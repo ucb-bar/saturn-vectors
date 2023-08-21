@@ -1,4 +1,4 @@
-package booster
+package vref
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class BoosterFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
+class VREFFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
   val io = IO(new Bundle {
     val core = new VectorCoreIO
     val tlb = Flipped(new DCacheTLBPort)

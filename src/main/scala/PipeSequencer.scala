@@ -1,4 +1,4 @@
-package booster
+package vref
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorIssueBeat(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasBoosterVectorParams {
+class VectorIssueBeat(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVREFVectorParams {
   val inst = new VectorIssueInst
   val renv1 = Bool()
   val renv2 = Bool()
@@ -22,7 +22,7 @@ class VectorIssueBeat(val params: BoosterVectorParams)(implicit p: Parameters) e
   val wmask   = UInt(dLenB.W)
 }
 
-class PipeHazard(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasBoosterVectorParams {
+class PipeHazard(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVREFVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
   val vat = UInt(params.vatSz.W)
   val last = Bool()
@@ -31,7 +31,7 @@ class PipeHazard(val params: BoosterVectorParams)(implicit p: Parameters) extend
 
 class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   writeVD: Boolean, readVS1: Boolean, readVS2: Boolean, readVD: Boolean,
-  val params: BoosterVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasBoosterVectorParams {
+  val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
   val io = IO(new Bundle {
     val dis_valid = Input(Bool())
     val dis_ready = Output(Bool())

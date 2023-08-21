@@ -1,11 +1,11 @@
-package booster
+package vref
 
 import chisel3._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 
-class BoosterEarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p) with VectorConsts {
+class VREFEarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p) with VectorConsts {
 
   io.legal := false.B
   io.fp := false.B

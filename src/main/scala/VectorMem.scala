@@ -1,4 +1,4 @@
-package booster
+package vref
 
 import chisel3._
 import chisel3.util._
@@ -17,12 +17,12 @@ class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) {
   val prestart = Bool()
 }
 
-class StoreData(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasBoosterVectorParams {
+class StoreData(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVREFVectorParams {
   val data = UInt(dLen.W)
   val mask = UInt(dLenB.W)
 }
 
-class VectorMemUnit(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasBoosterVectorParams {
+class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
     val enq = Flipped(Decoupled(new VectorIssueInst))

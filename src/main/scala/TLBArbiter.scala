@@ -1,4 +1,4 @@
-package booster
+package vref
 
 import chisel3._
 import org.chipsalliance.cde.config._

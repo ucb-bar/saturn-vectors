@@ -1,4 +1,4 @@
-package booster
+package vref
 
 import chisel3._
 import chisel3.util._
@@ -26,32 +26,31 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with Vecto
   def rd  = bits(11,7)
 }
 
-case class BoosterVectorParams(
+case class VREFVectorParams(
   viqEntries: Int = 4,
   vdqEntries: Int = 4,
   vlaqEntries: Int = 4,
   vsaqEntries: Int = 4,
-  vatSz: Int = 3) {
+  vectorAgeTags: Int = 8) {
   require(viqEntries >= 3)
 }
 
-trait HasBoosterVectorParams extends VectorConsts { this: HasCoreParameters =>
-  val params: BoosterVectorParams
+trait HasVREFVectorParams extends VectorConsts { this: HasCoreParameters =>
+  val params: VREFVectorParams
   def dLen = vMemDataBits
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
 
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
+  def vatSz = log2Ceil(params.vectorAgeTags)
 
-  def getEgId(vreg: UInt, eidx: UInt, eew: UInt): UInt = {
-    val base = vreg << log2Ceil(egsPerVReg)
-    val off = eidx >> (log2Ceil(dLenB).U - eew)
-    base + off
+  def getEgId(vreg: UInt, eidx: UInt, eew: UInt): UInt = if (egsPerVReg == 1) { vreg } else {
+    Cat(vreg, (eidx >> eew)(log2Ceil(egsPerVReg)-1,0))
   }
 }
 
-class BoosterVectorUnit(val params: BoosterVectorParams)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasBoosterVectorParams {
+class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVREFVectorParams {
   require(vLen >= 128)
   require(xLen == 64)
   require(vLen >= dLen)
@@ -60,11 +59,11 @@ class BoosterVectorUnit(val params: BoosterVectorParams)(implicit p: Parameters)
   val tlb_arbiter = Module(new TLBArbiter)
   tlb_arbiter.io.out <> io.tlb
 
-  val trap_check = Module(new BoosterFrontendTrapCheck)
+  val trap_check = Module(new VREFFrontendTrapCheck)
   trap_check.io.core <> io.core
   trap_check.io.tlb <> tlb_arbiter.io.in1
 
-  val viq = Module(new DCEQueue(new VectorIssueInst, params.viqEntries))
+  val viq = Module(new PeekingQueue(new VectorIssueInst, params.viqEntries))
   trap_check.io.issue_credits := viq.io.count - viq.entries.U
   viq.io.enq.valid := trap_check.io.issue.valid
   viq.io.enq.bits := trap_check.io.issue.bits
@@ -75,7 +74,7 @@ class BoosterVectorUnit(val params: BoosterVectorParams)(implicit p: Parameters)
   vmu.io.tlb <> tlb_arbiter.io.in0
   vmu.io.dmem <> io.dmem
 
-  val vdq = Module(new DCEQueue(new VectorIssueInst, params.vdqEntries))
+  val vdq = Module(new PeekingQueue(new VectorIssueInst, params.vdqEntries))
 
   viq.io.deq.ready := vdq.io.enq.ready && (!viq.io.deq.bits.vmu || vmu.io.enq.ready)
   vdq.io.enq.valid := viq.io.deq.valid && (!viq.io.deq.bits.vmu || vmu.io.enq.ready)
@@ -84,14 +83,11 @@ class BoosterVectorUnit(val params: BoosterVectorParams)(implicit p: Parameters)
   vdq.io.enq.bits := viq.io.deq.bits
   vmu.io.enq.bits := viq.io.enq.bits
 
-  val vat_valids = RegInit(VecInit.fill(1 << params.vatSz)(false.B))
-  val vat_tail = RegInit(0.U(params.vatSz.W))
+  val vat_valids = RegInit(VecInit.fill(params.vectorAgeTags)(false.B))
+  val vat_tail = RegInit(0.U(log2Ceil(params.vectorAgeTags).W))
   val vat_available = !vat_valids(vat_tail)
 
-  when (vdq.io.deq.fire) {
-    vat_valids(vat_tail) := true.B
-    vat_tail := vat_tail + 1.U
-  }
+  when (vdq.io.deq.fire) { vat_valids(vat_tail) := true.B }
 
   val vls = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && !i.opcode(5),
     true, false, false, false, params))
@@ -130,9 +126,9 @@ class BoosterVectorUnit(val params: BoosterVectorParams)(implicit p: Parameters)
 
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)
-    val older_wintents = otherSeqs.map(s => Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat) && s.io.seq_hazards.valid,
+    val older_wintents = otherSeqs.map(s => Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat),
       s.io.seq_hazards.wintent, 0.U)).reduce(_|_)
-    val older_rintents = otherSeqs.map(s => Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat) && s.io.seq_hazards.valid,
+    val older_rintents = otherSeqs.map(s => Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat),
       s.io.seq_hazards.rintent, 0.U)).reduce(_|_)
     val older_pipe_writes = (otherSeqs.map(_.io.pipe_hazards.map(h =>
       Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid, UIntToOH(h.bits.eg), 0.U))).flatten ++ Seq(0.U)).reduce(_|_)
@@ -146,6 +142,7 @@ class BoosterVectorUnit(val params: BoosterVectorParams)(implicit p: Parameters)
   vmu.io.load.ready := vls.io.iss.valid
   vls.io.iss.ready := vmu.io.load.valid
 
+  vss.io.iss.ready := false.B
   vxs.io.iss.ready := false.B
 
   when (vls.io.iss.fire) {
@@ -154,10 +151,9 @@ class BoosterVectorUnit(val params: BoosterVectorParams)(implicit p: Parameters)
       vls.io.iss.bits.wmask.asBools)
   }
 
-  vss.io.iss.ready := vmu.io.vstdata.ready
+  val stdata = vrf.read(vss.io.iss.bits.rvd_eg)
   vmu.io.vstdata.valid := vss.io.iss.valid
-  vmu.io.vstdata.bits.data := vrf.read(vss.io.iss.bits.rvd_eg).asUInt
-  vmu.io.vstdata.bits.mask := vss.io.iss.bits.wmask
+  vmu.io.vstdata.bits := stdata.asUInt
 
   val inflight_mem = (viq.io.peek ++ vdq.io.peek).map(e => e.valid && e.bits.vmu).orR || vls.io.valid || vss.io.valid
   trap_check.io.inflight_mem := inflight_mem

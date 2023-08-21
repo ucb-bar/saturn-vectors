@@ -1,4 +1,4 @@
-package booster
+package vref
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class StoreCoalescer(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasBoosterVectorParams {
+class StoreCoalescer(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
     val saq = Flipped(Decoupled(new LSAQEntry))

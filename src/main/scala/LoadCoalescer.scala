@@ -1,4 +1,4 @@
-package booster
+package vref
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class LoadCoalescer(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasBoosterVectorParams {
+class LoadCoalescer(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
   val io = IO(new Bundle {
     val lrq = Flipped(Decoupled(new HellaCacheResp))
     val laq = Flipped(Decoupled(new LSAQEntry))
