@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorLoadCoalescer(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasBoosterVectorParams {
+class LoadCoalescer(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasBoosterVectorParams {
   val io = IO(new Bundle {
     val lrq = Flipped(Decoupled(new HellaCacheResp))
     val laq = Flipped(Decoupled(new LSAQEntry))
@@ -25,7 +25,8 @@ class VectorLoadCoalescer(val params: BoosterVectorParams)(implicit p: Parameter
   val in_data_sr = in_data >> (in_sramt << 3)
   val in_data_sl = in_data << (in_slamt << 3)
   val in_lower_mask = (1.U << in_slamt) - 1.U
-  val in_combined_data = (in_lower_mask & rot_reg) | (~in_lower_mask & in_data_sl)
+  val in_lower_mask_bytes = FillInterleaved(8, in_lower_mask)
+  val in_combined_data = (in_lower_mask_bytes & rot_reg) | (~in_lower_mask_bytes & in_data_sl)
 
 
   io.out.valid := false.B

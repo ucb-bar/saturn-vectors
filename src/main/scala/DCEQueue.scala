@@ -2,24 +2,25 @@ package booster
 
 import chisel3._
 import chisel3.util._
-import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
-import freechips.rocketchip.util._
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.tile._
+import freechips.rocketchip.util._
+import freechips.rocketchip.rocket._
+import freechips.rocketchip.tilelink._
+import freechips.rocketchip.rocket.Instructions._
 
-class PeekingQueue[T <: Data](
+class DCEQueue[T <: Data](
   val gen:            T,
   val entries:        Int,
   val pipe:           Boolean = false,
-  val flow:           Boolean = false,
-  val hasFlush:       Boolean = false)
-    extends Module() {
+  val flow:           Boolean = false)(implicit val p: Parameters) extends Module {
   require(entries > -1, "Queue must have non-negative number of entries")
   require(entries != 0, "Use companion object Queue.apply for zero entries")
 
-  val io = IO(new QueueIO(gen, entries, hasFlush) {
+  val io = IO(new QueueIO(gen, entries, false) {
     val peek = Output(Vec(entries, Valid(gen)))
   })
+  val valids = RegInit(VecInit.fill(entries)(false.B))
   val ram = Reg(Vec(entries, gen))
   val enq_ptr = Counter(entries)
   val deq_ptr = Counter(entries)
@@ -29,40 +30,31 @@ class PeekingQueue[T <: Data](
   val full = ptr_match && maybe_full
   val do_enq = WireDefault(io.enq.fire)
   val do_deq = WireDefault(io.deq.fire)
-  val flush = io.flush.getOrElse(false.B)
-
-  val valids = RegInit(VecInit.fill(entries)(false.B))
 
   for (i <- 0 until entries) {
     io.peek(i).bits := ram(i)
     io.peek(i).valid := valids(i)
   }
 
-  // when flush is high, empty the queue
-  // Semantically, any enqueues happen before the flush.
+  when(do_deq) {
+    deq_ptr.inc()
+    valids(deq_ptr.value) := false.B
+  }
+
   when(do_enq) {
     ram(enq_ptr.value) := io.enq.bits
     valids(enq_ptr.value) := true.B
     enq_ptr.inc()
   }
-  when(do_deq) {
-    valids(deq_ptr.value) := false.B
-    deq_ptr.inc()
-  }
+
   when(do_enq =/= do_deq) {
     maybe_full := do_enq
-  }
-  when(flush) {
-    enq_ptr.reset()
-    deq_ptr.reset()
-    maybe_full := false.B
   }
 
   io.deq.valid := !empty
   io.enq.ready := !full
 
   io.deq.bits := ram(deq_ptr.value)
-
 
   if (flow) {
     when(io.enq.valid) { io.deq.valid := true.B }

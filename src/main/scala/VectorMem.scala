@@ -17,6 +17,10 @@ class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) {
   val prestart = Bool()
 }
 
+class StoreData(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasBoosterVectorParams {
+  val data = UInt(dLen.W)
+  val mask = UInt(dLenB.W)
+}
 
 class VectorMemUnit(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasBoosterVectorParams {
   val io = IO(new Bundle {
@@ -26,7 +30,7 @@ class VectorMemUnit(val params: BoosterVectorParams)(implicit p: Parameters) ext
     val tlb = Flipped(new DCacheTLBPort)
 
     val load = Decoupled(UInt(dLen.W))
-    val vstdata = Flipped(Decoupled(UInt(dLen.W)))
+    val vstdata = Flipped(Decoupled(new StoreData(params)))
   })
 
   val dmem_simple = Module(new SimpleHellaCacheIF)
@@ -72,15 +76,15 @@ class VectorMemUnit(val params: BoosterVectorParams)(implicit p: Parameters) ext
   val prestart = eidx < inst.vstart
   val load_tag = RegInit(0.U(log2Ceil(params.vlaqEntries).W))
 
-  val laq = Module(new Queue(new LSAQEntry, params.vlaqEntries))
-  val saq = Module(new Queue(new LSAQEntry, params.vsaqEntries))
+  val laq = Module(new DCEQueue(new LSAQEntry, params.vlaqEntries))
+  val saq = Module(new DCEQueue(new LSAQEntry, params.vsaqEntries))
   val inflight_loads = RegInit(0.U(log2Ceil(params.vlaqEntries).W))
 
   dmem_load.req.valid := valid && load && !prestart && laq.io.enq.ready
   dmem_load.req.bits.addr := Mux(iterative, addr, aligned_addr)
   dmem_load.req.bits.tag := load_tag
   dmem_load.req.bits.cmd := M_XRD
-  dmem_load.req.bits.size := Mux(iterative, inst.mem_size, log2Ceil(vMemDataBits/8).U)
+  dmem_load.req.bits.size := Mux(iterative, inst.mem_size, log2Ceil(dLenB).U)
   dmem_load.req.bits.signed := false.B
   dmem_load.req.bits.dprv := io.status.prv
   dmem_load.req.bits.dv := io.status.v
@@ -125,27 +129,24 @@ class VectorMemUnit(val params: BoosterVectorParams)(implicit p: Parameters) ext
     }
   }
 
-  val load_coalescer = Module(new VectorLoadCoalescer(params))
-  val lrq = Module(new Queue(new HellaCacheResp, params.vlaqEntries, flow=true))
+  val lcoal = Module(new LoadCoalescer(params))
+  val lrq = Module(new DCEQueue(new HellaCacheResp, params.vlaqEntries, flow=true))
   lrq.io.enq.valid := dmem_load.resp.valid
   lrq.io.enq.bits := dmem_load.resp.bits
   assert(!(lrq.io.enq.valid && !lrq.io.enq.ready))
 
-  load_coalescer.io.lrq <> lrq.io.deq
-  load_coalescer.io.laq <> laq.io.deq
-  io.load <> load_coalescer.io.out
+  lcoal.io.lrq <> lrq.io.deq
+  lcoal.io.laq <> laq.io.deq
+  io.load <> lcoal.io.out
 
-  dontTouch(io.load)
-
-  io.vstdata.ready := saq.io.deq.ready
-  dontTouch(io.vstdata)
-
-  dmem_store.req.valid := false.B
-  dmem_store.req.bits := DontCare
+  val scoal = Module(new StoreCoalescer(params))
+  scoal.io.status := io.status
+  scoal.io.saq <> saq.io.deq
+  scoal.io.stdata <> io.vstdata
+  dmem_store.req <> scoal.io.req
+  scoal.io.resp <> dmem_store.resp
   dmem_store.s1_kill := false.B
   dmem_store.s1_data := DontCare
   dmem_store.s2_kill := false.B
   dmem_store.keep_clock_enabled := false.B
-  saq.io.deq.ready := false.B
-
 }

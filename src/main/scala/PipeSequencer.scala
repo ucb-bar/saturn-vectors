@@ -24,7 +24,7 @@ class VectorIssueBeat(val params: BoosterVectorParams)(implicit p: Parameters) e
 
 class PipeHazard(val params: BoosterVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasBoosterVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
-  val vat = UInt(vatSz.W)
+  val vat = UInt(params.vatSz.W)
   val last = Bool()
 }
 
@@ -37,7 +37,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     val dis_ready = Output(Bool())
     val dis = Input(new VectorIssueInst)
 
-    val dis_vat = Input(UInt(vatSz.W))
+    val dis_vat = Input(UInt(params.vatSz.W))
     val dis_wvd = Input(Bool())
     val dis_renv1 = Input(Bool())
     val dis_renv2 = Input(Bool())
@@ -50,19 +50,19 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       val valid = Output(Bool())
       val rintent = Output(UInt(egsTotal.W))
       val wintent = Output(UInt(egsTotal.W))
-      val vat = Output(UInt(vatSz.W))
+      val vat = Output(UInt(params.vatSz.W))
 
       val writes = Input(UInt(egsTotal.W))
       val reads = Input(UInt(egsTotal.W))
     }
     val pipe_hazards = Vec(depth, Valid(new PipeHazard(params)))
 
-    val vat_release = Valid(UInt(vatSz.W))
+    val vat_release = Valid(UInt(params.vatSz.W))
   })
 
   val valid   = RegInit(false.B)
   val inst    = Reg(new VectorIssueInst)
-  val vat     = Reg(UInt(vatSz.W))
+  val vat     = Reg(UInt(params.vatSz.W))
   val wvd_oh  = Reg(UInt(egsTotal.W))
   val rvs1_oh = Reg(UInt(egsTotal.W))
   val rvs2_oh = Reg(UInt(egsTotal.W))
@@ -77,10 +77,12 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     ((mode === execRegular)        -> ((eidx + (dLenB.U >> inst.vconfig.vtype.vsew) >= inst.vconfig.vl))),
     ((mode === execElementOrder)   -> ((eidx + 1.U) === inst.vconfig.vl)),
     ((mode === execElementUnorder) -> ((eidx + 1.U) === inst.vconfig.vl))))
+  val eewmask = ((1.U << inst.vconfig.vtype.vsew) - 1.U)
+  val last_aligned = (((1.U << (log2Ceil(dLenB).U - inst.vconfig.vtype.vsew)) - 1.U) & inst.vconfig.vl) === 0.U
 
 
 
-  io.dis_ready := !sel(io.dis) || !valid || (last && io.iss.valid)
+  io.dis_ready := !sel(io.dis) || !valid || (last && io.iss.fire)
 
   val dis_fire = io.dis_valid && io.dis_ready && sel(io.dis)
   when (dis_fire) {
@@ -88,7 +90,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     inst := io.dis
     vat := io.dis_vat
     eidx := 0.U
-    val lmul_mask = ((1.U(8.W) << io.dis.pos_lmul) - 1.U)(7,0)
+    val lmul_mask = ((1.U(8.W) << (1.U << io.dis.pos_lmul)) - 1.U)(7,0)
     val wvd_arch_oh = Mux(writeVD.B && io.dis_wvd,
       lmul_mask << io.dis.rd, 0.U)
     val rvs1_arch_oh = Mux(readVS1.B && io.dis_renv1,
@@ -140,6 +142,19 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.rvs2_eg := getEgId(inst.rs2, eidx, inst.vconfig.vtype.vsew)
   io.iss.bits.rvd_eg  := getEgId(inst.rd , eidx, inst.vconfig.vtype.vsew)
   io.iss.bits.wvd_eg  := getEgId(inst.rd , eidx, inst.vconfig.vtype.vsew)
+  when (eidx < inst.vstart) {
+    // prestart
+    io.iss.bits.wmask := 0.U
+  } .elsewhen (mode =/= execRegular) {
+    // iterative, elementwise
+    io.iss.bits.wmask := eewmask << ((eidx << inst.vconfig.vtype.vsew)(log2Ceil(dLenB)-1,0))
+  } .elsewhen (last && !last_aligned) {
+    // regular, tail
+    io.iss.bits.wmask := (1.U << (inst.vconfig.vl << inst.vconfig.vtype.vsew)(log2Ceil(dLenB)-1,0)) - 1.U
+  } .otherwise {
+    // regular, body
+    io.iss.bits.wmask := ~(0.U(dLenB.W))
+  }
 
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
   val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(params)) }
