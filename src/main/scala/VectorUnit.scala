@@ -55,7 +55,7 @@ trait HasVREFVectorParams extends VectorConsts { this: HasCoreParameters =>
 }
 
 class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVREFVectorParams {
-  require(vLen >= 128)
+  require(vLen >= 64)
   require(xLen == 64)
   require(vLen >= dLen)
   require(vLen % dLen == 0)
@@ -216,7 +216,7 @@ class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) exten
   vmu.io.vstdata.bits.mask := vss.io.iss.bits.wmask
   vmu.io.vm := vmf.asUInt
 
-  val inflight_mem = (viq.io.peek ++ vdq.io.peek).map(e => e.valid && e.bits.vmu).orR || vls.io.valid || vss.io.valid
+  val inflight_mem = (viq.io.peek ++ vdq.io.peek).map(e => e.valid && e.bits.vmu).orR || vls.io.valid || vss.io.valid || vmu.io.busy
   trap_check.io.inflight_mem := inflight_mem
   trap_check.io.resetting := resetting
   trap_check.io.vm := vmf.asUInt

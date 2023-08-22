@@ -38,6 +38,7 @@ class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extend
       val vat = Output(UInt(params.vatSz.W))
       val hazard = Input(Bool())
     }
+    val busy = Output(Bool())
   })
 
   val dmem_simple = Module(new SimpleHellaCacheIF)
@@ -163,4 +164,6 @@ class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extend
   dmem_store.s1_data := DontCare
   dmem_store.s2_kill := false.B
   dmem_store.keep_clock_enabled := false.B
+
+  io.busy := scoal.io.busy
 }

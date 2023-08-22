@@ -15,6 +15,7 @@ class StoreCoalescer(val params: VREFVectorParams)(implicit p: Parameters) exten
 
     val req = Decoupled(new HellaCacheReq)
     val resp = Flipped(Valid(new HellaCacheResp))
+    val busy = Output(Bool())
   })
 
   val rot_reg = Reg(UInt(dLen.W))
@@ -32,7 +33,7 @@ class StoreCoalescer(val params: VREFVectorParams)(implicit p: Parameters) exten
   val in_combined_data = (in_lower_mask_bytes & rot_reg) | (~in_lower_mask_bytes & in_data_sl)
   val in_combined_mask = (in_lower_mask & mask_rot_reg) | (~in_lower_mask & in_mask_sl)
   val store_tags = RegInit(VecInit.fill(4)(false.B))
-  val tag = PriorityEncoder(store_tags)
+  val tag = PriorityEncoder(~(store_tags.asUInt))
   val tag_available = !store_tags(tag)
 
   io.saq.ready := false.B
@@ -72,6 +73,8 @@ class StoreCoalescer(val params: VREFVectorParams)(implicit p: Parameters) exten
     rot_reg := in_data_sr
     mask_rot_reg := in_mask_sr
   }
+
+  io.busy := store_tags.orR
 }
 
 
