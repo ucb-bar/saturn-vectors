@@ -20,7 +20,7 @@ class LoadCoalescer(val params: VREFVectorParams)(implicit p: Parameters) extend
   val in_data = Mux(io.laq.bits.prestart, 0.U, io.lrq.bits.data)
   val in_sramt = io.laq.bits.addr(dLenOffBits-1,0)
   val in_slamt = Mux(io.laq.bits.iterative,
-    io.laq.bits.eidx << io.laq.bits.inst.mem_size,
+    (io.laq.bits.eidx << io.laq.bits.inst.mem_size)(log2Ceil(dLenB)-1,0),
     (dLen/8).U - in_sramt)
   val in_data_sr = in_data >> (in_sramt << 3)
   val in_data_sl = in_data << (in_slamt << 3)

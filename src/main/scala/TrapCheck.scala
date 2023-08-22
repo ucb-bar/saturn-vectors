@@ -147,7 +147,7 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
       io.core.wb.xcpt := true.B
       io.core.set_vstart.valid := true.B
       io.core.set_vstart.bits := w_eidx
-    } .elsewhen (!w_xcpt && (w_eidx + 1.U) === w_vl) {
+    } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl) {
       x_replay := false.B
       io.core.wb.retire := true.B
       io.core.set_vstart.valid := true.B

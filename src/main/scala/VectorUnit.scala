@@ -107,7 +107,7 @@ class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) exten
   val vls = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && !i.opcode(5),
     true, false, false, false, params))
   val vss = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu &&  i.opcode(5),
-    true, false, false, false, params))
+    false, false, false, true, params))
   val vxs = Module(new PipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
     true, false, false, false, params))
   val seqs = Seq(vls, vss, vxs)

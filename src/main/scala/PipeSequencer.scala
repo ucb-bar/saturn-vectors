@@ -74,10 +74,9 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val wvd     = Reg(Bool())
   val eidx    = Reg(UInt(log2Ceil(maxVLMax).W))
   val mode    = Reg(UInt(2.W))
-  val last    = MuxCase(false.B, Seq(
-    ((mode === execRegular)        -> ((eidx + (dLenB.U >> inst.vconfig.vtype.vsew) >= inst.vconfig.vl))),
-    ((mode === execElementOrder)   -> ((eidx + 1.U) === inst.vconfig.vl)),
-    ((mode === execElementUnorder) -> ((eidx + 1.U) === inst.vconfig.vl))))
+  val incr_eidx = Mux(mode === execRegular, (dLenB.U >> inst.vconfig.vtype.vsew), 1.U)
+  val next_eidx = eidx +& incr_eidx
+  val last      = next_eidx >= inst.vconfig.vl
   val eewmask = ((1.U << (1.U << inst.vconfig.vtype.vsew)) - 1.U)((eLen/8)-1,0)
   val last_aligned = (((1.U << (log2Ceil(dLenB).U - inst.vconfig.vtype.vsew)) - 1.U) & inst.vconfig.vl) === 0.U
 
@@ -122,8 +121,8 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
 
   val vs1_read_oh = Mux(renv1, UIntToOH(io.iss.bits.rvs1_eg), 0.U)
   val vs2_read_oh = Mux(renv2, UIntToOH(io.iss.bits.rvs2_eg), 0.U)
-  val vd_read_oh = Mux(renvd, UIntToOH(io.iss.bits.rvs2_eg), 0.U)
-  val vd_write_oh = Mux(wvd, UIntToOH(io.iss.bits.wvd_eg), 0.U)
+  val vd_read_oh  = Mux(renvd, UIntToOH(io.iss.bits.rvd_eg) , 0.U)
+  val vd_write_oh = Mux(wvd  , UIntToOH(io.iss.bits.wvd_eg) , 0.U)
 
   val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh) & (pipe_writes | io.seq_hazards.writes)) =/= 0.U
   val waw_hazard = (vd_write_oh & (pipe_writes | io.seq_hazards.writes)) =/= 0.U
