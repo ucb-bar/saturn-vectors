@@ -7,14 +7,15 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) {
-  val inst = new VectorIssueInst
+class LSAQEntry(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) {
+  val inst = new VectorIssueInst(params)
   val addr = UInt(vaddrBitsExtended.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val iterative = Bool()
   val head = Bool()
   val tail = Bool()
   val prestart = Bool()
+  val masked = Bool()
 }
 
 class StoreData(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVREFVectorParams {
@@ -25,12 +26,18 @@ class StoreData(val params: VREFVectorParams)(implicit p: Parameters) extends Co
 class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
-    val enq = Flipped(Decoupled(new VectorIssueInst))
+    val enq = Flipped(Decoupled(new VectorIssueInst(params)))
     val dmem = new HellaCacheIO
     val tlb = Flipped(new DCacheTLBPort)
 
     val load = Decoupled(UInt(dLen.W))
     val vstdata = Flipped(Decoupled(new StoreData(params)))
+    val vm = Input(UInt(maxVLMax.W))
+    val vm_hazard = new Bundle {
+      val valid = Output(Bool())
+      val vat = Output(UInt(params.vatSz.W))
+      val hazard = Input(Bool())
+    }
   })
 
   val dmem_simple = Module(new SimpleHellaCacheIF)
@@ -41,7 +48,7 @@ class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extend
   val dmem_store = dmem_arb.io.requestor(0)
 
   val valid = RegInit(false.B)
-  val inst = Reg(new VectorIssueInst)
+  val inst = Reg(new VectorIssueInst(params))
   val addr = Reg(UInt(vaddrBitsExtended.W))
   val eidx = Reg(UInt(log2Ceil(maxVLMax).W))
   val stride = Reg(UInt(vaddrBitsExtended.W))
@@ -56,7 +63,7 @@ class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extend
     addr := io.enq.bits.rs1_data
     stride := Mux(io.enq.bits.mop === mopUnit, 1.U << io.enq.bits.mem_size, io.enq.bits.rs2_data)
 
-    val enq_iterative = io.enq.bits.mop =/= mopUnit || io.enq.bits.vstart =/= 0.U
+    val enq_iterative = io.enq.bits.mop =/= mopUnit || io.enq.bits.vstart =/= 0.U || !io.enq.bits.vm
     when (!enq_iterative) {
       stride := dLenB.U
       addr := (io.enq.bits.rs1_data >> dLenOffBits) << dLenOffBits
@@ -74,13 +81,18 @@ class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extend
   val next_eidx = eidx +& Mux(iterative, 1.U, eg_elems)
   val may_clear = next_eidx >= (inst.vconfig.vl +& Mux(alignment === 0.U && !iterative, eg_elems, 0.U))
   val prestart = eidx < inst.vstart
+  val masked = !inst.vm && !(io.vm >> eidx)(0)
   val load_tag = RegInit(0.U(log2Ceil(params.vlaqEntries).W))
 
-  val laq = Module(new DCEQueue(new LSAQEntry, params.vlaqEntries))
-  val saq = Module(new DCEQueue(new LSAQEntry, params.vsaqEntries))
+  io.vm_hazard.valid := valid && !inst.vm
+  io.vm_hazard.vat := inst.vat
+  val mask_hazard = !inst.vm && io.vm_hazard.hazard
+
+  val laq = Module(new DCEQueue(new LSAQEntry(params), params.vlaqEntries))
+  val saq = Module(new DCEQueue(new LSAQEntry(params), params.vsaqEntries))
   val inflight_loads = RegInit(0.U(log2Ceil(params.vlaqEntries).W))
 
-  dmem_load.req.valid := valid && load && !prestart && laq.io.enq.ready
+  dmem_load.req.valid := valid && load && !prestart && laq.io.enq.ready && !masked && !mask_hazard
   dmem_load.req.bits.addr := Mux(iterative, addr, aligned_addr)
   dmem_load.req.bits.tag := load_tag
   dmem_load.req.bits.cmd := M_XRD
@@ -108,7 +120,8 @@ class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extend
   laq.io.enq.bits.tail := may_clear
   laq.io.enq.bits.addr := addr
   laq.io.enq.bits.prestart := prestart
-  laq.io.enq.valid := valid && load && (prestart || dmem_load.req.ready)
+  laq.io.enq.bits.masked := masked
+  laq.io.enq.valid := valid && load && (prestart || dmem_load.req.ready) && !mask_hazard
 
   saq.io.enq.bits.inst := inst
   saq.io.enq.bits.eidx := eidx
@@ -117,7 +130,8 @@ class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extend
   saq.io.enq.bits.tail := may_clear
   saq.io.enq.bits.addr := addr
   saq.io.enq.bits.prestart := prestart
-  saq.io.enq.valid := valid && !load
+  saq.io.enq.bits.masked := masked
+  saq.io.enq.valid := valid && !load && !mask_hazard
 
   val fire = valid && Mux(load, laq.io.enq.fire, saq.io.enq.fire)
 

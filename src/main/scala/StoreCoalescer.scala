@@ -10,7 +10,7 @@ import freechips.rocketchip.tile._
 class StoreCoalescer(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
-    val saq = Flipped(Decoupled(new LSAQEntry))
+    val saq = Flipped(Decoupled(new LSAQEntry(params)))
     val stdata = Flipped(Decoupled(new StoreData(params)))
 
     val req = Decoupled(new HellaCacheReq)
@@ -52,7 +52,7 @@ class StoreCoalescer(val params: VREFVectorParams)(implicit p: Parameters) exten
   io.req.bits.no_alloc := false.B
   io.req.bits.no_xcpt := true.B
 
-  when (io.saq.bits.prestart) {
+  when (io.saq.bits.prestart || io.saq.bits.masked) {
     io.saq.ready := io.stdata.valid
     io.stdata.ready := true.B
   } .elsewhen (io.saq.bits.iterative || in_slamt === 0.U) {

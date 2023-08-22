@@ -8,16 +8,17 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 class VectorIssueBeat(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVREFVectorParams {
-  val inst = new VectorIssueInst
+  val inst = new VectorIssueInst(params)
   val renv1 = Bool()
   val renv2 = Bool()
   val renvd = Bool()
   val wvd = Bool()
 
-  val rvs1_eg = UInt(log2Ceil(egsTotal).W)
-  val rvs2_eg = UInt(log2Ceil(egsTotal).W)
-  val rvd_eg  = UInt(log2Ceil(egsTotal).W)
-  val wvd_eg  = UInt(log2Ceil(egsTotal).W)
+  val eidx = UInt(log2Ceil(maxVLMax).W)
+  val rvs1_eg  = UInt(log2Ceil(egsTotal).W)
+  val rvs2_eg  = UInt(log2Ceil(egsTotal).W)
+  val rvd_eg   = UInt(log2Ceil(egsTotal).W)
+  val wvd_eg   = UInt(log2Ceil(egsTotal).W)
 
   val wmask   = UInt(dLenB.W)
 }
@@ -35,13 +36,13 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val io = IO(new Bundle {
     val dis_valid = Input(Bool())
     val dis_ready = Output(Bool())
-    val dis = Input(new VectorIssueInst)
+    val dis = Input(new VectorIssueInst(params))
 
-    val dis_vat = Input(UInt(params.vatSz.W))
     val dis_wvd = Input(Bool())
     val dis_renv1 = Input(Bool())
     val dis_renv2 = Input(Bool())
     val dis_renvd = Input(Bool())
+    val dis_renvm = Input(Bool())
     val dis_execmode = Input(UInt(2.W))
 
     val valid = Output(Bool())
@@ -61,8 +62,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   })
 
   val valid   = RegInit(false.B)
-  val inst    = Reg(new VectorIssueInst)
-  val vat     = Reg(UInt(params.vatSz.W))
+  val inst    = Reg(new VectorIssueInst(params))
   val wvd_oh  = Reg(UInt(egsTotal.W))
   val rvs1_oh = Reg(UInt(egsTotal.W))
   val rvs2_oh = Reg(UInt(egsTotal.W))
@@ -70,6 +70,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val renv1   = Reg(Bool())
   val renv2   = Reg(Bool())
   val renvd   = Reg(Bool())
+  val renvm   = Reg(Bool())
   val wvd     = Reg(Bool())
   val eidx    = Reg(UInt(log2Ceil(maxVLMax).W))
   val mode    = Reg(UInt(2.W))
@@ -77,7 +78,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     ((mode === execRegular)        -> ((eidx + (dLenB.U >> inst.vconfig.vtype.vsew) >= inst.vconfig.vl))),
     ((mode === execElementOrder)   -> ((eidx + 1.U) === inst.vconfig.vl)),
     ((mode === execElementUnorder) -> ((eidx + 1.U) === inst.vconfig.vl))))
-  val eewmask = ((1.U << inst.vconfig.vtype.vsew) - 1.U)
+  val eewmask = ((1.U << (1.U << inst.vconfig.vtype.vsew)) - 1.U)((eLen/8)-1,0)
   val last_aligned = (((1.U << (log2Ceil(dLenB).U - inst.vconfig.vtype.vsew)) - 1.U) & inst.vconfig.vl) === 0.U
 
 
@@ -88,7 +89,6 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   when (dis_fire) {
     valid := true.B
     inst := io.dis
-    vat := io.dis_vat
     eidx := 0.U
     val lmul_mask = ((1.U(8.W) << (1.U << io.dis.pos_lmul)) - 1.U)(7,0)
     val wvd_arch_oh = Mux(writeVD.B && io.dis_wvd,
@@ -106,15 +106,17 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     renv1 := io.dis_renv1 && readVS1.B
     renv2 := io.dis_renv2 && readVS2.B
     renvd := io.dis_renvd && readVD.B
+    renvm := io.dis_renvm
     wvd := io.dis_wvd && writeVD.B
+    mode := io.dis_execmode
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
 
   io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := rvs1_oh | rvs2_oh | rvd_oh
+  io.seq_hazards.rintent := rvs1_oh | rvs2_oh | rvd_oh | Mux(renvm, ~(0.U(egsPerVReg.W)), 0.U)
   io.seq_hazards.wintent := wvd_oh
-  io.seq_hazards.vat := vat
+  io.seq_hazards.vat := inst.vat
 
   val pipe_writes = (io.pipe_hazards.map(h => Mux(h.valid, UIntToOH(h.bits.eg), 0.U)) ++ Seq(0.U)).reduce(_|_)
 
@@ -138,6 +140,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.renvd := renvd
   io.iss.bits.wvd   := wvd
 
+  io.iss.bits.eidx    := eidx
   io.iss.bits.rvs1_eg := getEgId(inst.rs1, eidx, inst.vconfig.vtype.vsew)
   io.iss.bits.rvs2_eg := getEgId(inst.rs2, eidx, inst.vconfig.vtype.vsew)
   io.iss.bits.rvd_eg  := getEgId(inst.rd , eidx, inst.vconfig.vtype.vsew)
@@ -165,8 +168,10 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       rvs1_oh := rvs1_oh & ~UIntToOH(io.iss.bits.rvs1_eg)
       rvs2_oh := rvs2_oh & ~UIntToOH(io.iss.bits.rvs2_eg)
       rvd_oh  := rvd_oh  & ~UIntToOH(io.iss.bits.rvd_eg)
+      eidx := eidx + (dLenB.U >> inst.vconfig.vtype.vsew)
+    } .otherwise {
+      eidx := eidx + 1.U
     }
-    eidx := eidx + (dLenB.U >> inst.vconfig.vtype.vsew)
   }
 
   for (i <- 0 until depth) {
@@ -178,7 +183,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     when (io.iss.fire) {
       pipe_valids.head := true.B
       pipe_hazards.head.eg := io.iss.bits.wvd_eg
-      pipe_hazards.head.vat := vat
+      pipe_hazards.head.vat := inst.vat
       pipe_hazards.head.last := last
     }
     for (i <- 1 until depth) {
@@ -189,6 +194,6 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     io.vat_release.bits := pipe_hazards.last.vat
   } else {
     io.vat_release.valid := io.iss.fire && last
-    io.vat_release.bits := vat
+    io.vat_release.bits := inst.vat
   }
 }

@@ -7,30 +7,35 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VREFFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
+class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
   val io = IO(new Bundle {
     val core = new VectorCoreIO
     val tlb = Flipped(new DCacheTLBPort)
 
-    val issue = Valid(new VectorIssueInst)
+    val issue = Valid(new VectorIssueInst(params))
     val issue_credits = Input(UInt())
     val inflight_mem = Input(Bool())
+    val resetting = Input(Bool())
+
+    val vm = Input(UInt(maxVLMax.W))
+    val vm_ready = Input(Bool())
   })
 
   // X stage
   val x_replay = RegInit(false.B)
-  val x_replay_inst = Reg(new VectorIssueInst)
+  val x_replay_inst = Reg(new VectorIssueInst(params))
   val x_replay_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
   val x_replay_addr = Reg(UInt(vaddrBitsExtended.W))
   val x_replay_pc = Reg(UInt(vaddrBitsExtended.W))
   val x_replay_stride = Reg(UInt(vaddrBitsExtended.W))
 
-  val x_core_inst = Wire(new VectorIssueInst)
+  val x_core_inst = Wire(new VectorIssueInst(params))
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
   x_core_inst.vstart := io.core.ex.vstart
   x_core_inst.rs1_data := io.core.ex.rs1
   x_core_inst.rs2_data := io.core.ex.rs2
+  x_core_inst.vat := DontCare
 
   val x_inst = Mux(x_replay, x_replay_inst, x_core_inst)
   val x_addr = Mux(x_replay, x_replay_addr, io.core.ex.rs1)
@@ -40,10 +45,11 @@ class VREFFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with
   val x_eidx = Mux(x_replay, x_replay_eidx, 0.U)
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
-  val x_iterative = true.B || x_inst.vstart =/= 0.U
-  val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart
+  val x_iterative = true.B || x_inst.vstart =/= 0.U || x_inst.vm
+  val x_masked = (io.vm >> x_eidx)(0)
+  val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked
 
-  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && io.issue_credits > 2.U
+  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && io.issue_credits > 2.U && !io.resetting && !(x_inst.vm && !io.vm_ready)
   io.tlb.req.valid := x_tlb_valid
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
@@ -68,10 +74,11 @@ class VREFFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with
   val m_eidx = RegEnable(x_eidx, x_may_be_valid)
   val m_pc = RegEnable(x_pc, x_may_be_valid)
   val m_vl = m_inst.vconfig.vl
+  val m_masked = RegNext(x_masked, x_may_be_valid)
   val m_tlb_resp_valid = RegNext(io.tlb.req.fire, x_may_be_valid)
   val m_iterative = RegEnable(x_iterative, x_may_be_valid)
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
-  m_tlb_resp.miss := io.tlb.s1_resp.miss || !m_tlb_resp_valid
+  m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && !m_masked)
 
   // W stage
   val w_valid = RegNext(m_valid && !(io.core.killm && !m_replay), false.B)
@@ -81,6 +88,7 @@ class VREFFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with
   val w_stride = RegEnable(m_stride, m_valid)
   val w_iterative = RegEnable(m_iterative, m_valid)
   val w_eidx = RegEnable(m_eidx, m_valid)
+  val w_masked = RegEnable(m_masked, m_valid)
   val w_vl = w_inst.vconfig.vl
   val w_pc = RegEnable(m_pc, m_valid)
   val w_tlb_resp = RegEnable(m_tlb_resp, m_valid)
@@ -95,7 +103,7 @@ class VREFFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with
     (w_tlb_resp.ma.st, Causes.misaligned_store.U),
     (w_tlb_resp.ma.ld, Causes.misaligned_load.U)
   )
-  val w_xcpt = w_xcpts.map(_._1).orR && w_eidx >= w_inst.vstart
+  val w_xcpt = w_xcpts.map(_._1).orR && w_eidx >= w_inst.vstart && !w_masked
   val w_cause = PriorityMux(w_xcpts)
 
   io.core.wb.retire := false.B
@@ -151,6 +159,4 @@ class VREFFrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with
   io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_iterative || w_replay))
   io.core.mem.block_mem := (w_valid && w_inst.vmu) || io.inflight_mem
   io.tlb.s2_kill := false.B
-
-
 }

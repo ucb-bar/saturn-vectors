@@ -10,7 +10,7 @@ import freechips.rocketchip.tile._
 class LoadCoalescer(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
   val io = IO(new Bundle {
     val lrq = Flipped(Decoupled(new HellaCacheResp))
-    val laq = Flipped(Decoupled(new LSAQEntry))
+    val laq = Flipped(Decoupled(new LSAQEntry(params)))
 
     val out = Decoupled(UInt(dLen.W))
   })
@@ -33,7 +33,7 @@ class LoadCoalescer(val params: VREFVectorParams)(implicit p: Parameters) extend
   io.laq.ready := false.B
   io.lrq.ready := false.B
 
-  when (io.laq.bits.prestart) {
+  when (io.laq.bits.prestart || io.laq.bits.masked) {
     io.out.valid := io.laq.valid
     io.laq.ready := io.out.ready
   } .elsewhen (io.laq.bits.iterative || in_sramt === 0.U) {
