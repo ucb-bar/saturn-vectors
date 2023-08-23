@@ -151,18 +151,24 @@ class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extend
   io.issue.valid := false.B
   io.issue.bits := w_inst
 
+  val x_set_replay = WireInit(false.B)
+  when (x_set_replay) {
+    x_replay := true.B
+    x_replay_inst := w_inst
+    x_replay_eidx := 0.U
+    x_replay_addr := w_addr
+    x_replay_pc := w_pc
+    x_replay_stride := w_stride
+  }
+
   when (w_valid && !w_replay) {
     when (w_inst.vstart >= w_vl) {
       io.core.wb.retire := true.B
-    } .elsewhen (w_iterative || !w_tlb_resp.cacheable) {
-      x_replay := true.B
-      x_replay_inst := w_inst
-      x_replay_eidx := 0.U
-      x_replay_addr := w_addr
-      x_replay_pc := w_pc
-      x_replay_stride := w_stride
+    } .elsewhen (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss)) {
+      x_set_replay := true.B
+    } .elsewhen (w_tlb_resp.miss) {
+      io.core.wb.replay := true.B
     } .otherwise {
-      when (w_tlb_resp.miss) { io.core.wb.replay := true.B }
       io.core.wb.retire := !w_xcpt
       io.core.wb.xcpt := w_xcpt
       io.core.wb.cause := w_cause
@@ -196,7 +202,7 @@ class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extend
     }
   }
 
-  io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_iterative || w_replay))
+  io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_iterative || w_replay || x_set_replay))
   io.core.mem.block_mem := (w_valid && w_inst.vmu) || io.mem_busy
   io.core.trap_check_busy := x_replay || m_valid || w_valid
   io.tlb.s2_kill := false.B
