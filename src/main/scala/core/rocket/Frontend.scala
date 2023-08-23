@@ -1,4 +1,4 @@
-package vref.core.rocket
+package vector.core.rocket
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-import vref.common._
+import vector.common._
 
 class VectorUnit(val params: VectorParams)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {
   val trap_check = Module(new FrontendTrapCheck(params))

@@ -1,4 +1,4 @@
-package vref.common
+package vector.common
 
 import chisel3._
 import chisel3.util._
