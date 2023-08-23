@@ -1,4 +1,4 @@
-package vref
+package vref.common
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class LSAQEntry(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) {
+class LSAQEntry(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) {
   val inst = new VectorIssueInst(params)
   val addr = UInt(vaddrBitsExtended.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
@@ -18,17 +18,16 @@ class LSAQEntry(val params: VREFVectorParams)(implicit p: Parameters) extends Co
   val masked = Bool()
 }
 
-class StoreData(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVREFVectorParams {
+class StoreData(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val data = UInt(dLen.W)
   val mask = UInt(dLenB.W)
 }
 
-class VectorMemUnit(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVREFVectorParams {
+class VectorMemUnit(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
     val enq = Flipped(Decoupled(new VectorIssueInst(params)))
     val dmem = new HellaCacheIO
-    val tlb = Flipped(new DCacheTLBPort)
 
     val load = Decoupled(UInt(dLen.W))
     val vstdata = Flipped(Decoupled(new StoreData(params)))

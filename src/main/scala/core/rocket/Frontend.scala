@@ -1,4 +1,4 @@
-package vref
+package vref.core.rocket
 
 import chisel3._
 import chisel3.util._
@@ -7,18 +7,38 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
+import vref.common._
+
+class VectorUnit(val params: VectorParams)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {
+  val trap_check = Module(new FrontendTrapCheck(params))
+  trap_check.io.core <> io.core
+  trap_check.io.tlb <> io.tlb
+
+  val vxu = Module(new VectorBackend(params))
+  trap_check.io.issue_credits := vxu.io.issue_credits
+  vxu.io.issue := trap_check.io.issue
+
+  trap_check.io.mem_busy := vxu.io.mem_busy
+  trap_check.io.vm       := vxu.io.vm
+  trap_check.io.vm_busy  := vxu.io.vm_busy
+  io.core.backend_busy   := vxu.io.backend_busy
+  vxu.io.status          := io.core.status
+
+  io.dmem <> vxu.io.mem
+
+}
+
+class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
   val io = IO(new Bundle {
     val core = new VectorCoreIO
     val tlb = Flipped(new DCacheTLBPort)
 
     val issue = Valid(new VectorIssueInst(params))
     val issue_credits = Input(UInt())
-    val inflight_mem = Input(Bool())
-    val resetting = Input(Bool())
+    val mem_busy = Input(Bool())
 
     val vm = Input(UInt(maxVLMax.W))
-    val vm_ready = Input(Bool())
+    val vm_busy = Input(Bool())
   })
 
   val replay_kill = WireInit(false.B)
@@ -53,7 +73,7 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
   val x_masked = (io.vm >> x_eidx)(0)
   val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked && !x_tlb_backoff
 
-  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && io.issue_credits > 2.U && !io.resetting && !(x_inst.vm && !io.vm_ready)
+  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && io.issue_credits > 2.U && !(x_inst.vm && io.vm_busy)
   io.tlb.req.valid := x_tlb_valid
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
@@ -171,7 +191,7 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
   }
 
   io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_iterative || w_replay))
-  io.core.mem.block_mem := (w_valid && w_inst.vmu) || io.inflight_mem
+  io.core.mem.block_mem := (w_valid && w_inst.vmu) || io.mem_busy
   io.core.trap_check_busy := x_replay || m_valid || w_valid
   io.tlb.s2_kill := false.B
 }

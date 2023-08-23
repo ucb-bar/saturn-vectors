@@ -1,23 +1,24 @@
-package vref
+package vref.core.rocket
 
 import chisel3._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.tile._
+import vref.common._
 
-class WithVREFUnit(vLen: Int = 128, dLen: Int = 64, params: VREFVectorParams = VREFVectorParams()) extends Config((site, here, up) => {
+class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams = VectorParams()) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: RocketTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
       core = tp.tileParams.core.copy(vector = Some(RocketCoreVectorParams(
         build = ((p: Parameters) => {
-          val vref = Module(new VREFVectorUnit(params)(p))
-          vref
+          val vec = Module(new VectorUnit(params)(p))
+          vec
         }),
         vLen = vLen,
         vMemDataBits = dLen,
         decoder = ((p: Parameters) => {
-          val decoder = Module(new VREFEarlyVectorDecode()(p))
+          val decoder = Module(new EarlyVectorDecode()(p))
           decoder
         })
       ))),

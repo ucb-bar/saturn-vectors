@@ -1,4 +1,4 @@
-package vref
+package vref.common
 
 import chisel3._
 import chisel3.util._
@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorIssueInst(val params: VREFVectorParams)(implicit p: Parameters) extends CoreBundle()(p) with VectorConsts {
+class VectorIssueInst(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) with VectorConsts {
   val bits = UInt(32.W)
   val vconfig = new VConfig
   val vstart = UInt(log2Ceil(maxVLMax).W)
@@ -29,48 +29,29 @@ class VectorIssueInst(val params: VREFVectorParams)(implicit p: Parameters) exte
   def may_write_v0 = rd === 0.U && opcode =/= opcStore
 }
 
-case class VREFVectorParams(
-  viqEntries: Int = 4,
-  vdqEntries: Int = 4,
-  vlaqEntries: Int = 4,
-  vsaqEntries: Int = 4,
-  vatSz: Int = 3) {
-  require(viqEntries >= 3)
-}
+class VectorBackend(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  val io = IO(new Bundle {
+    val issue_credits = Output(UInt(log2Ceil(params.viqEntries).W))
+    val issue = Input(Valid(new VectorIssueInst(params)))
 
-trait HasVREFVectorParams extends VectorConsts { this: HasCoreParameters =>
-  val params: VREFVectorParams
-  def dLen = vMemDataBits
-  def dLenB = dLen / 8
-  def dLenOffBits = log2Ceil(dLenB)
+    val vm = Output(UInt(maxVLMax.W))
+    val mem = new HellaCacheIO
 
-  def egsPerVReg = vLen / dLen
-  def egsTotal = (vLen / dLen) * 32
+    val backend_busy = Output(Bool())
+    val mem_busy = Output(Bool())
+    val vm_busy = Output(Bool())
+    val status = Input(new MStatus)
+  })
 
-  def getEgId(vreg: UInt, eidx: UInt, eew: UInt): UInt = {
-    val base = vreg << log2Ceil(egsPerVReg)
-    val off = eidx >> (log2Ceil(dLenB).U - eew)
-    base + off
-  }
-}
-
-class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVREFVectorParams {
   require(vLen >= 64)
   require(xLen == 64)
   require(vLen >= dLen)
   require(vLen % dLen == 0)
 
-  val tlb_arbiter = Module(new TLBArbiter)
-  tlb_arbiter.io.out <> io.tlb
-
-  val trap_check = Module(new VREFFrontendTrapCheck(params))
-  trap_check.io.core <> io.core
-  trap_check.io.tlb <> tlb_arbiter.io.in1
-
   val viq = Module(new DCEQueue(new VectorIssueInst(params), params.viqEntries))
-  trap_check.io.issue_credits := viq.io.count - viq.entries.U
-  viq.io.enq.valid := trap_check.io.issue.valid
-  viq.io.enq.bits := trap_check.io.issue.bits
+  io.issue_credits := viq.io.count - viq.entries.U
+  viq.io.enq.valid := io.issue.valid
+  viq.io.enq.bits := io.issue.bits
   assert(!(viq.io.enq.valid && !viq.io.enq.ready))
 
   val vat_valids = RegInit(VecInit.fill(1 << params.vatSz)(false.B))
@@ -89,9 +70,8 @@ class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) exten
 
 
   val vmu = Module(new VectorMemUnit(params))
-  vmu.io.status := io.core.status
-  vmu.io.tlb <> tlb_arbiter.io.in0
-  vmu.io.dmem <> io.dmem
+  vmu.io.status := io.status
+  vmu.io.dmem <> io.mem
 
   val vdq = Module(new DCEQueue(new VectorIssueInst(params), params.vdqEntries))
 
@@ -186,7 +166,10 @@ class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) exten
 
   val resetting = RegInit(true.B)
   val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
-  when (resetting) { reset_ctr := reset_ctr + 1.U }
+  when (resetting) {
+    reset_ctr := reset_ctr + 1.U
+    io.issue_credits := 0.U
+  }
   when (~reset_ctr === 0.U) { resetting := false.B }
 
   when (vls.io.iss.fire || resetting) {
@@ -216,10 +199,7 @@ class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) exten
   vmu.io.vstdata.bits.mask := vss.io.iss.bits.wmask
   vmu.io.vm := vmf.asUInt
 
-  val inflight_mem = (viq.io.peek ++ vdq.io.peek).map(e => e.valid && e.bits.vmu).orR || vls.io.valid || vss.io.valid || vmu.io.busy
-  trap_check.io.inflight_mem := inflight_mem
-  trap_check.io.resetting := resetting
-  trap_check.io.vm := vmf.asUInt
+
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ seqs.map(_.io.pipe_hazards).flatten.map { h =>
@@ -228,8 +208,10 @@ class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) exten
   val vdq_viq_inflight_wv0 = (vdq.io.peek ++ viq.io.peek).map { h =>
     h.valid && h.bits.may_write_v0
   }.orR
-  trap_check.io.vm_ready := !(seq_inflight_wv0 || vdq_viq_inflight_wv0)
 
-  io.core.backend_busy := viq.io.deq.valid || vdq.io.deq.valid || resetting
 
+  io.mem_busy := (viq.io.peek ++ vdq.io.peek).map(e => e.valid && e.bits.vmu).orR || vls.io.valid || vss.io.valid || vmu.io.busy
+  io.vm := vmf.asUInt
+  io.vm_busy := seq_inflight_wv0 || vdq_viq_inflight_wv0
+  io.backend_busy := viq.io.deq.valid || vdq.io.deq.valid || resetting
 }
