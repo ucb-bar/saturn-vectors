@@ -9,7 +9,7 @@ import freechips.rocketchip.tile._
 
 class LoadCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val lrq = Flipped(Decoupled(new HellaCacheResp))
+    val lrq = Flipped(Decoupled(UInt(dLen.W)))
     val laq = Flipped(Decoupled(new LSAQEntry))
 
     val out = Decoupled(UInt(dLen.W))
@@ -17,7 +17,7 @@ class LoadCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val rot_reg = Reg(UInt(dLen.W))
 
-  val in_data = Mux(io.laq.bits.prestart, 0.U, io.lrq.bits.data)
+  val in_data = Mux(io.laq.bits.prestart, 0.U, io.lrq.bits)
   val in_sramt = io.laq.bits.addr(dLenOffBits-1,0)
   val in_slamt = Mux(io.laq.bits.iterative,
     (io.laq.bits.eidx << io.laq.bits.inst.mem_size)(log2Ceil(dLenB)-1,0),

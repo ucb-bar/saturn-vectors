@@ -23,11 +23,25 @@ class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
   val mask = UInt(dLenB.W)
 }
 
+class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val addr = UInt(coreMaxAddrBits.W)
+  val size = UInt(2.W)
+  val data = UInt(dLen.W)
+  val mask = UInt(dLenB.W)
+}
+
+class VectorMemInterface(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val load_req = Decoupled(new MemRequest)
+  val load_resp = Input(Valid(UInt(dLen.W)))
+  val store_req = Decoupled(new MemRequest)
+}
+
 class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
     val enq = Flipped(Decoupled(new VectorIssueInst))
-    val dmem = new HellaCacheIO
+
+    val dmem = new VectorMemInterface
 
     val load = Decoupled(UInt(dLen.W))
     val vstdata = Flipped(Decoupled(new StoreData))
@@ -39,13 +53,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
     val busy = Output(Bool())
   })
-
-  val dmem_simple = Module(new SimpleHellaCacheIF)
-  val dmem_arb = Module(new HellaCacheArbiter(2))
-  dmem_simple.io.requestor <> dmem_arb.io.mem
-  io.dmem <> dmem_simple.io.cache
-  val dmem_load = dmem_arb.io.requestor(1)
-  val dmem_store = dmem_arb.io.requestor(0)
 
   val valid = RegInit(false.B)
   val inst = Reg(new VectorIssueInst)
@@ -82,7 +89,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val may_clear = next_eidx >= (inst.vconfig.vl +& Mux(alignment === 0.U && !iterative, eg_elems, 0.U))
   val prestart = eidx < inst.vstart
   val masked = !inst.vm && !(io.vm >> eidx)(0)
-  val load_tag = RegInit(0.U(log2Ceil(vParams.vlaqEntries).W))
 
   io.vm_hazard.valid := valid && !inst.vm
   io.vm_hazard.vat := inst.vat
@@ -90,28 +96,12 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val laq = Module(new DCEQueue(new LSAQEntry, vParams.vlaqEntries))
   val saq = Module(new DCEQueue(new LSAQEntry, vParams.vsaqEntries))
-  val inflight_loads = RegInit(0.U(log2Ceil(vParams.vlaqEntries).W))
 
-  dmem_load.req.valid := valid && load && !prestart && laq.io.enq.ready && !masked && !mask_hazard
-  dmem_load.req.bits.addr := Mux(iterative, addr, aligned_addr)
-  dmem_load.req.bits.tag := load_tag
-  dmem_load.req.bits.cmd := M_XRD
-  dmem_load.req.bits.size := Mux(iterative, inst.mem_size, log2Ceil(dLenB).U)
-  dmem_load.req.bits.signed := false.B
-  dmem_load.req.bits.dprv := io.status.prv
-  dmem_load.req.bits.dv := io.status.v
-  dmem_load.req.bits.data := DontCare
-  dmem_load.req.bits.mask := DontCare
-  dmem_load.req.bits.phys := false.B
-  dmem_load.req.bits.no_alloc := false.B
-  dmem_load.req.bits.no_xcpt := true.B
-
-  dmem_load.s1_kill := false.B
-  dmem_load.s1_data := DontCare
-  dmem_load.s2_kill := false.B
-  dmem_load.keep_clock_enabled := true.B
-
-  when (dmem_load.req.fire) { load_tag := Mux(load_tag === (vParams.vlaqEntries-1).U, 0.U, load_tag + 1.U) }
+  io.dmem.load_req.valid := valid && load && !prestart && laq.io.enq.ready && !masked && !mask_hazard
+  io.dmem.load_req.bits.addr := Mux(iterative, addr, aligned_addr)
+  io.dmem.load_req.bits.size := Mux(iterative, inst.mem_size, log2Ceil(dLenB).U)
+  io.dmem.load_req.bits.data := DontCare
+  io.dmem.load_req.bits.mask := DontCare
 
   laq.io.enq.bits.inst := inst
   laq.io.enq.bits.eidx := eidx
@@ -121,7 +111,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   laq.io.enq.bits.addr := addr
   laq.io.enq.bits.prestart := prestart
   laq.io.enq.bits.masked := masked
-  laq.io.enq.valid := valid && load && (prestart || dmem_load.req.ready) && !mask_hazard
+  laq.io.enq.valid := valid && load && (prestart || io.dmem.load_req.ready) && !mask_hazard
 
   saq.io.enq.bits.inst := inst
   saq.io.enq.bits.eidx := eidx
@@ -144,9 +134,9 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   val lcoal = Module(new LoadCoalescer)
-  val lrq = Module(new DCEQueue(new HellaCacheResp, vParams.vlaqEntries, flow=true))
-  lrq.io.enq.valid := dmem_load.resp.valid
-  lrq.io.enq.bits := dmem_load.resp.bits
+  val lrq = Module(new DCEQueue(UInt(dLen.W), vParams.vlaqEntries, flow=true))
+  lrq.io.enq.valid := io.dmem.load_resp.valid
+  lrq.io.enq.bits := io.dmem.load_resp.bits
   assert(!(lrq.io.enq.valid && !lrq.io.enq.ready))
 
   lcoal.io.lrq <> lrq.io.deq
@@ -157,12 +147,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   scoal.io.status := io.status
   scoal.io.saq <> saq.io.deq
   scoal.io.stdata <> io.vstdata
-  dmem_store.req <> scoal.io.req
-  scoal.io.resp <> dmem_store.resp
-  dmem_store.s1_kill := false.B
-  dmem_store.s1_data := DontCare
-  dmem_store.s2_kill := false.B
-  dmem_store.keep_clock_enabled := false.B
+  io.dmem.store_req <> scoal.io.req
 
-  io.busy := scoal.io.busy
+  io.busy := lrq.io.deq.valid || laq.io.deq.valid || saq.io.deq.valid
 }

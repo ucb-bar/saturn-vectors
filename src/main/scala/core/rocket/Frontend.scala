@@ -24,8 +24,68 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   io.core.backend_busy   := vxu.io.backend_busy
   vxu.io.status          := io.core.status
 
-  io.dmem <> vxu.io.mem
+  val hella_simple = Module(new SimpleHellaCacheIF)
+  val hella_arb = Module(new HellaCacheArbiter(2))
+  hella_simple.io.requestor <> hella_arb.io.mem
+  io.dmem <> hella_simple.io.cache
+  val hella_load = hella_arb.io.requestor(1)
+  val hella_store = hella_arb.io.requestor(0)
 
+
+  val load_tag_oh = RegInit(VecInit.fill(4)(false.B))
+  val load_tag = PriorityEncoder(~(load_tag_oh.asUInt))
+  val load_tag_available = !load_tag_oh(load_tag)
+  when (hella_load.req.fire) { load_tag_oh(load_tag) := true.B }
+  when (hella_load.resp.fire) { load_tag_oh(hella_load.resp.bits.tag) := false.B }
+
+  vxu.io.mem.load_req.ready  := hella_load.req.ready && load_tag_available
+  hella_load.req.valid       := vxu.io.mem.load_req.valid && load_tag_available
+  hella_load.req.bits.addr   := vxu.io.mem.load_req.bits.addr
+  hella_load.req.bits.size   := vxu.io.mem.load_req.bits.size
+  hella_load.req.bits.tag    := load_tag
+  hella_load.req.bits.cmd    := M_XRD
+  hella_load.req.bits.signed := false.B
+  hella_load.req.bits.dprv   := io.core.status.prv
+  hella_load.req.bits.dv     := io.core.status.dv
+  hella_load.req.bits.data   := DontCare
+  hella_load.req.bits.mask   := DontCare
+  hella_load.req.bits.phys   := DontCare
+  hella_load.req.bits.no_alloc := false.B
+  hella_load.req.bits.no_xcpt := true.B
+  hella_load.s1_kill := false.B
+  hella_load.s1_data := DontCare
+  hella_load.s2_kill := false.B
+  hella_load.keep_clock_enabled := vxu.io.backend_busy
+
+  vxu.io.mem.load_resp.valid := hella_load.resp.valid
+  vxu.io.mem.load_resp.bits  := hella_load.resp.bits.data
+
+  val store_tag_oh = RegInit(VecInit.fill(4)(false.B))
+  val store_tag = PriorityEncoder(~(store_tag_oh.asUInt))
+  val store_tag_available = !store_tag_oh(store_tag)
+  when (hella_store.req.fire) { store_tag_oh(store_tag) := true.B }
+  when (hella_store.resp.fire) { store_tag_oh(hella_store.resp.bits.tag) := false.B }
+
+  vxu.io.mem.store_req.ready  := hella_store.req.ready && store_tag_available
+  hella_store.req.valid       := vxu.io.mem.store_req.valid && store_tag_available
+  hella_store.req.bits.addr   := vxu.io.mem.store_req.bits.addr
+  hella_store.req.bits.tag    := store_tag
+  hella_store.req.bits.cmd    := M_XWR
+  hella_store.req.bits.size   := vxu.io.mem.store_req.bits.size
+  hella_store.req.bits.signed := false.B
+  hella_store.req.bits.dprv   := io.core.status.prv
+  hella_store.req.bits.dv     := io.core.status.dv
+  hella_store.req.bits.data   := vxu.io.mem.store_req.bits.data
+  hella_store.req.bits.mask   := vxu.io.mem.store_req.bits.mask
+  hella_store.req.bits.phys   := DontCare
+  hella_store.req.bits.no_alloc := false.B
+  hella_store.req.bits.no_xcpt := true.B
+  hella_store.s1_kill := false.B
+  hella_store.s1_data := DontCare
+  hella_store.s2_kill := false.B
+  hella_store.keep_clock_enabled := vxu.io.backend_busy
+
+  when (store_tag_oh.orR || load_tag_oh.orR) { trap_check.io.mem_busy := true.B }
 }
 
 class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {

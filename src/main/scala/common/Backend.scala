@@ -35,7 +35,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val issue = Input(Valid(new VectorIssueInst))
 
     val vm = Output(UInt(maxVLMax.W))
-    val mem = new HellaCacheIO
+
+    val mem = new VectorMemInterface
 
     val backend_busy = Output(Bool())
     val mem_busy = Output(Bool())
