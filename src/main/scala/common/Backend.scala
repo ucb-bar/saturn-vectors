@@ -31,7 +31,7 @@ class VectorIssueInst(val params: VectorParams)(implicit p: Parameters) extends 
 
 class VectorBackend(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val issue_credits = Output(UInt(log2Ceil(params.viqEntries).W))
+    val issue_credits = Output(UInt((1+log2Ceil(params.viqEntries)).W))
     val issue = Input(Valid(new VectorIssueInst(params)))
 
     val vm = Output(UInt(maxVLMax.W))
@@ -49,7 +49,7 @@ class VectorBackend(val params: VectorParams)(implicit p: Parameters) extends Co
   require(vLen % dLen == 0)
 
   val viq = Module(new DCEQueue(new VectorIssueInst(params), params.viqEntries))
-  io.issue_credits := viq.io.count - viq.entries.U
+  io.issue_credits := viq.entries.U - viq.io.count
   viq.io.enq.valid := io.issue.valid
   viq.io.enq.bits := io.issue.bits
   assert(!(viq.io.enq.valid && !viq.io.enq.ready))
