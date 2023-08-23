@@ -230,6 +230,6 @@ class VREFVectorUnit(val params: VREFVectorParams)(implicit p: Parameters) exten
   }.orR
   trap_check.io.vm_ready := !(seq_inflight_wv0 || vdq_viq_inflight_wv0)
 
-  io.core.busy := viq.io.deq.valid || vdq.io.deq.valid || resetting
+  io.core.backend_busy := viq.io.deq.valid || vdq.io.deq.valid || resetting
 
 }

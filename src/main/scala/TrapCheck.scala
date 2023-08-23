@@ -21,7 +21,11 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
     val vm_ready = Input(Bool())
   })
 
+  val replay_kill = WireInit(false.B)
+
   // X stage
+  val x_tlb_backoff = RegInit(0.U(2.W))
+  when (x_tlb_backoff.orR) { x_tlb_backoff := x_tlb_backoff - 1.U }
   val x_replay = RegInit(false.B)
   val x_replay_inst = Reg(new VectorIssueInst(params))
   val x_replay_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -47,7 +51,7 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
   val x_iterative = true.B || x_inst.vstart =/= 0.U || x_inst.vm
   val x_masked = (io.vm >> x_eidx)(0)
-  val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked
+  val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked && !x_tlb_backoff
 
   io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && io.issue_credits > 2.U && !io.resetting && !(x_inst.vm && !io.vm_ready)
   io.tlb.req.valid := x_tlb_valid
@@ -61,12 +65,13 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
   when (x_replay && x_replay_eidx < x_replay_inst.vconfig.vl) {
     val next_x_replay_eidx = x_replay_eidx + 1.U
     x_replay_eidx := next_x_replay_eidx
+    x_replay_addr := x_replay_addr + x_replay_stride
   }
 
   val x_may_be_valid = io.core.ex.valid || x_replay
 
   // M stage
-  val m_valid = RegNext(x_replay || (io.core.ex.valid && io.core.ex.ready), false.B)
+  val m_valid = RegNext((x_replay && !replay_kill) || (io.core.ex.valid && io.core.ex.ready), false.B)
   val m_inst = RegEnable(x_inst, x_may_be_valid)
   val m_replay = RegEnable(x_replay, x_may_be_valid)
   val m_addr = RegEnable(x_addr, x_may_be_valid)
@@ -80,8 +85,10 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && !m_masked)
 
+  when (io.tlb.s1_resp.miss && m_tlb_resp_valid) { x_tlb_backoff := 3.U }
+
   // W stage
-  val w_valid = RegNext(m_valid && !(io.core.killm && !m_replay), false.B)
+  val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, io.core.killm), false.B)
   val w_replay = RegEnable(m_replay, m_valid)
   val w_inst = RegEnable(m_inst, m_valid)
   val w_addr = RegEnable(m_addr, m_valid)
@@ -111,6 +118,7 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
   io.core.wb.xcpt := false.B
   io.core.wb.cause := DontCare
   io.core.wb.replay := false.B
+  io.core.wb.tval := w_addr
   io.core.set_vstart.valid := false.B
   io.core.set_vstart.bits := DontCare
 
@@ -139,6 +147,7 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
   }
   when (w_valid && w_replay) {
     when (w_tlb_resp.miss) {
+      replay_kill := true.B
       x_replay_eidx := w_eidx
       x_replay_addr := w_addr
     } .elsewhen (w_xcpt) {
@@ -147,6 +156,11 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
       io.core.wb.xcpt := true.B
       io.core.set_vstart.valid := true.B
       io.core.set_vstart.bits := w_eidx
+      replay_kill := true.B
+      when (w_eidx =/= 0.U) {
+        io.issue.valid := true.B
+        io.issue.bits.vconfig.vl := w_eidx
+      }
     } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl) {
       x_replay := false.B
       io.core.wb.retire := true.B
@@ -158,5 +172,6 @@ class VREFFrontendTrapCheck(val params: VREFVectorParams)(implicit p: Parameters
 
   io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_iterative || w_replay))
   io.core.mem.block_mem := (w_valid && w_inst.vmu) || io.inflight_mem
+  io.core.trap_check_busy := x_replay || m_valid || w_valid
   io.tlb.s2_kill := false.B
 }
