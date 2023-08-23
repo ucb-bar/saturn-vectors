@@ -7,10 +7,10 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class LoadCoalescer(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class LoadCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val lrq = Flipped(Decoupled(new HellaCacheResp))
-    val laq = Flipped(Decoupled(new LSAQEntry(params)))
+    val laq = Flipped(Decoupled(new LSAQEntry))
 
     val out = Decoupled(UInt(dLen.W))
   })

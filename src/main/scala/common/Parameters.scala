@@ -16,8 +16,11 @@ case class VectorParams(
   require(viqEntries >= 3)
 }
 
+case object VectorParamsKey extends Field[VectorParams]
+
 trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
-  val params: VectorParams
+  implicit val p: Parameters
+  def vParams: VectorParams = p(VectorParamsKey)
   def dLen = vMemDataBits
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)

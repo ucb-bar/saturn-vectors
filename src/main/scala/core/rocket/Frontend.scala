@@ -9,12 +9,12 @@ import freechips.rocketchip.tile._
 
 import vector.common._
 
-class VectorUnit(val params: VectorParams)(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {
-  val trap_check = Module(new FrontendTrapCheck(params))
+class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {
+  val trap_check = Module(new FrontendTrapCheck)
   trap_check.io.core <> io.core
   trap_check.io.tlb <> io.tlb
 
-  val vxu = Module(new VectorBackend(params))
+  val vxu = Module(new VectorBackend)
   trap_check.io.issue_credits := vxu.io.issue_credits
   vxu.io.issue := trap_check.io.issue
 
@@ -28,12 +28,12 @@ class VectorUnit(val params: VectorParams)(implicit p: Parameters) extends Rocke
 
 }
 
-class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
+class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with VectorConsts {
   val io = IO(new Bundle {
     val core = new VectorCoreIO
     val tlb = Flipped(new DCacheTLBPort)
 
-    val issue = Valid(new VectorIssueInst(params))
+    val issue = Valid(new VectorIssueInst)
     val issue_credits = Input(UInt())
     val mem_busy = Input(Bool())
 
@@ -47,13 +47,13 @@ class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extend
   val x_tlb_backoff = RegInit(0.U(2.W))
   when (x_tlb_backoff.orR) { x_tlb_backoff := x_tlb_backoff - 1.U }
   val x_replay = RegInit(false.B)
-  val x_replay_inst = Reg(new VectorIssueInst(params))
+  val x_replay_inst = Reg(new VectorIssueInst)
   val x_replay_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
   val x_replay_addr = Reg(UInt(vaddrBitsExtended.W))
   val x_replay_pc = Reg(UInt(vaddrBitsExtended.W))
   val x_replay_stride = Reg(UInt(vaddrBitsExtended.W))
 
-  val x_core_inst = Wire(new VectorIssueInst(params))
+  val x_core_inst = Wire(new VectorIssueInst)
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
   x_core_inst.vstart := io.core.ex.vstart

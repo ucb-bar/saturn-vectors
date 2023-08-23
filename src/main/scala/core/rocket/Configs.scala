@@ -12,7 +12,9 @@ class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams
     case tp: RocketTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
       core = tp.tileParams.core.copy(vector = Some(RocketCoreVectorParams(
         build = ((p: Parameters) => {
-          val vec = Module(new VectorUnit(params)(p))
+          val vec = Module(new VectorUnit()(p.alterPartial {
+            case VectorParamsKey => params
+          }))
           vec
         }),
         vLen = vLen,

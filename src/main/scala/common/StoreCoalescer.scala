@@ -7,11 +7,11 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class StoreCoalescer(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
-    val saq = Flipped(Decoupled(new LSAQEntry(params)))
-    val stdata = Flipped(Decoupled(new StoreData(params)))
+    val saq = Flipped(Decoupled(new LSAQEntry))
+    val stdata = Flipped(Decoupled(new StoreData))
 
     val req = Decoupled(new HellaCacheReq)
     val resp = Flipped(Valid(new HellaCacheResp))

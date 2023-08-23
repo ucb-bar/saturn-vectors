@@ -7,13 +7,13 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorIssueInst(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) with VectorConsts {
+class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val bits = UInt(32.W)
   val vconfig = new VConfig
   val vstart = UInt(log2Ceil(maxVLMax).W)
   val rs1_data = UInt(xLen.W)
   val rs2_data = UInt(xLen.W)
-  val vat = UInt(params.vatSz.W)
+  val vat = UInt(vParams.vatSz.W)
 
   def opcode = bits(6,0)
   def mem_size = bits(13,12)
@@ -29,10 +29,10 @@ class VectorIssueInst(val params: VectorParams)(implicit p: Parameters) extends 
   def may_write_v0 = rd === 0.U && opcode =/= opcStore
 }
 
-class VectorBackend(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val issue_credits = Output(UInt((1+log2Ceil(params.viqEntries)).W))
-    val issue = Input(Valid(new VectorIssueInst(params)))
+    val issue_credits = Output(UInt((1+log2Ceil(vParams.viqEntries)).W))
+    val issue = Input(Valid(new VectorIssueInst))
 
     val vm = Output(UInt(maxVLMax.W))
     val mem = new HellaCacheIO
@@ -48,14 +48,14 @@ class VectorBackend(val params: VectorParams)(implicit p: Parameters) extends Co
   require(vLen >= dLen)
   require(vLen % dLen == 0)
 
-  val viq = Module(new DCEQueue(new VectorIssueInst(params), params.viqEntries))
+  val viq = Module(new DCEQueue(new VectorIssueInst, vParams.viqEntries))
   io.issue_credits := viq.entries.U - viq.io.count
   viq.io.enq.valid := io.issue.valid
   viq.io.enq.bits := io.issue.bits
   assert(!(viq.io.enq.valid && !viq.io.enq.ready))
 
-  val vat_valids = RegInit(VecInit.fill(1 << params.vatSz)(false.B))
-  val vat_tail = RegInit(0.U(params.vatSz.W))
+  val vat_valids = RegInit(VecInit.fill(1 << vParams.vatSz)(false.B))
+  val vat_tail = RegInit(0.U(vParams.vatSz.W))
   def vatOlder(i0: UInt, i1: UInt) = (i0 < i1) ^ (i0 < vat_tail) ^ (i1 < vat_tail)
   val vat_available = !vat_valids(vat_tail)
 
@@ -64,16 +64,16 @@ class VectorBackend(val params: VectorParams)(implicit p: Parameters) extends Co
     vat_tail := vat_tail + 1.U
   }
 
-  val viq_issue_inst = Wire(new VectorIssueInst(params))
+  val viq_issue_inst = Wire(new VectorIssueInst)
   viq_issue_inst := viq.io.deq.bits
   viq_issue_inst.vat := vat_tail
 
 
-  val vmu = Module(new VectorMemUnit(params))
+  val vmu = Module(new VectorMemUnit)
   vmu.io.status := io.status
   vmu.io.dmem <> io.mem
 
-  val vdq = Module(new DCEQueue(new VectorIssueInst(params), params.vdqEntries))
+  val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
 
   viq.io.deq.ready := vat_available && vdq.io.enq.ready && (!viq.io.deq.bits.vmu || vmu.io.enq.ready)
   vdq.io.enq.valid := vat_available && viq.io.deq.valid && (!viq.io.deq.bits.vmu || vmu.io.enq.ready)
@@ -85,11 +85,11 @@ class VectorBackend(val params: VectorParams)(implicit p: Parameters) extends Co
 
 
   val vls = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && !i.opcode(5),
-    true, false, false, false, params))
+    true, false, false, false))
   val vss = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu &&  i.opcode(5),
-    false, false, false, true, params))
+    false, false, false, true))
   val vxs = Module(new PipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
-    true, false, false, false, params))
+    true, false, false, false))
   val seqs = Seq(vls, vss, vxs)
 
 

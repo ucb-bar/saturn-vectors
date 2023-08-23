@@ -7,8 +7,8 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class LSAQEntry(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) {
-  val inst = new VectorIssueInst(params)
+class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) {
+  val inst = new VectorIssueInst
   val addr = UInt(vaddrBitsExtended.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val iterative = Bool()
@@ -18,23 +18,23 @@ class LSAQEntry(val params: VectorParams)(implicit p: Parameters) extends CoreBu
   val masked = Bool()
 }
 
-class StoreData(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val data = UInt(dLen.W)
   val mask = UInt(dLenB.W)
 }
 
-class VectorMemUnit(val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
-    val enq = Flipped(Decoupled(new VectorIssueInst(params)))
+    val enq = Flipped(Decoupled(new VectorIssueInst))
     val dmem = new HellaCacheIO
 
     val load = Decoupled(UInt(dLen.W))
-    val vstdata = Flipped(Decoupled(new StoreData(params)))
+    val vstdata = Flipped(Decoupled(new StoreData))
     val vm = Input(UInt(maxVLMax.W))
     val vm_hazard = new Bundle {
       val valid = Output(Bool())
-      val vat = Output(UInt(params.vatSz.W))
+      val vat = Output(UInt(vParams.vatSz.W))
       val hazard = Input(Bool())
     }
     val busy = Output(Bool())
@@ -48,7 +48,7 @@ class VectorMemUnit(val params: VectorParams)(implicit p: Parameters) extends Co
   val dmem_store = dmem_arb.io.requestor(0)
 
   val valid = RegInit(false.B)
-  val inst = Reg(new VectorIssueInst(params))
+  val inst = Reg(new VectorIssueInst)
   val addr = Reg(UInt(vaddrBitsExtended.W))
   val eidx = Reg(UInt(log2Ceil(maxVLMax).W))
   val stride = Reg(UInt(vaddrBitsExtended.W))
@@ -82,15 +82,15 @@ class VectorMemUnit(val params: VectorParams)(implicit p: Parameters) extends Co
   val may_clear = next_eidx >= (inst.vconfig.vl +& Mux(alignment === 0.U && !iterative, eg_elems, 0.U))
   val prestart = eidx < inst.vstart
   val masked = !inst.vm && !(io.vm >> eidx)(0)
-  val load_tag = RegInit(0.U(log2Ceil(params.vlaqEntries).W))
+  val load_tag = RegInit(0.U(log2Ceil(vParams.vlaqEntries).W))
 
   io.vm_hazard.valid := valid && !inst.vm
   io.vm_hazard.vat := inst.vat
   val mask_hazard = !inst.vm && io.vm_hazard.hazard
 
-  val laq = Module(new DCEQueue(new LSAQEntry(params), params.vlaqEntries))
-  val saq = Module(new DCEQueue(new LSAQEntry(params), params.vsaqEntries))
-  val inflight_loads = RegInit(0.U(log2Ceil(params.vlaqEntries).W))
+  val laq = Module(new DCEQueue(new LSAQEntry, vParams.vlaqEntries))
+  val saq = Module(new DCEQueue(new LSAQEntry, vParams.vsaqEntries))
+  val inflight_loads = RegInit(0.U(log2Ceil(vParams.vlaqEntries).W))
 
   dmem_load.req.valid := valid && load && !prestart && laq.io.enq.ready && !masked && !mask_hazard
   dmem_load.req.bits.addr := Mux(iterative, addr, aligned_addr)
@@ -111,7 +111,7 @@ class VectorMemUnit(val params: VectorParams)(implicit p: Parameters) extends Co
   dmem_load.s2_kill := false.B
   dmem_load.keep_clock_enabled := true.B
 
-  when (dmem_load.req.fire) { load_tag := Mux(load_tag === (params.vlaqEntries-1).U, 0.U, load_tag + 1.U) }
+  when (dmem_load.req.fire) { load_tag := Mux(load_tag === (vParams.vlaqEntries-1).U, 0.U, load_tag + 1.U) }
 
   laq.io.enq.bits.inst := inst
   laq.io.enq.bits.eidx := eidx
@@ -143,8 +143,8 @@ class VectorMemUnit(val params: VectorParams)(implicit p: Parameters) extends Co
     }
   }
 
-  val lcoal = Module(new LoadCoalescer(params))
-  val lrq = Module(new DCEQueue(new HellaCacheResp, params.vlaqEntries, flow=true))
+  val lcoal = Module(new LoadCoalescer)
+  val lrq = Module(new DCEQueue(new HellaCacheResp, vParams.vlaqEntries, flow=true))
   lrq.io.enq.valid := dmem_load.resp.valid
   lrq.io.enq.bits := dmem_load.resp.bits
   assert(!(lrq.io.enq.valid && !lrq.io.enq.ready))
@@ -153,7 +153,7 @@ class VectorMemUnit(val params: VectorParams)(implicit p: Parameters) extends Co
   lcoal.io.laq <> laq.io.deq
   io.load <> lcoal.io.out
 
-  val scoal = Module(new StoreCoalescer(params))
+  val scoal = Module(new StoreCoalescer)
   scoal.io.status := io.status
   scoal.io.saq <> saq.io.deq
   scoal.io.stdata <> io.vstdata

@@ -7,8 +7,8 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorIssueBeat(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val inst = new VectorIssueInst(params)
+class VectorIssueBeat(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val inst = new VectorIssueInst
   val renv1 = Bool()
   val renv2 = Bool()
   val renvd = Bool()
@@ -23,20 +23,20 @@ class VectorIssueBeat(val params: VectorParams)(implicit p: Parameters) extends 
   val wmask   = UInt(dLenB.W)
 }
 
-class PipeHazard(val params: VectorParams)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
-  val vat = UInt(params.vatSz.W)
+  val vat = UInt(vParams.vatSz.W)
   val last = Bool()
 }
 
 
 class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   writeVD: Boolean, readVS1: Boolean, readVS2: Boolean, readVD: Boolean,
-  val params: VectorParams)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val dis_valid = Input(Bool())
     val dis_ready = Output(Bool())
-    val dis = Input(new VectorIssueInst(params))
+    val dis = Input(new VectorIssueInst)
 
     val dis_wvd = Input(Bool())
     val dis_renv1 = Input(Bool())
@@ -46,23 +46,23 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     val dis_execmode = Input(UInt(2.W))
 
     val valid = Output(Bool())
-    val iss = Decoupled(new VectorIssueBeat(params))
+    val iss = Decoupled(new VectorIssueBeat)
     val seq_hazards = new Bundle {
       val valid = Output(Bool())
       val rintent = Output(UInt(egsTotal.W))
       val wintent = Output(UInt(egsTotal.W))
-      val vat = Output(UInt(params.vatSz.W))
+      val vat = Output(UInt(vParams.vatSz.W))
 
       val writes = Input(UInt(egsTotal.W))
       val reads = Input(UInt(egsTotal.W))
     }
-    val pipe_hazards = Vec(depth, Valid(new PipeHazard(params)))
+    val pipe_hazards = Vec(depth, Valid(new PipeHazard))
 
-    val vat_release = Valid(UInt(params.vatSz.W))
+    val vat_release = Valid(UInt(vParams.vatSz.W))
   })
 
   val valid   = RegInit(false.B)
-  val inst    = Reg(new VectorIssueInst(params))
+  val inst    = Reg(new VectorIssueInst)
   val wvd_oh  = Reg(UInt(egsTotal.W))
   val rvs1_oh = Reg(UInt(egsTotal.W))
   val rvs2_oh = Reg(UInt(egsTotal.W))
@@ -159,7 +159,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   }
 
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
-  val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(params)) }
+  val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard) }
 
   when (io.iss.fire && !last) {
     when (mode === execRegular) {
