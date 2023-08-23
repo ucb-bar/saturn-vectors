@@ -69,9 +69,13 @@ class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extend
   val x_eidx = Mux(x_replay, x_replay_eidx, 0.U)
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
-  val x_iterative = true.B || x_inst.vstart =/= 0.U || x_inst.vm
   val x_masked = (io.vm >> x_eidx)(0)
+  val x_unit_bound = x_inst.vconfig.vl << x_inst.mem_size
+  val x_single_page = x_inst.mop === mopUnit && ((x_addr + x_unit_bound)(pgIdxBits) === x_addr(pgIdxBits))
+  val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm
   val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked && !x_tlb_backoff
+
+
 
   io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && io.issue_credits > 2.U && !(x_inst.vm && io.vm_busy)
   io.tlb.req.valid := x_tlb_valid
@@ -141,6 +145,8 @@ class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extend
   io.core.wb.tval := w_addr
   io.core.set_vstart.valid := false.B
   io.core.set_vstart.bits := DontCare
+  io.core.set_vxsat := DontCare
+  io.core.backend_busy := DontCare
 
   io.issue.valid := false.B
   io.issue.bits := w_inst
@@ -148,7 +154,7 @@ class FrontendTrapCheck(val params: VectorParams)(implicit p: Parameters) extend
   when (w_valid && !w_replay) {
     when (w_inst.vstart >= w_vl) {
       io.core.wb.retire := true.B
-    } .elsewhen (w_iterative) {
+    } .elsewhen (w_iterative || !w_tlb_resp.cacheable) {
       x_replay := true.B
       x_replay_inst := w_inst
       x_replay_eidx := 0.U
