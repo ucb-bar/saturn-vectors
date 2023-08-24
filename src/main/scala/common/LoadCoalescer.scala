@@ -13,6 +13,7 @@ class LoadCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val laq = Flipped(Decoupled(new LSAQEntry))
 
     val out = Decoupled(UInt(dLen.W))
+    val maq_clear = Valid(UInt(vmaqSz.W))
   })
 
   val rot_reg = Reg(UInt(dLen.W))
@@ -51,4 +52,7 @@ class LoadCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVect
   when (io.laq.fire) { rot_reg := in_data_sr }
 
   assert(!(io.lrq.valid && !io.laq.valid))
+
+  io.maq_clear.valid := io.laq.fire && io.laq.bits.tail
+  io.maq_clear.bits := io.laq.bits.maq_idx
 }

@@ -8,13 +8,12 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 case class VectorParams(
-  viqEntries: Int = 4,
   vdqEntries: Int = 4,
   vlaqEntries: Int = 4,
   vsaqEntries: Int = 4,
-  vatSz: Int = 3) {
-  require(viqEntries >= 3)
-}
+  vmaqEntries: Int = 4,
+  vsoqEntries: Int = 4,
+  vatSz: Int = 3)
 
 case object VectorParamsKey extends Field[VectorParams]
 
@@ -25,6 +24,8 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
 
+  def vmaqSz = log2Ceil(vParams.vmaqEntries)
+
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
 
@@ -33,4 +34,6 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
     val off = eidx >> (log2Ceil(dLenB).U - eew)
     base + off
   }
+
+  def cqOlder(i0: UInt, i1: UInt, tail: UInt) = (i0 < i1) ^ (i0 < tail) ^ (i1 < tail)
 }

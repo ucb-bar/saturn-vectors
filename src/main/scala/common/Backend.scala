@@ -31,8 +31,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val issue_credits = Output(UInt((1+log2Ceil(vParams.viqEntries)).W))
-    val issue = Input(Valid(new VectorIssueInst))
+    val issue = Flipped(Decoupled(new VectorIssueInst))
 
     val vm = Output(UInt(maxVLMax.W))
 
@@ -49,41 +48,34 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   require(vLen >= dLen)
   require(vLen % dLen == 0)
 
-  val viq = Module(new DCEQueue(new VectorIssueInst, vParams.viqEntries))
-  io.issue_credits := viq.entries.U - viq.io.count
-  viq.io.enq.valid := io.issue.valid
-  viq.io.enq.bits := io.issue.bits
-  assert(!(viq.io.enq.valid && !viq.io.enq.ready))
-
-  val vat_valids = RegInit(VecInit.fill(1 << vParams.vatSz)(false.B))
-  val vat_tail = RegInit(0.U(vParams.vatSz.W))
-  def vatOlder(i0: UInt, i1: UInt) = (i0 < i1) ^ (i0 < vat_tail) ^ (i1 < vat_tail)
-  val vat_available = !vat_valids(vat_tail)
-
-  when (viq.io.deq.fire) {
-    vat_valids(vat_tail) := true.B
-    vat_tail := vat_tail + 1.U
-  }
-
-  val viq_issue_inst = Wire(new VectorIssueInst)
-  viq_issue_inst := viq.io.deq.bits
-  viq_issue_inst.vat := vat_tail
-
-
   val vmu = Module(new VectorMemUnit)
   vmu.io.status := io.status
   vmu.io.dmem <> io.mem
 
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
 
-  viq.io.deq.ready := vat_available && vdq.io.enq.ready && (!viq.io.deq.bits.vmu || vmu.io.enq.ready)
-  vdq.io.enq.valid := vat_available && viq.io.deq.valid && (!viq.io.deq.bits.vmu || vmu.io.enq.ready)
-  vmu.io.enq.valid := vat_available && viq.io.deq.valid && viq.io.deq.bits.vmu
+  val vat_valids = RegInit(VecInit.fill(1 << vParams.vatSz)(false.B))
+  val vat_tail = RegInit(0.U(vParams.vatSz.W))
+  def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, vat_tail)
+  val vat_available = !vat_valids(vat_tail)
+  val vat_available_count = PopCount(~vat_valids.asUInt)
 
-  vdq.io.enq.bits := viq_issue_inst
-  vmu.io.enq.bits := viq_issue_inst
 
+  when (io.issue.fire) {
+    assert(!vat_valids(vat_tail))
+    vat_valids(vat_tail) := true.B
+    vat_tail := vat_tail + 1.U
+  }
 
+  val issue_inst = WireInit(io.issue.bits)
+  issue_inst.vat := vat_tail
+
+  io.issue.ready   := vat_available && vdq.io.enq.ready && (!issue_inst.vmu || vmu.io.enq.ready)
+  vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready)
+  vmu.io.enq.valid := vat_available && io.issue.valid   && issue_inst.vmu
+
+  vdq.io.enq.bits := issue_inst
+  vmu.io.enq.bits := issue_inst
 
   val vls = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && !i.opcode(5),
     true, false, false, false))
@@ -169,7 +161,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
   when (resetting) {
     reset_ctr := reset_ctr + 1.U
-    io.issue_credits := 0.U
+    io.issue.ready := false.B
   }
   when (~reset_ctr === 0.U) { resetting := false.B }
 
@@ -206,13 +198,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   } ++ seqs.map(_.io.pipe_hazards).flatten.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
-  val vdq_viq_inflight_wv0 = (vdq.io.peek ++ viq.io.peek).map { h =>
+  val vdq_inflight_wv0 = vdq.io.peek.map { h =>
     h.valid && h.bits.may_write_v0
   }.orR
 
 
-  io.mem_busy := (viq.io.peek ++ vdq.io.peek).map(e => e.valid && e.bits.vmu).orR || vls.io.valid || vss.io.valid || vmu.io.busy
+  io.mem_busy := vmu.io.busy
   io.vm := vmf.asUInt
-  io.vm_busy := seq_inflight_wv0 || vdq_viq_inflight_wv0
-  io.backend_busy := viq.io.deq.valid || vdq.io.deq.valid || resetting
+  io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
+  io.backend_busy := vdq.io.deq.valid || resetting
 }

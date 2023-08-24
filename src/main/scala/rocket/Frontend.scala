@@ -15,8 +15,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   trap_check.io.tlb <> io.tlb
 
   val vxu = Module(new VectorBackend)
-  trap_check.io.issue_credits := vxu.io.issue_credits
-  vxu.io.issue := trap_check.io.issue
+  vxu.io.issue <> trap_check.io.issue
 
   trap_check.io.mem_busy := vxu.io.mem_busy
   trap_check.io.vm       := vxu.io.vm
@@ -85,6 +84,8 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   hella_store.s2_kill := false.B
   hella_store.keep_clock_enabled := vxu.io.backend_busy
 
+  vxu.io.mem.store_ack := hella_store.resp.fire
+
   when (store_tag_oh.orR || load_tag_oh.orR) { trap_check.io.mem_busy := true.B }
 }
 
@@ -93,8 +94,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
     val core = new VectorCoreIO
     val tlb = Flipped(new DCacheTLBPort)
 
-    val issue = Valid(new VectorIssueInst)
-    val issue_credits = Input(UInt())
+    val issue = Decoupled(new VectorIssueInst)
     val mem_busy = Input(Bool())
 
     val vm = Input(UInt(maxVLMax.W))
@@ -137,7 +137,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
 
 
 
-  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && io.issue_credits > 2.U && !(x_inst.vm && io.vm_busy)
+  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy)
   io.tlb.req.valid := x_tlb_valid
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
@@ -224,6 +224,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   when (w_valid && !w_replay) {
     when (w_inst.vstart >= w_vl) {
       io.core.wb.retire := true.B
+    } .elsewhen (!io.issue.ready) {
+      io.core.wb.replay := true.B
     } .elsewhen (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss)) {
       x_set_replay := true.B
     } .elsewhen (w_tlb_resp.miss) {
@@ -252,6 +254,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
       when (w_eidx =/= 0.U) {
         io.issue.valid := true.B
         io.issue.bits.vconfig.vl := w_eidx
+        assert(io.issue.ready)
       }
     } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl) {
       x_replay := false.B
@@ -259,6 +262,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
       io.core.set_vstart.valid := true.B
       io.core.set_vstart.bits := 0.U
       io.issue.valid := true.B
+      assert(io.issue.ready)
     }
   }
 

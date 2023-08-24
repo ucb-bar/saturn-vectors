@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) {
+class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val inst = new VectorIssueInst
   val addr = UInt(vaddrBitsExtended.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
@@ -16,6 +16,7 @@ class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) {
   val tail = Bool()
   val prestart = Bool()
   val masked = Bool()
+  val maq_idx = UInt(vmaqSz.W)
 }
 
 class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -34,6 +35,7 @@ class VectorMemInterface(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val load_req = Decoupled(new MemRequest)
   val load_resp = Input(Valid(UInt(dLen.W)))
   val store_req = Decoupled(new MemRequest)
+  val store_ack = Input(Bool())
 }
 
 class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -54,6 +56,33 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val busy = Output(Bool())
   })
 
+  class MAQEntry extends Bundle {
+    val agen = Bool()
+    val inst = new VectorIssueInst
+    def base = inst.rs1_data
+    val bound = UInt(vaddrBitsExtended.W)
+    def store = inst.opcode(5)
+    def all = inst.mop =/= mopUnit
+  }
+
+  val maq = Reg(Vec(vParams.vmaqEntries, new MAQEntry))
+  val maq_valids = RegInit(VecInit.fill(vParams.vmaqEntries)(false.B))
+  val maq_enq_ptr   = RegInit(0.U(vmaqSz.W))
+  val maq_agen_ptr  = RegInit(0.U(vmaqSz.W))
+  val maq_available = !maq_valids(maq_enq_ptr)
+  def maqOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, maq_enq_ptr)
+
+  io.enq.ready := maq_available
+  when (io.enq.fire) {
+    maq(maq_enq_ptr).inst := io.enq.bits
+    val enq_bound = (io.enq.bits.vconfig.vl << io.enq.bits.mem_size) + io.enq.bits.rs1_data
+    maq(maq_enq_ptr).bound := enq_bound
+    maq(maq_enq_ptr).agen := false.B
+    maq_valids(maq_enq_ptr) := true.B
+    maq_enq_ptr := Mux(maq_enq_ptr === (vParams.vmaqEntries-1).U, 0.U, maq_enq_ptr + 1.U)
+  }
+
+
   val valid = RegInit(false.B)
   val inst = Reg(new VectorIssueInst)
   val addr = Reg(UInt(vaddrBitsExtended.W))
@@ -61,21 +90,37 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val stride = Reg(UInt(vaddrBitsExtended.W))
   val iterative = Reg(Bool())
   val clear = WireInit(false.B)
+  val maq_idx = Reg(UInt(vmaqSz.W))
 
-  io.enq.ready := !valid || clear
-  when (io.enq.fire) {
+  val agen_inst = maq(maq_agen_ptr).inst
+  val agen_base = maq(maq_agen_ptr).base
+  val agen_bound = maq(maq_agen_ptr).bound
+  val agen_maq_conflict = (0 until vParams.vmaqEntries).map { i =>
+    val addr_conflict = maq(maq_agen_ptr).all || maq(i).all || (maq(i).base < agen_bound && maq(i).bound > agen_base)
+    val conflict = addr_conflict && (agen_inst.opcode(5) || maq(i).store)
+    maq_valids(i) && maqOlder(i.U, maq_agen_ptr) && conflict
+  }.orR
+  val agen_valid = maq_valids(maq_agen_ptr) && !maq(maq_agen_ptr).agen
+  val agen_ready = (!valid || clear) && !agen_maq_conflict
+
+  when (agen_valid && agen_ready) {
+
     valid := true.B
-    inst := io.enq.bits
+    inst := agen_inst
     eidx := 0.U
-    addr := io.enq.bits.rs1_data
-    stride := Mux(io.enq.bits.mop === mopUnit, 1.U << io.enq.bits.mem_size, io.enq.bits.rs2_data)
+    addr := agen_inst.rs1_data
+    stride := Mux(agen_inst.mop === mopUnit, 1.U << agen_inst.mem_size, agen_inst.rs2_data)
 
-    val enq_iterative = io.enq.bits.mop =/= mopUnit || io.enq.bits.vstart =/= 0.U || !io.enq.bits.vm
+    val enq_iterative = agen_inst.mop =/= mopUnit || agen_inst.vstart =/= 0.U || !agen_inst.vm
     when (!enq_iterative) {
       stride := dLenB.U
-      addr := (io.enq.bits.rs1_data >> dLenOffBits) << dLenOffBits
+      addr := (agen_inst.rs1_data >> dLenOffBits) << dLenOffBits
     }
     iterative := enq_iterative
+    maq_idx := maq_agen_ptr
+
+    maq(maq_agen_ptr).agen := true.B
+    maq_agen_ptr := Mux(maq_agen_ptr === (vParams.vmaqEntries-1).U, 0.U, maq_agen_ptr + 1.U)
   } .elsewhen (clear) {
     valid := false.B
   }
@@ -86,7 +131,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val load = !inst.opcode(5)
   val eg_elems = dLenB.U >> inst.mem_size
   val next_eidx = eidx +& Mux(iterative, 1.U, eg_elems)
-  val may_clear = next_eidx >= (inst.vconfig.vl +& Mux(alignment === 0.U && !iterative, eg_elems, 0.U))
+  val may_clear = next_eidx >= inst.vconfig.vl
   val prestart = eidx < inst.vstart
   val masked = !inst.vm && !(io.vm >> eidx)(0)
 
@@ -111,6 +156,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   laq.io.enq.bits.addr := addr
   laq.io.enq.bits.prestart := prestart
   laq.io.enq.bits.masked := masked
+  laq.io.enq.bits.maq_idx := maq_idx
   laq.io.enq.valid := valid && load && (prestart || io.dmem.load_req.ready) && !mask_hazard
 
   saq.io.enq.bits.inst := inst
@@ -121,6 +167,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   saq.io.enq.bits.addr := addr
   saq.io.enq.bits.prestart := prestart
   saq.io.enq.bits.masked := masked
+  saq.io.enq.bits.maq_idx := maq_idx
   saq.io.enq.valid := valid && !load && !mask_hazard
 
   val fire = valid && Mux(load, laq.io.enq.fire, saq.io.enq.fire)
@@ -148,6 +195,16 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   scoal.io.saq <> saq.io.deq
   scoal.io.stdata <> io.vstdata
   io.dmem.store_req <> scoal.io.req
+  scoal.io.ack <> io.dmem.store_ack
 
-  io.busy := lrq.io.deq.valid || laq.io.deq.valid || saq.io.deq.valid
+  when (lcoal.io.maq_clear.valid) {
+    assert(maq_valids(lcoal.io.maq_clear.bits))
+    maq_valids(lcoal.io.maq_clear.bits) := false.B
+  }
+  when (scoal.io.maq_clear.valid) {
+    assert(maq_valids(scoal.io.maq_clear.bits))
+    maq_valids(scoal.io.maq_clear.bits) := false.B
+  }
+
+  io.busy := maq_valids.orR
 }
