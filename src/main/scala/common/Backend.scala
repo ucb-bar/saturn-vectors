@@ -40,7 +40,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val backend_busy = Output(Bool())
     val mem_busy = Output(Bool())
     val vm_busy = Output(Bool())
-    val status = Input(new MStatus)
   })
 
   require(vLen >= 64)
@@ -49,7 +48,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   require(vLen % dLen == 0)
 
   val vmu = Module(new VectorMemUnit)
-  vmu.io.status := io.status
   vmu.io.dmem <> io.mem
 
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
@@ -61,7 +59,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vat_available_count = PopCount(~vat_valids.asUInt)
 
 
-  when (io.issue.fire) {
+  when (vdq.io.enq.fire) {
     assert(!vat_valids(vat_tail))
     vat_valids(vat_tail) := true.B
     vat_tail := vat_tail + 1.U
@@ -73,6 +71,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.issue.ready   := vat_available && vdq.io.enq.ready && (!issue_inst.vmu || vmu.io.enq.ready)
   vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready)
   vmu.io.enq.valid := vat_available && io.issue.valid   && issue_inst.vmu
+
+  when (io.issue.bits.vconfig.vl <= io.issue.bits.vstart) {
+    io.issue.ready := true.B
+    vdq.io.enq.valid := false.B
+    vmu.io.enq.valid := false.B
+  }
 
   vdq.io.enq.bits := issue_inst
   vmu.io.enq.bits := issue_inst

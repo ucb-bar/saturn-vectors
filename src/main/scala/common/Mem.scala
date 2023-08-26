@@ -26,7 +26,7 @@ class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
 
 class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val addr = UInt(coreMaxAddrBits.W)
-  val size = UInt(2.W)
+  val size = UInt(log2Ceil(log2Ceil(dLenB)).W)
   val data = UInt(dLen.W)
   val mask = UInt(dLenB.W)
 }
@@ -36,11 +36,17 @@ class VectorMemInterface(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val load_resp = Input(Valid(UInt(dLen.W)))
   val store_req = Decoupled(new MemRequest)
   val store_ack = Input(Bool())
+
+  val scalar_check = new Bundle {
+    val addr = Input(UInt(vaddrBitsExtended.W))
+    val size = Input(UInt(2.W))
+    val store = Input(Bool())
+    val conflict = Output(Bool())
+  }
 }
 
 class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val status = Input(new MStatus)
     val enq = Flipped(Decoupled(new VectorIssueInst))
 
     val dmem = new VectorMemInterface
@@ -82,6 +88,12 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     maq_enq_ptr := Mux(maq_enq_ptr === (vParams.vmaqEntries-1).U, 0.U, maq_enq_ptr + 1.U)
   }
 
+  val scalar_bound = io.dmem.scalar_check.addr + (1.U << io.dmem.scalar_check.size)
+  io.dmem.scalar_check.conflict := (0 until vParams.vmaqEntries).map { i =>
+    val addr_conflict = maq(maq_agen_ptr).all || (maq(i).base < scalar_bound && maq(i).bound > io.dmem.scalar_check.addr)
+    val conflict = addr_conflict && (io.dmem.scalar_check.store || maq(i).store)
+    maq_valids(i) && conflict
+  }.orR
 
   val valid = RegInit(false.B)
   val inst = Reg(new VectorIssueInst)
@@ -191,7 +203,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.load <> lcoal.io.out
 
   val scoal = Module(new StoreCoalescer)
-  scoal.io.status := io.status
   scoal.io.saq <> saq.io.deq
   scoal.io.stdata <> io.vstdata
   io.dmem.store_req <> scoal.io.req

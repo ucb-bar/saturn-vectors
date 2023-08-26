@@ -10,6 +10,8 @@ import freechips.rocketchip.tile._
 import vector.common._
 
 class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {
+  require(dLen == vMemDataBits)
+
   val trap_check = Module(new FrontendTrapCheck)
   trap_check.io.core <> io.core
   trap_check.io.tlb <> io.tlb
@@ -21,7 +23,6 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   trap_check.io.vm       := vxu.io.vm
   trap_check.io.vm_busy  := vxu.io.vm_busy
   io.core.backend_busy   := vxu.io.backend_busy
-  vxu.io.status          := io.core.status
 
   val hella_simple = Module(new SimpleHellaCacheIF)
   val hella_arb = Module(new HellaCacheArbiter(2))
@@ -30,6 +31,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   val hella_load = hella_arb.io.requestor(1)
   val hella_store = hella_arb.io.requestor(0)
 
+  vxu.io.mem.scalar_check := DontCare
 
   val load_tag_oh = RegInit(VecInit.fill(4)(false.B))
   val load_tag = PriorityEncoder(~(load_tag_oh.asUInt))

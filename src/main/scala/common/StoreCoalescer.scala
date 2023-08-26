@@ -9,7 +9,6 @@ import freechips.rocketchip.tile._
 
 class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val status = Input(new MStatus)
     val saq = Flipped(Decoupled(new LSAQEntry))
     val stdata = Flipped(Decoupled(new StoreData))
 
@@ -34,7 +33,7 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
   val in_combined_mask = (in_lower_mask & mask_rot_reg) | (~in_lower_mask & in_mask_sl)
 
 
-  val soq = Module(new DCEQueue(new LSAQEntry, vParams.vsoqEntries))
+  val soq = Module(new DCEQueue(new LSAQEntry, vParams.vsoqEntries, flow=true))
 
   io.saq.ready := false.B
   io.stdata.ready := false.B
