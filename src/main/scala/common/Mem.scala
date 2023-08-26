@@ -142,7 +142,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val load = !inst.opcode(5)
   val eg_elems = dLenB.U >> inst.mem_size
   val next_eidx = eidx +& Mux(iterative, 1.U, eg_elems)
-  val may_clear = next_eidx >= Mux(iterative, inst.vconfig.vl, inst.vconfig.vl + eg_elems)
+  val may_clear = next_eidx >= Mux(iterative || alignment === 0.U, inst.vconfig.vl, inst.vconfig.vl + eg_elems)
   val prestart = eidx < inst.vstart
   val masked = !inst.vm && !(io.vm >> eidx)(0)
 
