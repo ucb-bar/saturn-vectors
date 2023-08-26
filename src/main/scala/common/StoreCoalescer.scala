@@ -30,7 +30,7 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
   val in_lower_mask = (1.U << in_slamt) - 1.U
   val in_lower_mask_bytes = FillInterleaved(8, in_lower_mask)
   val in_combined_data = (in_lower_mask_bytes & rot_reg) | (~in_lower_mask_bytes & in_data_sl)
-  val in_combined_mask = (in_lower_mask & mask_rot_reg) | (~in_lower_mask & in_mask_sl)
+  val in_combined_mask = (in_lower_mask & mask_rot_reg) | (~in_lower_mask & Mux(io.saq.bits.tail, 0.U, in_mask_sl))
 
 
   val soq = Module(new DCEQueue(new LSAQEntry, vParams.vsoqEntries, flow=true))
@@ -40,7 +40,8 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
   io.req.valid := false.B
   soq.io.enq.valid := false.B
 
-  io.req.bits.addr := io.saq.bits.addr
+  val aligned_addr = (io.saq.bits.addr >> dLenOffBits) << dLenOffBits
+  io.req.bits.addr := Mux(io.saq.bits.iterative, io.saq.bits.addr, aligned_addr)
   io.req.bits.size := Mux(io.saq.bits.iterative, io.saq.bits.inst.mem_size, log2Ceil(dLenB).U)
   io.req.bits.data := Mux(io.saq.bits.iterative || in_slamt === 0.U, in_data, in_combined_data)
   io.req.bits.mask := Mux(io.saq.bits.iterative || in_slamt === 0.U, in_mask, in_combined_mask)
@@ -59,7 +60,7 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
     io.req.valid := io.saq.valid && (io.stdata.valid || io.saq.bits.tail) && soq.io.enq.ready
     io.saq.ready := io.req.ready && (io.stdata.valid || io.saq.bits.tail) && soq.io.enq.ready
     io.stdata.ready := io.req.ready && io.saq.valid && !io.saq.bits.tail && soq.io.enq.ready
-    soq.io.enq.valid := io.saq.valid && io.req.valid && (io.stdata.valid || io.saq.bits.tail)
+    soq.io.enq.valid := io.saq.valid && io.req.ready && (io.stdata.valid || io.saq.bits.tail)
   }
 
   when (io.stdata.fire) {

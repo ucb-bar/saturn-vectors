@@ -98,7 +98,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val valid = RegInit(false.B)
   val inst = Reg(new VectorIssueInst)
   val addr = Reg(UInt(vaddrBitsExtended.W))
-  val eidx = Reg(UInt(log2Ceil(maxVLMax).W))
+  val eidx = Reg(UInt((1+log2Ceil(maxVLMax)).W))
   val stride = Reg(UInt(vaddrBitsExtended.W))
   val iterative = Reg(Bool())
   val clear = WireInit(false.B)
@@ -126,7 +126,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val enq_iterative = agen_inst.mop =/= mopUnit || agen_inst.vstart =/= 0.U || !agen_inst.vm
     when (!enq_iterative) {
       stride := dLenB.U
-      addr := (agen_inst.rs1_data >> dLenOffBits) << dLenOffBits
     }
     iterative := enq_iterative
     maq_idx := maq_agen_ptr
@@ -143,7 +142,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val load = !inst.opcode(5)
   val eg_elems = dLenB.U >> inst.mem_size
   val next_eidx = eidx +& Mux(iterative, 1.U, eg_elems)
-  val may_clear = next_eidx >= inst.vconfig.vl
+  val may_clear = next_eidx >= Mux(iterative, inst.vconfig.vl, inst.vconfig.vl + eg_elems)
   val prestart = eidx < inst.vstart
   val masked = !inst.vm && !(io.vm >> eidx)(0)
 
@@ -185,8 +184,8 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val fire = valid && Mux(load, laq.io.enq.fire, saq.io.enq.fire)
 
   when (fire) {
-    clear := next_eidx >= inst.vconfig.vl
-    when (!clear) {
+    clear := may_clear
+    when (!may_clear) {
       addr := addr + stride
       eidx := next_eidx
     }
