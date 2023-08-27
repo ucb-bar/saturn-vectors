@@ -26,7 +26,7 @@ class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
 
 class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val addr = UInt(coreMaxAddrBits.W)
-  val size = UInt(log2Ceil(log2Ceil(dLenB)).W)
+  val size = UInt(log2Ceil(1+log2Ceil(dLenB)).W)
   val data = UInt(dLen.W)
   val mask = UInt(dLenB.W)
 }
