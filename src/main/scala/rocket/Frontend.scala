@@ -118,6 +118,9 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val x_core_inst = Wire(new VectorIssueInst)
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
+  x_core_inst.vconfig.vl := Mux(io.core.ex.inst(27,26) === mopUnit && io.core.ex.inst(24,20) === lumopMask,
+    (io.core.ex.vconfig.vl >> 3) + Mux(io.core.ex.vconfig.vl(2,0) === 0.U, 0.U, 1.U),
+    io.core.ex.vconfig.vl)
   x_core_inst.vstart := io.core.ex.vstart
   x_core_inst.rs1_data := io.core.ex.rs1
   x_core_inst.rs2_data := io.core.ex.rs2
@@ -162,7 +165,6 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val m_stride = RegEnable(x_stride, x_may_be_valid)
   val m_eidx = RegEnable(x_eidx, x_may_be_valid)
   val m_pc = RegEnable(x_pc, x_may_be_valid)
-  val m_vl = m_inst.vconfig.vl
   val m_masked = RegNext(x_masked, x_may_be_valid)
   val m_tlb_req_valid = RegNext(x_tlb_valid, x_may_be_valid)
   val m_tlb_resp_valid = RegNext(io.tlb.req.fire, x_may_be_valid)
