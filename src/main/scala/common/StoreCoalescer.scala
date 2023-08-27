@@ -34,6 +34,7 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
 
 
   val soq = Module(new DCEQueue(new LSAQEntry, vParams.vsoqEntries, flow=true))
+  val soq_prestart_masked_hazard = soq.io.peek.map(h => h.valid && h.bits.prestart_masked).orR
 
   io.saq.ready := false.B
   io.stdata.ready := false.B
@@ -48,10 +49,12 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
   soq.io.enq.bits := io.saq.bits
 
 
-  when (io.saq.bits.prestart || io.saq.bits.masked) {
+  when (io.saq.bits.prestart_masked) {
     io.saq.ready := io.stdata.valid && soq.io.enq.ready
     io.stdata.ready := io.saq.valid && soq.io.enq.ready
     soq.io.enq.valid := io.saq.valid && io.stdata.valid
+  } .elsewhen (soq_prestart_masked_hazard) {
+    // do nothing
   } .elsewhen (io.saq.bits.iterative || in_slamt === 0.U) {
     io.req.valid := io.saq.valid && io.stdata.valid && soq.io.enq.ready
     io.saq.ready := io.stdata.valid && io.req.ready && soq.io.enq.ready
@@ -68,7 +71,7 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
     rot_reg := in_data_sr
     mask_rot_reg := in_mask_sr
   }
-  soq.io.deq.ready := io.ack || soq.io.deq.bits.masked
+  soq.io.deq.ready := io.ack || soq.io.deq.bits.prestart_masked
   io.maq_clear.valid := soq.io.deq.fire && soq.io.deq.bits.tail
   io.maq_clear.bits := soq.io.deq.bits.maq_idx
 }

@@ -106,8 +106,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val replay_kill = WireInit(false.B)
 
   // X stage
-  val x_tlb_backoff = RegInit(false.B)
-  when (x_tlb_backoff) { x_tlb_backoff := false.B }
+  val x_tlb_backoff = RegInit(0.U(2.W))
+  when (x_tlb_backoff =/= 0.U) { x_tlb_backoff := x_tlb_backoff - 1.U }
   val x_replay = RegInit(false.B)
   val x_replay_inst = Reg(new VectorIssueInst)
   val x_replay_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -138,7 +138,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked
 
   io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy)
-  io.tlb.req.valid := x_tlb_valid && !x_tlb_backoff
+  io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
   io.tlb.req.bits.size := x_inst.mem_size
@@ -170,7 +170,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
 
-  when (io.tlb.s1_resp.miss && m_tlb_resp_valid) { x_tlb_backoff := true.B }
+  when (io.tlb.s1_resp.miss && m_tlb_req_valid) { x_tlb_backoff := 3.U }
 
   // W stage
   val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, io.core.killm), false.B)
