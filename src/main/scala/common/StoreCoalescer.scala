@@ -48,9 +48,10 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
   soq.io.enq.bits := io.saq.bits
 
 
-  when (io.saq.valid && (io.saq.bits.prestart || io.saq.bits.masked)) {
-    io.saq.ready := io.stdata.valid
-    io.stdata.ready := true.B
+  when (io.saq.bits.prestart || io.saq.bits.masked) {
+    io.saq.ready := io.stdata.valid && soq.io.enq.ready
+    io.stdata.ready := io.saq.valid && soq.io.enq.ready
+    soq.io.enq.valid := io.saq.valid && io.stdata.valid
   } .elsewhen (io.saq.bits.iterative || in_slamt === 0.U) {
     io.req.valid := io.saq.valid && io.stdata.valid && soq.io.enq.ready
     io.saq.ready := io.stdata.valid && io.req.ready && soq.io.enq.ready
@@ -67,8 +68,7 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
     rot_reg := in_data_sr
     mask_rot_reg := in_mask_sr
   }
-
-  soq.io.deq.ready := io.ack
+  soq.io.deq.ready := io.ack || soq.io.deq.bits.masked
   io.maq_clear.valid := soq.io.deq.fire && soq.io.deq.bits.tail
   io.maq_clear.bits := soq.io.deq.bits.maq_idx
 }
