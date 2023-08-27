@@ -131,7 +131,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val x_eidx = Mux(x_replay, x_replay_eidx, 0.U)
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
-  val x_masked = (io.vm >> x_eidx)(0)
+  val x_masked = (io.vm >> x_eidx)(0) && !x_inst.vm
   val x_unit_bound = x_inst.vconfig.vl << x_inst.mem_size
   val x_single_page = x_inst.mop === mopUnit && ((x_addr + x_unit_bound)(pgIdxBits) === x_addr(pgIdxBits))
   val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm
@@ -166,10 +166,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val m_pc = RegEnable(x_pc, x_may_be_valid)
   val m_vl = m_inst.vconfig.vl
   val m_masked = RegNext(x_masked, x_may_be_valid)
+  val m_tlb_req_valid = RegNext(io.tlb.req.valid, x_may_be_valid)
   val m_tlb_resp_valid = RegNext(io.tlb.req.fire, x_may_be_valid)
   val m_iterative = RegEnable(x_iterative, x_may_be_valid)
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
-  m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && !m_masked)
+  m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
 
   when (io.tlb.s1_resp.miss && m_tlb_resp_valid) { x_tlb_backoff := 3.U }
 
