@@ -90,32 +90,46 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val seqs = Seq(vls, vss, vxs)
 
 
-  vdq.io.deq.ready := seqs.map(_.io.dis_ready).andR
+  vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
   seqs.foreach { s =>
-    s.io.dis_valid := vdq.io.deq.valid
-    s.io.dis := vdq.io.deq.bits
-    s.io.dis_wvd := false.B
-    s.io.dis_renv1 := false.B
-    s.io.dis_renv2 := false.B
-    s.io.dis_renvd := false.B
-    s.io.dis_renvm := false.B
-    s.io.dis_execmode := execRegular
+    s.io.dis.valid := vdq.io.deq.valid
+    s.io.dis.inst := vdq.io.deq.bits
+    s.io.dis.wvd := false.B
+    s.io.dis.renv1 := false.B
+    s.io.dis.renv2 := false.B
+    s.io.dis.renvd := false.B
+    s.io.dis.renvm := false.B
+    s.io.dis.execmode := execRegular
     when (s.io.vat_release.valid) {
       assert(vat_valids(s.io.vat_release.bits))
       vat_valids(s.io.vat_release.bits) := false.B
     }
+    s.io.dis.vs1_eew  := vdq.io.deq.bits.vconfig.vtype.vsew
+    s.io.dis.vs2_eew  := vdq.io.deq.bits.vconfig.vtype.vsew
+    s.io.dis.vs3_eew  := vdq.io.deq.bits.vconfig.vtype.vsew
+    s.io.dis.vd_eew   := vdq.io.deq.bits.vconfig.vtype.vsew
+    s.io.dis.incr_eew := vdq.io.deq.bits.vconfig.vtype.vsew
   }
 
-  vls.io.dis_wvd := true.B
-  vls.io.dis_renvm := !vdq.io.deq.bits.vm
-  vls.io.dis_execmode := Mux(vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vstart === 0.U && vdq.io.deq.bits.vm,
-    execRegular, execElementOrder)
-  vls.io.dis.vconfig.vtype.vsew := vdq.io.deq.bits.mem_size
+  vls.io.dis.wvd := true.B
+  vls.io.dis.renvm := !vdq.io.deq.bits.vm
+  when (!(vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vstart === 0.U && vdq.io.deq.bits.vm)) {
+    vls.io.dis.execmode := execElementOrder
+  }
+  when (!vdq.io.deq.bits.mop(0)) {
+    vls.io.dis.vd_eew := vdq.io.deq.bits.mem_size
+    vls.io.dis.incr_eew := vdq.io.deq.bits.mem_size
+  }
 
-  vss.io.dis_renvd := true.B
-  vss.io.dis_renvm := vdq.io.deq.bits.vm
-  vss.io.dis_execmode := Mux(vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vstart === 0.U && vdq.io.deq.bits.vm,
-    execRegular, execElementOrder)
+  vss.io.dis.renvd := true.B
+  vss.io.dis.renvm := vdq.io.deq.bits.vm
+  when (!(vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vstart === 0.U && vdq.io.deq.bits.vm)) {
+    vss.io.dis.execmode := execElementOrder
+  }
+  when (!(vdq.io.deq.bits.mop(0))) {
+    vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_size
+    vss.io.dis.incr_eew := vdq.io.deq.bits.mem_size
+  }
 
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)

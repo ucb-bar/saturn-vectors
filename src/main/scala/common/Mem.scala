@@ -139,7 +139,8 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val alignment = addr(dLenOffBits-1,0)
   val alignment_elems = alignment >> inst.mem_size
   val load = !inst.opcode(5)
-  val eg_elems = dLenB.U >> inst.mem_size
+  val mem_size = Mux(inst.mop(0), inst.vconfig.vtype.vsew, inst.mem_size)
+  val eg_elems = dLenB.U >> mem_size
   val next_eidx = eidx +& Mux(iterative, 1.U, eg_elems)
   val may_clear = next_eidx >= Mux(iterative || alignment === 0.U, inst.vconfig.vl, inst.vconfig.vl + eg_elems)
   val prestart_masked = (eidx < inst.vstart) || (!inst.vm && !(io.vm >> eidx)(0))
@@ -153,7 +154,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.dmem.load_req.valid := valid && load && !prestart_masked && laq.io.enq.ready && !mask_hazard
   io.dmem.load_req.bits.addr := Mux(iterative, addr, aligned_addr)
-  io.dmem.load_req.bits.size := Mux(iterative, inst.mem_size, log2Ceil(dLenB).U)
+  io.dmem.load_req.bits.size := Mux(iterative, mem_size, log2Ceil(dLenB).U)
   io.dmem.load_req.bits.data := DontCare
   io.dmem.load_req.bits.mask := DontCare
 

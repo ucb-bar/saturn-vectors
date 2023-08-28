@@ -135,6 +135,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
   val x_masked = !(io.vm >> x_eidx)(0) && !x_inst.vm
+  val x_mem_size = Mux(x_inst.mop(0), x_inst.vconfig.vtype.vsew, x_inst.mem_size)
   val x_unit_bound = x_inst.vconfig.vl << x_inst.mem_size
   val x_single_page = x_inst.mop === mopUnit && ((x_addr + x_unit_bound)(pgIdxBits) === x_addr(pgIdxBits))
   val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm
@@ -144,7 +145,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Vec
   io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
-  io.tlb.req.bits.size := x_inst.mem_size
+  io.tlb.req.bits.size := x_mem_size
   io.tlb.req.bits.cmd := Mux(x_inst.opcode(5), M_XWR, M_XRD)
   io.tlb.req.bits.prv := io.core.status.prv
   io.tlb.req.bits.v := io.core.status.v
