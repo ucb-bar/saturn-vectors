@@ -90,7 +90,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val incr_eidx = Mux(mode === execRegular, (dLenB.U >> vd_eew), 1.U)
   val next_eidx = eidx +& incr_eidx
   val last      = next_eidx >= inst.vconfig.vl
-  val eewmask = ((1.U << (1.U << vd_eew)) - 1.U)((eLen/8)-1,0)
+  val eewmask = eewByteMask(vd_eew)
   val last_aligned = (((1.U << (log2Ceil(dLenB).U - vd_eew)) - 1.U) & inst.vconfig.vl) === 0.U
 
 

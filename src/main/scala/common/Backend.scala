@@ -29,6 +29,15 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def may_write_v0 = rd === 0.U && opcode =/= opcStore
 }
 
+class VectorIndexAccessIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val ready = Output(Bool())
+  val valid = Input(Bool())
+  val vrs = Input(UInt(5.W))
+  val eidx = Input(UInt(maxVLMax.W))
+  val eew = Input(UInt(2.W))
+  val idx = Output(UInt(64.W))
+}
+
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val issue = Flipped(Decoupled(new VectorIssueInst))
@@ -40,6 +49,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val backend_busy = Output(Bool())
     val mem_busy = Output(Bool())
     val vm_busy = Output(Bool())
+
+    val index_access = new VectorIndexAccessIO
   })
 
   require(vLen >= 64)
@@ -205,8 +216,19 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   vss.io.iss.ready := vmu.io.vstdata.ready
+
+
+  val vstdata_egid = WireInit(vss.io.iss.bits.rvd_eg)
+  io.index_access.ready := !io.backend_busy
+  if (vParams.frontendIndexAccess) {
+    when (io.index_access.valid && io.index_access.ready) {
+      vstdata_egid := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
+    }
+  }
+  val vstdata_rdata = vrf.read(vstdata_egid).asUInt
+  io.index_access.idx := vstdata_rdata >> ((io.index_access.eidx << io.index_access.eew)(log2Ceil(dLenB)-1,0) << 3)
   vmu.io.vstdata.valid := vss.io.iss.valid
-  vmu.io.vstdata.bits.data := vrf.read(vss.io.iss.bits.rvd_eg).asUInt
+  vmu.io.vstdata.bits.data := vstdata_rdata
   vmu.io.vstdata.bits.mask := vss.io.iss.bits.wmask
   vmu.io.vm := vmf.asUInt
 

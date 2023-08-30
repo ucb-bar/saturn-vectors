@@ -14,7 +14,8 @@ case class VectorParams(
   vmaqEntries: Int = 4,
   vsoqEntries: Int = 4,
   dLen: Int = 64,
-  vatSz: Int = 3)
+  vatSz: Int = 3,
+  frontendIndexAccess: Boolean = true)
 
 case object VectorParamsKey extends Field[VectorParams]
 
@@ -35,6 +36,12 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
     val off = eidx >> (log2Ceil(dLenB).U - eew)
     base + off
   }
+
+  def eewByteMask(eew: UInt) = (0 until (1+log2Ceil(eLen/8))).map { e =>
+    Mux(e.U === eew, ((1 << (1 << e)) - 1).U, 0.U)
+  }.reduce(_|_)((eLen/8)-1,0)
+  def eewBitMask(eew: UInt) = FillInterleaved(8, eewByteMask(eew))
+
 
   def cqOlder(i0: UInt, i1: UInt, tail: UInt) = (i0 < i1) ^ (i0 < tail) ^ (i1 < tail)
 }
