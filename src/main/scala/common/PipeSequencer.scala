@@ -101,7 +101,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   when (dis_fire) {
     valid := true.B
     inst := io.dis.inst
-    eidx := 0.U
+    eidx := io.dis.inst.vstart
     val lmul_mask = ((1.U(8.W) << (1.U << io.dis.inst.pos_lmul)) - 1.U)(7,0)
     val wvd_arch_oh = Mux(writeVD.B && io.dis.wvd,
       lmul_mask << io.dis.inst.rd, 0.U)

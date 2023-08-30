@@ -111,6 +111,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.dis.renvd := false.B
     s.io.dis.renvm := false.B
     s.io.dis.execmode := execRegular
+    when (vdq.io.deq.bits.vstart =/= 0.U) {
+      s.io.dis.execmode := execElementOrder
+    }
     when (s.io.vat_release.valid) {
       assert(vat_valids(s.io.vat_release.bits))
       vat_valids(s.io.vat_release.bits) := false.B

@@ -14,7 +14,7 @@ class LSAQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
   val iterative = Bool()
   val head = Bool()
   val tail = Bool()
-  val prestart_masked = Bool()
+  val masked = Bool()
   val maq_idx = UInt(vmaqSz.W)
 }
 
@@ -37,7 +37,7 @@ class VectorMemInterface(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val store_ack = Input(Bool())
 
   val scalar_check = new Bundle {
-    val addr = Input(UInt(vaddrBitsExtended.W))
+    val addr = Input(UInt(coreMaxAddrBits.W))
     val size = Input(UInt(2.W))
     val store = Input(Bool())
     val conflict = Output(Bool())
@@ -118,7 +118,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     valid := true.B
     inst := agen_inst
-    eidx := 0.U
+    eidx := agen_inst.vstart
     addr := agen_inst.rs1_data
     stride := Mux(agen_inst.mop === mopUnit, 1.U << agen_inst.mem_size, agen_inst.rs2_data)
 
@@ -143,7 +143,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val eg_elems = dLenB.U >> mem_size
   val next_eidx = eidx +& Mux(iterative, 1.U, eg_elems)
   val may_clear = next_eidx >= Mux(iterative || alignment === 0.U, inst.vconfig.vl, inst.vconfig.vl + eg_elems)
-  val prestart_masked = (eidx < inst.vstart) || (!inst.vm && !(io.vm >> eidx)(0))
+  val masked = (!inst.vm && !(io.vm >> eidx)(0))
 
   io.vm_hazard.valid := valid && !inst.vm
   io.vm_hazard.vat := inst.vat
@@ -152,7 +152,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val laq = Module(new DCEQueue(new LSAQEntry, vParams.vlaqEntries))
   val saq = Module(new DCEQueue(new LSAQEntry, vParams.vsaqEntries))
 
-  io.dmem.load_req.valid := valid && load && !prestart_masked && laq.io.enq.ready && !mask_hazard
+  io.dmem.load_req.valid := valid && load && !masked && laq.io.enq.ready && !mask_hazard
   io.dmem.load_req.bits.addr := Mux(iterative, addr, aligned_addr)
   io.dmem.load_req.bits.size := Mux(iterative, mem_size, log2Ceil(dLenB).U)
   io.dmem.load_req.bits.data := DontCare
@@ -164,9 +164,9 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   laq.io.enq.bits.head := eidx === 0.U
   laq.io.enq.bits.tail := may_clear
   laq.io.enq.bits.addr := addr
-  laq.io.enq.bits.prestart_masked := prestart_masked
+  laq.io.enq.bits.masked := masked
   laq.io.enq.bits.maq_idx := maq_idx
-  laq.io.enq.valid := valid && load && (prestart_masked || io.dmem.load_req.ready) && !mask_hazard
+  laq.io.enq.valid := valid && load && (masked || io.dmem.load_req.ready) && !mask_hazard
 
   saq.io.enq.bits.inst := inst
   saq.io.enq.bits.eidx := eidx
@@ -174,7 +174,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   saq.io.enq.bits.head := eidx === 0.U
   saq.io.enq.bits.tail := may_clear
   saq.io.enq.bits.addr := addr
-  saq.io.enq.bits.prestart_masked := prestart_masked
+  saq.io.enq.bits.masked := masked
   saq.io.enq.bits.maq_idx := maq_idx
   saq.io.enq.valid := valid && !load && !mask_hazard
 

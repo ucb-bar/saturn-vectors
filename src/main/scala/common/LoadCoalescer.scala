@@ -18,7 +18,7 @@ class LoadCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val rot_reg = Reg(UInt(dLen.W))
 
-  val in_data = Mux(io.laq.bits.prestart_masked, 0.U, io.lrq.bits)
+  val in_data = Mux(io.laq.bits.masked, 0.U, io.lrq.bits)
   val in_sramt = io.laq.bits.addr(dLenOffBits-1,0)
   val in_slamt = Mux(io.laq.bits.iterative,
     (io.laq.bits.eidx << io.laq.bits.inst.mem_size)(log2Ceil(dLenB)-1,0),
@@ -34,7 +34,7 @@ class LoadCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.laq.ready := false.B
   io.lrq.ready := false.B
 
-  when (io.laq.bits.prestart_masked) {
+  when (io.laq.bits.masked) {
     io.out.valid := io.laq.valid
     io.laq.ready := io.out.ready
   } .elsewhen (io.laq.bits.iterative || in_sramt === 0.U) {

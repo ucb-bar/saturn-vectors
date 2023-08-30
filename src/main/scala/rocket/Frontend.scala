@@ -51,7 +51,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   hella_load.req.bits.dv     := io.core.status.dv
   hella_load.req.bits.data   := DontCare
   hella_load.req.bits.mask   := DontCare
-  hella_load.req.bits.phys   := DontCare
+  hella_load.req.bits.phys   := true.B
   hella_load.req.bits.no_alloc := false.B
   hella_load.req.bits.no_xcpt := true.B
   hella_load.s1_kill := false.B
@@ -79,7 +79,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   hella_store.req.bits.dv     := io.core.status.dv
   hella_store.req.bits.data   := vxu.io.mem.store_req.bits.data
   hella_store.req.bits.mask   := vxu.io.mem.store_req.bits.mask
-  hella_store.req.bits.phys   := DontCare
+  hella_store.req.bits.phys   := true.B
   hella_store.req.bits.no_alloc := false.B
   hella_store.req.bits.no_xcpt := true.B
   hella_store.s1_kill := false.B
@@ -226,6 +226,10 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
   io.issue.valid := false.B
   io.issue.bits := w_inst
+  when (w_inst.vmu) {
+    io.issue.bits.rs1_data := w_tlb_resp.paddr
+  }
+
 
   val x_set_replay = WireInit(false.B)
   when (x_set_replay) {
@@ -256,7 +260,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     }
   }
   when (w_valid && w_replay) {
-    when (w_tlb_resp.miss) {
+    io.issue.valid := !w_tlb_resp.miss && !w_xcpt && w_inst.vstart <= w_eidx && !w_masked
+    io.issue.bits.vstart := w_eidx
+    io.issue.bits.vconfig.vl := w_eidx + 1.U
+
+    when (w_tlb_resp.miss || !io.issue.ready) {
       replay_kill := true.B
       x_replay_eidx := w_eidx
       x_replay_addr := Mux(w_inst.mop(1), w_inst.rs1_data, w_addr)
@@ -267,18 +275,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       io.core.set_vstart.valid := true.B
       io.core.set_vstart.bits := w_eidx
       replay_kill := true.B
-      when (w_eidx =/= 0.U) {
-        io.issue.valid := true.B
-        io.issue.bits.vconfig.vl := w_eidx
-        assert(io.issue.ready)
-      }
     } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl) {
       x_replay := false.B
       io.core.wb.retire := true.B
       io.core.set_vstart.valid := true.B
       io.core.set_vstart.bits := 0.U
-      io.issue.valid := true.B
-      assert(io.issue.ready)
+      replay_kill := true.B
     }
   }
 
