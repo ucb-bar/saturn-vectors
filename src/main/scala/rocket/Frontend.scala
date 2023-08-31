@@ -145,7 +145,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_indexed = x_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val x_index_ready = !x_indexed || io.index_access.ready
   val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_size), 0.U)
-  val x_addr = Mux(x_replay, x_replay_addr + x_index, io.core.ex.rs1)
+  val x_addr = Mux(x_replay, Mux(x_inst.mop(0), x_inst.rs1_data, x_replay_addr) + x_index, io.core.ex.rs1)
   val x_single_page = (x_addr + x_unit_bound)(pgIdxBits) === x_addr(pgIdxBits)
   val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm || x_inst.mop =/= mopUnit
   val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked
@@ -164,7 +164,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.tlb.req.bits.prv := io.core.status.prv
   io.tlb.req.bits.v := io.core.status.v
 
-  when (x_replay && x_replay_eidx < x_replay_inst.vconfig.vl) {
+  when (x_replay && x_replay_eidx < x_replay_inst.vconfig.vl && x_tlb_backoff === 0.U) {
     val next_x_replay_eidx = x_replay_eidx + 1.U
     x_replay_eidx := next_x_replay_eidx
     x_replay_addr := x_replay_addr + x_replay_stride
@@ -187,7 +187,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
 
-  when (io.tlb.s1_resp.miss && m_tlb_req_valid) { x_tlb_backoff := 3.U }
+  when (io.tlb.s1_resp.miss && m_tlb_req_valid && x_tlb_backoff === 0.U) { x_tlb_backoff := 3.U }
 
   // W stage
   val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, io.core.killm), false.B)
@@ -266,6 +266,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     io.issue.bits.vconfig.vl := w_eidx +& 1.U
 
     when (w_tlb_resp.miss || !io.issue.ready) {
+      x_tlb_backoff := 3.U
       replay_kill := true.B
       x_replay_eidx := w_eidx
       x_replay_addr := w_addr
