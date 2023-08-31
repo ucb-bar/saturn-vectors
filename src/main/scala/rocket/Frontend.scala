@@ -268,7 +268,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     when (w_tlb_resp.miss || !io.issue.ready) {
       replay_kill := true.B
       x_replay_eidx := w_eidx
-      x_replay_addr := Mux(w_inst.mop(1), w_inst.rs1_data, w_addr)
+      x_replay_addr := w_addr
     } .elsewhen (w_xcpt) {
       x_replay := false.B
       io.core.wb.retire := false.B
