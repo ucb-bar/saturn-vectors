@@ -81,7 +81,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.issue.ready   := vat_available && vdq.io.enq.ready && (!issue_inst.vmu || vmu.io.enq.ready)
   vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready)
-  vmu.io.enq.valid := vat_available && io.issue.valid   && issue_inst.vmu
+  vmu.io.enq.valid := vat_available && io.issue.valid   && vdq.io.enq.ready && issue_inst.vmu
 
   when (io.issue.bits.vconfig.vl <= io.issue.bits.vstart) {
     io.issue.ready := true.B
@@ -222,7 +222,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   val vstdata_egid = WireInit(vss.io.iss.bits.rvd_eg)
-  io.index_access.ready := !io.backend_busy
+  io.index_access.ready := !vss.io.iss.valid
   if (vParams.frontendIndexAccess) {
     when (io.index_access.valid && io.index_access.ready) {
       vstdata_egid := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)

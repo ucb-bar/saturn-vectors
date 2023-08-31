@@ -20,6 +20,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   vxu.io.issue <> trap_check.io.issue
   trap_check.io.index_access <> vxu.io.index_access
 
+  trap_check.io.backend_busy := vxu.io.backend_busy
   trap_check.io.mem_busy := vxu.io.mem_busy
   trap_check.io.vm       := vxu.io.vm
   trap_check.io.vm_busy  := vxu.io.vm_busy
@@ -99,6 +100,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
     val issue = Decoupled(new VectorIssueInst)
     val mem_busy = Input(Bool())
+    val backend_busy = Input(Bool())
 
     val vm = Input(UInt(maxVLMax.W))
     val vm_busy = Input(Bool())
@@ -143,18 +145,18 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_indexed = x_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val x_index_ready = !x_indexed || io.index_access.ready
   val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_size), 0.U)
-  val x_addr = Mux(x_replay, x_replay_addr, io.core.ex.rs1) + x_index
-  val x_single_page = x_inst.mop === mopUnit && ((x_addr + x_unit_bound)(pgIdxBits) === x_addr(pgIdxBits))
-  val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm
-  val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked && x_index_ready
-  io.index_access.valid := (io.core.ex.valid || x_replay) && x_indexed
+  val x_addr = Mux(x_replay, x_replay_addr + x_index, io.core.ex.rs1)
+  val x_single_page = (x_addr + x_unit_bound)(pgIdxBits) === x_addr(pgIdxBits)
+  val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm || x_inst.mop =/= mopUnit
+  val x_tlb_valid = (x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) && x_eidx < x_vl && x_inst.vmu && x_eidx >= x_inst.vstart && !x_masked
+  io.index_access.valid := x_replay && x_indexed
   io.index_access.vrs := x_inst.rs2
   io.index_access.eidx := x_eidx
   io.index_access.eew := x_inst.mem_size
 
 
-  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy)
-  io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U
+  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy) && !(x_indexed && io.backend_busy)
+  io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U && x_index_ready
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
   io.tlb.req.bits.size := x_mem_size
@@ -229,7 +231,6 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   when (w_inst.vmu) {
     io.issue.bits.rs1_data := w_tlb_resp.paddr
   }
-
 
   val x_set_replay = WireInit(false.B)
   when (x_set_replay) {

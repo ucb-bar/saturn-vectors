@@ -11,7 +11,7 @@ case class VectorParams(
   vdqEntries: Int = 4,
   vlaqEntries: Int = 4,
   vsaqEntries: Int = 4,
-  vmaqEntries: Int = 4,
+  vmaqEntries: Int = 6,
   vsoqEntries: Int = 4,
   dLen: Int = 64,
   vatSz: Int = 3,
