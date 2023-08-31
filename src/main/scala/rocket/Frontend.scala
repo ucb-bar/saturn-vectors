@@ -173,7 +173,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_may_be_valid = io.core.ex.valid || x_replay
 
   // M stage
-  val m_valid = RegNext((x_replay && !replay_kill) || (io.core.ex.valid && io.core.ex.ready), false.B)
+  val m_valid = RegNext((x_replay && !replay_kill && x_tlb_backoff === 0.U) || (io.core.ex.valid && io.core.ex.ready), false.B)
   val m_inst = RegEnable(x_inst, x_may_be_valid)
   val m_replay = RegEnable(x_replay, x_may_be_valid)
   val m_addr = RegEnable(x_addr, x_may_be_valid)
