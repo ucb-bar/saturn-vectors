@@ -15,10 +15,17 @@ class VectorIssueBeat(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val wvd = Bool()
 
   val eidx = UInt(log2Ceil(maxVLMax).W)
-  val rvs1_eg  = UInt(log2Ceil(egsTotal).W)
-  val rvs2_eg  = UInt(log2Ceil(egsTotal).W)
-  val rvd_eg   = UInt(log2Ceil(egsTotal).W)
-  val wvd_eg   = UInt(log2Ceil(egsTotal).W)
+
+  val rvs1_byte  = UInt(log2Ceil(egsTotal*dLenB).W)
+  val rvs2_byte  = UInt(log2Ceil(egsTotal*dLenB).W)
+  val rvd_byte   = UInt(log2Ceil(egsTotal*dLenB).W)
+
+  val wvd_byte   = UInt(log2Ceil(egsTotal*dLenB).W)
+
+  def rvs1_eg    = rvs1_byte >> log2Ceil(dLenB)
+  def rvs2_eg    = rvs2_byte >> log2Ceil(dLenB)
+  def rvd_eg     = rvd_byte >> log2Ceil(dLenB)
+  def wvd_eg     = wvd_byte >> log2Ceil(dLenB)
 
   val wmask   = UInt(dLenB.W)
 }
@@ -54,6 +61,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     }
 
     val valid = Output(Bool())
+    val busy = Output(Bool())
     val iss = Decoupled(new VectorIssueBeat)
     val seq_hazards = new Bundle {
       val valid = Output(Bool())
@@ -158,10 +166,10 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.wvd   := wvd
 
   io.iss.bits.eidx    := eidx
-  io.iss.bits.rvs1_eg := getEgId(inst.rs1, eidx, vs1_eew)
-  io.iss.bits.rvs2_eg := getEgId(inst.rs2, eidx, vs2_eew)
-  io.iss.bits.rvd_eg  := getEgId(inst.rd , eidx, vs3_eew)
-  io.iss.bits.wvd_eg  := getEgId(inst.rd , eidx, vd_eew)
+  io.iss.bits.rvs1_byte := getByteId(inst.rs1, eidx, vs1_eew)
+  io.iss.bits.rvs2_byte := getByteId(inst.rs2, eidx, vs2_eew)
+  io.iss.bits.rvd_byte  := getByteId(inst.rd , eidx, vs3_eew)
+  io.iss.bits.wvd_byte  := getByteId(inst.rd , eidx, vd_eew)
   when (eidx < inst.vstart) {
     // prestart
     io.iss.bits.wmask := 0.U
@@ -213,4 +221,6 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     io.vat_release.valid := io.iss.fire && last
     io.vat_release.bits := inst.vat
   }
+
+  io.busy := (pipe_valids :+ valid).reduce(_||_)
 }

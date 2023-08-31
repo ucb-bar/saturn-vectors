@@ -218,21 +218,26 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrfWrite(eg, data, mask)
   }
 
-  vss.io.iss.ready := vmu.io.vstdata.ready
-
-
-  val vstdata_egid = WireInit(vss.io.iss.bits.rvd_eg)
-  io.index_access.ready := !vss.io.iss.valid
-  if (vParams.frontendIndexAccess) {
-    when (io.index_access.valid && io.index_access.ready) {
-      vstdata_egid := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
-    }
+  val reads = Seq(1, 1).map { rc =>
+    val arb = Module(new Arbiter(UInt(log2Ceil(egsTotal*dLenB).W), rc))
+    arb.io.out.ready := true.B
+    (arb.io.in, vrf.read(arb.io.out.bits >> log2Ceil(dLenB)).asUInt >> (arb.io.out.bits(log2Ceil(dLenB)-1,0) << 3))
   }
-  val vstdata_rdata = vrf.read(vstdata_egid).asUInt
-  io.index_access.idx := vstdata_rdata >> ((io.index_access.eidx << io.index_access.eew)(log2Ceil(dLenB)-1,0) << 3)
-  vmu.io.vstdata.valid := vss.io.iss.valid
-  vmu.io.vstdata.bits.data := vstdata_rdata
-  vmu.io.vstdata.bits.mask := vss.io.iss.bits.wmask
+
+  reads(0)._1(0).valid  := vss.io.iss.valid     && vmu.io.vstdata.ready
+  vss.io.iss.ready      := reads(0)._1(0).ready && vmu.io.vstdata.ready
+  vmu.io.vstdata.valid  := vss.io.iss.valid     && reads(0)._1(0).ready
+
+  reads(0)._1(0).bits      := vss.io.iss.bits.rvd_byte
+  vmu.io.vstdata.bits.data := reads(0)._2.asUInt
+  vmu.io.vstdata.bits.mask := vss.io.iss.bits.wmask >> vss.io.iss.bits.rvd_byte(log2Ceil(dLenB)-1,0)
+
+  reads(1)._1(0).valid  := io.index_access.valid
+  io.index_access.ready := reads(1)._1(0).ready && !io.backend_busy
+
+  reads(1)._1(0).bits   := getByteId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
+  io.index_access.idx   := reads(1)._2.asUInt
+
   vmu.io.vm := vmf.asUInt
 
 
@@ -249,5 +254,5 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.mem_busy := vmu.io.busy
   io.vm := vmf.asUInt
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.backend_busy := vdq.io.deq.valid || resetting
+  io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || resetting
 }

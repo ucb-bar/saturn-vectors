@@ -14,8 +14,7 @@ case class VectorParams(
   vmaqEntries: Int = 6,
   vsoqEntries: Int = 4,
   dLen: Int = 64,
-  vatSz: Int = 3,
-  frontendIndexAccess: Boolean = true)
+  vatSz: Int = 3)
 
 case object VectorParamsKey extends Field[VectorParams]
 
@@ -35,6 +34,9 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
     val base = vreg << log2Ceil(egsPerVReg)
     val off = eidx >> (log2Ceil(dLenB).U - eew)
     base + off
+  }
+  def getByteId(vreg: UInt, eidx: UInt, eew: UInt): UInt = {
+    Cat(getEgId(vreg, eidx, eew), (eidx << eew)(log2Ceil(dLenB)-1,0))
   }
 
   def eewByteMask(eew: UInt) = (0 until (1+log2Ceil(eLen/8))).map { e =>

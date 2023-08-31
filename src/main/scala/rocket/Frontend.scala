@@ -263,7 +263,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   when (w_valid && w_replay) {
     io.issue.valid := !w_tlb_resp.miss && !w_xcpt && w_inst.vstart <= w_eidx && !w_masked
     io.issue.bits.vstart := w_eidx
-    io.issue.bits.vconfig.vl := w_eidx + 1.U
+    io.issue.bits.vconfig.vl := w_eidx +& 1.U
 
     when (w_tlb_resp.miss || !io.issue.ready) {
       replay_kill := true.B

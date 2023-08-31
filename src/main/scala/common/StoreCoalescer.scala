@@ -44,8 +44,8 @@ class StoreCoalescer(implicit p: Parameters) extends CoreModule()(p) with HasVec
   val aligned_addr = (io.saq.bits.addr >> dLenOffBits) << dLenOffBits
   io.req.bits.addr := Mux(io.saq.bits.iterative, io.saq.bits.addr, aligned_addr)
   io.req.bits.size := Mux(io.saq.bits.iterative, io.saq.bits.inst.mem_size, log2Ceil(dLenB).U)
-  io.req.bits.data := Mux(io.saq.bits.iterative || in_slamt === 0.U, in_data, in_combined_data)
-  io.req.bits.mask := Mux(io.saq.bits.iterative || in_slamt === 0.U, in_mask, in_combined_mask)
+  io.req.bits.data := Mux(io.saq.bits.iterative || in_slamt === 0.U, in_data_sl, in_combined_data)
+  io.req.bits.mask := Mux(io.saq.bits.iterative || in_slamt === 0.U, in_mask_sl, in_combined_mask)
   soq.io.enq.bits := io.saq.bits
 
 

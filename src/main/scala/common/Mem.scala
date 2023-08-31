@@ -80,7 +80,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.enq.ready := maq_available
   when (io.enq.fire) {
     maq(maq_enq_ptr).inst := io.enq.bits
-    val enq_bound = (io.enq.bits.vconfig.vl << io.enq.bits.mem_size) + io.enq.bits.rs1_data
+    val enq_bound = ((io.enq.bits.vconfig.vl - io.enq.bits.vstart) << io.enq.bits.mem_size) + io.enq.bits.rs1_data
     maq(maq_enq_ptr).bound := enq_bound
     maq(maq_enq_ptr).agen := false.B
     maq_valids(maq_enq_ptr) := true.B
