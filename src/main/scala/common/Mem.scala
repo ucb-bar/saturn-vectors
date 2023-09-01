@@ -94,99 +94,80 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     maq_valids(i) && conflict
   }.orR
 
-  val valid = RegInit(false.B)
-  val inst = Reg(new VectorIssueInst)
-  val addr = Reg(UInt(vaddrBitsExtended.W))
-  val eidx = Reg(UInt((1+log2Ceil(maxVLMax)).W))
-  val stride = Reg(UInt(vaddrBitsExtended.W))
-  val iterative = Reg(Bool())
-  val clear = WireInit(false.B)
-  val maq_idx = Reg(UInt(vmaqSz.W))
-
-  val agen_inst = maq(maq_agen_ptr).inst
-  val agen_base = maq(maq_agen_ptr).base
-  val agen_bound = maq(maq_agen_ptr).bound
-  val agen_maq_conflict = (0 until vParams.vmaqEntries).map { i =>
-    val addr_conflict = maq(maq_agen_ptr).all || maq(i).all || (maq(i).base < agen_bound && maq(i).bound > agen_base)
-    val conflict = addr_conflict && (agen_inst.opcode(5) || maq(i).store)
-    maq_valids(i) && maqOlder(i.U, maq_agen_ptr) && conflict
-  }.orR
-  val agen_valid = maq_valids(maq_agen_ptr) && !maq(maq_agen_ptr).agen
-  val agen_ready = (!valid || clear) && !agen_maq_conflict
-
-  when (agen_valid && agen_ready) {
-
-    valid := true.B
-    inst := agen_inst
-    eidx := agen_inst.vstart
-    addr := agen_inst.rs1_data
-    stride := Mux(agen_inst.mop === mopUnit, 1.U << agen_inst.mem_size, agen_inst.rs2_data)
-
-    val enq_iterative = agen_inst.mop =/= mopUnit || agen_inst.vstart =/= 0.U || !agen_inst.vm
-    when (!enq_iterative) {
-      stride := dLenB.U
-    }
-    iterative := enq_iterative
-    maq_idx := maq_agen_ptr
-
-    maq(maq_agen_ptr).agen := true.B
-    maq_agen_ptr := Mux(maq_agen_ptr === (vParams.vmaqEntries-1).U, 0.U, maq_agen_ptr + 1.U)
-  } .elsewhen (clear) {
-    valid := false.B
-  }
-
-  val aligned_addr = (addr >> dLenOffBits) << dLenOffBits
-  val alignment = addr(dLenOffBits-1,0)
-  val alignment_elems = alignment >> inst.mem_size
-  val load = !inst.opcode(5)
-  val mem_size = Mux(inst.mop(0), inst.vconfig.vtype.vsew, inst.mem_size)
-  val eg_elems = dLenB.U >> mem_size
-  val next_eidx = eidx +& Mux(iterative, 1.U, eg_elems)
-  val may_clear = next_eidx >= Mux(iterative || alignment === 0.U, inst.vconfig.vl, inst.vconfig.vl + eg_elems)
-  val masked = (!inst.vm && !(io.vm >> eidx)(0))
-
-  io.vm_hazard.valid := valid && !inst.vm
-  io.vm_hazard.vat := inst.vat
-  val mask_hazard = !inst.vm && io.vm_hazard.hazard
-
   val laq = Module(new DCEQueue(new LSAQEntry, vParams.vlaqEntries))
   val saq = Module(new DCEQueue(new LSAQEntry, vParams.vsaqEntries))
 
-  io.dmem.load_req.valid := valid && load && !masked && laq.io.enq.ready && !mask_hazard
-  io.dmem.load_req.bits.addr := Mux(iterative, addr, aligned_addr)
-  io.dmem.load_req.bits.size := Mux(iterative, mem_size, log2Ceil(dLenB).U)
+  val agen_maq = maq(maq_agen_ptr)
+  val r_addr = Reg(UInt(paddrBits.W))
+  val r_eidx = Reg(UInt((1+log2Ceil(maxVLMax)).W))
+  val agen_head   = RegInit(true.B)
+  val agen_addr = Mux(agen_head, agen_maq.inst.rs1_data, r_addr)
+  val agen_eidx = Mux(agen_head, agen_maq.inst.vstart, r_eidx)
+  val agen_aligned_addr = (agen_addr >> dLenOffBits) << dLenOffBits
+  val agen_alignment = agen_addr(dLenOffBits-1,0)
+  val agen_inst = agen_maq.inst
+  val agen_load = !agen_inst.opcode(5)
+  val agen_mem_size = Mux(agen_inst.mop(0), agen_inst.vconfig.vtype.vsew, agen_inst.mem_size)
+  val agen_eg_elems = dLenB.U >> agen_inst.mem_size
+  val agen_iterative = agen_inst.mop =/= mopUnit || agen_inst.vstart =/= 0.U || !agen_inst.vm
+  val agen_next_eidx = agen_eidx +& Mux(agen_iterative, 1.U, agen_eg_elems)
+  val agen_may_clear = agen_next_eidx >= Mux(agen_iterative || agen_alignment === 0.U,
+    agen_inst.vconfig.vl,
+    agen_inst.vconfig.vl + agen_eg_elems)
+  val agen_masked = !agen_inst.vm && !(io.vm >> agen_eidx)(0)
+
+  val agen_maq_conflict = (0 until vParams.vmaqEntries).map { i =>
+    val addr_conflict = agen_maq.all || maq(i).all || (maq(i).base < agen_maq.bound && maq(i).bound > agen_maq.base)
+    val conflict = addr_conflict && (agen_inst.opcode(5) || maq(i).store)
+    maq_valids(i) && maqOlder(i.U, maq_agen_ptr) && conflict
+  }.orR
+  val agen_mask_hazard = !agen_inst.vm && io.vm_hazard.hazard
+  val agen_valid = maq_valids(maq_agen_ptr) && !agen_maq.agen && !agen_maq_conflict && !agen_mask_hazard
+  val agen_ready = Mux(agen_maq.store,
+    saq.io.enq.ready,
+    (io.dmem.load_req.ready && laq.io.enq.ready) || agen_masked)
+  val agen_stride = Mux(agen_inst.mop === mopUnit, dLenB.U, agen_inst.rs2_data)
+
+  when (agen_valid && agen_ready) {
+    r_addr := agen_addr + agen_stride
+    r_eidx := agen_next_eidx
+    agen_head := false.B
+    when (agen_may_clear) {
+      maq(maq_agen_ptr).agen := true.B
+      maq_agen_ptr := Mux(maq_agen_ptr === (vParams.vmaqEntries-1).U, 0.U, maq_agen_ptr + 1.U)
+      agen_head := true.B
+    }
+  }
+
+  io.vm_hazard.valid := agen_valid && !agen_inst.vm
+  io.vm_hazard.vat := agen_inst.vat
+
+
+  io.dmem.load_req.valid := agen_valid && agen_load && !agen_masked && laq.io.enq.ready
+  io.dmem.load_req.bits.addr := Mux(agen_iterative, agen_addr, agen_aligned_addr)
+  io.dmem.load_req.bits.size := Mux(agen_iterative, agen_mem_size, log2Ceil(dLenB).U)
   io.dmem.load_req.bits.data := DontCare
   io.dmem.load_req.bits.mask := DontCare
 
-  laq.io.enq.bits.inst := inst
-  laq.io.enq.bits.eidx := eidx
-  laq.io.enq.bits.iterative := iterative
-  laq.io.enq.bits.head := eidx === 0.U
-  laq.io.enq.bits.tail := may_clear
-  laq.io.enq.bits.addr := addr
-  laq.io.enq.bits.masked := masked
-  laq.io.enq.bits.maq_idx := maq_idx
-  laq.io.enq.valid := valid && load && (masked || io.dmem.load_req.ready) && !mask_hazard
+  laq.io.enq.bits.inst := agen_inst
+  laq.io.enq.bits.eidx := agen_eidx
+  laq.io.enq.bits.iterative := agen_iterative
+  laq.io.enq.bits.head := agen_head
+  laq.io.enq.bits.tail := agen_may_clear
+  laq.io.enq.bits.addr := agen_addr
+  laq.io.enq.bits.masked := agen_masked
+  laq.io.enq.bits.maq_idx := maq_agen_ptr
+  laq.io.enq.valid := agen_valid && agen_load && (agen_masked || io.dmem.load_req.ready)
 
-  saq.io.enq.bits.inst := inst
-  saq.io.enq.bits.eidx := eidx
-  saq.io.enq.bits.iterative := iterative
-  saq.io.enq.bits.head := eidx === 0.U
-  saq.io.enq.bits.tail := may_clear
-  saq.io.enq.bits.addr := addr
-  saq.io.enq.bits.masked := masked
-  saq.io.enq.bits.maq_idx := maq_idx
-  saq.io.enq.valid := valid && !load && !mask_hazard
-
-  val fire = valid && Mux(load, laq.io.enq.fire, saq.io.enq.fire)
-
-  when (fire) {
-    clear := may_clear
-    when (!may_clear) {
-      addr := addr + stride
-      eidx := next_eidx
-    }
-  }
+  saq.io.enq.bits.inst := agen_inst
+  saq.io.enq.bits.eidx := agen_eidx
+  saq.io.enq.bits.iterative := agen_iterative
+  saq.io.enq.bits.head := agen_head
+  saq.io.enq.bits.tail := agen_may_clear
+  saq.io.enq.bits.addr := agen_addr
+  saq.io.enq.bits.masked := agen_masked
+  saq.io.enq.bits.maq_idx := maq_agen_ptr
+  saq.io.enq.valid := agen_valid && !agen_load
 
   val lcoal = Module(new LoadCoalescer)
   val lrq = Module(new DCEQueue(UInt(dLen.W), vParams.vlaqEntries, flow=true))
