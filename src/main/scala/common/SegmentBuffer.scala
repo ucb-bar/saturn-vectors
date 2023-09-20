@@ -53,7 +53,7 @@ class LoadSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Has
   io.out.bits := Mux1H(UIntToOH(out_row), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
 
   when (io.in.fire) {
-    wrow := ((1.U << (dLenB.U >> io.in.bits.eew)(3,0)) - 1.U)(7,0) << io.in.bits.sidx
+    wrow := ((1.U << (dLenB.U >> io.in.bits.eew)(4,0)) - 1.U)(7,0) << io.in.bits.sidx
   }
   wcol := ((1.U << (1.U << io.in.bits.eew)) - 1.U)(7,0) << (io.in.bits.eidx(log2Ceil(dLenB)-1,0) << io.in.bits.eew)(log2Ceil(dLenB)-1,0)
   wmode := in_sel
