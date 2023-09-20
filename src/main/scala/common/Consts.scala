@@ -24,7 +24,6 @@ trait VectorConsts {
   def opcStore  = "b0100111".U
   def opcVector = "b1010111".U
 
-  def execRegular        = 0.U(2.W)
-  def execElementOrder   = 1.U(2.W)
-  def execElementUnorder = 2.U(2.W)
+  def execRegular      = 1.U(3.W)
+  def execElementOrder = 2.U(3.W)
 }

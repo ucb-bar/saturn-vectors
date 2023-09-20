@@ -9,10 +9,13 @@ import freechips.rocketchip.tile._
 
 case class VectorParams(
   vdqEntries: Int = 4,
-  vlaqEntries: Int = 4,
-  vsaqEntries: Int = 4,
-  vmaqEntries: Int = 6,
-  vsoqEntries: Int = 4,
+
+  vliqEntries: Int = 4,
+  vsiqEntries: Int = 4,
+
+  vlifqEntries: Int = 4,
+  vsifqEntries: Int = 4,
+
   dLen: Int = 64,
   vatSz: Int = 3)
 
@@ -24,8 +27,6 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
   def dLen = vParams.dLen
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
-
-  def vmaqSz = log2Ceil(vParams.vmaqEntries)
 
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
