@@ -153,7 +153,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   io.out.bits.tail := Mux(remaining_bytes >= dLenB.U, dLenB.U, remaining_bytes)
 
   when (io.in.fire) {
-    wrow := (1.U << (1.U << (log2Ceil(cols).U - io.in.bits.eew)))(7,0) << sidxOff(io.in.bits.sidx, io.in.bits.eew)
+    wrow := ((1.U << (1.U << (log2Ceil(cols).U - io.in.bits.eew))) - 1.U)(7,0) << sidxOff(io.in.bits.sidx, io.in.bits.eew)
   }
   wcol := ((1.U << (1.U << io.in.bits.eew)) - 1.U)(7,0) << (io.in.bits.sidx << io.in.bits.eew)(log2Ceil(cols)-1,0)
 
@@ -187,7 +187,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
 
   when (io.out.fire) {
     val sidx_tail = ((out_sidx +& (cols.U >> out_eew(out_sel))) > out_nf(out_sel))
-    when (out_row === out_rows(out_sel) && sidx_tail) {
+    when ((out_row +& 1.U === out_rows(out_sel)) && sidx_tail) {
       out_sel := !out_sel
       out_row := 0.U
       out_sidx := 0.U

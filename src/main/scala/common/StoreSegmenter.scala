@@ -42,10 +42,10 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
   segbuf.io.in.bits.data := io.stdata.bits
   segbuf.io.in.bits.eew := mem_size
   segbuf.io.in.bits.nf := io.inst.nf
-  segbuf.io.in.bits.rows := Mux(next_eidx >= io.inst.vconfig.vl, eidx_incr, (io.inst.vconfig.vl - eidx))
+  segbuf.io.in.bits.rows := Mux(next_eidx >= io.inst.vconfig.vl, (io.inst.vconfig.vl - eidx), eidx_incr)
   segbuf.io.in.bits.sidx := sidx
 
-  io.compactor.valid := io.valid && Mux(segbuf.io.busy,
+  io.compactor.valid := Mux(segbuf.io.busy,
     segbuf.io.out.valid,
     io.stdata.valid && io.valid && io.inst.nf === 0.U)
   io.compactor_data := Mux(segbuf.io.busy,
