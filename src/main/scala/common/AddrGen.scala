@@ -82,7 +82,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.bits.phys := io.inst.phys
 
   when (io.out.fire) {
-    when (next_sidx > io.inst.nf || io.inst.mop === mopUnit) {
+    when (next_sidx > io.inst.nf || (io.inst.mop === mopUnit && io.inst.vm)) {
       r_eaddr := next_eaddr
       r_saddr := next_eaddr
       r_eidx := next_eidx
