@@ -73,7 +73,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   hella_store.req.valid       := vxu.io.mem.store_req.valid && store_tag_available
   hella_store.req.bits.addr   := vxu.io.mem.store_req.bits.addr
   hella_store.req.bits.tag    := store_tag
-  hella_store.req.bits.cmd    := M_XWR
+  hella_store.req.bits.cmd    := M_PWR
   hella_store.req.bits.size   := log2Ceil(dLenB).U
   hella_store.req.bits.signed := false.B
   hella_store.req.bits.dprv   := io.core.status.prv

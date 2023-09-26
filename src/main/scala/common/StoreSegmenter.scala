@@ -10,48 +10,61 @@ import freechips.rocketchip.tile._
 
 class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
+    val valid = Input(Bool())
+    val done = Output(Bool())
+    val inst = Input(new VectorIssueInst)
+
     val compactor = Decoupled(new CompactorReq)
     val compactor_data = Output(UInt(dLen.W))
-
-    val seg = Flipped(Decoupled(new SegmenterReq))
     val stdata = Flipped(Decoupled(UInt(dLen.W)))
   })
 
-  val transpose = Module(new StoreMultiTransposeArray(dLenB))
+  val segbuf = Module(new StoreSegmentBuffer)
 
+  val r_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
+  val r_head = RegInit(true.B)
+  val eidx = Mux(r_head, io.inst.vstart, r_eidx)
   val sidx = RegInit(0.U(3.W))
 
-  transpose.io.in.valid := io.seg.valid && io.seg.bits.nf =/= 0.U && io.stdata.valid
-  transpose.io.in.bits.eew := io.seg.bits.eew
-  transpose.io.in.bits.tail := sidx === io.seg.bits.nf
-  transpose.io.in.bits.elems := Mux(io.seg.bits.tail, io.seg.bits.tail_align, dLenB.U) >> io.seg.bits.eew
-  transpose.io.in.bits.wdata := io.stdata.bits.asUInt
-  transpose.io.out.ready := io.compactor.ready
+  val eidx_incr = (dLenB.U >> io.inst.mem_size)
+  val next_eidx = eidx +& eidx_incr
+  val next_sidx = sidx +& 1.U
 
-  io.seg.ready := Mux(io.seg.bits.nf === 0.U,
-    io.stdata.valid && io.compactor.ready,
-    io.stdata.valid && transpose.io.in.ready && sidx === io.seg.bits.nf)
+  val sidx_tail = next_sidx > io.inst.nf
+  val eidx_tail = next_eidx >= io.inst.vconfig.vl
 
-  io.stdata.ready := io.seg.valid && Mux(io.seg.bits.nf === 0.U,
-    io.compactor.ready,
-    transpose.io.in.ready)
+  io.stdata.ready := io.valid && Mux(io.inst.nf === 0.U,
+    !segbuf.io.busy && io.compactor.ready,
+    segbuf.io.in.ready)
 
-  io.compactor.valid := Mux(transpose.io.busy,
-    transpose.io.out.valid,
-    io.stdata.valid && io.seg.valid)
-  io.compactor.bits.head := 0.U
-  io.compactor.bits.tail := Mux(transpose.io.busy,
-    transpose.io.out.bits.count,
-    Mux(io.seg.bits.tail, io.seg.bits.tail_align, 0.U))
-  io.compactor_data := Mux(transpose.io.busy,
-    transpose.io.out.bits.data.asUInt,
-    io.stdata.bits)
+  segbuf.io.in.valid := io.valid && io.inst.nf =/= 0.U && io.stdata.valid
+  segbuf.io.in.bits.data := io.stdata.bits
+  segbuf.io.in.bits.eew := io.inst.mem_size
+  segbuf.io.in.bits.nf := io.inst.nf
+  segbuf.io.in.bits.rows := Mux(next_eidx >= io.inst.vconfig.vl, eidx_incr, (io.inst.vconfig.vl - eidx))
+  segbuf.io.in.bits.sidx := sidx
 
-  when (transpose.io.in.fire && io.seg.bits.nf =/= 0.U) {
-    sidx := sidx + 1.U
-    when (sidx === io.seg.bits.nf) {
+  io.compactor.valid := io.valid && Mux(segbuf.io.busy,
+    segbuf.io.out.valid,
+    io.stdata.valid && io.valid && io.inst.nf === 0.U)
+  io.compactor_data := Mux(segbuf.io.busy,
+    segbuf.io.out.bits.data, io.stdata.bits)
+  io.compactor.bits.head := Mux(segbuf.io.busy,
+    segbuf.io.out.bits.head, eidx << io.inst.mem_size)
+  io.compactor.bits.tail := Mux(segbuf.io.busy,
+    segbuf.io.out.bits.tail, Mux(eidx_tail, io.inst.vconfig.vl << io.inst.mem_size, 0.U))
+
+  segbuf.io.out.ready := io.compactor.ready
+
+  io.done := false.B
+  when (io.stdata.fire) {
+    when (io.inst.nf =/= 0.U && !sidx_tail) {
+      sidx := next_sidx
+    } .otherwise {
+      r_eidx := next_eidx
       sidx := 0.U
+      io.done := eidx_tail
+      r_head := eidx_tail
     }
   }
-
 }

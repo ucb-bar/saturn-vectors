@@ -9,51 +9,70 @@ import freechips.rocketchip.tile._
 
 class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
+    val valid = Input(Bool())
+    val done = Output(Bool())
+    val inst = Input(new VectorIssueInst)
+
     val compactor = Decoupled(new CompactorReq)
     val compactor_data = Input(UInt(dLen.W))
-
-    val seg = Flipped(Decoupled(new SegmenterReq))
 
     val resp = Decoupled(UInt(dLen.W))
   })
 
   val segbuf = Module(new LoadSegmentBuffer)
 
+  val r_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
+  val r_head = RegInit(true.B)
+  val eidx = Mux(r_head, io.inst.vstart, r_eidx)
   val sidx = RegInit(0.U(3.W))
-  val elems_per_dlen = dLenB.U >> io.seg.bits.eew
-  val remaining_bytes = Mux(io.seg.bits.nf =/= 0.U,
-    (io.seg.bits.nf - sidx +& 1.U) << io.seg.bits.eew,
-    Mux(io.seg.bits.tail, io.seg.bits.tail_align, 0.U))
-  val last = remaining_bytes <= dLenB.U
 
-  io.compactor.valid := io.seg.valid && (io.seg.bits.nf === 0.U && !segbuf.io.busy || segbuf.io.in.ready)
-  io.compactor.bits.head := Mux(io.seg.bits.nf === 0.U, io.seg.bits.eidx << io.seg.bits.eew, 0.U)
-  io.compactor.bits.tail := Mux(remaining_bytes >= dLenB.U, 0.U, remaining_bytes)
+  val eidx_incr = Mux(io.inst.nf =/= 0.U, 1.U, dLenB.U >> io.inst.mem_size)
+  val next_eidx = eidx +& eidx_incr
+  val next_sidx = sidx +& (dLenB.U >> io.inst.mem_size)
 
-  segbuf.io.in.valid := io.seg.valid && io.seg.bits.nf =/= 0.U && io.compactor.ready
-  segbuf.io.in.bits.eew := io.seg.bits.eew
-  segbuf.io.in.bits.nf := io.seg.bits.nf
-  segbuf.io.in.bits.data := io.compactor_data
-  segbuf.io.in.bits.eidx := io.seg.bits.eidx
-  segbuf.io.in.bits.sidx := sidx
-  segbuf.io.in.bits.sidx_tail := last
-  segbuf.io.in.bits.tail := io.seg.bits.tail
+  val sidx_tail = next_sidx > io.inst.nf
+  val eidx_tail = next_eidx >= io.inst.vconfig.vl
 
-  when (segbuf.io.in.fire) {
-    sidx := sidx + elems_per_dlen
-    when (last) {
-      sidx := 0.U
-    }
+  io.compactor.valid := io.valid && (io.inst.nf === 0.U && !segbuf.io.busy || segbuf.io.in.ready)
+  when (io.inst.nf === 0.U) {
+    io.compactor.bits.head := eidx << io.inst.mem_size
+    io.compactor.bits.tail := Mux(eidx_tail, io.inst.vconfig.vl << io.inst.mem_size, 0.U)
+  } .otherwise {
+    io.compactor.bits.head := 0.U
+    io.compactor.bits.tail := Mux(sidx_tail, (io.inst.nf +& 1.U) << io.inst.mem_size, 0.U)
   }
+
+  segbuf.io.in.valid := io.valid && io.inst.nf =/= 0.U && io.compactor.ready
+  segbuf.io.in.bits.eew := io.inst.mem_size
+  segbuf.io.in.bits.nf := io.inst.nf
+  segbuf.io.in.bits.data := io.compactor_data
+  segbuf.io.in.bits.eidx := eidx
+  segbuf.io.in.bits.sidx := sidx
+  segbuf.io.in.bits.sidx_tail := sidx_tail
+  segbuf.io.in.bits.tail := eidx_tail
 
   segbuf.io.out.ready := io.resp.ready
 
   io.resp.valid := Mux(segbuf.io.busy,
     segbuf.io.out.valid,
-    io.compactor.ready && io.seg.valid && io.seg.bits.nf === 0.U)
+    io.compactor.ready && io.valid && io.inst.nf === 0.U)
   io.resp.bits := Mux(segbuf.io.busy, segbuf.io.out.bits, io.compactor_data)
 
-  io.seg.ready := Mux(io.seg.bits.nf === 0.U,
+  when (segbuf.io.in.fire) {
+    sidx := next_sidx
+    when (next_sidx > io.inst.nf) {
+      sidx := 0.U
+    }
+  }
+
+  val seg_ready = Mux(io.inst.nf === 0.U,
     !segbuf.io.busy && io.compactor.ready && io.resp.ready,
-    segbuf.io.in.ready && io.compactor.ready && last)
+    segbuf.io.in.ready && io.compactor.ready && sidx_tail)
+
+  io.done := false.B
+  when (seg_ready && io.valid) {
+    r_head := eidx_tail
+    r_eidx := next_eidx
+    io.done := eidx_tail
+  }
 }
