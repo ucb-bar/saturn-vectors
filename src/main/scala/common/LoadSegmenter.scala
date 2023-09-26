@@ -26,24 +26,25 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val eidx = Mux(r_head, io.inst.vstart, r_eidx)
   val sidx = RegInit(0.U(3.W))
 
-  val eidx_incr = Mux(io.inst.nf =/= 0.U, 1.U, dLenB.U >> io.inst.mem_size)
+  val mem_size = Mux(io.inst.mop(0), io.inst.vconfig.vtype.vsew, io.inst.mem_size)
+  val eidx_incr = Mux(io.inst.nf =/= 0.U, 1.U, dLenB.U >> mem_size)
   val next_eidx = eidx +& eidx_incr
-  val next_sidx = sidx +& (dLenB.U >> io.inst.mem_size)
+  val next_sidx = sidx +& (dLenB.U >> mem_size)
 
   val sidx_tail = next_sidx > io.inst.nf
   val eidx_tail = next_eidx >= io.inst.vconfig.vl
 
   io.compactor.valid := io.valid && (io.inst.nf === 0.U && !segbuf.io.busy || segbuf.io.in.ready)
   when (io.inst.nf === 0.U) {
-    io.compactor.bits.head := eidx << io.inst.mem_size
-    io.compactor.bits.tail := Mux(eidx_tail, io.inst.vconfig.vl << io.inst.mem_size, 0.U)
+    io.compactor.bits.head := eidx << mem_size
+    io.compactor.bits.tail := Mux(eidx_tail, io.inst.vconfig.vl << mem_size, 0.U)
   } .otherwise {
     io.compactor.bits.head := 0.U
-    io.compactor.bits.tail := Mux(sidx_tail, (io.inst.nf +& 1.U) << io.inst.mem_size, 0.U)
+    io.compactor.bits.tail := Mux(sidx_tail, (io.inst.nf +& 1.U) << mem_size, 0.U)
   }
 
   segbuf.io.in.valid := io.valid && io.inst.nf =/= 0.U && io.compactor.ready
-  segbuf.io.in.bits.eew := io.inst.mem_size
+  segbuf.io.in.bits.eew := mem_size
   segbuf.io.in.bits.nf := io.inst.nf
   segbuf.io.in.bits.data := io.compactor_data
   segbuf.io.in.bits.eidx := eidx

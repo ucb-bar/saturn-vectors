@@ -134,7 +134,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.vat := DontCare
   x_core_inst.phys := DontCare
 
-  def nextPage(addr: UInt) = addr + (1 << pgIdxBits).U
+  def nextPage(addr: UInt) = ((addr + (1 << pgIdxBits).U) >> pgIdxBits) << pgIdxBits
 
   val x_inst = Mux(x_replay, x_replay_inst, x_core_inst)
   val x_stride = Mux(x_replay, x_replay_stride, Mux1H(Seq(
@@ -203,6 +203,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val m_pc = RegEnable(x_pc, x_may_be_valid)
   val m_masked = RegNext(x_masked, x_may_be_valid)
   val m_seg_hi = RegNext(x_replay_seg_hi, x_may_be_valid)
+  val m_seg_single_page = RegNext(x_replay_seg_single_page, x_may_be_valid)
   val m_tlb_req_valid = RegNext(x_tlb_valid, x_may_be_valid)
   val m_tlb_resp_valid = RegNext(io.tlb.req.fire, x_may_be_valid)
   val m_iterative = RegEnable(x_iterative, x_may_be_valid)
@@ -225,6 +226,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val w_pc = RegEnable(m_pc, m_valid)
   val w_tlb_resp = RegEnable(m_tlb_resp, m_valid)
   val w_seg_hi = RegEnable(m_seg_hi, m_valid)
+  val w_seg_single_page = RegEnable(m_seg_single_page, m_valid)
 
   val w_xcpts = Seq(
     (w_tlb_resp.pf.st, Causes.store_page_fault.U),
@@ -289,7 +291,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     }
   }
   when (w_valid && w_replay) {
-    io.issue.valid := !w_tlb_resp.miss && !w_xcpt && w_inst.vstart <= w_eidx && !w_masked && (w_seg_hi || w_inst.nf === 0.U)
+    io.issue.valid := !w_tlb_resp.miss && !w_xcpt && w_inst.vstart <= w_eidx && !w_masked && (w_seg_hi || w_inst.nf === 0.U || w_seg_single_page)
     io.issue.bits.vstart := w_eidx
     io.issue.bits.vconfig.vl := w_eidx +& 1.U
 
@@ -306,7 +308,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       io.core.set_vstart.valid := true.B
       io.core.set_vstart.bits := w_eidx
       replay_kill := true.B
-    } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl && (w_seg_hi || w_inst.nf === 0.U)) {
+    } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl && (w_seg_hi || w_seg_single_page || w_inst.nf === 0.U)) {
       x_replay := false.B
       io.core.wb.retire := true.B
       io.core.set_vstart.valid := true.B
