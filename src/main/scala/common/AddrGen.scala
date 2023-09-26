@@ -39,22 +39,24 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     io.maskindex.bits.index & eewBitMask(io.inst.mem_size), 0.U)
   val saddr = Mux(io.inst.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
 
+  val fast_segmented = io.inst.mop === mopUnit && io.inst.vm
   val mem_size = Mux(io.inst.mop(0), io.inst.vconfig.vtype.vsew, io.inst.mem_size)
-  val max_eidx = Mux(io.inst.mop === mopUnit && io.inst.vm,
+  val max_eidx = Mux(fast_segmented,
     io.inst.vconfig.vl * (io.inst.nf +& 1.U),
     io.inst.vconfig.vl)
   val stride = Mux(io.inst.mop === mopStrided, io.inst.rs2_data,
     Mux(io.inst.mop === mopUnit, dLenB.U, 0.U))
+  val nf = Mux(fast_segmented, 0.U, io.inst.nf)
 
   val next_max_elems = getElems(saddr, mem_size)
-  val next_contig_elems = Mux(io.inst.mop === mopUnit && io.inst.vm,
+  val next_contig_elems = Mux(fast_segmented,
     max_eidx - eidx,
     io.inst.nf +& 1.U - sidx)
   val next_act_elems = min(next_contig_elems, next_max_elems)(dLenOffBits,0)
   val next_act_bytes = next_act_elems << mem_size
 
   val next_sidx = sidx +& next_act_elems
-  val next_eidx = eidx +& Mux(io.inst.nf =/= 0.U && io.inst.mop =/= mopUnit, 1.U, next_act_elems)
+  val next_eidx = eidx +& Mux(fast_segmented, next_act_elems, 1.U)
 
   val next_eaddr = eaddr + Mux(io.inst.mop === mopUnit, next_act_bytes, Mux(io.inst.mop === mopStrided, io.inst.rs2_data, 0.U))
   val next_saddr = saddr + next_act_bytes
@@ -64,7 +66,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val block_maskindex = (needs_mask || needs_index) && !io.maskindex.valid
 
   val masked = needs_mask && !io.maskindex.bits.mask
-  val may_clear = next_sidx > io.inst.nf && next_eidx >= max_eidx
+  val may_clear = (fast_segmented || next_sidx > io.inst.nf) && next_eidx >= max_eidx
 
 
   io.done := false.B
@@ -82,7 +84,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.bits.phys := io.inst.phys
 
   when (io.out.fire) {
-    when (next_sidx > io.inst.nf || (io.inst.mop === mopUnit && io.inst.vm)) {
+    when (next_sidx > io.inst.nf || fast_segmented) {
       r_eaddr := next_eaddr
       r_saddr := next_eaddr
       r_eidx := next_eidx
