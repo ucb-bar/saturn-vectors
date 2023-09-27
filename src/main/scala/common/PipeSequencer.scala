@@ -52,7 +52,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       val renv2 = Input(Bool())
       val renvd = Input(Bool())
       val renvm = Input(Bool())
-      val nf = Input(UInt(3.W))
+      val seg_nf = Input(UInt(3.W))
 
       val execmode = Input(UInt(2.W))
 
@@ -99,7 +99,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val vs3_eew = Reg(UInt(2.W))
   val vd_eew  = Reg(UInt(2.W))
   val incr_eew = Reg(UInt(2.W))
-  val nf      = Reg(UInt(3.W))
+  val seg_nf  = Reg(UInt(3.W))
   val eidx    = Reg(UInt(log2Ceil(maxVLMax).W))
   val sidx    = Reg(UInt(3.W))
   val mode    = Reg(UInt(2.W))
@@ -108,7 +108,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val next_eidx = min(
     Mux(mode =/= execRegular, eidx +& 1.U, inst.vconfig.vl),
     ((eidx << incr_eew) + (dLenB.U >> sub_dlen)) >> incr_eew)
-  val last      = next_eidx === inst.vconfig.vl && sidx === nf
+  val last      = next_eidx === inst.vconfig.vl && sidx === seg_nf
   val eewmask   = eewByteMask(vd_eew)
 
 
@@ -121,7 +121,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     inst := io.dis.inst
     eidx := io.dis.inst.vstart
     sidx := 0.U
-    val lmul_mask = ((1.U << ((1.U << io.dis.inst.pos_lmul) +& 1.U + io.dis.nf)) - 1.U)(31,0)
+    val lmul_mask = ((1.U << ((1.U << io.dis.inst.pos_lmul) +& 1.U + io.dis.seg_nf)) - 1.U)(31,0)
     val wvd_arch_oh = Mux(writeVD.B && io.dis.wvd,
       lmul_mask << io.dis.inst.rd, 0.U)
     val rvs1_arch_oh = Mux(readVS1.B && io.dis.renv1,
@@ -145,7 +145,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     vs3_eew := io.dis.vs3_eew
     vd_eew := io.dis.vd_eew
     incr_eew := io.dis.incr_eew
-    nf := io.dis.nf
+    seg_nf := io.dis.seg_nf
     sub_dlen := io.dis.sub_dlen
     clear_vat := io.dis.clear_vat
   } .elsewhen (last && io.iss.fire) {
@@ -200,7 +200,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       rvs2_oh := rvs2_oh & ~UIntToOH(io.iss.bits.rvs2_eg)
       rvd_oh  := rvd_oh  & ~UIntToOH(io.iss.bits.rvd_eg)
     }
-    when (sidx === nf) {
+    when (sidx === seg_nf) {
       sidx := 0.U
       eidx := next_eidx
     } .otherwise {

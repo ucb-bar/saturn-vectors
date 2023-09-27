@@ -27,14 +27,14 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val sidx = RegInit(0.U(3.W))
 
   val mem_size = io.inst.mem_elem_size
-  val eidx_incr = Mux(io.inst.nf =/= 0.U, 1.U, dLenB.U >> mem_size)
+  val eidx_incr = Mux(io.inst.seg_nf =/= 0.U, 1.U, dLenB.U >> mem_size)
   val next_eidx = eidx +& eidx_incr
   val next_sidx = sidx +& (dLenB.U >> mem_size)
 
-  val sidx_tail = next_sidx > io.inst.nf
+  val sidx_tail = next_sidx > io.inst.seg_nf
   val eidx_tail = next_eidx >= io.inst.vconfig.vl
 
-  when (io.inst.nf === 0.U) {
+  when (io.inst.seg_nf === 0.U) {
     io.compactor.valid := io.valid && !segbuf.io.busy && io.resp.ready
     io.compactor.bits.head := eidx << mem_size
     io.compactor.bits.tail := Mux(eidx_tail, io.inst.vconfig.vl << mem_size, 0.U)
@@ -44,7 +44,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
     io.compactor.bits.tail := Mux(sidx_tail, (io.inst.nf +& 1.U) << mem_size, 0.U)
   }
 
-  segbuf.io.in.valid := io.valid && io.inst.nf =/= 0.U && io.compactor.ready
+  segbuf.io.in.valid := io.valid && io.inst.seg_nf =/= 0.U && io.compactor.ready
   segbuf.io.in.bits.eew := mem_size
   segbuf.io.in.bits.nf := io.inst.nf
   segbuf.io.in.bits.data := io.compactor_data
@@ -57,7 +57,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.resp.valid := Mux(segbuf.io.busy,
     segbuf.io.out.valid,
-    io.compactor.ready && io.valid && io.inst.nf === 0.U)
+    io.compactor.ready && io.valid && io.inst.seg_nf === 0.U)
   io.resp.bits := Mux(segbuf.io.busy, segbuf.io.out.bits, io.compactor_data)
 
   when (segbuf.io.in.fire) {
@@ -67,7 +67,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
   }
 
-  val seg_ready = Mux(io.inst.nf === 0.U,
+  val seg_ready = Mux(io.inst.seg_nf === 0.U,
     !segbuf.io.busy && io.compactor.ready && io.resp.ready,
     segbuf.io.in.ready && io.compactor.ready && sidx_tail)
 

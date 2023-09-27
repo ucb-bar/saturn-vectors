@@ -24,6 +24,8 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def vm = bits(25)
   def umop = bits(24,20)
   def nf = bits(31,29)
+  def seg_nf = Mux(umop === lumopWhole, 0.U, nf)
+  def wr_nf = Mux(umop === lumopWhole, nf, 0.U)
   def pos_lmul = Mux(vconfig.vtype.vlmul_sign, 0.U, vconfig.vtype.vlmul_mag)
   def vmu = opcode.isOneOf(opcLoad, opcStore)
   def rs1 = bits(19,15)
@@ -118,7 +120,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.dis.renvd := false.B
     s.io.dis.renvm := false.B
     s.io.dis.execmode := execRegular
-    s.io.dis.nf := 0.U
+    s.io.dis.seg_nf := 0.U
     s.io.dis.sub_dlen := 0.U
     when (s.io.vat_release.valid) {
       assert(vat_valids(s.io.vat_release.bits))
@@ -134,16 +136,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vls.io.dis.wvd := true.B
   vls.io.dis.renvm := !vdq.io.deq.bits.vm
   vls.io.dis.clear_vat := true.B
-  vls.io.dis.nf := vdq.io.deq.bits.nf
+  vls.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
   vls.io.dis.vd_eew := vdq.io.deq.bits.mem_elem_size
   vls.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
 
   vss.io.dis.renvd := true.B
   vss.io.dis.renvm := vdq.io.deq.bits.vm
   vss.io.dis.clear_vat := false.B
-  vss.io.dis.nf := vdq.io.deq.bits.nf
+  vss.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
   vss.io.dis.sub_dlen := Mux(
-    vdq.io.deq.bits.nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& vss.io.dis.vs3_eew)),
+    vdq.io.deq.bits.seg_nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& vss.io.dis.vs3_eew)),
     log2Ceil(dLenB).U - 3.U - vss.io.dis.vs3_eew,
     0.U)
   vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_elem_size

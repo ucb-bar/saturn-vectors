@@ -32,21 +32,20 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
 
 
   val eidx = Mux(r_head,
-    io.inst.vstart * (Mux(io.inst.mop === mopUnit && io.inst.vm, io.inst.nf, 0.U) +& 1.U),
+    io.inst.vstart * (Mux(io.inst.mop === mopUnit && io.inst.vm, io.inst.seg_nf, 0.U) +& 1.U),
     r_eidx)
   val sidx = Mux(r_head, 0.U             , r_sidx)
   val eaddr = Mux(r_head, io.inst.rs1_data, r_eaddr) + Mux(io.inst.mop(0),
     io.maskindex.bits.index & eewBitMask(io.inst.mem_idx_size), 0.U)
   val saddr = Mux(io.inst.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
 
-  val fast_segmented = io.inst.mop === mopUnit && io.inst.vm
+  val fast_segmented = (io.inst.mop === mopUnit && io.inst.vm)
   val mem_size = io.inst.mem_elem_size
   val max_eidx = Mux(fast_segmented,
-    io.inst.vconfig.vl * (io.inst.nf +& 1.U),
+    io.inst.vconfig.vl * (io.inst.seg_nf +& 1.U),
     io.inst.vconfig.vl)
   val stride = Mux(io.inst.mop === mopStrided, io.inst.rs2_data,
     Mux(io.inst.mop === mopUnit, dLenB.U, 0.U))
-  val nf = Mux(fast_segmented, 0.U, io.inst.nf)
 
   val next_max_elems = getElems(saddr, mem_size)
   val next_contig_elems = Mux(fast_segmented,
