@@ -149,7 +149,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   val row_sel = out_row + sidxOff(out_sidx, out_eew(out_sel))
   io.out.bits.data := Mux1H(UIntToOH(row_sel), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
   io.out.bits.head := 0.U
-  val remaining_bytes = (out_nf(out_sel) +& 1.U - out_sidx(out_sel)) << out_eew(out_sel)
+  val remaining_bytes = (out_nf(out_sel) +& 1.U - out_sidx) << out_eew(out_sel)
   io.out.bits.tail := Mux(remaining_bytes >= dLenB.U, dLenB.U, remaining_bytes)
 
   when (io.in.fire) {
