@@ -61,6 +61,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       val vs3_eew = Input(UInt(2.W))
       val vd_eew = Input(UInt(2.W))
       val incr_eew = Input(UInt(2.W))
+      val sub_dlen = Input(UInt(2.W))
     }
 
     val valid = Output(Bool())
@@ -103,9 +104,10 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val sidx    = Reg(UInt(3.W))
   val mode    = Reg(UInt(2.W))
   val clear_vat = Reg(Bool())
+  val sub_dlen = Reg(UInt(2.W))
   val next_eidx = min(
     Mux(mode =/= execRegular, eidx +& 1.U, inst.vconfig.vl),
-    ((eidx << incr_eew) + dLenB.U) >> incr_eew)
+    ((eidx << incr_eew) + (dLenB.U >> sub_dlen)) >> incr_eew)
   val last      = next_eidx === inst.vconfig.vl && sidx === nf
   val eewmask   = eewByteMask(vd_eew)
 
@@ -144,6 +146,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     vd_eew := io.dis.vd_eew
     incr_eew := io.dis.incr_eew
     nf := io.dis.nf
+    sub_dlen := io.dis.sub_dlen
     clear_vat := io.dis.clear_vat
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
@@ -182,15 +185,16 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.rvd_byte  := getByteId(inst.rd  + (sidx << inst.pos_lmul), eidx, vs3_eew)
   io.iss.bits.wvd_byte  := getByteId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew)
 
-  val head_mask = ~(0.U(dLenB.W)) << (eidx << vd_eew)(dLenOffBits-1,0)
-  val tail_mask = ~(0.U(dLenB.W)) >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
+  val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
+  val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
+  val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
   io.iss.bits.wmask := head_mask & tail_mask
 
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
   val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard) }
 
   when (io.iss.fire && !last) {
-    when (mode === execRegular) {
+    when (mode === execRegular && sub_dlen === 0.U) {
       wvd_oh  := wvd_oh  & ~UIntToOH(io.iss.bits.wvd_eg)
       rvs1_oh := rvs1_oh & ~UIntToOH(io.iss.bits.rvs1_eg)
       rvs2_oh := rvs2_oh & ~UIntToOH(io.iss.bits.rvs2_eg)

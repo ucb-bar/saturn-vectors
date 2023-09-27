@@ -118,6 +118,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.dis.renvm := false.B
     s.io.dis.execmode := execRegular
     s.io.dis.nf := 0.U
+    s.io.dis.sub_dlen := 0.U
     when (s.io.vat_release.valid) {
       assert(vat_valids(s.io.vat_release.bits))
       vat_valids(s.io.vat_release.bits) := false.B
@@ -142,6 +143,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vss.io.dis.renvm := vdq.io.deq.bits.vm
   vss.io.dis.clear_vat := false.B
   vss.io.dis.nf := vdq.io.deq.bits.nf
+  vss.io.dis.sub_dlen := Mux(
+    vdq.io.deq.bits.nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& vss.io.dis.vs3_eew)),
+    log2Ceil(dLenB).U - 3.U - vss.io.dis.vs3_eew,
+    0.U)
   when (!(vdq.io.deq.bits.mop(0))) {
     vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_size
     vss.io.dis.incr_eew := vdq.io.deq.bits.mem_size
