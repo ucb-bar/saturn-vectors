@@ -34,11 +34,12 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val sidx_tail = next_sidx > io.inst.nf
   val eidx_tail = next_eidx >= io.inst.vconfig.vl
 
-  io.compactor.valid := io.valid && (io.inst.nf === 0.U && !segbuf.io.busy || segbuf.io.in.ready)
   when (io.inst.nf === 0.U) {
+    io.compactor.valid := io.valid && !segbuf.io.busy && io.resp.ready
     io.compactor.bits.head := eidx << mem_size
     io.compactor.bits.tail := Mux(eidx_tail, io.inst.vconfig.vl << mem_size, 0.U)
   } .otherwise {
+    io.compactor.valid := io.valid && segbuf.io.in.ready
     io.compactor.bits.head := 0.U
     io.compactor.bits.tail := Mux(sidx_tail, (io.inst.nf +& 1.U) << mem_size, 0.U)
   }
