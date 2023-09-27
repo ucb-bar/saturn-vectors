@@ -18,7 +18,8 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 
   def opcode = bits(6,0)
   def store = opcode(5)
-  def mem_size = bits(13,12)
+  def mem_idx_size = bits(13,12)
+  def mem_elem_size = Mux(mop(0), vconfig.vtype.vsew, bits(13,12))
   def mop = bits(27,26)
   def vm = bits(25)
   def umop = bits(24,20)
@@ -134,10 +135,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vls.io.dis.renvm := !vdq.io.deq.bits.vm
   vls.io.dis.clear_vat := true.B
   vls.io.dis.nf := vdq.io.deq.bits.nf
-  when (!vdq.io.deq.bits.mop(0)) {
-    vls.io.dis.vd_eew := vdq.io.deq.bits.mem_size
-    vls.io.dis.incr_eew := vdq.io.deq.bits.mem_size
-  }
+  vls.io.dis.vd_eew := vdq.io.deq.bits.mem_elem_size
+  vls.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
 
   vss.io.dis.renvd := true.B
   vss.io.dis.renvm := vdq.io.deq.bits.vm
@@ -147,16 +146,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vdq.io.deq.bits.nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& vss.io.dis.vs3_eew)),
     log2Ceil(dLenB).U - 3.U - vss.io.dis.vs3_eew,
     0.U)
-  when (!(vdq.io.deq.bits.mop(0))) {
-    vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_size
-    vss.io.dis.incr_eew := vdq.io.deq.bits.mem_size
-  }
+  vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_elem_size
+  vss.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
 
   vxs.io.dis.clear_vat := true.B
 
   vims.io.dis.renv1   := !vdq.io.deq.bits.vm
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
-  vims.io.dis.vs2_eew := vdq.io.deq.bits.mem_size
+  vims.io.dis.vs2_eew := vdq.io.deq.bits.mem_idx_size
   vims.io.dis.execmode := execElementOrder
   vims.io.dis.clear_vat := false.B
 
@@ -246,7 +243,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(1)._1(0).bits   := vims.io.iss.bits.rvs2_byte
 
   vmu.io.maskindex.valid := vims.io.iss.valid && (reads(1)._1(0).ready || !vims.io.iss.bits.renv2)
-  vmu.io.maskindex.bits.mask := (vmf.asUInt >> vims.io.iss.bits.eidx) & eewBitMask(vims.io.iss.bits.inst.mem_size)
+  vmu.io.maskindex.bits.mask := (vmf.asUInt >> vims.io.iss.bits.eidx) & eewBitMask(vims.io.iss.bits.inst.mem_idx_size)
   vmu.io.maskindex.bits.index := reads(1)._2
   vmu.io.maskindex.bits.load := !vims.io.iss.bits.inst.opcode(5)
 

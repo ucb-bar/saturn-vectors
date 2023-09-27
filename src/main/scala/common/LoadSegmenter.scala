@@ -26,7 +26,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val eidx = Mux(r_head, io.inst.vstart, r_eidx)
   val sidx = RegInit(0.U(3.W))
 
-  val mem_size = Mux(io.inst.mop(0), io.inst.vconfig.vtype.vsew, io.inst.mem_size)
+  val mem_size = io.inst.mem_elem_size
   val eidx_incr = Mux(io.inst.nf =/= 0.U, 1.U, dLenB.U >> mem_size)
   val next_eidx = eidx +& eidx_incr
   val next_sidx = sidx +& (dLenB.U >> mem_size)

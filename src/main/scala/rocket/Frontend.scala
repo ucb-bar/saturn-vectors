@@ -145,11 +145,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
   val x_masked = !(io.vm >> x_eidx)(0) && !x_inst.vm
-  val x_mem_size = Mux(x_inst.mop(0), x_inst.vconfig.vtype.vsew, x_inst.mem_size)
+  val x_mem_size = x_inst.mem_elem_size
   val x_unit_bound = ((x_inst.nf +& 1.U) * x_inst.vconfig.vl) << x_mem_size
   val x_indexed = x_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val x_index_ready = !x_indexed || io.index_access.ready
-  val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_size), 0.U)
+  val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_idx_size), 0.U)
   val x_baseaddr = Mux(x_replay,
     Mux(x_inst.mop(0), x_inst.rs1_data, x_replay_addr),
     io.core.ex.rs1)
@@ -167,7 +167,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.index_access.valid := x_replay && x_indexed
   io.index_access.vrs := x_inst.rs2
   io.index_access.eidx := x_eidx
-  io.index_access.eew := x_inst.mem_size
+  io.index_access.eew := x_inst.mem_idx_size
 
 
   io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy) && !(x_indexed && io.backend_busy)

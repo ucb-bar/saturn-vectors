@@ -26,7 +26,7 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
   val eidx = Mux(r_head, io.inst.vstart, r_eidx)
   val sidx = RegInit(0.U(3.W))
 
-  val mem_size = Mux(io.inst.mop(0), io.inst.vconfig.vtype.vsew, io.inst.mem_size)
+  val mem_size = io.inst.mem_elem_size
   val sub_dlen = Mux(io.inst.nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& mem_size)),
     log2Ceil(dLenB).U - 3.U - mem_size,
     0.U)

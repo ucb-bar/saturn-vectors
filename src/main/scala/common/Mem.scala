@@ -119,7 +119,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   liq_enq_fire := io.enq.valid && liq_enq_ready && !io.enq.bits.store
   siq_enq_fire := io.enq.valid && siq_enq_ready &&  io.enq.bits.store
 
-  val enq_bound = (((io.enq.bits.nf +& 1.U) * io.enq.bits.vconfig.vl) << io.enq.bits.mem_size) + io.enq.bits.rs1_data
+  val enq_bound = (((io.enq.bits.nf +& 1.U) * io.enq.bits.vconfig.vl) << io.enq.bits.mem_elem_size) + io.enq.bits.rs1_data
 
   when (liq_enq_fire) {
     liq(liq_enq_ptr).inst := io.enq.bits
