@@ -254,6 +254,9 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.core.set_vstart.valid := false.B
   io.core.set_vstart.bits := DontCare
   io.core.set_vxsat := DontCare
+  io.core.set_vconfig.valid := false.B
+  io.core.set_vconfig.bits := w_inst.vconfig
+  io.core.set_vconfig.bits.vl := w_eidx
   io.core.backend_busy := DontCare
 
   io.issue.valid := false.B
@@ -307,10 +310,13 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       x_replay_seg_hi := w_seg_hi
     } .elsewhen (w_xcpt) {
       x_replay := false.B
-      io.core.wb.retire := false.B
-      io.core.wb.xcpt := true.B
-      io.core.set_vstart.valid := true.B
+      val ff = w_inst.umop === lumopFF && w_eidx =/= 0.U
+      io.core.wb.retire := ff
+      io.core.wb.xcpt := !ff
+      io.core.set_vstart.valid := !ff
       io.core.set_vstart.bits := w_eidx
+      io.core.set_vconfig.valid := ff
+      io.core.set_vconfig.bits.vl := w_eidx
       replay_kill := true.B
     } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl && (w_seg_hi || w_seg_single_page || w_inst.seg_nf === 0.U)) {
       x_replay := false.B
