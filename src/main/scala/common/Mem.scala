@@ -112,7 +112,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   when (siq_enq_fire) { ptrIncr(siq_enq_ptr, vParams.vsiqEntries); siq_valids(siq_enq_ptr) := true.B }
   when (siq_sss_fire) { ptrIncr(siq_sss_ptr, vParams.vsiqEntries); siq_sss(siq_sss_ptr) := true.B }
-  when (siq_sas_fire) { ptrIncr(siq_sas_ptr, vParams.vsiqEntries); siq_sas(siq_sas_ptr) := true.B; assert(siq_sss(siq_sas_ptr)) }
+  when (siq_sas_fire) { ptrIncr(siq_sas_ptr, vParams.vsiqEntries); siq_sas(siq_sas_ptr) := true.B; assert(siq_sss(siq_sas_ptr) || (siq_sss_fire && siq_sss_ptr === siq_sas_ptr)) }
   when (siq_deq_fire) { ptrIncr(siq_deq_ptr, vParams.vsiqEntries); siq_valids(siq_deq_ptr) := false.B; assert(siq_sas(siq_deq_ptr)) }
 
   io.enq.ready := Mux(io.enq.bits.store, siq_enq_ready, liq_enq_ready)
