@@ -24,8 +24,9 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def vm = bits(25)
   def umop = bits(24,20)
   def nf = bits(31,29)
-  def seg_nf = Mux(umop === lumopWhole, 0.U, nf)
-  def wr_nf = Mux(umop === lumopWhole, nf, 0.U)
+  def wr = mop === mopUnit && umop === lumopWhole
+  def seg_nf = Mux(wr, 0.U, nf)
+  def wr_nf = Mux(wr, nf, 0.U)
   def pos_lmul = Mux(vconfig.vtype.vlmul_sign, 0.U, vconfig.vtype.vlmul_mag)
   def vmu = opcode.isOneOf(opcLoad, opcStore)
   def rs1 = bits(19,15)

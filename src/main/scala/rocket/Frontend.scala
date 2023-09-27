@@ -126,11 +126,13 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
 
-  when (io.core.ex.inst(26,26) === mopUnit && io.core.ex.inst(24,20) === lumopMask) {
-    x_core_inst.vconfig.vl := (io.core.ex.vconfig.vl >> 3) + Mux(io.core.ex.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
-  }
-  when (io.core.ex.inst(24,20) === lumopWhole) {
-    x_core_inst.vconfig.vl := (vLen.U >> (io.core.ex.inst(13,12) +& 3.U)) * (io.core.ex.inst(31,29) +& 1.U)
+  when (io.core.ex.inst(27,26) === mopUnit) {
+    when (io.core.ex.inst(24,20) === lumopMask) {
+      x_core_inst.vconfig.vl := (io.core.ex.vconfig.vl >> 3) + Mux(io.core.ex.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
+    }
+    when (io.core.ex.inst(24,20) === lumopWhole) {
+      x_core_inst.vconfig.vl := (vLen.U >> (io.core.ex.inst(13,12) +& 3.U)) * (io.core.ex.inst(31,29) +& 1.U)
+    }
   }
   x_core_inst.vstart := io.core.ex.vstart
   x_core_inst.rs1_data := io.core.ex.rs1
@@ -298,7 +300,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     }
   }
   when (w_valid && w_replay) {
-    io.issue.valid := !w_tlb_resp.miss && !w_xcpt && w_inst.vstart <= w_eidx && !w_masked && (w_seg_hi || w_inst.seg_nf === 0.U || w_seg_single_page)
+    io.issue.valid := (!w_tlb_resp.miss &&
+      !w_xcpt &&
+      w_inst.vstart <= w_eidx &&
+      !w_masked &&
+      (w_seg_hi || w_inst.seg_nf === 0.U || w_seg_single_page)
+    )
     io.issue.bits.vstart := w_eidx
     io.issue.bits.vconfig.vl := w_eidx +& 1.U
 
@@ -310,7 +317,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       x_replay_seg_hi := w_seg_hi
     } .elsewhen (w_xcpt) {
       x_replay := false.B
-      val ff = w_inst.umop === lumopFF && w_eidx =/= 0.U
+      val ff = w_inst.umop === lumopFF && w_inst.mop === mopUnit && w_eidx =/= 0.U
       io.core.wb.retire := ff
       io.core.wb.xcpt := !ff
       io.core.set_vstart.valid := !ff
