@@ -19,7 +19,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   val vxu = Module(new VectorBackend)
   vxu.io.issue <> trap_check.io.issue
   trap_check.io.index_access <> vxu.io.index_access
-
+  trap_check.io.scalar_check <> vxu.io.mem.scalar_check
   trap_check.io.backend_busy := vxu.io.backend_busy
   trap_check.io.mem_busy := vxu.io.mem_busy
   trap_check.io.vm       := vxu.io.vm
@@ -32,8 +32,6 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   io.dmem <> hella_simple.io.cache
   val hella_load = hella_arb.io.requestor(1)
   val hella_store = hella_arb.io.requestor(0)
-
-  vxu.io.mem.scalar_check := DontCare
 
   val load_tag_oh = RegInit(VecInit.fill(4)(false.B))
   val load_tag = PriorityEncoder(~(load_tag_oh.asUInt))
@@ -105,6 +103,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
     val vm = Input(UInt(maxVLMax.W))
     val vm_busy = Input(Bool())
+
+    val scalar_check = Flipped(new ScalarMemOrderCheckIO)
 
     val index_access = Flipped(new VectorIndexAccessIO)
   })
@@ -217,6 +217,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
 
   when (io.tlb.s1_resp.miss && m_tlb_req_valid && x_tlb_backoff === 0.U) { x_tlb_backoff := 3.U }
+
+  io.scalar_check.addr := io.tlb.s1_resp.paddr
+  io.scalar_check.size := io.tlb.s1_resp.size
+  io.scalar_check.store := isWrite(io.tlb.s1_resp.cmd)
+  io.core.mem.block_mem := io.scalar_check.conflict
 
   // W stage
   val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, io.core.killm), false.B)
@@ -334,8 +339,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     }
   }
 
+  // this instruction hasn't writen into the VMIQs yet, so have to block a younger scalar op
+  when (w_valid && w_inst.vmu) {
+    io.core.mem.block_mem := true.B
+  }
+
   io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_iterative || w_replay || x_set_replay))
-  io.core.mem.block_mem := (w_valid && w_inst.vmu) || io.mem_busy
   io.core.trap_check_busy := x_replay || m_valid || w_valid
   io.tlb.s2_kill := false.B
 }

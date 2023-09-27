@@ -11,7 +11,7 @@ class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
   val inst = new VectorIssueInst
   def base = inst.rs1_data
   val bound = UInt(paddrBits.W)
-  def bound_all = inst.mop =/= mopUnit
+  def bound_all = inst.mop =/= mopUnit || !inst.phys
 }
 
 class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
