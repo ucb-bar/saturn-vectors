@@ -17,10 +17,6 @@ class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p)
 
   val opcode = io.inst(6,0)
 
-  val v_load = opcode === opcLoad
-  val v_store = opcode === opcStore
-  val v_arith = opcode === opcVector
-
   val width = io.inst(14,12)
   val lumop = io.inst(24,20)
   val sumop = lumop
@@ -28,6 +24,11 @@ class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p)
   val mop = io.inst(27,26)
   val mew = io.inst(28)
   val nf = io.inst(31,29)
+  val funct3 = io.inst(14,12)
+
+  val v_load = opcode === opcLoad
+  val v_store = opcode === opcStore
+  val v_arith = opcode === opcVector && funct3 =/= 7.U
 
   when (v_load || v_store) {
     io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U)
@@ -39,5 +40,9 @@ class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p)
     when (mew === 1.U) { io.legal := false.B }
     io.read_rs1 := true.B
     io.read_rs2 := mop === mopStrided
+  } .elsewhen (v_arith) {
+    io.legal := true.B
+    io.read_rs1 := funct3.isOneOf(4.U, 6.U)
+    io.read_frs1 := funct3 === 5.U
   }
 }

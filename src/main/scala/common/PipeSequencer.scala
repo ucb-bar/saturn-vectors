@@ -30,14 +30,16 @@ class VectorIssueBeat(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val wmask   = UInt(dLenB.W)
 }
 
-class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
   val vat = UInt(vParams.vatSz.W)
+  val hazard_oh = UInt(depth.W)
+  def hazard = hazard_oh(0)
   val clear_vat = Bool()
 }
 
 
-class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
+class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   writeVD: Boolean, readVS1: Boolean, readVS2: Boolean, readVD: Boolean,
 )(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
@@ -62,6 +64,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       val vd_eew = Input(UInt(2.W))
       val incr_eew = Input(UInt(2.W))
       val sub_dlen = Input(UInt(2.W))
+      val pipe_lat = Input(UInt((log2Ceil(depth+1)).W))
     }
 
     val valid = Output(Bool())
@@ -76,7 +79,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       val writes = Input(UInt(egsTotal.W))
       val reads = Input(UInt(egsTotal.W))
     }
-    val pipe_hazards = Vec(depth, Valid(new PipeHazard))
+    val pipe_hazards = Vec(depth, Valid(new PipeHazard(depth)))
 
     val vat_release = Valid(UInt(vParams.vatSz.W))
   })
@@ -105,6 +108,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   val mode    = Reg(UInt(2.W))
   val clear_vat = Reg(Bool())
   val sub_dlen = Reg(UInt(2.W))
+  val lat     = Reg(UInt(log2Ceil(depth+1).W))
   val next_eidx = min(
     Mux(mode =/= execRegular, eidx +& 1.U, inst.vconfig.vl),
     ((eidx << incr_eew) + (dLenB.U >> sub_dlen)) >> incr_eew)
@@ -147,6 +151,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
     incr_eew := io.dis.incr_eew
     seg_nf := io.dis.seg_nf
     sub_dlen := io.dis.sub_dlen
+    lat := io.dis.pipe_lat
     clear_vat := io.dis.clear_vat
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
@@ -191,7 +196,7 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.wmask := head_mask & tail_mask
 
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
-  val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard) }
+  val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(depth)) }
 
   when (io.iss.fire && !last) {
     when (mode === execRegular && sub_dlen === 0.U) {
@@ -219,10 +224,16 @@ class PipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
       pipe_hazards.head.eg := io.iss.bits.wvd_eg
       pipe_hazards.head.vat := inst.vat
       pipe_hazards.head.clear_vat := last && clear_vat
+      pipe_hazards.head.hazard_oh := (1.U << lat) - 1.U
+    } .otherwise {
+      pipe_valids.head := false.B
     }
     for (i <- 1 until depth) {
       pipe_valids(i) := pipe_valids(i-1)
-      when (pipe_valids(i-1)) { pipe_hazards(i) := pipe_hazards(i-1) }
+      when (pipe_valids(i-1)) {
+        pipe_hazards(i) := pipe_hazards(i-1)
+        pipe_hazards(i).hazard_oh := pipe_hazards(i-1).hazard_oh >> 1
+      }
     }
     io.vat_release.valid := pipe_valids.last && pipe_hazards.last.clear_vat
     io.vat_release.bits := pipe_hazards.last.vat

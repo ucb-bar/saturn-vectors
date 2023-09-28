@@ -33,6 +33,8 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def rs2 = bits(24,20)
   def rd  = bits(11,7)
   def may_write_v0 = rd === 0.U && opcode =/= opcStore
+  def funct3 = bits(14,12)
+  def imm4 = bits(19,15)
 }
 
 class VectorIndexAccessIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -123,6 +125,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.dis.execmode := execRegular
     s.io.dis.seg_nf := 0.U
     s.io.dis.sub_dlen := 0.U
+    s.io.dis.pipe_lat := s.depth.U
     when (s.io.vat_release.valid) {
       assert(vat_valids(s.io.vat_release.bits))
       vat_valids(s.io.vat_release.bits) := false.B
@@ -160,6 +163,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vims.io.dis.execmode := execElementOrder
   vims.io.dis.clear_vat := false.B
 
+  vxs.io.dis.renv1 := true.B
+  vxs.io.dis.renv2 := vdq.io.deq.bits.funct3 < 3.U
+  vxs.io.dis.wvd := true.B
+  when (vdq.io.deq.bits.funct3 === 3.U) {
+    vxs.io.dis.inst.rs2_data := vdq.io.deq.bits.imm4
+  }
+
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)
     val older_wintents = otherSeqs.map { s =>
@@ -171,7 +181,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
         s.io.seq_hazards.rintent, 0.U)
     }).reduce(_|_)
     val older_pipe_writes = (otherSeqs.map(_.io.pipe_hazards).flatten.map(h =>
-      Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid, UIntToOH(h.bits.eg), 0.U)) :+ 0.U).reduce(_|_)
+      Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid && h.bits.hazard =/= 0.U,
+        UIntToOH(h.bits.eg), 0.U)) :+ 0.U).reduce(_|_)
 
     seq.io.seq_hazards.writes := older_pipe_writes | older_wintents
     seq.io.seq_hazards.reads := older_rintents
@@ -191,7 +202,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.lresp.ready := vls.io.iss.valid
   vls.io.iss.ready := vmu.io.lresp.valid
-  vxs.io.iss.ready := false.B
+  vxs.io.iss.ready := true.B
 
   val resetting = RegInit(true.B)
   val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
@@ -258,7 +269,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ seqs.map(_.io.pipe_hazards).flatten.map { h =>
-    h.valid && (h.bits.eg < egsPerVReg.U)
+    h.valid && h.bits.hazard && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>
     h.valid && h.bits.may_write_v0
