@@ -123,7 +123,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     false, true, true, false))
   val seqs = Seq(vls, vss, vxs, vims)
 
-  val veu = Module(new VectorExecutionUnit(3))
+  val vxu = Module(new VectorExecutionUnit(3))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
   seqs.foreach { s =>
@@ -179,11 +179,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vims.io.dis.clear_vat := false.B
 
   vxs.io.dis.renv1 := true.B
-  vxs.io.dis.renv2 := vdq.io.deq.bits.funct3 < 3.U
+  vxs.io.dis.renv2 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
   vxs.io.dis.wvd := true.B
-  when (vdq.io.deq.bits.funct3 === 3.U) {
-    vxs.io.dis.inst.rs2_data := vdq.io.deq.bits.imm4
+  when (vdq.io.deq.bits.funct3 === OPIVI) {
+    vxs.io.dis.inst.rs1_data := Cat(Fill(59, vdq.io.deq.bits.imm4(4)), vdq.io.deq.bits.imm4)
   }
+  when (vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPMVV, OPIVI, OPIVX, OPMVX)) {
+    vxs.io.dis.pipe_lat := 1.U
+  }
+
+
 
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)
@@ -246,7 +251,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrfWrite(write)
   }
 
-  val reads = Seq(1, 2).map { rc =>
+  // Read ports are
+  // vss-vrd
+  // vxs-vrs1
+  // vxs-vrs2
+  // vxs-vrs3, vmu-index, frontend-index
+  val reads = Seq(1, 1, 1, 3).map { rc =>
     val arb = Module(new Arbiter(UInt(log2Ceil(egsTotal).W), rc))
     val read_ios = Seq.fill(rc) { Wire(new VectorReadIO) }
     arb.io.out.ready := true.B
@@ -263,7 +273,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.sdata.bits    := vss.io.iss.bits.rvd_data
   vss.io.iss.ready     := vmu.io.sdata.ready
 
-  reads(1)(0) <> vims.io.rvs2
+  reads(1)(0) <> vxs.io.rvs1
+  reads(2)(0) <> vxs.io.rvs2
+  reads(3)(0) <> vxs.io.rvd
+
+  reads(3)(1) <> vims.io.rvs2
   vmu.io.maskindex.valid := vims.io.iss.valid
   val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.inst.mem_idx_size)(dLenOffBits-1,0) << 3))
   vmu.io.maskindex.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.inst.mem_idx_size)
@@ -271,10 +285,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.maskindex.bits.load  := !vims.io.iss.bits.inst.opcode(5)
   vims.io.iss.ready      := vmu.io.maskindex.ready
 
-  reads(1)(1).req.valid := io.index_access.valid
-  io.index_access.ready := reads(1)(1).req.ready
-  reads(1)(1).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
-  io.index_access.idx   := reads(1)(1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
+  reads(3)(2).req.valid := io.index_access.valid
+  io.index_access.ready := reads(3)(2).req.ready
+  reads(3)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
+  io.index_access.idx   := reads(3)(2).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
   when (vmu.io.vat_release.valid) {
     assert(vat_valids(vmu.io.vat_release.bits))
@@ -282,7 +296,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
 
-  veu.io.iss <> vxs.io.iss
+  vxu.io.iss <> vxs.io.iss
+  when (vxs.io.iss.bits.inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX)) {
+    val scalar = vxs.io.iss.bits.inst.rs1_data
+    vxu.io.iss.bits.rvs1_data := dLenSplat(scalar, vxu.io.iss.bits.rvs1_eew)
+  }
+  when (vxu.io.write.valid) { vrfWrite(vxu.io.write.bits) }
 
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)

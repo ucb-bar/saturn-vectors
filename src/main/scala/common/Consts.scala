@@ -26,4 +26,13 @@ trait VectorConsts {
 
   def execRegular      = 1.U(3.W)
   def execElementOrder = 2.U(3.W)
+
+  def OPIVV = 0.U
+  def OPFVV = 1.U
+  def OPMVV = 2.U
+  def OPIVI = 3.U
+  def OPIVX = 4.U
+  def OPFVF = 5.U
+  def OPMVX = 6.U
+  def OPCFG = 7.U
 }

@@ -18,13 +18,8 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
   val pipe_bits = Seq.fill(depth) { Reg(new VectorIssueBeat(depth)) }
 
-  wmask := wmask >> 1 | (io.iss.fire << io.iss.bits.wlat)
-  io.write.valid := wmask(0)
-  io.write.bits.eg := pipe_bits.last.wvd_eg
-  io.write.bits.mask := pipe_bits.last.wmask
-  io.write.bits.data := DontCare
-
-  io.iss.ready := ((1.U << io.iss.bits.wlat) & wmask) === 0.U
+  wmask := wmask >> 1 | ((io.iss.fire << io.iss.bits.wlat) >> 1)
+  io.iss.ready := (1.U << (io.iss.bits.wlat) & wmask) === 0.U
 
   pipe_valids.head := io.iss.fire
   when (io.iss.fire) { pipe_bits.head := io.iss.bits }
@@ -34,4 +29,12 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
       pipe_bits(i) := pipe_bits(i-1)
     }
   }
+
+  val viu = Module(new VectorIntegerUnit)
+  viu.io.iss.valid := io.iss.fire && io.iss.bits.inst.funct3.isOneOf(OPIVI, OPIVX, OPIVV)
+  viu.io.iss.bits := io.iss.bits
+  viu.io.pipe(0).valid := pipe_valids(0)
+  viu.io.pipe(0).bits := pipe_bits(0)
+
+  io.write := viu.io.write
 }

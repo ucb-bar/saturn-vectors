@@ -47,4 +47,9 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
 
 
   def cqOlder(i0: UInt, i1: UInt, tail: UInt) = (i0 < i1) ^ (i0 < tail) ^ (i1 < tail)
+  def dLenSplat(in: UInt, eew: UInt) = {
+    val v = Wire(UInt(64.W))
+    v := in
+    Mux1H(UIntToOH(eew), (0 until 4).map { i => Fill(dLenB >> i, v((8<<i)-1,0)) })
+  }
 }
