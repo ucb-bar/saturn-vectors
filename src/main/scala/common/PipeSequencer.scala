@@ -7,27 +7,21 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorIssueBeat(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val inst = new VectorIssueInst
-  val renv1 = Bool()
-  val renv2 = Bool()
-  val renvd = Bool()
   val wvd = Bool()
 
   val eidx = UInt(log2Ceil(maxVLMax).W)
 
-  val rvs1_byte  = UInt(log2Ceil(egsTotal*dLenB).W)
-  val rvs2_byte  = UInt(log2Ceil(egsTotal*dLenB).W)
-  val rvd_byte   = UInt(log2Ceil(egsTotal*dLenB).W)
+  val rvs1_data = UInt(dLen.W)
+  val rvs2_data = UInt(dLen.W)
+  val rvd_data  = UInt(dLen.W)
 
   val wvd_byte   = UInt(log2Ceil(egsTotal*dLenB).W)
-
-  def rvs1_eg    = rvs1_byte >> log2Ceil(dLenB)
-  def rvs2_eg    = rvs2_byte >> log2Ceil(dLenB)
-  def rvd_eg     = rvd_byte >> log2Ceil(dLenB)
   def wvd_eg     = wvd_byte >> log2Ceil(dLenB)
-
   val wmask   = UInt(dLenB.W)
+
+  val wlat = UInt(log2Ceil(pipe_depth+1).W)
 }
 
 class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -69,7 +63,10 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
 
     val valid = Output(Bool())
     val busy = Output(Bool())
-    val iss = Decoupled(new VectorIssueBeat)
+    val iss = Decoupled(new VectorIssueBeat(depth))
+    val rvs1 = new VectorReadIO
+    val rvs2 = new VectorReadIO
+    val rvd  = new VectorReadIO
     val seq_hazards = new Bundle {
       val valid = Output(Bool())
       val rintent = Output(UInt(egsTotal.W))
@@ -164,9 +161,9 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
 
   val pipe_writes = (io.pipe_hazards.map(h => Mux(h.valid, UIntToOH(h.bits.eg), 0.U)) ++ Seq(0.U)).reduce(_|_)
 
-  val vs1_read_oh = Mux(renv1, UIntToOH(io.iss.bits.rvs1_eg), 0.U)
-  val vs2_read_oh = Mux(renv2, UIntToOH(io.iss.bits.rvs2_eg), 0.U)
-  val vd_read_oh  = Mux(renvd, UIntToOH(io.iss.bits.rvd_eg) , 0.U)
+  val vs1_read_oh = Mux(renv1, UIntToOH(io.rvs1.req.bits), 0.U)
+  val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits), 0.U)
+  val vd_read_oh  = Mux(renvd, UIntToOH(io.rvd.req.bits ) , 0.U)
   val vd_write_oh = Mux(wvd  , UIntToOH(io.iss.bits.wvd_eg) , 0.U)
 
   val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh) & (pipe_writes | io.seq_hazards.writes)) =/= 0.U
@@ -176,19 +173,31 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
 
 
   io.valid := valid
-  io.iss.valid := valid && !data_hazard
+
+  io.rvs1.req.bits := getEgId(inst.rs1 + (sidx << inst.pos_lmul), eidx, vs1_eew)
+  io.rvs2.req.bits := getEgId(inst.rs2 + (sidx << inst.pos_lmul), eidx, vs2_eew)
+  io.rvd.req.bits  := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vs3_eew)
+
+  io.rvs1.req.valid := valid && renv1 && !data_hazard
+  io.rvs2.req.valid := valid && renv2 && !data_hazard
+  io.rvd.req.valid  := valid && renvd && !data_hazard
+
+  io.iss.valid := (valid &&
+    !data_hazard &&
+    !(renv1 && !io.rvs1.req.ready) &&
+    !(renv2 && !io.rvs2.req.ready) &&
+    !(renvd && !io.rvd.req.ready)
+  )
 
   io.iss.bits.inst := inst
-  io.iss.bits.renv1 := renv1
-  io.iss.bits.renv2 := renv2
-  io.iss.bits.renvd := renvd
   io.iss.bits.wvd   := wvd
 
-  io.iss.bits.eidx    := eidx
-  io.iss.bits.rvs1_byte := getByteId(inst.rs1 + (sidx << inst.pos_lmul), eidx, vs1_eew)
-  io.iss.bits.rvs2_byte := getByteId(inst.rs2 + (sidx << inst.pos_lmul), eidx, vs2_eew)
-  io.iss.bits.rvd_byte  := getByteId(inst.rd  + (sidx << inst.pos_lmul), eidx, vs3_eew)
+  io.iss.bits.rvs1_data := io.rvs1.resp
+  io.iss.bits.rvs2_data := io.rvs2.resp
+  io.iss.bits.rvd_data  := io.rvd.resp
+  io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_byte  := getByteId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew)
+  io.iss.bits.wlat := lat
 
   val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
@@ -201,9 +210,9 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   when (io.iss.fire && !last) {
     when (mode === execRegular && sub_dlen === 0.U) {
       wvd_oh  := wvd_oh  & ~UIntToOH(io.iss.bits.wvd_eg)
-      rvs1_oh := rvs1_oh & ~UIntToOH(io.iss.bits.rvs1_eg)
-      rvs2_oh := rvs2_oh & ~UIntToOH(io.iss.bits.rvs2_eg)
-      rvd_oh  := rvd_oh  & ~UIntToOH(io.iss.bits.rvd_eg)
+      rvs1_oh := rvs1_oh & ~UIntToOH(io.rvs1.req.bits)
+      rvs2_oh := rvs2_oh & ~UIntToOH(io.rvs2.req.bits)
+      rvd_oh  := rvd_oh  & ~UIntToOH(io.rvd.req.bits)
     }
     when (sidx === seg_nf) {
       sidx := 0.U
