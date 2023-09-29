@@ -19,6 +19,7 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
   val is_sub = io.pipe(0).bits.inst.opcode(1)
+  val is_rsub = io.pipe(0).bits.inst.opcode(0)
 
   val add_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -31,7 +32,9 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   add_carry(0) := is_sub
 
   for (i <- 0 until dLenB) {
-    val full =  Mux(is_sub, ~add_in1(i), add_in1(i)) +& add_in2(i) +& Mux(add_use_carry(i), add_carry(i), is_sub)
+    val in1 = Mux(is_rsub, add_in2(i), add_in1(i))
+    val in2 = Mux(is_rsub, add_in1(i), add_in2(i))
+    val full =  Mux(is_sub, ~in1, in1) +& in2 +& Mux(add_use_carry(i), add_carry(i), is_sub)
     add_out(i) := full(7,0)
     add_carry(i+1) := full(8)
   }
