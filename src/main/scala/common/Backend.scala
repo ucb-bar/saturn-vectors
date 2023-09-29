@@ -178,8 +178,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vims.io.dis.clear_vat := false.B
 
   vxs.io.dis.clear_vat := true.B
-  vxs.io.dis.renv1 := true.B
-  vxs.io.dis.renv2 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
+  vxs.io.dis.renv1 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
+  vxs.io.dis.renv2 := true.B
   vxs.io.dis.wvd := true.B
   when (vdq.io.deq.bits.funct3 === OPIVI) {
     vxs.io.dis.inst.rs1_data := Cat(Fill(59, vdq.io.deq.bits.imm4(4)), vdq.io.deq.bits.imm4)
