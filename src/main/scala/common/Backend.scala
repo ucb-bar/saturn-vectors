@@ -114,13 +114,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.vat_tail := vat_tail
 
   val vls = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && !i.opcode(5),
-    true, false, false, false))
+    true, false, false, false, true))
   val vss = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu &&  i.opcode(5),
-    false, false, false, true))
+    false, false, false, true, true))
   val vxs = Module(new PipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
-    true, false, false, false))
+    true, true, true, true, false))
   val vims = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && (!i.vm || i.mop(0)),
-    false, true, true, false))
+    false, true, true, false, false))
   val seqs = Seq(vls, vss, vxs, vims)
 
   val vxu = Module(new VectorExecutionUnit(3))
@@ -170,7 +170,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_elem_size
   vss.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
 
-  vxs.io.dis.clear_vat := true.B
 
   vims.io.dis.renv1   := !vdq.io.deq.bits.vm
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
@@ -178,6 +177,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vims.io.dis.execmode := execElementOrder
   vims.io.dis.clear_vat := false.B
 
+  vxs.io.dis.clear_vat := true.B
   vxs.io.dis.renv1 := true.B
   vxs.io.dis.renv2 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
   vxs.io.dis.wvd := true.B

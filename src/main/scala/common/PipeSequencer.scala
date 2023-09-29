@@ -39,6 +39,7 @@ class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) wit
 
 class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   writeVD: Boolean, readVS1: Boolean, readVS2: Boolean, readVD: Boolean,
+  segmented: Boolean
 )(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val dis = new Bundle {
@@ -126,15 +127,17 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     inst := io.dis.inst
     eidx := io.dis.inst.vstart
     sidx := 0.U
-    val lmul_mask = ((1.U << ((1.U << io.dis.inst.pos_lmul) +& 1.U + io.dis.seg_nf)) - 1.U)(31,0)
+    def mul(eew: UInt) = (io.dis.inst.vconfig.vl >> (log2Ceil(vLen/8).U - eew))(3,0)
+    def mul_mask(eew: UInt) = ((1.U << (mul(eew) + 1.U)) - 1.U)(7,0)
+
     val wvd_arch_oh = Mux(writeVD.B && io.dis.wvd,
-      lmul_mask << io.dis.inst.rd, 0.U)
+      mul_mask(io.dis.vd_eew) << io.dis.inst.rd, 0.U)
     val rvs1_arch_oh = Mux(readVS1.B && io.dis.renv1,
-      lmul_mask << io.dis.inst.rs1, 0.U)
+      mul_mask(io.dis.vs1_eew) << io.dis.inst.rs1, 0.U)
     val rvs2_arch_oh = Mux(readVS2.B && io.dis.renv2,
-      lmul_mask << io.dis.inst.rs2, 0.U)
+      mul_mask(io.dis.vs2_eew) << io.dis.inst.rs2, 0.U)
     val rvd_arch_oh  = Mux(readVD.B && io.dis.renvd,
-      lmul_mask << io.dis.inst.rd, 0.U)
+      mul_mask(io.dis.vs3_eew) << io.dis.inst.rd, 0.U)
     wvd_oh := FillInterleaved(egsPerVReg, wvd_arch_oh)
     rvs1_oh := FillInterleaved(egsPerVReg, rvs1_arch_oh)
     rvs2_oh := FillInterleaved(egsPerVReg, rvs2_arch_oh)
@@ -259,4 +262,10 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   }
 
   io.busy := (pipe_valids :+ valid).reduce(_||_)
+
+  if (!writeVD) { wvd_oh := 0.U  ; wvd   := false.B ; vd_eew  := 0.U }
+  if (!readVS1) { rvs1_oh := 0.U ; renv1 := false.B ; vs1_eew := 0.U }
+  if (!readVS2) { rvs2_oh := 0.U ; renv2 := false.B ; vs2_eew := 0.U }
+  if (!readVD)  { rvd_oh := 0.U  ; renvd := false.B ; vs3_eew := 0.U }
+  if (!segmented) { sidx := 0.U ; seg_nf := 0.U }
 }
