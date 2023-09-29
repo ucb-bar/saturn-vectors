@@ -120,7 +120,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vxs = Module(new PipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
     true, true, true, true, false))
   val vims = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && (!i.vm || i.mop(0)),
-    false, true, true, false, false))
+    false, false, true, false, false))
   val seqs = Seq(vls, vss, vxs, vims)
 
   val vxu = Module(new VectorExecutionUnit(3))
@@ -153,14 +153,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   vls.io.dis.wvd := true.B
-  vls.io.dis.renvm := !vdq.io.deq.bits.vm
   vls.io.dis.clear_vat := true.B
   vls.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
   vls.io.dis.vd_eew := vdq.io.deq.bits.mem_elem_size
   vls.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
 
   vss.io.dis.renvd := true.B
-  vss.io.dis.renvm := vdq.io.deq.bits.vm
   vss.io.dis.clear_vat := false.B
   vss.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
   vss.io.dis.sub_dlen := Mux(
@@ -171,7 +169,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vss.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
 
 
-  vims.io.dis.renv1   := !vdq.io.deq.bits.vm
+  vims.io.dis.renvm   := !vdq.io.deq.bits.vm
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
   vims.io.dis.vs2_eew := vdq.io.deq.bits.mem_idx_size
   vims.io.dis.execmode := execElementOrder
@@ -278,12 +276,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(3)(0) <> vxs.io.rvd
 
   reads(3)(1) <> vims.io.rvs2
-  vmu.io.maskindex.valid := vims.io.iss.valid
+  vims.io.rvs1.req.ready := true.B
+
+  val maskindex_q = Module(new Queue(new MaskIndex, 1, pipe=true, flow=true))
+  vmu.io.maskindex <> maskindex_q.io.deq
+
+  maskindex_q.io.enq.valid := vims.io.iss.valid
   val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.inst.mem_idx_size)(dLenOffBits-1,0) << 3))
-  vmu.io.maskindex.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.inst.mem_idx_size)
-  vmu.io.maskindex.bits.mask  := vmf.asUInt >> vims.io.iss.bits.eidx
-  vmu.io.maskindex.bits.load  := !vims.io.iss.bits.inst.opcode(5)
-  vims.io.iss.ready      := vmu.io.maskindex.ready
+  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.inst.mem_idx_size)
+  maskindex_q.io.enq.bits.mask  := vmf.asUInt >> vims.io.iss.bits.eidx
+  maskindex_q.io.enq.bits.load  := !vims.io.iss.bits.inst.opcode(5)
+  vims.io.iss.ready      := maskindex_q.io.enq.ready
 
   reads(3)(2).req.valid := io.index_access.valid
   io.index_access.ready := reads(3)(2).req.ready

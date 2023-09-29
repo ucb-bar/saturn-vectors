@@ -21,8 +21,7 @@ class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundl
   val rvs2_eew = UInt(2.W)
   val rvd_eew = UInt(2.W)
 
-  val wvd_byte   = UInt(log2Ceil(egsTotal*dLenB).W)
-  def wvd_eg     = wvd_byte >> log2Ceil(dLenB)
+  val wvd_eg   = UInt(log2Ceil(egsTotal).W)
   val wmask   = UInt(dLenB.W)
 
   val wlat = UInt(log2Ceil(pipe_depth+1).W)
@@ -206,7 +205,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.rvs2_eew  := vs2_eew
   io.iss.bits.rvd_eew   := vs3_eew
   io.iss.bits.eidx      := eidx
-  io.iss.bits.wvd_byte  := getByteId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew)
+  io.iss.bits.wvd_eg    := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew)
   io.iss.bits.wlat := lat
 
   val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
