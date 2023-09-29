@@ -126,12 +126,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
 
-  when (io.core.ex.inst(27,26) === mopUnit) {
-    when (io.core.ex.inst(24,20) === lumopMask) {
+  when (x_core_inst.mop === mopUnit && x_core_inst.vmu) {
+    when (x_core_inst.umop === lumopMask) {
       x_core_inst.vconfig.vl := (io.core.ex.vconfig.vl >> 3) + Mux(io.core.ex.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
     }
-    when (io.core.ex.inst(24,20) === lumopWhole) {
-      x_core_inst.vconfig.vl := (vLen.U >> (io.core.ex.inst(13,12) +& 3.U)) * (io.core.ex.inst(31,29) +& 1.U)
+    when (x_core_inst.umop === lumopWhole) {
+      x_core_inst.vconfig.vl := (vLen.U >> (x_core_inst.mem_elem_size +& 3.U)) * (x_core_inst.nf +& 1.U)
     }
   }
   x_core_inst.vstart := io.core.ex.vstart
@@ -235,6 +235,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val w_masked = RegEnable(m_masked, m_valid)
   val w_vl = w_inst.vconfig.vl
   val w_pc = RegEnable(m_pc, m_valid)
+  val w_tlb_req_valid = RegEnable(m_tlb_req_valid, m_valid)
   val w_tlb_resp = RegEnable(m_tlb_resp, m_valid)
   val w_seg_hi = RegEnable(m_seg_hi, m_valid)
   val w_seg_single_page = RegEnable(m_seg_single_page, m_valid)
@@ -249,7 +250,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     (w_tlb_resp.ma.st, Causes.misaligned_store.U),
     (w_tlb_resp.ma.ld, Causes.misaligned_load.U)
   )
-  val w_xcpt = w_xcpts.map(_._1).orR && w_eidx >= w_inst.vstart && !w_masked
+  val w_xcpt = w_xcpts.map(_._1).orR && w_eidx >= w_inst.vstart && !w_masked && w_tlb_req_valid
   val w_cause = PriorityMux(w_xcpts)
 
   io.core.wb.retire := false.B
