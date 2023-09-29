@@ -18,18 +18,20 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 }
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
-  val add_in0 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
-  val add_in1 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  val is_sub = io.pipe(0).bits.inst.opcode(1)
+
+  val add_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  val add_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_use_carry = Mux1H(UIntToOH(io.pipe(0).bits.rvs1_eew),
     (0 until 4).map { eew => Fill(dLenB >> eew, ~(1.U((1 << eew).W))) }
   )
   val add_carry = Wire(Vec(dLenB+1, UInt(1.W)))
   val add_out = Wire(Vec(dLenB, UInt(8.W)))
 
-  add_carry(0) := 0.U
+  add_carry(0) := is_sub
 
   for (i <- 0 until dLenB) {
-    val full =  add_in0(i) +& add_in1(i) +& Mux(add_use_carry(i), add_carry(i), 0.U)
+    val full =  Mux(is_sub, ~add_in1(i), add_in1(i)) +& add_in2(i) +& Mux(add_use_carry(i), add_carry(i), is_sub)
     add_out(i) := full(7,0)
     add_carry(i+1) := full(8)
   }
