@@ -37,6 +37,12 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def imm4 = bits(19,15)
 }
 
+class WideVectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val eg = UInt(log2Ceil(egsTotal).W)
+  val data = UInt(dLen.W)
+  val mask = UInt(dLenB.W)
+}
+
 class VectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
   val data = UInt(dLen.W)
@@ -206,15 +212,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.seq_hazards.reads := older_rintents
   }
 
-  val vrf = Mem(egsTotal, Vec(dLenB, UInt(8.W)))
+  val vrf = Module(new RegisterFileBank(4, 2, egsTotal))
   val vmf = Reg(Vec(egsPerVReg, Vec(dLenB, UInt(8.W))))
 
-  def vrfWrite(write: VectorWrite) {
-    val eg = write.eg
-    val wdata = write.data.asTypeOf(Vec(dLenB, UInt(8.W)))
-    val wmask = write.mask.asBools
-    vrf.write(eg, wdata, wmask)
-    when (eg < egsPerVReg.U) {
+  var writePortId: Int = 0
+  def vrfWrite(write: Valid[VectorWrite]) {
+    val eg = write.bits.eg
+    val wdata = write.bits.data.asTypeOf(Vec(dLenB, UInt(8.W)))
+    val wmask = write.bits.mask.asBools
+    vrf.io.write(writePortId) := write
+    writePortId = writePortId + 1
+    when (write.valid && eg < egsPerVReg.U) {
       for (i <- 0 until dLenB) when (wmask(i)) { vmf(eg)(i) := wdata(i) }
     }
   }
@@ -230,40 +238,34 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
   when (~reset_ctr === 0.U) { resetting := false.B }
 
-  when (vls.io.iss.fire || resetting) {
-    val write = Wire(new VectorWrite)
-    when (resetting) {
-      write.eg := reset_ctr
-      write.data := 0.U
-      write.mask := ~(0.U(dLenB.W))
-    } .otherwise {
-      write.eg := vls.io.iss.bits.wvd_eg
-      write.data := vmu.io.lresp.bits
-      write.mask := vls.io.iss.bits.wmask
-
-      when (!vls.io.iss.bits.inst.vm &&
-        (vmf.asUInt & UIntToOH(vls.io.iss.bits.eidx)) === 0.U) {
-        write.mask := 0.U(dLenB.W)
-      }
-    }
-    vrfWrite(write)
+  val load_write = Wire(Valid(new VectorWrite))
+  load_write.valid := vls.io.iss.fire
+  load_write.bits.eg := vls.io.iss.bits.wvd_eg
+  load_write.bits.data := vmu.io.lresp.bits
+  load_write.bits.mask := vls.io.iss.bits.wmask
+  when (!vls.io.iss.bits.inst.vm &&
+    (vmf.asUInt & UIntToOH(vls.io.iss.bits.eidx)) === 0.U) {
+    load_write.bits.mask := 0.U(dLenB.W)
   }
+
+  when (resetting) {
+    load_write.valid := true.B
+    load_write.bits.eg := reset_ctr
+    load_write.bits.data := 0.U
+    load_write.bits.mask := ~(0.U(dLenB.W))
+  }
+
+  vrfWrite(load_write)
 
   // Read ports are
   // vss-vrd
   // vxs-vrs1
   // vxs-vrs2
   // vxs-vrs3, vmu-index, frontend-index
-  val reads = Seq(1, 1, 1, 3).map { rc =>
-    val arb = Module(new Arbiter(UInt(log2Ceil(egsTotal).W), rc))
-    val read_ios = Seq.fill(rc) { Wire(new VectorReadIO) }
-    arb.io.out.ready := true.B
-    val read = vrf.read(arb.io.out.bits).asUInt
-    for (i <- 0 until rc) {
-      arb.io.in(i) <> read_ios(i).req
-      read_ios(i).resp := read
-    }
-    read_ios
+  val reads = Seq(1, 1, 1, 3).zipWithIndex.map { case (rc, i) =>
+    val arb = Module(new RegisterReadXbar(1, rc))
+    vrf.io.read(i) <> arb.io.out(0)
+    arb.io.in
   }
 
   reads(0)(0) <> vss.io.rvd
@@ -304,7 +306,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val scalar = vxs.io.iss.bits.inst.rs1_data
     vxu.io.iss.bits.rvs1_data := dLenSplat(scalar, vxu.io.iss.bits.rvs1_eew)
   }
-  when (vxu.io.write.valid) { vrfWrite(vxu.io.write.bits) }
+  vrfWrite(vxu.io.write)
 
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)

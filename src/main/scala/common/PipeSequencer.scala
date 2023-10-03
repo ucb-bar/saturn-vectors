@@ -184,9 +184,9 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.rvs2.req.bits := getEgId(inst.rs2 + (sidx << inst.pos_lmul), eidx, vs2_eew)
   io.rvd.req.bits  := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vs3_eew)
 
-  io.rvs1.req.valid := valid && renv1 && !data_hazard
-  io.rvs2.req.valid := valid && renv2 && !data_hazard
-  io.rvd.req.valid  := valid && renvd && !data_hazard
+  io.rvs1.req.valid := valid && renv1
+  io.rvs2.req.valid := valid && renv2
+  io.rvd.req.valid  := valid && renvd
 
   io.iss.valid := (valid &&
     !data_hazard &&
