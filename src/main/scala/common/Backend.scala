@@ -213,7 +213,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.seq_hazards.reads := older_rintents
   }
 
-  val vrf = Module(new RegisterFileBank(4, 2, egsTotal))
+  val vrf = Seq.fill(2) { Module(new RegisterFileBank(4, 2, egsTotal/2)) }
   val vmf = Reg(Vec(egsPerVReg, Vec(dLenB, UInt(8.W))))
 
   var writePortId: Int = 0
@@ -221,7 +221,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val eg = write.bits.eg
     val wdata = write.bits.data.asTypeOf(Vec(dLenB, UInt(8.W)))
     val wmask = write.bits.mask.asBools
-    vrf.io.write(writePortId) := write
+
+    for (b <- 0 until 2) {
+      vrf(b).io.write(writePortId).valid := write.valid && eg(0) === b.U
+      vrf(b).io.write(writePortId).bits.eg := eg >> 1
+      vrf(b).io.write(writePortId).bits.data := write.bits.data
+      vrf(b).io.write(writePortId).bits.mask := write.bits.mask
+    }
+
     writePortId = writePortId + 1
     when (write.valid && eg < egsPerVReg.U) {
       for (i <- 0 until dLenB) when (wmask(i)) { vmf(eg)(i) := wdata(i) }
@@ -264,8 +271,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs-vrs2
   // vxs-vrs3, vmu-index, frontend-index
   val reads = Seq(1, 1, 1, 3).zipWithIndex.map { case (rc, i) =>
-    val arb = Module(new RegisterReadXbar(1, rc))
-    vrf.io.read(i) <> arb.io.out(0)
+    val arb = Module(new RegisterReadXbar(rc))
+    vrf(0).io.read(i) <> arb.io.out(0)
+    vrf(1).io.read(i) <> arb.io.out(1)
     arb.io.in
   }
 
