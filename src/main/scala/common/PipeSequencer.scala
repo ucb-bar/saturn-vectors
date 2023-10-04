@@ -215,7 +215,9 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
-  val vm_resp   = (io.rvm.resp >> eidx(log2Ceil(dLen)-1,0))(dLenB-1,0)
+  val vm_off    = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
+  val vm_eidx   = (eidx & ~(vm_off >> vd_eew))(log2Ceil(dLen)-1,0)
+  val vm_resp   = (io.rvm.resp >> vm_eidx)
   val vm_mask   = Mux(renvm, Mux1H(UIntToOH(vd_eew), (0 until 4).map { sew =>
     FillInterleaved(1 << sew, vm_resp)
   }), ~(0.U(dLenB.W)))

@@ -39,7 +39,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     io.maskindex.bits.index & eewBitMask(io.inst.mem_idx_size), 0.U)
   val saddr = Mux(io.inst.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
 
-  val fast_segmented = (io.inst.mop === mopUnit && io.inst.vm)
+  val fast_segmented = io.inst.mop === mopUnit
   val mem_size = io.inst.mem_elem_size
   val max_eidx = Mux(fast_segmented,
     io.inst.vconfig.vl * (io.inst.seg_nf +& 1.U),
@@ -60,7 +60,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val next_eaddr = eaddr + Mux(io.inst.mop === mopUnit, next_act_bytes, Mux(io.inst.mop === mopStrided, io.inst.rs2_data, 0.U))
   val next_saddr = saddr + next_act_bytes
 
-  val needs_mask = !io.inst.vm
+  val needs_mask = !io.inst.vm && io.inst.mop =/= mopUnit
   val needs_index = io.inst.mop(0)
   val block_maskindex = (needs_mask || needs_index) && !io.maskindex.valid
 

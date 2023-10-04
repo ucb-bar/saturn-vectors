@@ -28,7 +28,7 @@ class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorP
   val mask = UInt(dLenB.W)
 }
 
-class MaskIndex extends Bundle {
+class MaskIndex(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val mask = Bool()
   val index = UInt(64.W)
   val load = Bool()

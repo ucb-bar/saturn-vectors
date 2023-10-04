@@ -70,7 +70,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     false, false, false, true, true))
   val vxs = Module(new PipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
     true, true, true, true, false))
-  val vims = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && (!i.vm || i.mop(0)),
+  val vims = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && ((!i.vm && i.mop =/= mopUnit) || i.mop(0)),
     false, false, true, false, false))
   val seqs = Seq(vls, vss, vxs, vims)
 
@@ -124,7 +124,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
-  vims.io.dis.renvm   := !vdq.io.deq.bits.vm
+  vims.io.dis.renvm   := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit
   vims.io.dis.vs2_eew := vdq.io.deq.bits.mem_idx_size
   vims.io.dis.execmode := execElementOrder
   vims.io.dis.clear_vat := false.B
@@ -199,10 +199,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   load_write.bits.eg := vls.io.iss.bits.wvd_eg
   load_write.bits.data := vmu.io.lresp.bits
   load_write.bits.mask := vls.io.iss.bits.wmask
-  // when (!vls.io.iss.bits.inst.vm &&
-  //   (vmf.asUInt & UIntToOH(vls.io.iss.bits.eidx)) === 0.U) {
-  //   load_write.bits.mask := 0.U(dLenB.W)
-  // }
 
   when (resetting) {
     load_write.valid := true.B
