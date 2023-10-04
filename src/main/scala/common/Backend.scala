@@ -7,62 +7,6 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val bits = UInt(32.W)
-  val vconfig = new VConfig
-  val vstart = UInt(log2Ceil(maxVLMax).W)
-  val rs1_data = UInt(xLen.W)
-  val rs2_data = UInt(xLen.W)
-  val vat = UInt(vParams.vatSz.W)
-  val phys = Bool()
-
-  def opcode = bits(6,0)
-  def store = opcode(5)
-  def mem_idx_size = bits(13,12)
-  def mem_elem_size = Mux(mop(0), vconfig.vtype.vsew, bits(13,12))
-  def mop = bits(27,26)
-  def vm = bits(25)
-  def umop = bits(24,20)
-  def nf = bits(31,29)
-  def wr = mop === mopUnit && umop === lumopWhole
-  def seg_nf = Mux(wr, 0.U, nf)
-  def wr_nf = Mux(wr, nf, 0.U)
-  def pos_lmul = Mux(vconfig.vtype.vlmul_sign, 0.U, vconfig.vtype.vlmul_mag)
-  def vmu = opcode.isOneOf(opcLoad, opcStore)
-  def rs1 = bits(19,15)
-  def rs2 = bits(24,20)
-  def rd  = bits(11,7)
-  def may_write_v0 = rd === 0.U && opcode =/= opcStore
-  def funct3 = bits(14,12)
-  def imm4 = bits(19,15)
-  def funct6 = bits(31,26)
-}
-
-class WideVectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val eg = UInt(log2Ceil(egsTotal).W)
-  val data = UInt(dLen.W)
-  val mask = UInt(dLenB.W)
-}
-
-class VectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val eg = UInt(log2Ceil(egsTotal).W)
-  val data = UInt(dLen.W)
-  val mask = UInt(dLenB.W)
-}
-
-class VectorReadIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val req = Decoupled(UInt(log2Ceil(egsTotal).W))
-  val resp = Input(UInt(dLen.W))
-}
-
-class VectorIndexAccessIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val ready = Output(Bool())
-  val valid = Input(Bool())
-  val vrs = Input(UInt(5.W))
-  val eidx = Input(UInt(maxVLMax.W))
-  val eew = Input(UInt(2.W))
-  val idx = Output(UInt(64.W))
-}
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
@@ -157,6 +101,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.rvs1 := DontCare
     s.io.rvs2 := DontCare
     s.io.rvd := DontCare
+    s.io.rvm := DontCare
   }
 
   vls.io.dis.wvd := true.B
@@ -164,6 +109,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vls.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
   vls.io.dis.vd_eew := vdq.io.deq.bits.mem_elem_size
   vls.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
+  vls.io.dis.renvm := !vdq.io.deq.bits.vm
 
   vss.io.dis.renvd := true.B
   vss.io.dis.clear_vat := false.B
@@ -174,10 +120,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     0.U)
   vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_elem_size
   vss.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
+  vss.io.dis.renvm := !vdq.io.deq.bits.vm
 
 
-  vims.io.dis.renvm   := !vdq.io.deq.bits.vm
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
+  vims.io.dis.renvm   := !vdq.io.deq.bits.vm
   vims.io.dis.vs2_eew := vdq.io.deq.bits.mem_idx_size
   vims.io.dis.execmode := execElementOrder
   vims.io.dis.clear_vat := false.B
@@ -185,6 +132,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vxs.io.dis.clear_vat := true.B
   vxs.io.dis.renv1 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
   vxs.io.dis.renv2 := true.B
+  vxs.io.dis.renvm := !vdq.io.deq.bits.vm
   vxs.io.dis.wvd := true.B
   when (vdq.io.deq.bits.funct3 === OPIVI) {
     vxs.io.dis.inst.rs1_data := Cat(Fill(59, vdq.io.deq.bits.imm4(4)), vdq.io.deq.bits.imm4)
@@ -213,7 +161,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.seq_hazards.reads := older_rintents
   }
 
-  val vrf = Seq.fill(2) { Module(new RegisterFileBank(4, 2, egsTotal/2)) }
+  val vrf = Seq.fill(2) { Module(new RegisterFileBank(5, 2, egsTotal/2)) }
   val vmf = Reg(Vec(egsPerVReg, Vec(dLenB, UInt(8.W))))
 
   var writePortId: Int = 0
@@ -251,10 +199,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   load_write.bits.eg := vls.io.iss.bits.wvd_eg
   load_write.bits.data := vmu.io.lresp.bits
   load_write.bits.mask := vls.io.iss.bits.wmask
-  when (!vls.io.iss.bits.inst.vm &&
-    (vmf.asUInt & UIntToOH(vls.io.iss.bits.eidx)) === 0.U) {
-    load_write.bits.mask := 0.U(dLenB.W)
-  }
+  // when (!vls.io.iss.bits.inst.vm &&
+  //   (vmf.asUInt & UIntToOH(vls.io.iss.bits.eidx)) === 0.U) {
+  //   load_write.bits.mask := 0.U(dLenB.W)
+  // }
 
   when (resetting) {
     load_write.valid := true.B
@@ -270,7 +218,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs-vrs1
   // vxs-vrs2
   // vxs-vrs3, vmu-index, frontend-index
-  val reads = Seq(1, 1, 1, 3).zipWithIndex.map { case (rc, i) =>
+  // vls-mask, vss-mask, vxs-mask
+  val reads = Seq(1, 1, 1, 3, 3).zipWithIndex.map { case (rc, i) =>
     val arb = Module(new RegisterReadXbar(rc))
     vrf(0).io.read(i) <> arb.io.out(0)
     vrf(1).io.read(i) <> arb.io.out(1)
@@ -303,6 +252,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.index_access.ready := reads(3)(2).req.ready
   reads(3)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
   io.index_access.idx   := reads(3)(2).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
+
+  reads(4)(0) <> vls.io.rvm
+  reads(4)(1) <> vss.io.rvm
+  reads(4)(2) <> vxs.io.rvm
 
   when (vmu.io.vat_release.valid) {
     assert(vat_valids(vmu.io.vat_release.bits))

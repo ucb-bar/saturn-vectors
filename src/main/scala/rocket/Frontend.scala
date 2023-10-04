@@ -164,7 +164,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   def samePage(base: UInt, size: UInt) = (base + size - 1.U)(pgIdxBits) === base(pgIdxBits)
   val x_single_page = samePage(x_baseaddr, x_unit_bound)
   val x_replay_seg_single_page = samePage(x_indexaddr, ((x_inst.nf +& 1.U) << x_mem_size))
-  val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm || x_inst.mop =/= mopUnit
+  val x_iterative = (!x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm || x_inst.mop =/= mopUnit)
   val x_tlb_valid = ((x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) &&
     x_eidx < x_vl &&
     x_inst.vmu &&
@@ -292,7 +292,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       io.core.wb.retire := true.B
     } .elsewhen (!io.issue.ready) {
       io.core.wb.replay := true.B
-    } .elsewhen (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss)) {
+    } .elsewhen (w_inst.vmu && (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
       x_set_replay := true.B
     } .elsewhen (w_tlb_resp.miss) {
       io.core.wb.replay := true.B

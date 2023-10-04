@@ -71,6 +71,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     val rvs1 = new VectorReadIO
     val rvs2 = new VectorReadIO
     val rvd  = new VectorReadIO
+    val rvm  = new VectorReadIO
     val seq_hazards = new Bundle {
       val valid = Output(Bool())
       val rintent = Output(UInt(egsTotal.W))
@@ -180,19 +181,22 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
 
   io.valid := valid
 
-  io.rvs1.req.bits := getEgId(inst.rs1 + (sidx << inst.pos_lmul), eidx, vs1_eew)
-  io.rvs2.req.bits := getEgId(inst.rs2 + (sidx << inst.pos_lmul), eidx, vs2_eew)
-  io.rvd.req.bits  := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vs3_eew)
+  io.rvs1.req.bits := getEgId(inst.rs1 + (sidx << inst.pos_lmul), eidx     , vs1_eew)
+  io.rvs2.req.bits := getEgId(inst.rs2 + (sidx << inst.pos_lmul), eidx     , vs2_eew)
+  io.rvd.req.bits  := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx     , vs3_eew)
+  io.rvm.req.bits  := getEgId(0.U                               , eidx >> 3, 0.U)
 
   io.rvs1.req.valid := valid && renv1
   io.rvs2.req.valid := valid && renv2
   io.rvd.req.valid  := valid && renvd
+  io.rvm.req.valid  := valid && renvm
 
   io.iss.valid := (valid &&
     !data_hazard &&
     !(renv1 && !io.rvs1.req.ready) &&
     !(renv2 && !io.rvs2.req.ready) &&
-    !(renvd && !io.rvd.req.ready)
+    !(renvd && !io.rvd.req.ready) &&
+    !(renvm && !io.rvm.req.ready)
   )
 
   io.iss.bits.inst := inst
@@ -211,7 +215,11 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
-  io.iss.bits.wmask := head_mask & tail_mask
+  val vm_resp   = (io.rvm.resp >> eidx(log2Ceil(dLen)-1,0))(dLenB-1,0)
+  val vm_mask   = Mux(renvm, Mux1H(UIntToOH(vd_eew), (0 until 4).map { sew =>
+    FillInterleaved(1 << sew, vm_resp)
+  }), ~(0.U(dLenB.W)))
+  io.iss.bits.wmask := head_mask & tail_mask & vm_mask
 
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
   val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(depth)) }
