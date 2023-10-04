@@ -5,6 +5,30 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 
+object OPIFunct6 extends ChiselEnum {
+  val add = Value
+  val _ = Value
+  val sub, rsub, minu, min, maxu, max = Value
+  val _ = Value
+  val vand, vor, vxor, vrgather = Value
+  val _ = Value
+  val slideup, slidedown = Value
+  def rgatherei16 = slideup
+
+  val vadc = Value
+  val _ = Value
+  val madc, sbc, msbc = Value
+  val _, _, _ = Value
+  val merge, mseq, msne, msltu, mslt, msleu, msle, msgtu, msgt = Value
+  val saddu, sadd, ssubu, ssub = Value
+  val _ = Value
+  val sll = Value
+  val _ = Value
+  val smul, srl, sra, srrl, srra, nsrl, nsra, nclipu, nclip = Value
+  val wredsumu, wredsum = Value
+}
+
+
 trait VectorConsts {
   def mopUnit      = 0.U(2.W)
   def mopUnordered = 1.U(2.W)
@@ -36,19 +60,4 @@ trait VectorConsts {
   def OPMVX = 6.U
   def OPCFG = 7.U
 
-  object OPIFunct6 extends ChiselEnum {
-    val add = Value
-    val sub, rsub, minu, min, maxu, max = Value("b000010".U)
-    val vand, vor, vxor, vrgather = Value("b001001".U)
-    val slideup, slidedown = Value("b001110".U)
-    def rgatherei16 = slideup
-
-    val vadc = Value
-    val madc, sbc, msbc = Value("b010001".U)
-    val merge, mseq, msne, msltu, mslt, msleu, msle, msgtu, msgt = Value("b010111".U)
-    val saddu, sadd, ssubu, ssub = Value("b100000".U)
-    val sll = Value("b100101".U)
-    val smul, srl, sra, srrl, srra, nsrl, nsra, nclipu, nclip = Value("b100111".U)
-    val wredsumu, wredsum = Value("b110000".U)
-  }
 }

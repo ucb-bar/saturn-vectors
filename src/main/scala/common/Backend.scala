@@ -35,6 +35,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def may_write_v0 = rd === 0.U && opcode =/= opcStore
   def funct3 = bits(14,12)
   def imm4 = bits(19,15)
+  def funct6 = bits(31,26)
 }
 
 class WideVectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
