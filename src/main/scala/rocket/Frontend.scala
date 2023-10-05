@@ -168,13 +168,13 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_tlb_valid = Mux(x_replay,
     x_eidx < x_vl && x_eidx >= x_inst.vstart && !x_masked,
     io.core.ex.valid && !x_iterative && x_inst.vmu)
-  io.index_access.valid := x_replay && x_indexed
+  io.index_access.valid := x_replay && x_indexed && x_tlb_backoff === 0.U
   io.index_access.vrs := x_inst.rs2
   io.index_access.eidx := x_eidx
   io.index_access.eew := x_inst.mem_idx_size
 
 
-  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu)
+  io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy) && !(x_indexed && io.backend_busy)
   io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U && (x_index_ready || !x_replay)
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B

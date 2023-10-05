@@ -214,8 +214,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs-vrs1
   // vxs-vrs2
   // vxs-vrs3, vmu-index, frontend-index
-  // vls-mask, vss-mask, vxs-mask
-  val reads = Seq(1, 1, 1, 3, 3).zipWithIndex.map { case (rc, i) =>
+  // vls-mask, vss-mask, vxs-mask, vims-mask
+  val reads = Seq(1, 1, 1, 3, 4).zipWithIndex.map { case (rc, i) =>
     val arb = Module(new RegisterReadXbar(rc))
     vrf(0).io.read(i) <> arb.io.out(0)
     vrf(1).io.read(i) <> arb.io.out(1)
@@ -252,6 +252,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(4)(0) <> vls.io.rvm
   reads(4)(1) <> vss.io.rvm
   reads(4)(2) <> vxs.io.rvm
+  reads(4)(3) <> vims.io.rvm
 
   when (vmu.io.vat_release.valid) {
     assert(vat_valids(vmu.io.vat_release.bits))
