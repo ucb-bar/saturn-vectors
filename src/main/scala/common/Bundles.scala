@@ -53,7 +53,14 @@ class VectorIndexAccessIO(implicit p: Parameters) extends CoreBundle()(p) with H
   val ready = Output(Bool())
   val valid = Input(Bool())
   val vrs = Input(UInt(5.W))
-  val eidx = Input(UInt(maxVLMax.W))
+  val eidx = Input(UInt((1+log2Ceil(maxVLMax)).W))
   val eew = Input(UInt(2.W))
   val idx = Output(UInt(64.W))
+}
+
+class VectorMaskAccessIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val ready = Output(Bool())
+  val valid = Input(Bool())
+  val eidx = Input(UInt((1+log2Ceil(maxVLMax)).W))
+  val mask = Output(Bool())
 }

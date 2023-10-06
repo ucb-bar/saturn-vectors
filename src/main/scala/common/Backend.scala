@@ -12,8 +12,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val io = IO(new Bundle {
     val issue = Flipped(Decoupled(new VectorIssueInst))
 
-    val vm = Output(UInt(maxVLMax.W))
-
     val mem = new VectorMemInterface
 
     val backend_busy = Output(Bool())
@@ -21,6 +19,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val vm_busy = Output(Bool())
 
     val index_access = new VectorIndexAccessIO
+    val mask_access = new VectorMaskAccessIO
   })
 
   require(vLen >= 64)
@@ -162,7 +161,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   val vrf = Seq.fill(2) { Module(new RegisterFileBank(5, 2, egsTotal/2)) }
-  val vmf = Reg(Vec(egsPerVReg, Vec(dLenB, UInt(8.W))))
 
   var writePortId: Int = 0
   def vrfWrite(write: Valid[VectorWrite]) {
@@ -178,9 +176,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
 
     writePortId = writePortId + 1
-    when (write.valid && eg < egsPerVReg.U) {
-      for (i <- 0 until dLenB) when (wmask(i)) { vmf(eg)(i) := wdata(i) }
-    }
   }
 
   vmu.io.lresp.ready := vls.io.iss.valid
@@ -214,8 +209,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs-vrs1
   // vxs-vrs2
   // vxs-vrs3, vmu-index, frontend-index
-  // vls-mask, vss-mask, vxs-mask, vims-mask
-  val reads = Seq(1, 1, 1, 3, 4).zipWithIndex.map { case (rc, i) =>
+  // vls-mask, vss-mask, vxs-mask, vims-mask, frontend-mask
+  val reads = Seq(1, 1, 1, 3, 5).zipWithIndex.map { case (rc, i) =>
     val arb = Module(new RegisterReadXbar(rc))
     vrf(0).io.read(i) <> arb.io.out(0)
     vrf(1).io.read(i) <> arb.io.out(1)
@@ -234,16 +229,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(3)(1) <> vims.io.rvs2
   vims.io.rvs1.req.ready := true.B
 
-  val maskindex_q = Module(new Queue(new MaskIndex, 1, pipe=true, flow=true))
-  vmu.io.maskindex <> maskindex_q.io.deq
-
-  maskindex_q.io.enq.valid := vims.io.iss.valid
-  val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.inst.mem_idx_size)(dLenOffBits-1,0) << 3))
-  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.inst.mem_idx_size)
-  maskindex_q.io.enq.bits.mask  := (vims.io.iss.bits.wmask >> (vims.io.iss.bits.eidx & ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)))
-  maskindex_q.io.enq.bits.load  := !vims.io.iss.bits.inst.opcode(5)
-  vims.io.iss.ready      := maskindex_q.io.enq.ready
-
   reads(3)(2).req.valid := io.index_access.valid
   io.index_access.ready := reads(3)(2).req.ready
   reads(3)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
@@ -253,6 +238,22 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(4)(1) <> vss.io.rvm
   reads(4)(2) <> vxs.io.rvm
   reads(4)(3) <> vims.io.rvm
+  reads(4)(4).req.valid := io.mask_access.valid
+  reads(4)(4).req.bits  := getEgId(0.U, io.mask_access.eidx >> 3, 0.U)
+  io.mask_access.ready  := reads(4)(4).req.ready
+  io.mask_access.mask   := reads(4)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
+
+
+  val maskindex_q = Module(new Queue(new MaskIndex, 1, pipe=true, flow=true))
+  vmu.io.maskindex <> maskindex_q.io.deq
+
+  maskindex_q.io.enq.valid := vims.io.iss.valid
+  val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.inst.mem_idx_size)(dLenOffBits-1,0) << 3))
+  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.inst.mem_idx_size)
+  maskindex_q.io.enq.bits.mask  := reads(4)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
+  maskindex_q.io.enq.bits.load  := !vims.io.iss.bits.inst.opcode(5)
+  vims.io.iss.ready      := maskindex_q.io.enq.ready
+
 
   when (vmu.io.vat_release.valid) {
     assert(vat_valids(vmu.io.vat_release.bits))
@@ -278,7 +279,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   io.mem_busy := vmu.io.busy
-  io.vm := vmf.asUInt
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
   io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || resetting
 }

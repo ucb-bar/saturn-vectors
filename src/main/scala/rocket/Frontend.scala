@@ -19,10 +19,10 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   val vxu = Module(new VectorBackend)
   vxu.io.issue <> trap_check.io.issue
   trap_check.io.index_access <> vxu.io.index_access
+  trap_check.io.mask_access  <> vxu.io.mask_access
   trap_check.io.scalar_check <> vxu.io.mem.scalar_check
   trap_check.io.backend_busy := vxu.io.backend_busy
   trap_check.io.mem_busy := vxu.io.mem_busy
-  trap_check.io.vm       := vxu.io.vm
   trap_check.io.vm_busy  := vxu.io.vm_busy
   io.core.backend_busy   := vxu.io.backend_busy
 
@@ -101,12 +101,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     val mem_busy = Input(Bool())
     val backend_busy = Input(Bool())
 
-    val vm = Input(UInt(maxVLMax.W))
     val vm_busy = Input(Bool())
 
     val scalar_check = Flipped(new ScalarMemOrderCheckIO)
 
     val index_access = Flipped(new VectorIndexAccessIO)
+    val mask_access = Flipped(new VectorMaskAccessIO)
   })
 
   val replay_kill = WireInit(false.B)
@@ -150,11 +150,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_eidx = Mux(x_replay, x_replay_eidx, 0.U)
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
-  val x_masked = !(io.vm >> x_eidx)(0) && !x_inst.vm
   val x_mem_size = x_inst.mem_elem_size
   val x_unit_bound = ((x_inst.nf +& 1.U) * x_inst.vconfig.vl) << x_mem_size
   val x_indexed = x_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val x_index_ready = !x_indexed || io.index_access.ready
+  val x_mask_ready = x_inst.vm || io.mask_access.ready
   val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_idx_size), 0.U)
   val x_baseaddr = Mux(x_replay,
     Mux(x_inst.mop(0), x_inst.rs1_data, x_replay_addr),
@@ -165,17 +165,21 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_single_page = samePage(x_baseaddr, x_unit_bound)
   val x_replay_seg_single_page = samePage(x_indexaddr, ((x_inst.nf +& 1.U) << x_mem_size))
   val x_iterative = (!x_single_page || x_inst.mop =/= mopUnit)
+  val x_masked = !io.mask_access.mask && !x_inst.vm
   val x_tlb_valid = Mux(x_replay,
     x_eidx < x_vl && x_eidx >= x_inst.vstart && !x_masked,
     io.core.ex.valid && !x_iterative && x_inst.vmu)
+
   io.index_access.valid := x_replay && x_indexed && x_tlb_backoff === 0.U
   io.index_access.vrs := x_inst.rs2
   io.index_access.eidx := x_eidx
   io.index_access.eew := x_inst.mem_idx_size
 
+  io.mask_access.valid := x_replay && !x_inst.vm && x_tlb_backoff === 0.U
+  io.mask_access.eidx := x_eidx
 
   io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy) && !(x_indexed && io.backend_busy)
-  io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U && (x_index_ready || !x_replay)
+  io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U && ((x_mask_ready && x_index_ready) || !x_replay)
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
   io.tlb.req.bits.size := x_mem_size
@@ -183,7 +187,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.tlb.req.bits.prv := io.core.status.prv
   io.tlb.req.bits.v := io.core.status.v
 
-  when (x_replay && x_replay_eidx < x_replay_inst.vconfig.vl && x_tlb_backoff === 0.U) {
+  when (x_replay && x_replay_eidx < x_replay_inst.vconfig.vl && x_tlb_backoff === 0.U && x_index_ready && x_mask_ready) {
     val next_x_replay_eidx = x_replay_eidx + 1.U
     when (x_replay_seg_hi || x_replay_seg_single_page || x_inst.seg_nf === 0.U) {
       x_replay_eidx := next_x_replay_eidx
