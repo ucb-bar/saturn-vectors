@@ -178,6 +178,10 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.mask_access.valid := x_replay && !x_inst.vm && x_tlb_backoff === 0.U
   io.mask_access.eidx := x_eidx
 
+  when ((io.index_access.valid && !io.index_access.ready) || (io.mask_access.valid && !io.mask_access.ready)) {
+    x_tlb_backoff := 3.U
+  }
+
   io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy) && !(x_indexed && io.backend_busy)
   io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U && ((x_mask_ready && x_index_ready) || !x_replay)
   io.tlb.req.bits.vaddr := x_addr
