@@ -13,7 +13,7 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
     val pipe = Input(Vec(depth, Valid(new VectorIssueBeat(depth))))
 
-    val write = Valid(new VectorWrite)
+    val writes = Vec(2, Valid(new VectorWrite))
   })
 }
 
@@ -43,8 +43,13 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     add_carry(i+1) := full(8)
   }
 
-  io.write.valid := io.pipe(0).valid
-  io.write.bits.eg := io.pipe(0).bits.wvd_eg
-  io.write.bits.mask := io.pipe(0).bits.wmask
-  io.write.bits.data := add_out.asUInt
+  io.writes(0).valid     := io.pipe(0).valid && io.pipe(0).bits.wvd_eg(0) === 0.U
+  io.writes(0).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
+  io.writes(0).bits.mask := io.pipe(0).bits.wmask
+  io.writes(0).bits.data := add_out.asUInt
+
+  io.writes(1).valid     := io.pipe(0).valid && io.pipe(0).bits.wvd_eg(0) === 1.U
+  io.writes(1).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
+  io.writes(1).bits.mask := io.pipe(0).bits.wmask
+  io.writes(1).bits.data := add_out.asUInt
 }

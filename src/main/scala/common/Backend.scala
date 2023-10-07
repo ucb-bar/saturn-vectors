@@ -162,20 +162,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vrf = Seq.fill(2) { Module(new RegisterFileBank(5, 2, egsTotal/2)) }
 
-  var writePortId: Int = 0
-  def vrfWrite(write: Valid[VectorWrite]) {
-    val eg = write.bits.eg
-    val wdata = write.bits.data.asTypeOf(Vec(dLenB, UInt(8.W)))
-    val wmask = write.bits.mask.asBools
-
-    for (b <- 0 until 2) {
-      vrf(b).io.write(writePortId).valid := write.valid && eg(0) === b.U
-      vrf(b).io.write(writePortId).bits.eg := eg >> 1
-      vrf(b).io.write(writePortId).bits.data := write.bits.data
-      vrf(b).io.write(writePortId).bits.mask := write.bits.mask
-    }
-
-    writePortId = writePortId + 1
+  def vrfWrite(bankId: Int, write: Valid[VectorWrite]) = {
+    val out = Wire(Valid(new VectorWrite))
+    out.valid := write.valid && write.bits.eg(0) === bankId.U
+    out.bits := write.bits
+    out.bits.eg := write.bits.eg >> 1
+    out
   }
 
   vmu.io.lresp.ready := vls.io.iss.valid
@@ -202,7 +194,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     load_write.bits.mask := ~(0.U(dLenB.W))
   }
 
-  vrfWrite(load_write)
+  vrf(0).io.write(0) := vrfWrite(0, load_write)
+  vrf(1).io.write(0) := vrfWrite(1, load_write)
 
   // Read ports are
   // vss-vrd
@@ -266,7 +259,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val scalar = vxs.io.iss.bits.inst.rs1_data
     vxu.io.iss.bits.rvs1_data := dLenSplat(scalar, vxu.io.iss.bits.rvs1_eew)
   }
-  vrfWrite(vxu.io.write)
+  vrf(0).io.write(1) := vxu.io.writes(0)
+  vrf(1).io.write(1) := vxu.io.writes(1)
 
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
