@@ -18,12 +18,12 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 }
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
-  val is_sub = DecodeLogic(io.pipe(0).bits.inst.funct6,
-    Seq(OPIFunct6.sub, OPIFunct6.rsub).map(_.litValue.U),
-    Seq(OPIFunct6.add).map(_.litValue.U))
-  val is_rsub = DecodeLogic(io.pipe(0).bits.inst.funct6,
-    Seq(OPIFunct6.rsub).map(_.litValue.U),
-    Seq(OPIFunct6.sub).map(_.litValue.U))
+  val is_sub = VecDecode(io.pipe(0).bits.inst,
+    Seq(OPIFunct6.sub, OPIFunct6.rsub),
+    Seq(OPIFunct6.add))
+  val is_rsub = VecDecode(io.pipe(0).bits.inst,
+    Seq(OPIFunct6.rsub),
+    Seq(OPIFunct6.sub))
 
   val add_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))

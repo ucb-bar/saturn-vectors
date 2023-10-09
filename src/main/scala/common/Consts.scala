@@ -1,6 +1,7 @@
 package vector.common
 
 import chisel3._
+import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
@@ -20,6 +21,7 @@ object OPIFunct6 extends ChiselEnum {
   val madc, sbc, msbc = Value
   val _, _, _ = Value
   val merge, mseq, msne, msltu, mslt, msleu, msle, msgtu, msgt = Value
+
   val saddu, sadd, ssubu, ssub = Value
   val _ = Value
   val sll = Value
@@ -28,6 +30,37 @@ object OPIFunct6 extends ChiselEnum {
   val wredsumu, wredsum = Value
 }
 
+object OPMFunct6 extends ChiselEnum {
+  val redsum, redand, redor, redxor, redminu, redmin, redmaxu, redmax, aaddu, aadd, asubu, asub = Value
+  val _, _ = Value
+  val slide1up, slide1down = Value
+
+  val wxunary0, rxunary0 = Value
+  val _ = Value
+  val xunary0 = Value
+  val _ = Value
+  val munary0 = Value
+  val _, _ = Value
+  val compress, mandnot, mand, mor, mxor, mornot, mnand, mnor, mxnor = Value
+
+  val divu, div, remu, rem, mulhu, mul, mulhsu, mulh = Value
+  val _, _ = Value
+  val madd = Value
+  val _ = Value
+  val nmsub = Value
+  val _ = Value
+  val macc = Value
+  val _ = Value
+  val nmsac = Value
+
+  val waddu, wadd, wsubu, wsub, wadduw, waddw, wsubuw, wsubw, wmulu = Value
+  val _ = Value
+  val wmulsu, wmul, wmaccu, wmacc, wmaccus, wmaccsu = Value
+}
+
+object OPFFunct6 extends ChiselEnum {
+
+}
 
 trait VectorConsts {
   def mopUnit      = 0.U(2.W)
@@ -59,5 +92,22 @@ trait VectorConsts {
   def OPFVF = 5.U
   def OPMVX = 6.U
   def OPCFG = 7.U
-
 }
+
+object VecDecode extends VectorConsts {
+  def apply(funct3: UInt, funct6: UInt,
+    trues: Seq[EnumType],
+    falses: Seq[EnumType]): Bool = {
+    def vToUInt(vs: Seq[EnumType]) = vs.map {
+      case v: OPIFunct6.Type => Seq(OPIVV, OPIVI, OPIVX).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
+      case v: OPMFunct6.Type => Seq(OPMVV, OPMVX       ).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
+      case v: OPFFunct6.Type => Seq(OPFVV, OPFVF       ).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
+    }.flatten
+    DecodeLogic(Cat(funct3(2,0), funct6(5,0)),
+      vToUInt(trues),
+      vToUInt(falses))
+  }
+  def apply(inst: VectorIssueInst, trues: Seq[EnumType], falses: Seq[EnumType]): Bool = apply(
+    inst.funct3, inst.funct6, trues, falses)
+}
+
