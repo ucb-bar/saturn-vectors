@@ -84,7 +84,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.dis.renv2 := false.B
     s.io.dis.renvd := false.B
     s.io.dis.renvm := false.B
-    s.io.dis.execmode := execRegular
+    s.io.dis.elementwise := false.B
     s.io.dis.seg_nf := 0.U
     s.io.dis.sub_dlen := 0.U
     s.io.dis.pipe_lat := s.depth.U
@@ -125,7 +125,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
   vims.io.dis.renvm   := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit
   vims.io.dis.vs2_eew := vdq.io.deq.bits.mem_idx_size
-  vims.io.dis.execmode := execElementOrder
+  vims.io.dis.elementwise := true.B
   vims.io.dis.clear_vat := false.B
 
   vxs.io.dis.clear_vat := true.B
