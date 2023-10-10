@@ -22,6 +22,7 @@ class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundl
   val rvd_eew = UInt(2.W)
 
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
+  val wvd_widen2 = Bool()
   val wmask   = UInt(dLenB.W)
 
   val wlat = UInt(log2Ceil(pipe_depth+1).W)
@@ -29,10 +30,12 @@ class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundl
 
 class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
+  val wvd_widen2 = Bool()
   val vat = UInt(vParams.vatSz.W)
   val hazard_oh = UInt(depth.W)
   def hazard = hazard_oh(0)
   val clear_vat = Bool()
+  def eg_oh = Mux(wvd_widen2, FillInterleaved(2, UIntToOH(eg >> 1) ), UIntToOH(eg))
 }
 
 
@@ -58,6 +61,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
       val vs2_eew = Input(UInt(2.W))
       val vs3_eew = Input(UInt(2.W))
       val vd_eew = Input(UInt(2.W))
+      val vd_widen2 = Input(Bool())
       val incr_eew = Input(UInt(2.W))
       val elementwise = Input(Bool())
       val sub_dlen = Input(UInt(2.W))
@@ -102,6 +106,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   val vs2_eew = Reg(UInt(2.W))
   val vs3_eew = Reg(UInt(2.W))
   val vd_eew  = Reg(UInt(2.W))
+  val vd_widen2 = Reg(Bool())
   val incr_eew = Reg(UInt(2.W))
   val seg_nf  = Reg(UInt(3.W))
   val eidx    = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -130,7 +135,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     def mul_mask(eew: UInt) = ((1.U << (mul(eew) + 1.U)) - 1.U)(7,0)
 
     val wvd_arch_oh = Mux(writeVD.B && io.dis.wvd,
-      mul_mask(io.dis.vd_eew) << io.dis.inst.rd, 0.U)
+      mul_mask(io.dis.vd_eew + io.dis.vd_widen2) << io.dis.inst.rd, 0.U)
     val rvs1_arch_oh = Mux(readVS1.B && io.dis.renv1,
       mul_mask(io.dis.vs1_eew) << io.dis.inst.rs1, 0.U)
     val rvs2_arch_oh = Mux(readVS2.B && io.dis.renv2,
@@ -151,6 +156,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     vs2_eew := io.dis.vs2_eew
     vs3_eew := io.dis.vs3_eew
     vd_eew := io.dis.vd_eew
+    vd_widen2 := io.dis.vd_widen2
     incr_eew := io.dis.incr_eew
     seg_nf := io.dis.seg_nf
     sub_dlen := io.dis.sub_dlen
@@ -165,7 +171,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.seq_hazards.wintent := wvd_oh
   io.seq_hazards.vat := inst.vat
 
-  val pipe_writes = (io.pipe_hazards.map(h => Mux(h.valid, UIntToOH(h.bits.eg), 0.U)) ++ Seq(0.U)).reduce(_|_)
+  val pipe_writes = (io.pipe_hazards.map(h => Mux(h.valid && h.bits.hazard, h.bits.eg_oh, 0.U)) ++ Seq(0.U)).reduce(_|_)
 
   val vs1_read_oh = Mux(renv1, UIntToOH(io.rvs1.req.bits), 0.U)
   val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits), 0.U)
@@ -208,7 +214,8 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.rvs2_eew  := vs2_eew
   io.iss.bits.rvd_eew   := vs3_eew
   io.iss.bits.eidx      := eidx
-  io.iss.bits.wvd_eg    := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew)
+  io.iss.bits.wvd_eg    := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew + vd_widen2)
+  io.iss.bits.wvd_widen2 := vd_widen2
   io.iss.bits.wlat := lat
 
   val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
@@ -226,8 +233,9 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(depth)) }
 
   when (io.iss.fire && !last) {
-    when (!elementwise && sub_dlen === 0.U) {
-      wvd_oh  := wvd_oh  & ~UIntToOH(io.iss.bits.wvd_eg)
+    when (tail_mask(dLenB-1)) {
+      val wvd_clr_mask = Mux(vd_widen2, FillInterleaved(2, UIntToOH(io.iss.bits.wvd_eg >> 1)), UIntToOH(io.iss.bits.wvd_eg))
+      wvd_oh  := wvd_oh  & ~wvd_clr_mask
       rvs1_oh := rvs1_oh & ~UIntToOH(io.rvs1.req.bits)
       rvs2_oh := rvs2_oh & ~UIntToOH(io.rvs2.req.bits)
       rvd_oh  := rvd_oh  & ~UIntToOH(io.rvd.req.bits)
@@ -252,6 +260,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
       pipe_hazards.head.vat := inst.vat
       pipe_hazards.head.clear_vat := last && clear_vat
       pipe_hazards.head.hazard_oh := (1.U << lat) - 1.U
+      pipe_hazards.head.wvd_widen2 := vd_widen2
     } .otherwise {
       pipe_valids.head := false.B
     }

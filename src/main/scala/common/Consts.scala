@@ -35,7 +35,7 @@ object OPMFunct6 extends ChiselEnum {
   val _, _ = Value
   val slide1up, slide1down = Value
 
-  val wxunary0, rxunary0 = Value
+  val wrxunary0 = Value
   val _ = Value
   val xunary0 = Value
   val _ = Value
@@ -44,7 +44,7 @@ object OPMFunct6 extends ChiselEnum {
   val compress, mandnot, mand, mor, mxor, mornot, mnand, mnor, mxnor = Value
 
   val divu, div, remu, rem, mulhu, mul, mulhsu, mulh = Value
-  val _, _ = Value
+  val _ = Value
   val madd = Value
   val _ = Value
   val nmsub = Value

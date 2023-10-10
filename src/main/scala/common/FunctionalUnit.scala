@@ -32,6 +32,8 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   )
   val add_carry = Wire(Vec(dLenB+1, UInt(1.W)))
   val add_out = Wire(Vec(dLenB, UInt(8.W)))
+  val add_wideout_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> eew, UInt((16 << eew).W))) }
+  val add_wideout = Mux1H(UIntToOH(io.pipe(0).bits.rvs1_eew), add_wideout_eew.map(_.asUInt))
 
   add_carry(0) := is_sub
 
@@ -42,14 +44,28 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     add_out(i) := full(7,0)
     add_carry(i+1) := full(8)
   }
+  for (eew <- 0 until 3) {
+    val out_vec = add_out.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
+    for (i <- 0 until dLenB >> eew) {
+      add_wideout_eew(eew)(i) := Cat(add_carry((i+1) << eew), out_vec(i))
+    }
+  }
 
-  io.writes(0).valid     := io.pipe(0).valid && io.pipe(0).bits.wvd_eg(0) === 0.U
+  io.writes(0).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === 0.U || io.pipe(0).bits.wvd_widen2)
   io.writes(0).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
   io.writes(0).bits.mask := io.pipe(0).bits.wmask
   io.writes(0).bits.data := add_out.asUInt
 
-  io.writes(1).valid     := io.pipe(0).valid && io.pipe(0).bits.wvd_eg(0) === 1.U
+  io.writes(1).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === 1.U || io.pipe(0).bits.wvd_widen2)
   io.writes(1).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
   io.writes(1).bits.mask := io.pipe(0).bits.wmask
   io.writes(1).bits.data := add_out.asUInt
+
+  when (io.pipe(0).bits.wvd_widen2) {
+    val wide_mask = FillInterleaved(2, io.pipe(0).bits.wmask)
+    io.writes(0).bits.mask := wide_mask(dLenB-1,0)
+    io.writes(1).bits.mask := wide_mask >> dLenB
+    io.writes(0).bits.data := add_wideout
+    io.writes(1).bits.data := add_wideout >> dLen
+  }
 }

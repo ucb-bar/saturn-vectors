@@ -97,6 +97,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.dis.vs3_eew  := vdq.io.deq.bits.vconfig.vtype.vsew
     s.io.dis.vd_eew   := vdq.io.deq.bits.vconfig.vtype.vsew
     s.io.dis.incr_eew := vdq.io.deq.bits.vconfig.vtype.vsew
+    s.io.dis.vd_widen2 := false.B
     s.io.rvs1 := DontCare
     s.io.rvs2 := DontCare
     s.io.rvd := DontCare
@@ -139,6 +140,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   when (vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPMVV, OPIVI, OPIVX, OPMVX)) {
     vxs.io.dis.pipe_lat := 1.U
   }
+  when (vdq.io.deq.bits.funct3.isOneOf(OPMVV, OPMVX) && vdq.io.deq.bits.funct6 >= OPMFunct6.waddu.litValue.U) {
+    vxs.io.dis.vd_widen2 := true.B
+  }
 
 
 
@@ -154,7 +158,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }).reduce(_|_)
     val older_pipe_writes = (otherSeqs.map(_.io.pipe_hazards).flatten.map(h =>
       Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid && h.bits.hazard =/= 0.U,
-        UIntToOH(h.bits.eg), 0.U)) :+ 0.U).reduce(_|_)
+        h.bits.eg_oh, 0.U)) :+ 0.U).reduce(_|_)
 
     seq.io.seq_hazards.writes := older_pipe_writes | older_wintents
     seq.io.seq_hazards.reads := older_rintents
