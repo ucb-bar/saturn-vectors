@@ -19,11 +19,14 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
   val is_sub = VecDecode(io.pipe(0).bits.inst,
-    Seq(OPIFunct6.sub, OPIFunct6.rsub),
-    Seq(OPIFunct6.add))
+    Seq(OPIFunct6.sub, OPIFunct6.rsub, OPMFunct6.wsubu),
+    Seq(OPIFunct6.add, OPMFunct6.waddu))
   val is_rsub = VecDecode(io.pipe(0).bits.inst,
     Seq(OPIFunct6.rsub),
-    Seq(OPIFunct6.sub))
+    Seq(OPIFunct6.sub, OPMFunct6.wsubu))
+  val add_ext_carry = VecDecode(io.pipe(0).bits.inst,
+    Seq(OPMFunct6.wsubu),
+    Seq(OPMFunct6.waddu))
 
   val add_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -40,15 +43,18 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   for (i <- 0 until dLenB) {
     val in1 = Mux(is_rsub, add_in2(i), add_in1(i))
     val in2 = Mux(is_rsub, add_in1(i), add_in2(i))
-    val full =  Mux(is_sub, ~in1, in1) +& in2 +& Mux(add_use_carry(i), add_carry(i), is_sub)
+    val full = Mux(is_sub, ~in1, in1) +& in2 +& Mux(add_use_carry(i), add_carry(i), is_sub)
     add_out(i) := full(7,0)
     add_carry(i+1) := full(8)
   }
   for (eew <- 0 until 3) {
     val out_vec = add_out.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
     for (i <- 0 until dLenB >> eew) {
-      add_wideout_eew(eew)(i) := Cat(add_carry((i+1) << eew), out_vec(i))
+      val carry = add_carry((i+1) << eew) ^ is_sub
+      val hi = Cat(Fill((8 << eew) - 1, carry & add_ext_carry), carry)
+      add_wideout_eew(eew)(i) := Cat(hi, out_vec(i))
     }
+    dontTouch(add_wideout_eew(eew))
   }
 
   io.writes(0).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === 0.U || io.pipe(0).bits.wvd_widen2)
