@@ -89,22 +89,32 @@ trait VectorConsts {
   def OPFVF = 5.U
   def OPMVX = 6.U
   def OPCFG = 7.U
+
+  def X = BitPat("b?")
+  def N = BitPat("b0")
+  def Y = BitPat("b1")
+
 }
 
 object VecDecode extends VectorConsts {
-  def apply(funct3: UInt, funct6: UInt,
-    trues: Seq[EnumType],
-    falses: Seq[EnumType]): Bool = {
-    def vToUInt(vs: Seq[EnumType]) = vs.map {
+  def apply(funct3: UInt, funct6: UInt, default: Seq[BitPat], table: Seq[(EnumType, Seq[BitPat])]): Seq[UInt] = {
+    def enumToUInt(e: EnumType): Seq[UInt] = e match {
       case v: OPIFunct6.Type => Seq(OPIVV, OPIVI, OPIVX).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
       case v: OPMFunct6.Type => Seq(OPMVV, OPMVX       ).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
       case v: OPFFunct6.Type => Seq(OPFVV, OPFVF       ).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
-    }.flatten
+    }
     DecodeLogic(Cat(funct3(2,0), funct6(5,0)),
-      vToUInt(trues),
-      vToUInt(falses))
+      default,
+      table.map(e => enumToUInt(e._1).map(u => (BitPat(u), e._2))).flatten)
   }
-  def apply(inst: VectorIssueInst, trues: Seq[EnumType], falses: Seq[EnumType]): Bool = apply(
-    inst.funct3, inst.funct6, trues, falses)
+
+  def apply(inst: VectorIssueInst, default: Seq[BitPat], table: Seq[(EnumType, Seq[BitPat])]): Seq[UInt] = apply(
+    inst.funct3, inst.funct6, default, table)
+
+  def applyBools(inst: VectorIssueInst, default: Seq[BitPat], table: Seq[(EnumType, Seq[BitPat])]): Seq[Bool] = apply(
+    inst.funct3, inst.funct6, default, table).map(_(0))
+
+  def apply(inst: VectorIssueInst, trues: Seq[EnumType], falses: Seq[EnumType]): Bool = applyBools(
+    inst, Seq(BitPat.dontCare(1)), trues.map(e => (e, Seq(BitPat(true.B)))) ++ falses.map(e => (e, Seq(BitPat(false.B)))))(0)
 }
 

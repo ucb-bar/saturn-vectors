@@ -140,8 +140,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   when (vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPMVV, OPIVI, OPIVX, OPMVX)) {
     vxs.io.dis.pipe_lat := 1.U
   }
-  when (vdq.io.deq.bits.funct3.isOneOf(OPMVV, OPMVX) && vdq.io.deq.bits.funct6 >= OPMFunct6.waddu.litValue.U) {
-    vxs.io.dis.vd_widen2 := true.B
+  when (vdq.io.deq.bits.funct3.isOneOf(OPMVV, OPMVX)) {
+    when (OPMFunct6(vdq.io.deq.bits.funct6)
+      .isOneOf(OPMFunct6.waddu, OPMFunct6.wadd, OPMFunct6.wsub, OPMFunct6.wsubu)) {
+      vxs.io.dis.vd_widen2 := true.B
+    }
+    when (OPMFunct6(vdq.io.deq.bits.funct6)
+      .isOneOf(OPMFunct6.wadduw, OPMFunct6.waddw, OPMFunct6.wsubuw, OPMFunct6.wsubw)) {
+      vxs.io.dis.vs2_eew := vdq.io.deq.bits.vconfig.vtype.vsew + 1.U
+      vxs.io.dis.vd_eew := vdq.io.deq.bits.vconfig.vtype.vsew + 1.U
+      vxs.io.dis.incr_eew := vdq.io.deq.bits.vconfig.vtype.vsew + 1.U
+    }
   }
 
 
