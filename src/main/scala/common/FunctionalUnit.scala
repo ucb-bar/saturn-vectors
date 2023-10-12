@@ -19,20 +19,23 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
 
-  val ctrl_sub :: ctrl_rsub :: ctrl_add_sext :: ctrl_wide_in :: Nil = VecDecode.applyBools(io.pipe(0).bits.inst,
-    Seq.fill(4)(BitPat.dontCare(1)), Seq(
-      (OPIFunct6.add   , Seq(N,X,X,N)),
-      (OPIFunct6.sub   , Seq(Y,N,X,N)),
-      (OPIFunct6.rsub  , Seq(Y,Y,X,N)),
-      (OPMFunct6.waddu , Seq(N,X,N,N)),
-      (OPMFunct6.wadd  , Seq(N,X,Y,N)),
-      (OPMFunct6.wsubu , Seq(Y,N,N,N)),
-      (OPMFunct6.wsub  , Seq(Y,N,Y,N)),
-      (OPMFunct6.wadduw, Seq(N,X,N,Y)),
-      (OPMFunct6.waddw , Seq(N,X,Y,Y)),
-      (OPMFunct6.wsubuw, Seq(Y,N,N,Y)),
-      (OPMFunct6.wsubw , Seq(Y,N,Y,Y))
+  val ctrl_sub :: ctrl_add_sext :: ctrl_wide_in :: Nil = VecDecode.applyBools(io.pipe(0).bits.inst,
+    Seq.fill(3)(BitPat.dontCare(1)), Seq(
+      (OPIFunct6.add   , Seq(N,X,N)),
+      (OPIFunct6.sub   , Seq(Y,X,N)),
+      (OPIFunct6.rsub  , Seq(Y,X,N)),
+      (OPMFunct6.waddu , Seq(N,N,N)),
+      (OPMFunct6.wadd  , Seq(N,Y,N)),
+      (OPMFunct6.wsubu , Seq(Y,N,N)),
+      (OPMFunct6.wsub  , Seq(Y,Y,N)),
+      (OPMFunct6.wadduw, Seq(N,N,Y)),
+      (OPMFunct6.waddw , Seq(N,Y,Y)),
+      (OPMFunct6.wsubuw, Seq(Y,N,Y)),
+      (OPMFunct6.wsubw , Seq(Y,Y,Y))
     ))
+
+  val rsub = io.pipe(0).bits.inst.isOpi && OPIFunct6(io.pipe(0).bits.inst.funct6) === OPIFunct6.rsub
+  val xunary0 = io.pipe(0).bits.inst.isOpm && OPMFunct6(io.pipe(0).bits.inst.funct6) === OPMFunct6.xunary0
 
   val add_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -49,8 +52,8 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   add_carry(0) := ctrl_sub
 
   for (i <- 0 until dLenB) {
-    val in1 = Mux(ctrl_wide_in, add_wide_in1(i), Mux(ctrl_rsub, add_in2(i), add_in1(i)))
-    val in2 = Mux(ctrl_rsub, add_in1(i), add_in2(i))
+    val in1 = Mux(ctrl_wide_in, add_wide_in1(i), Mux(rsub, add_in2(i), add_in1(i)))
+    val in2 = Mux(rsub, add_in1(i), add_in2(i))
     val full = Mux(ctrl_sub, ~in1, in1) +& in2 +& Mux(add_use_carry(i), add_carry(i), ctrl_sub)
     add_out(i) := full(7,0)
     add_carry(i+1) := full(8)
@@ -74,18 +77,43 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     }
   }
 
+  val xunary0_eew_mul = io.pipe(0).bits.vd_eew - io.pipe(0).bits.rvs2_eew
+  val xunary0_in = (1 until 4).map { m =>
+    val w = dLen >> m
+    val in = Wire(UInt(w.W))
+    val in_mul = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(1 << m, UInt(w.W)))
+    in := in_mul(io.pipe(0).bits.wvd_eg(m-1,0))
+    in
+  }
+  val xunary0_out = Mux1H((1 until 4).map { vd_eew => (0 until vd_eew).map { vs2_eew =>
+    (io.pipe(0).bits.vd_eew === vd_eew.U && io.pipe(0).bits.rvs2_eew === vs2_eew.U) -> {
+      val mul = vd_eew - vs2_eew
+      val in = xunary0_in(mul-1).asTypeOf(Vec(dLenB >> vd_eew, UInt((8 << vs2_eew).W)))
+      val out = Wire(Vec(dLenB >> vd_eew, UInt((8 << vd_eew).W)))
+      out.zip(in).foreach { case (l, r) => l := Cat(
+        Fill((8 << vd_eew) - (8 << vs2_eew), io.pipe(0).bits.inst.rs1(0) && r((8 << vs2_eew)-1)),
+        r)
+      }
+      out.asUInt
+    }
+  }}.flatten)
+
+  val out = Mux(xunary0, xunary0_out, add_out.asUInt)
+
   io.writes(0).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === 0.U || io.pipe(0).bits.wvd_widen2)
   io.writes(0).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
   io.writes(0).bits.mask := io.pipe(0).bits.wmask
-  io.writes(0).bits.data := add_out.asUInt
+  io.writes(0).bits.data := out
 
   io.writes(1).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === 1.U || io.pipe(0).bits.wvd_widen2)
   io.writes(1).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
   io.writes(1).bits.mask := io.pipe(0).bits.wmask
-  io.writes(1).bits.data := add_out.asUInt
+  io.writes(1).bits.data := out
 
+  val wide_mask = FillInterleaved(2, io.pipe(0).bits.wmask)
   when (io.pipe(0).bits.wvd_widen2) {
-    val wide_mask = FillInterleaved(2, io.pipe(0).bits.wmask)
+    io.writes(0).valid := io.pipe(0).valid
+    io.writes(1).valid := io.pipe(0).valid
     io.writes(0).bits.mask := wide_mask(dLenB-1,0)
     io.writes(1).bits.mask := wide_mask >> dLenB
     io.writes(0).bits.data := add_wide_out

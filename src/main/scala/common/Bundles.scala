@@ -36,6 +36,10 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def funct3 = bits(14,12)
   def imm4 = bits(19,15)
   def funct6 = bits(31,26)
+
+  def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)
+  def isOpm = funct3.isOneOf(OPMVV, OPMVX)
+  def isOpf = funct3.isOneOf(OPFVV, OPFVF)
 }
 
 class VectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

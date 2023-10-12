@@ -20,6 +20,7 @@ class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundl
   val rvs1_eew = UInt(2.W)
   val rvs2_eew = UInt(2.W)
   val rvd_eew = UInt(2.W)
+  val vd_eew  = UInt(2.W)
 
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
   val wvd_widen2 = Bool()
@@ -213,6 +214,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew
   io.iss.bits.rvd_eew   := vs3_eew
+  io.iss.bits.vd_eew    := vd_eew
   io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_eg    := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew + vd_widen2)
   io.iss.bits.wvd_widen2 := vd_widen2
