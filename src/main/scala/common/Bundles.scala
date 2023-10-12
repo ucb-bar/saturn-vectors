@@ -68,3 +68,36 @@ class VectorMaskAccessIO(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val eidx = Input(UInt((1+log2Ceil(maxVLMax)).W))
   val mask = Output(Bool())
 }
+
+class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val inst = new VectorIssueInst
+  val wvd = Bool()
+
+  val eidx = UInt(log2Ceil(maxVLMax).W)
+
+  val rvs1_data = UInt(dLen.W)
+  val rvs2_data = UInt(dLen.W)
+  val rvd_data  = UInt(dLen.W)
+
+  val rvs1_eew = UInt(2.W)
+  val rvs2_eew = UInt(2.W)
+  val rvd_eew = UInt(2.W)
+  val vd_eew  = UInt(2.W)
+  val rmask   = UInt(dLenB.W)
+
+  val wvd_eg   = UInt(log2Ceil(egsTotal).W)
+  val wvd_widen2 = Bool()
+  val wmask   = UInt(dLenB.W)
+
+  val wlat = UInt(log2Ceil(pipe_depth+1).W)
+}
+
+class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val eg = UInt(log2Ceil(egsTotal).W)
+  val wvd_widen2 = Bool()
+  val vat = UInt(vParams.vatSz.W)
+  val hazard_oh = UInt(depth.W)
+  def hazard = hazard_oh(0)
+  val clear_vat = Bool()
+  def eg_oh = Mux(wvd_widen2, FillInterleaved(2, UIntToOH(eg >> 1) ), UIntToOH(eg))
+}

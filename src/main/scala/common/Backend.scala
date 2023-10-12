@@ -98,6 +98,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.dis.vd_eew   := vdq.io.deq.bits.vconfig.vtype.vsew
     s.io.dis.incr_eew := vdq.io.deq.bits.vconfig.vtype.vsew
     s.io.dis.vd_widen2 := false.B
+    s.io.dis.renvm := !vdq.io.deq.bits.vm
+    s.io.dis.use_wmask := !vdq.io.deq.bits.vm
     s.io.rvs1 := DontCare
     s.io.rvs2 := DontCare
     s.io.rvd := DontCare
@@ -109,7 +111,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vls.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
   vls.io.dis.vd_eew := vdq.io.deq.bits.mem_elem_size
   vls.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
-  vls.io.dis.renvm := !vdq.io.deq.bits.vm
 
   vss.io.dis.renvd := true.B
   vss.io.dis.clear_vat := false.B
@@ -120,8 +121,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     0.U)
   vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_elem_size
   vss.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
-  vss.io.dis.renvm := !vdq.io.deq.bits.vm
-
 
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
   vims.io.dis.renvm   := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit
@@ -132,11 +131,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vxs.io.dis.clear_vat := true.B
   vxs.io.dis.renv1 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
   vxs.io.dis.renv2 := true.B
-  vxs.io.dis.renvm := !vdq.io.deq.bits.vm
   vxs.io.dis.wvd := true.B
   when (vdq.io.deq.bits.funct3 === OPIVI) {
     vxs.io.dis.inst.rs1_data := Cat(Fill(59, vdq.io.deq.bits.imm4(4)), vdq.io.deq.bits.imm4)
   }
+  when (vdq.io.deq.bits.isOpi) {
+    when (OPIFunct6(vdq.io.deq.bits.funct6) === OPIFunct6.adc) {
+      vxs.io.dis.use_wmask := false.B
+    }
+  }
+
   when (vdq.io.deq.bits.isOpi || vdq.io.deq.bits.isOpm) {
     vxs.io.dis.pipe_lat := 1.U
   }

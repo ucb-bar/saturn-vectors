@@ -19,19 +19,20 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
 
-  val ctrl_sub :: ctrl_add_sext :: ctrl_wide_in :: Nil = VecDecode.applyBools(io.pipe(0).bits.inst,
-    Seq.fill(3)(BitPat.dontCare(1)), Seq(
-      (OPIFunct6.add   , Seq(N,X,N)),
-      (OPIFunct6.sub   , Seq(Y,X,N)),
-      (OPIFunct6.rsub  , Seq(Y,X,N)),
-      (OPMFunct6.waddu , Seq(N,N,N)),
-      (OPMFunct6.wadd  , Seq(N,Y,N)),
-      (OPMFunct6.wsubu , Seq(Y,N,N)),
-      (OPMFunct6.wsub  , Seq(Y,Y,N)),
-      (OPMFunct6.wadduw, Seq(N,N,Y)),
-      (OPMFunct6.waddw , Seq(N,Y,Y)),
-      (OPMFunct6.wsubuw, Seq(Y,N,Y)),
-      (OPMFunct6.wsubw , Seq(Y,Y,Y))
+  val ctrl_sub :: ctrl_add_sext :: ctrl_wide_in :: ctrl_cmask :: Nil = VecDecode.applyBools(io.pipe(0).bits.inst,
+    Seq.fill(4)(BitPat.dontCare(1)), Seq(
+      (OPIFunct6.add   , Seq(N,X,N,N)),
+      (OPIFunct6.sub   , Seq(Y,X,N,N)),
+      (OPIFunct6.rsub  , Seq(Y,X,N,N)),
+      (OPMFunct6.waddu , Seq(N,N,N,N)),
+      (OPMFunct6.wadd  , Seq(N,Y,N,N)),
+      (OPMFunct6.wsubu , Seq(Y,N,N,N)),
+      (OPMFunct6.wsub  , Seq(Y,Y,N,N)),
+      (OPMFunct6.wadduw, Seq(N,N,Y,N)),
+      (OPMFunct6.waddw , Seq(N,Y,Y,N)),
+      (OPMFunct6.wsubuw, Seq(Y,N,Y,N)),
+      (OPMFunct6.wsubw , Seq(Y,Y,Y,N)),
+      (OPIFunct6.adc   , Seq(N,X,N,Y))
     ))
 
   val rsub = io.pipe(0).bits.inst.isOpi && OPIFunct6(io.pipe(0).bits.inst.funct6) === OPIFunct6.rsub
@@ -42,6 +43,9 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   val add_use_carry = Mux1H(UIntToOH(io.pipe(0).bits.rvs2_eew),
     (0 until 4).map { eew => Fill(dLenB >> eew, ~(1.U((1 << eew).W))) }
   )
+  val add_mask_carry = Mux1H(UIntToOH(io.pipe(0).bits.rvs2_eew), (0 until 4).map { eew =>
+    VecInit((0 until dLenB >> eew).map { i => io.pipe(0).bits.rmask(i) | 0.U((1 << eew).W) }).asUInt
+  })
   val add_carry = Wire(Vec(dLenB+1, UInt(1.W)))
   val add_out = Wire(Vec(dLenB, UInt(8.W)))
   val add_wide_out_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> eew, UInt((16 << eew).W))) }
@@ -54,7 +58,11 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   for (i <- 0 until dLenB) {
     val in1 = Mux(ctrl_wide_in, add_wide_in1(i), Mux(rsub, add_in2(i), add_in1(i)))
     val in2 = Mux(rsub, add_in1(i), add_in2(i))
-    val full = Mux(ctrl_sub, ~in1, in1) +& in2 +& Mux(add_use_carry(i), add_carry(i), ctrl_sub)
+    val full = (Mux(ctrl_sub, ~in1, in1) +&
+      in2 +&
+      Mux(add_use_carry(i), add_carry(i), ctrl_sub) +&
+      Mux(ctrl_cmask, add_mask_carry(i), 0.U)
+    )
     add_out(i) := full(7,0)
     add_carry(i+1) := full(8)
   }
