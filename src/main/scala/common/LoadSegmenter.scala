@@ -13,7 +13,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val done = Output(Bool())
     val inst = Input(new VectorIssueInst)
 
-    val compactor = Decoupled(new CompactorReq)
+    val compactor = Decoupled(new CompactorReq(dLenB))
     val compactor_data = Input(UInt(dLen.W))
 
     val resp = Decoupled(UInt(dLen.W))
