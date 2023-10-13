@@ -256,7 +256,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.mask_access.mask   := reads(4)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
-  val maskindex_q = Module(new Queue(new MaskIndex, 1, pipe=true, flow=true))
+  val maskindex_q = Module(new Queue(new MaskIndex, 2))
   vmu.io.maskindex <> maskindex_q.io.deq
 
   maskindex_q.io.enq.valid := vims.io.iss.valid
