@@ -169,7 +169,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   lrq.io.enq.bits := io.dmem.load_resp.bits
 
   // Load compacting
-  val lcu = Module(new Compactor(dLenB, 8))
+  val lcu = Module(new Compactor(dLenB, dLenB, 8))
   lcu.io.push.valid := lifq.io.deq.valid && (lrq.io.deq.valid || lifq.io.deq.bits.masked)
   lcu.io.push.bits.head := lifq.io.deq.bits.head
   lcu.io.push.bits.tail := lifq.io.deq.bits.tail
@@ -187,7 +187,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   liq_lss_fire := lss.io.done
 
   // Store segment sequencing
-  val scu = Module(new Compactor(dLenB, 8))
+  val scu = Module(new Compactor(dLenB, dLenB, 8))
   val sss = Module(new StoreSegmenter)
   sss.io.valid := siq_sss_valid
   sss.io.inst := siq(siq_sss_ptr).inst
