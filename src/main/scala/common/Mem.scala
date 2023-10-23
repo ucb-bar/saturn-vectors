@@ -50,6 +50,19 @@ class VectorMemInterface(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val scalar_check = new ScalarMemOrderCheckIO
 }
 
+class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val data = UInt(dLen.W)
+  val mask = UInt(dLenB.W)
+  def asMaskedBytes = {
+    val bytes = Wire(Vec(dLenB, new MaskedByte))
+    for (i <- 0 until dLenB) {
+      bytes(i).data := data(((i+1)*8)-1,i*8)
+      bytes(i).mask := mask(i)
+    }
+    bytes
+  }
+}
+
 class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new VectorIssueInst))
@@ -57,7 +70,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val dmem = new VectorMemInterface
 
     val lresp = Decoupled(UInt(dLen.W))
-    val sdata = Flipped(Decoupled(UInt(dLen.W)))
+    val sdata = Flipped(Decoupled(new StoreData))
 
     val maskindex = Flipped(Decoupled(new MaskIndex))
 
@@ -169,7 +182,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   lrq.io.enq.bits := io.dmem.load_resp.bits
 
   // Load compacting
-  val lcu = Module(new Compactor(dLenB, dLenB, 8))
+  val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
   lcu.io.push.valid := lifq.io.deq.valid && (lrq.io.deq.valid || lifq.io.deq.bits.masked)
   lcu.io.push.bits.head := lifq.io.deq.bits.head
   lcu.io.push.bits.tail := lifq.io.deq.bits.tail
@@ -187,12 +200,12 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   liq_lss_fire := lss.io.done
 
   // Store segment sequencing
-  val scu = Module(new Compactor(dLenB, dLenB, 8))
+  val scu = Module(new Compactor(dLenB, dLenB, new MaskedByte, true))
   val sss = Module(new StoreSegmenter)
   sss.io.valid := siq_sss_valid
   sss.io.inst := siq(siq_sss_ptr).inst
   scu.io.push <> sss.io.compactor
-  scu.io.push_data := sss.io.compactor_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  scu.io.push_data := sss.io.compactor_data
   sss.io.stdata <> io.sdata
   siq_sss_fire := sss.io.done
 
@@ -211,7 +224,8 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   siq_sas_fire := sas.io.done
 
   io.dmem.store_req <> sas.io.req
-  io.dmem.store_req.bits.data := scu.io.pop_data.asUInt
+  io.dmem.store_req.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
+  io.dmem.store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & sas.io.req.bits.mask
 
   val sifq = Module(new DCEQueue(new IFQEntry, vParams.vsifqEntries))
   sas.io.out.ready := sifq.io.enq.ready && scu.io.pop.ready

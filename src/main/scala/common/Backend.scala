@@ -121,6 +121,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     0.U)
   vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_elem_size
   vss.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
+  vss.io.dis.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
 
   vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
   vims.io.dis.renvm   := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit
@@ -231,7 +232,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   reads(0)(0) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
-  vmu.io.sdata.bits    := vss.io.iss.bits.rvd_data
+  vmu.io.sdata.bits.data := vss.io.iss.bits.rvd_data
+  vmu.io.sdata.bits.mask := vss.io.iss.bits.rmask
   vss.io.iss.ready     := vmu.io.sdata.ready
 
   reads(1)(0) <> vxs.io.rvs1

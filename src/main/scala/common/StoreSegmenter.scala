@@ -15,8 +15,8 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
     val inst = Input(new VectorIssueInst)
 
     val compactor = Decoupled(new CompactorReq(dLenB))
-    val compactor_data = Output(UInt(dLen.W))
-    val stdata = Flipped(Decoupled(UInt(dLen.W)))
+    val compactor_data = Output(Vec(dLenB, new MaskedByte))
+    val stdata = Flipped(Decoupled(new StoreData))
   })
 
   val segbuf = Module(new StoreSegmentBuffer)
@@ -42,7 +42,8 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
     segbuf.io.in.ready)
 
   segbuf.io.in.valid := io.valid && io.inst.seg_nf =/= 0.U && io.stdata.valid
-  segbuf.io.in.bits.data := io.stdata.bits >> ((eidx << mem_size)(dLenOffBits-1,0) << 3)
+  segbuf.io.in.bits.data := io.stdata.bits.data >> ((eidx << mem_size)(dLenOffBits-1,0) << 3)
+  segbuf.io.in.bits.mask := io.stdata.bits.mask
   segbuf.io.in.bits.eew := mem_size
   segbuf.io.in.bits.nf := io.inst.nf
   segbuf.io.in.bits.rows := Mux(next_eidx >= io.inst.vconfig.vl, (io.inst.vconfig.vl - eidx), eidx_incr)
@@ -53,7 +54,7 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
     segbuf.io.out.valid,
     io.stdata.valid && io.valid && io.inst.seg_nf === 0.U)
   io.compactor_data := Mux(segbuf.io.busy,
-    segbuf.io.out.bits.data, io.stdata.bits)
+    segbuf.io.out.bits.data, io.stdata.bits).asMaskedBytes
   io.compactor.bits.head := Mux(segbuf.io.busy,
     segbuf.io.out.bits.head, eidx << mem_size)
   io.compactor.bits.tail := Mux(segbuf.io.busy,
@@ -73,3 +74,4 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
     }
   }
 }
+

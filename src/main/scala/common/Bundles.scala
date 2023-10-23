@@ -69,6 +69,11 @@ class VectorMaskAccessIO(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val mask = Output(Bool())
 }
 
+class MaskedByte extends Bundle {
+  val data = UInt(8.W)
+  val mask = Bool()
+}
+
 class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val inst = new VectorIssueInst
   val wvd = Bool()

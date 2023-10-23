@@ -200,7 +200,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     FillInterleaved(1 << sew, vm_resp)
   }), ~(0.U(dLenB.W)))
   io.iss.bits.wmask := head_mask & tail_mask & vm_mask
-  io.iss.bits.rmask := vm_resp
+  io.iss.bits.rmask := Mux(renvm, vm_resp, ~(0.U(dLenB.W)))
 
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
   val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(depth)) }
