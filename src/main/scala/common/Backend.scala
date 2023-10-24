@@ -50,7 +50,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.issue.ready   := vat_available && vdq.io.enq.ready && (!issue_inst.vmu || vmu.io.enq.ready)
   vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready)
-  vmu.io.enq.valid := vat_available && io.issue.valid   && vdq.io.enq.ready && issue_inst.vmu
+  vmu.io.enq.valid := vat_available && io.issue.valid   && vdq.io.enq.ready && issue_inst.bits(6,0).isOneOf(opcLoad, opcStore)
 
   when (io.issue.bits.vconfig.vl <= io.issue.bits.vstart) {
     io.issue.ready := true.B
@@ -59,7 +59,20 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   vdq.io.enq.bits := issue_inst
-  vmu.io.enq.bits := issue_inst
+
+  vmu.io.enq.bits.vat := issue_inst.vat
+  vmu.io.enq.bits.phys := issue_inst.phys
+  vmu.io.enq.bits.base_addr := issue_inst.rs1_data
+  vmu.io.enq.bits.stride := issue_inst.rs2_data
+  vmu.io.enq.bits.vstart := issue_inst.vstart
+  vmu.io.enq.bits.vl := issue_inst.vconfig.vl
+  vmu.io.enq.bits.mop := issue_inst.bits(27,26)
+  vmu.io.enq.bits.vm := issue_inst.bits(25)
+  vmu.io.enq.bits.nf := issue_inst.bits(31,29)
+  vmu.io.enq.bits.idx_size := issue_inst.bits(13,12)
+  vmu.io.enq.bits.elem_size := Mux(issue_inst.bits(26), issue_inst.vconfig.vtype.vsew, issue_inst.bits(13,12))
+  vmu.io.enq.bits.whole_reg := issue_inst.bits(24,20) === lumopWhole && issue_inst.bits(27,26) === mopUnit
+  vmu.io.enq.bits.store := issue_inst.bits(5)
 
   vmu.io.vat_tail := vat_tail
 

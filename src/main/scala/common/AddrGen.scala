@@ -11,7 +11,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val io = IO(new Bundle {
     val valid = Input(Bool())
     val done = Output(Bool())
-    val inst = Input(new VectorIssueInst)
+    val op = Input(new VectorMemMacroOp)
     val maskindex = Flipped(Decoupled(new MaskIndex))
     val req = Decoupled(new MemRequest)
 
@@ -32,40 +32,40 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
 
 
   val eidx = Mux(r_head,
-    io.inst.vstart * (Mux(io.inst.mop === mopUnit && io.inst.vm, io.inst.seg_nf, 0.U) +& 1.U),
+    io.op.vstart * (Mux(io.op.mop === mopUnit && io.op.vm, io.op.seg_nf, 0.U) +& 1.U),
     r_eidx)
   val sidx = Mux(r_head, 0.U             , r_sidx)
-  val eaddr = Mux(r_head, io.inst.rs1_data, r_eaddr) + Mux(io.inst.mop(0),
-    io.maskindex.bits.index & eewBitMask(io.inst.mem_idx_size), 0.U)
-  val saddr = Mux(io.inst.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
+  val eaddr = Mux(r_head, io.op.base_addr, r_eaddr) + Mux(io.op.mop(0),
+    io.maskindex.bits.index & eewBitMask(io.op.idx_size), 0.U)
+  val saddr = Mux(io.op.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
 
-  val fast_segmented = io.inst.mop === mopUnit
-  val mem_size = io.inst.mem_elem_size
+  val fast_segmented = io.op.mop === mopUnit
+  val mem_size = io.op.elem_size
   val max_eidx = Mux(fast_segmented,
-    io.inst.vconfig.vl * (io.inst.seg_nf +& 1.U),
-    io.inst.vconfig.vl)
-  val stride = Mux(io.inst.mop === mopStrided, io.inst.rs2_data,
-    Mux(io.inst.mop === mopUnit, dLenB.U, 0.U))
+    io.op.vl * (io.op.seg_nf +& 1.U),
+    io.op.vl)
+  val stride = Mux(io.op.mop === mopStrided, io.op.stride,
+    Mux(io.op.mop === mopUnit, dLenB.U, 0.U))
 
   val next_max_elems = getElems(saddr, mem_size)
   val next_contig_elems = Mux(fast_segmented,
     max_eidx - eidx,
-    io.inst.nf +& 1.U - sidx)
+    io.op.nf +& 1.U - sidx)
   val next_act_elems = min(next_contig_elems, next_max_elems)(dLenOffBits,0)
   val next_act_bytes = next_act_elems << mem_size
 
   val next_sidx = sidx +& next_act_elems
   val next_eidx = eidx +& Mux(fast_segmented, next_act_elems, 1.U)
 
-  val next_eaddr = eaddr + Mux(io.inst.mop === mopUnit, next_act_bytes, Mux(io.inst.mop === mopStrided, io.inst.rs2_data, 0.U))
+  val next_eaddr = eaddr + Mux(io.op.mop === mopUnit, next_act_bytes, Mux(io.op.mop === mopStrided, io.op.stride, 0.U))
   val next_saddr = saddr + next_act_bytes
 
-  val needs_mask = !io.inst.vm && io.inst.mop =/= mopUnit
-  val needs_index = io.inst.mop(0)
+  val needs_mask = !io.op.vm && io.op.mop =/= mopUnit
+  val needs_index = io.op.mop(0)
   val block_maskindex = (needs_mask || needs_index) && !io.maskindex.valid
 
   val masked = needs_mask && !io.maskindex.bits.mask
-  val may_clear = (fast_segmented || next_sidx > io.inst.nf) && next_eidx >= max_eidx
+  val may_clear = (fast_segmented || next_sidx > io.op.nf) && next_eidx >= max_eidx
 
 
   io.done := false.B
@@ -80,19 +80,19 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.bits.addr := (saddr >> dLenOffBits) << dLenOffBits
   io.req.bits.data := DontCare
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
-  io.req.bits.phys := io.inst.phys
+  io.req.bits.phys := io.op.phys
 
   when (io.out.fire) {
-    when (next_sidx > io.inst.nf || fast_segmented) {
+    when (next_sidx > io.op.nf || fast_segmented) {
       r_eaddr := next_eaddr
       r_saddr := next_eaddr
       r_eidx := next_eidx
       r_sidx := 0.U
       io.maskindex.ready := true.B
     } .otherwise {
-      r_eaddr := io.inst.rs1_data
+      r_eaddr := io.op.base_addr
       r_saddr := next_saddr
-      r_eidx := io.inst.vstart
+      r_eidx := io.op.vstart
       r_sidx := next_sidx
     }
     r_head := false.B

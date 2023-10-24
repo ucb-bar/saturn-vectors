@@ -7,6 +7,30 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
+class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val vat = UInt(vParams.vatSz.W)
+  val phys = Bool()
+
+  val base_addr = UInt(xLen.W)
+  val stride    = UInt(xLen.W)
+
+  val vstart = UInt(log2Ceil(maxVLMax).W)
+  val vl = UInt((1+log2Ceil(maxVLMax)).W)
+
+  val mop = UInt(2.W)
+  val vm = Bool()
+  val nf = UInt(3.W)
+
+  val idx_size = UInt(2.W)
+  val elem_size = UInt(2.W)
+  val whole_reg = Bool()
+  val store = Bool()
+
+  def seg_nf = Mux(whole_reg, 0.U, nf)
+  def wr_nf = Mux(whole_reg, nf, 0.U)
+}
+
+
 class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val bits = UInt(32.W)
   val vconfig = new VConfig
