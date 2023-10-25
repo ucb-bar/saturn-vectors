@@ -30,16 +30,16 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val r_sidx = Reg(UInt(3.W))
   val r_head = RegInit(true.B)
 
-
+  val fast_segmented = io.op.mop === mopUnit
   val eidx = Mux(r_head,
-    io.op.vstart * (Mux(io.op.mop === mopUnit && io.op.vm, io.op.seg_nf, 0.U) +& 1.U),
+    io.op.vstart * (Mux(fast_segmented, io.op.seg_nf, 0.U) +& 1.U),
     r_eidx)
   val sidx = Mux(r_head, 0.U             , r_sidx)
   val eaddr = Mux(r_head, io.op.base_addr, r_eaddr) + Mux(io.op.mop(0),
     io.maskindex.bits.index & eewBitMask(io.op.idx_size), 0.U)
   val saddr = Mux(io.op.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
 
-  val fast_segmented = io.op.mop === mopUnit
+
   val mem_size = io.op.elem_size
   val max_eidx = Mux(fast_segmented,
     io.op.vl * (io.op.seg_nf +& 1.U),
