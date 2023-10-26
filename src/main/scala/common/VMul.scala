@@ -13,7 +13,7 @@ class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
         val in1 = Input(Vec(xLenB, UInt(xLenB.W)))
         val in2 = Input(Vec(xLenB, UInt(xLenB.W)))
         
-        val out = Input(Vec(xLenB, UInt((xLenB*2).W)))
+        val out = Output(Vec(xLenB, UInt((xLenB*2).W)))
 
     })
     ///////////////////////////////////////////
@@ -24,11 +24,6 @@ class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
         val lenBlocks = 1 << vsew
         val numBlocks = xLenB/lenBlocks
         val blockValue = (1 << (lenBlocks)) - 1
-        println("xlenB", xLenB)
-        // println("vsew", vsew)
-        // println("lenBlocks",lenBlocks) 
-        // println("nblocks", numBlocks)
-        // println("blockVal",blockValue)
         for (i <- 0 until numBlocks) {
             for (j <- 0 until lenBlocks) { //ewB
                 use_pprod(vsew)(i*lenBlocks+j) := (blockValue << (lenBlocks*i)).U
@@ -62,7 +57,7 @@ class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
             // println(i, numPProds-i)
             partialSum + active_pprods(i)(numPProds - i)
         }
-        reduced_pprods(k) := sum
+        reduced_pprods(k) := sum 
     }
     for (k <- 1 until xLenB) {
         val numPProds = xLenB - k
@@ -74,20 +69,21 @@ class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
             partialSum + active_pprods(xind)(yind)
         }
         // println(k+xLenB-1)
-        reduced_pprods(k+xLenB-1) := sum
+        reduced_pprods(k+xLenB-1) := sum 
+        println("sum",sum)
+        println("reduced_pprods(k+xLenB-1)",reduced_pprods(k+xLenB-1))
     }
     // final reduce
-    val vSumsOut = Wire(Vec(4, UInt((xLenB*2 + xLenB/2 + 1).W)))
-    for (vsew <- 0 until 4) {
-        val lenBlocks = 1 << vsew
-        val numBlocks = xLenB/lenBlocks
-        val vSum = Wire(Vec(numBlocks, UInt((xLenB*2 + xLenB/2 + 1).W)))
-        for (i <- 0 until numBlocks) {
-            vSum(i) := (0 to lenBlocks).foldLeft(0.U) { (partialSum, j) =>
-                partialSum + reduced_pprods(lenBlocks*i + j)
-            }
-        }
-        vSumsOut(vsew) := vSum.flatten
+    val vSumsOut = (0 to nDiagonals-1).foldLeft(0.U((xLenB*xLenB*2).W)) { (partialSum, i) =>
+                        partialSum + (reduced_pprods(i) << (8*i).U)
+                    }
+    println("reduce pprods",reduced_pprods)
+    println("vsums",vSumsOut)
+
+    for (i <- 0 until xLenB) {
+        println("inds",i,(i+1)*2*xLenB - 1, i*2*xLenB)
+        println("out",io.out(i))
+        println("vsums",vSumsOut((i+1)*2*xLenB - 1, i*2*xLenB))
+        io.out(i) := vSumsOut((i+1)*2*xLenB - 1, i*2*xLenB)
     }
-    io.out := vSumsOut(io.eew)
 }
