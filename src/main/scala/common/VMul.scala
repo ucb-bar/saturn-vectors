@@ -10,80 +10,45 @@ import freechips.rocketchip.tile._
 class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
     val io = IO(new Bundle {
         val eew = Input(UInt(3.W))
-        val in1 = Input(Vec(xLenB, UInt(xLenB.W)))
-        val in2 = Input(Vec(xLenB, UInt(xLenB.W)))
+        val in1 = Input(Vec(xLenB, UInt(8.W)))
+        val in0 = Input(Vec(xLenB, UInt(8.W)))
         
-        val out = Output(Vec(xLenB, UInt((xLenB*2).W)))
+        val out = Output(Vec(xLenB, UInt(16.W)))
 
     })
-    ///////////////////////////////////////////
-    //generate block-diagonal matrix use_pprod
-    ///////////////////////////////////////////
-    val use_pprod = Wire(Vec(4, Vec(xLenB, UInt(xLenB.W))))  
-    for (vsew <- 0 until 4) {
+    val vsewMax = if (xLenB==8) 3 else if (xLenB==4) 2 else 0
+    if (vsewMax == 0) println("ILLEGAL xLen")
+    //////////////////////////////////////////////
+    //generate block-diagonal matrix validPProds//
+    //////////////////////////////////////////////
+    val validPProds = Wire(Vec(vsewMax+1, Vec(xLenB, UInt(xLenB.W))))  
+    for (vsew <- 0 until vsewMax+1) {
         val lenBlocks = 1 << vsew
         val numBlocks = xLenB/lenBlocks
         val blockValue = (1 << (lenBlocks)) - 1
         for (i <- 0 until numBlocks) {
-            for (j <- 0 until lenBlocks) { //ewB
-                use_pprod(vsew)(i*lenBlocks+j) := (blockValue << (lenBlocks*i)).U
+            for (j <- 0 until lenBlocks) { //lenBlocks = element witdth (in bytes)
+                validPProds(vsew)(i*lenBlocks+j) := (blockValue << (lenBlocks*i)).U
             }
         }
     }
-    //generate active partial products
-    val active_pprods = Wire(Vec(xLenB, Vec(xLenB, UInt((xLenB*2).W))))
-    val nDiagonals = xLenB*2-1
+    //compute partial products and set invalid PPs = 0
+    val activePProds = Wire(Vec(xLenB, Vec(xLenB, UInt(16.W))))
     for (i <- 0 until xLenB) {
         for (j <- 0 until xLenB) {
-            val pprod = (io.in1(i) * io.in2(j))
-            active_pprods(i)(j) := Mux(use_pprod(io.eew)(i).asBools(j), pprod, 0.U)
+            val pProd = (io.in1(i) * io.in0(j))
+            activePProds(i)(j) := Mux(validPProds(io.eew)(i).asBools(j), pProd, 0.U)
         }
     }
-    //sum partial products along each anti-diagonal of active_pprods
-    // val reduced_pprods = (0 until (nDiagonals)).map { k =>
-    //     val numPProds = k.min(nDiagonals-k)
-    //     println("outer:", k, numPProds)
-    //     (0 to numPProds).foldLeft(0.U((xLenB*2 + numPProds/2).W)) { (partialSum, i) =>
-    //         println(numPProds-i, i)
-    //         partialSum + active_pprods(i)(numPProds - i)
-    //     }
-    // }
-    // println("reduced",reduced_pprods)
-    val reduced_pprods = Wire(Vec(nDiagonals, UInt((xLenB*2 + xLenB/2).W)))
-    for (k <- 0 until xLenB) {
-        val numPProds = k
-        // println("outer:", k, numPProds)
-        val sum = (0 to numPProds).foldLeft(0.U((xLenB*2 + numPProds/2).W)) { (partialSum, i) =>
-            // println(i, numPProds-i)
-            partialSum + active_pprods(i)(numPProds - i)
-        }
-        reduced_pprods(k) := sum 
-    }
-    for (k <- 1 until xLenB) {
-        val numPProds = xLenB - k
-        // println("outer2:", k, numPProds)
-        val sum = (0 to numPProds-1).foldLeft(0.U((xLenB*2 + numPProds/2).W)) { (partialSum, i) =>
-            val xind = i + k
-            val yind = xLenB-1 - i
-            // println(xind,yind)
-            partialSum + active_pprods(xind)(yind)
-        }
-        // println(k+xLenB-1)
-        reduced_pprods(k+xLenB-1) := sum 
-        println("sum",sum)
-        println("reduced_pprods(k+xLenB-1)",reduced_pprods(k+xLenB-1))
-    }
-    // final reduce
-    val vSumsOut = (0 to nDiagonals-1).foldLeft(0.U((xLenB*xLenB*2).W)) { (partialSum, i) =>
-                        partialSum + (reduced_pprods(i) << (8*i).U)
+    //shift and accumulate valid partial products
+    val vSumsOut = (0 until xLenB).foldLeft(0.U) { (iPartialSum, i) =>
+                        iPartialSum + 
+                            (0 until xLenB).foldLeft(0.U) { (jPartialSum, j) =>
+                                jPartialSum + (activePProds(i)(j) << (8*(i+j)).U)
+                            }
                     }
-    println("reduce pprods",reduced_pprods)
-    println("vsums",vSumsOut)
-
+    //output vector of 8bit elements
     for (i <- 0 until xLenB) {
-        println("inds",i,(i+1)*2*xLenB - 1, i*2*xLenB)
-        println("out",io.out(i))
-        println("vsums",vSumsOut((i+1)*2*xLenB - 1, i*2*xLenB))
-        io.out(i) := vSumsOut((i+1)*2*xLenB - 1, i*2*xLenB)
+        io.out(i) := vSumsOut((i+1)*16 - 1, i*16)
     }
 }
