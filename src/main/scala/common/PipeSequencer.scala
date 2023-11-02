@@ -7,35 +7,6 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val inst = new VectorIssueInst
-  val wvd = Bool()
-
-  val eidx = UInt(log2Ceil(maxVLMax).W)
-
-  val rvs1_data = UInt(dLen.W)
-  val rvs2_data = UInt(dLen.W)
-  val rvd_data  = UInt(dLen.W)
-
-  val rvs1_eew = UInt(2.W)
-  val rvs2_eew = UInt(2.W)
-  val rvd_eew = UInt(2.W)
-
-  val wvd_eg   = UInt(log2Ceil(egsTotal).W)
-  val wmask   = UInt(dLenB.W)
-
-  val wlat = UInt(log2Ceil(pipe_depth+1).W)
-}
-
-class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val eg = UInt(log2Ceil(egsTotal).W)
-  val vat = UInt(vParams.vatSz.W)
-  val hazard_oh = UInt(depth.W)
-  def hazard = hazard_oh(0)
-  val clear_vat = Bool()
-}
-
-
 class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   writeVD: Boolean, readVS1: Boolean, readVS2: Boolean, readVD: Boolean,
   segmented: Boolean
@@ -54,15 +25,16 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
       val renvm = Input(Bool())
       val seg_nf = Input(UInt(3.W))
 
-      val execmode = Input(UInt(2.W))
-
       val vs1_eew = Input(UInt(2.W))
       val vs2_eew = Input(UInt(2.W))
       val vs3_eew = Input(UInt(2.W))
       val vd_eew = Input(UInt(2.W))
+      val vd_widen2 = Input(Bool())
       val incr_eew = Input(UInt(2.W))
+      val elementwise = Input(Bool())
       val sub_dlen = Input(UInt(2.W))
       val pipe_lat = Input(UInt((log2Ceil(depth+1)).W))
+      val use_wmask = Input(Bool())
     }
 
     val valid = Output(Bool())
@@ -71,6 +43,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     val rvs1 = new VectorReadIO
     val rvs2 = new VectorReadIO
     val rvd  = new VectorReadIO
+    val rvm  = new VectorReadIO
     val seq_hazards = new Bundle {
       val valid = Output(Bool())
       val rintent = Output(UInt(egsTotal.W))
@@ -102,16 +75,18 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   val vs2_eew = Reg(UInt(2.W))
   val vs3_eew = Reg(UInt(2.W))
   val vd_eew  = Reg(UInt(2.W))
+  val vd_widen2 = Reg(Bool())
   val incr_eew = Reg(UInt(2.W))
   val seg_nf  = Reg(UInt(3.W))
   val eidx    = Reg(UInt(log2Ceil(maxVLMax).W))
   val sidx    = Reg(UInt(3.W))
-  val mode    = Reg(UInt(2.W))
   val clear_vat = Reg(Bool())
   val sub_dlen = Reg(UInt(2.W))
+  val elementwise = Reg(Bool())
   val lat     = Reg(UInt(log2Ceil(depth+1).W))
+  val use_wmask = Reg(Bool())
   val next_eidx = min(
-    Mux(mode =/= execRegular, eidx +& 1.U, inst.vconfig.vl),
+    Mux(elementwise, eidx +& 1.U, inst.vconfig.vl),
     ((eidx << incr_eew) + (dLenB.U >> sub_dlen)) >> incr_eew)
   val last      = next_eidx === inst.vconfig.vl && sidx === seg_nf
   val eewmask   = eewByteMask(vd_eew)
@@ -130,7 +105,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     def mul_mask(eew: UInt) = ((1.U << (mul(eew) + 1.U)) - 1.U)(7,0)
 
     val wvd_arch_oh = Mux(writeVD.B && io.dis.wvd,
-      mul_mask(io.dis.vd_eew) << io.dis.inst.rd, 0.U)
+      mul_mask(io.dis.vd_eew + io.dis.vd_widen2) << io.dis.inst.rd, 0.U)
     val rvs1_arch_oh = Mux(readVS1.B && io.dis.renv1,
       mul_mask(io.dis.vs1_eew) << io.dis.inst.rs1, 0.U)
     val rvs2_arch_oh = Mux(readVS2.B && io.dis.renv2,
@@ -146,16 +121,18 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     renvd := io.dis.renvd && readVD.B
     renvm := io.dis.renvm
     wvd := io.dis.wvd && writeVD.B
-    mode := io.dis.execmode
+    elementwise := io.dis.elementwise
     vs1_eew := io.dis.vs1_eew
     vs2_eew := io.dis.vs2_eew
     vs3_eew := io.dis.vs3_eew
     vd_eew := io.dis.vd_eew
+    vd_widen2 := io.dis.vd_widen2
     incr_eew := io.dis.incr_eew
     seg_nf := io.dis.seg_nf
     sub_dlen := io.dis.sub_dlen
     lat := io.dis.pipe_lat
     clear_vat := io.dis.clear_vat
+    use_wmask := io.dis.use_wmask
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
@@ -165,7 +142,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.seq_hazards.wintent := wvd_oh
   io.seq_hazards.vat := inst.vat
 
-  val pipe_writes = (io.pipe_hazards.map(h => Mux(h.valid, UIntToOH(h.bits.eg), 0.U)) ++ Seq(0.U)).reduce(_|_)
+  val pipe_writes = (io.pipe_hazards.map(h => Mux(h.valid && h.bits.hazard, h.bits.eg_oh, 0.U)) ++ Seq(0.U)).reduce(_|_)
 
   val vs1_read_oh = Mux(renv1, UIntToOH(io.rvs1.req.bits), 0.U)
   val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits), 0.U)
@@ -180,19 +157,22 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
 
   io.valid := valid
 
-  io.rvs1.req.bits := getEgId(inst.rs1 + (sidx << inst.pos_lmul), eidx, vs1_eew)
-  io.rvs2.req.bits := getEgId(inst.rs2 + (sidx << inst.pos_lmul), eidx, vs2_eew)
-  io.rvd.req.bits  := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vs3_eew)
+  io.rvs1.req.bits := getEgId(inst.rs1 + (sidx << inst.pos_lmul), eidx     , vs1_eew)
+  io.rvs2.req.bits := getEgId(inst.rs2 + (sidx << inst.pos_lmul), eidx     , vs2_eew)
+  io.rvd.req.bits  := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx     , vs3_eew)
+  io.rvm.req.bits  := getEgId(0.U                               , eidx >> 3, 0.U)
 
-  io.rvs1.req.valid := valid && renv1 && !data_hazard
-  io.rvs2.req.valid := valid && renv2 && !data_hazard
-  io.rvd.req.valid  := valid && renvd && !data_hazard
+  io.rvs1.req.valid := valid && renv1
+  io.rvs2.req.valid := valid && renv2
+  io.rvd.req.valid  := valid && renvd
+  io.rvm.req.valid  := valid && renvm
 
   io.iss.valid := (valid &&
     !data_hazard &&
     !(renv1 && !io.rvs1.req.ready) &&
     !(renv2 && !io.rvs2.req.ready) &&
-    !(renvd && !io.rvd.req.ready)
+    !(renvd && !io.rvd.req.ready) &&
+    !(renvm && !io.rvm.req.ready)
   )
 
   io.iss.bits.inst := inst
@@ -204,21 +184,31 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew
   io.iss.bits.rvd_eew   := vs3_eew
+  io.iss.bits.vd_eew    := vd_eew
   io.iss.bits.eidx      := eidx
-  io.iss.bits.wvd_eg    := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew)
+  io.iss.bits.wvd_eg    := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew + vd_widen2)
+  io.iss.bits.wvd_widen2 := vd_widen2
   io.iss.bits.wlat := lat
 
   val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
-  io.iss.bits.wmask := head_mask & tail_mask
+  val vm_off    = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
+  val vm_eidx   = (eidx & ~(vm_off >> vd_eew))(log2Ceil(dLen)-1,0)
+  val vm_resp   = (io.rvm.resp >> vm_eidx)
+  val vm_mask   = Mux(use_wmask, Mux1H(UIntToOH(vd_eew), (0 until 4).map { sew =>
+    FillInterleaved(1 << sew, vm_resp)
+  }), ~(0.U(dLenB.W)))
+  io.iss.bits.wmask := head_mask & tail_mask & vm_mask
+  io.iss.bits.rmask := Mux(renvm, vm_resp, ~(0.U(dLenB.W)))
 
   val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
   val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(depth)) }
 
   when (io.iss.fire && !last) {
-    when (mode === execRegular && sub_dlen === 0.U) {
-      wvd_oh  := wvd_oh  & ~UIntToOH(io.iss.bits.wvd_eg)
+    when (tail_mask(dLenB-1)) {
+      val wvd_clr_mask = Mux(vd_widen2, FillInterleaved(2, UIntToOH(io.iss.bits.wvd_eg >> 1)), UIntToOH(io.iss.bits.wvd_eg))
+      wvd_oh  := wvd_oh  & ~wvd_clr_mask
       rvs1_oh := rvs1_oh & ~UIntToOH(io.rvs1.req.bits)
       rvs2_oh := rvs2_oh & ~UIntToOH(io.rvs2.req.bits)
       rvd_oh  := rvd_oh  & ~UIntToOH(io.rvd.req.bits)
@@ -243,6 +233,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
       pipe_hazards.head.vat := inst.vat
       pipe_hazards.head.clear_vat := last && clear_vat
       pipe_hazards.head.hazard_oh := (1.U << lat) - 1.U
+      pipe_hazards.head.wvd_widen2 := vd_widen2
     } .otherwise {
       pipe_valids.head := false.B
     }

@@ -11,7 +11,7 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new VectorIssueBeat(depth)))
 
-    val write = Valid(new VectorWrite)
+    val writes = Vec(2, Valid(new VectorWrite))
   })
 
   val wmask = RegInit(0.U(depth.W))
@@ -36,5 +36,5 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viu.io.pipe(0).valid := pipe_valids(0)
   viu.io.pipe(0).bits := pipe_bits(0)
 
-  io.write := viu.io.write
+  io.writes := viu.io.writes
 }

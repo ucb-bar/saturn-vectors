@@ -8,10 +8,10 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val inst = new VectorIssueInst
-  def base = inst.rs1_data
+  val op = new VectorMemMacroOp
+  def base = op.base_addr
   val bound = UInt(paddrBits.W)
-  def bound_all = inst.mop =/= mopUnit || !inst.phys
+  def bound_all = op.mop =/= mopUnit || !op.phys
 }
 
 class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -28,7 +28,7 @@ class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorP
   val mask = UInt(dLenB.W)
 }
 
-class MaskIndex extends Bundle {
+class MaskIndex(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val mask = Bool()
   val index = UInt(64.W)
   val load = Bool()
@@ -50,14 +50,27 @@ class VectorMemInterface(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val scalar_check = new ScalarMemOrderCheckIO
 }
 
+class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val data = UInt(dLen.W)
+  val mask = UInt(dLenB.W)
+  def asMaskedBytes = {
+    val bytes = Wire(Vec(dLenB, new MaskedByte))
+    for (i <- 0 until dLenB) {
+      bytes(i).data := data(((i+1)*8)-1,i*8)
+      bytes(i).mask := mask(i)
+    }
+    bytes
+  }
+}
+
 class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val enq = Flipped(Decoupled(new VectorIssueInst))
+    val enq = Flipped(Decoupled(new VectorMemMacroOp))
 
     val dmem = new VectorMemInterface
 
     val lresp = Decoupled(UInt(dLen.W))
-    val sdata = Flipped(Decoupled(UInt(dLen.W)))
+    val sdata = Flipped(Decoupled(new StoreData))
 
     val maskindex = Flipped(Decoupled(new MaskIndex))
 
@@ -119,15 +132,15 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   liq_enq_fire := io.enq.valid && liq_enq_ready && !io.enq.bits.store
   siq_enq_fire := io.enq.valid && siq_enq_ready &&  io.enq.bits.store
 
-  val enq_bound = (((io.enq.bits.nf +& 1.U) * io.enq.bits.vconfig.vl) << io.enq.bits.mem_elem_size) + io.enq.bits.rs1_data
+  val enq_bound = (((io.enq.bits.nf +& 1.U) * io.enq.bits.vl) << io.enq.bits.elem_size) + io.enq.bits.base_addr
 
   when (liq_enq_fire) {
-    liq(liq_enq_ptr).inst := io.enq.bits
+    liq(liq_enq_ptr).op := io.enq.bits
     liq(liq_enq_ptr).bound := enq_bound
     liq_las(liq_enq_ptr) := false.B
   }
   when (siq_enq_fire) {
-    siq(siq_enq_ptr).inst := io.enq.bits
+    siq(siq_enq_ptr).op := io.enq.bits
     siq(siq_enq_ptr).bound := enq_bound
     siq_sss(siq_enq_ptr) := false.B
     siq_sas(siq_enq_ptr) := false.B
@@ -150,10 +163,10 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val addr_conflict = (siq(i).bound_all || liq(liq_las_ptr).bound_all ||
       (siq(i).base < liq(liq_las_ptr).bound && siq(i).bound > liq(liq_las_ptr).base)
     )
-    siq_valids(i) && addr_conflict && vatOlder(siq(i).inst.vat, liq(liq_las_ptr).inst.vat)
+    siq_valids(i) && addr_conflict && vatOlder(siq(i).op.vat, liq(liq_las_ptr).op.vat)
   }.orR
   las.io.valid := liq_las_valid && !las_order_block
-  las.io.inst := liq(liq_las_ptr).inst
+  las.io.op := liq(liq_las_ptr).op
 
   las.io.maskindex.valid := io.maskindex.valid && io.maskindex.bits.load
   las.io.maskindex.bits := io.maskindex.bits
@@ -169,28 +182,28 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   lrq.io.enq.bits := io.dmem.load_resp.bits
 
   // Load compacting
-  val lcu = Module(new Compactor)
+  val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
   lcu.io.push.valid := lifq.io.deq.valid && (lrq.io.deq.valid || lifq.io.deq.bits.masked)
   lcu.io.push.bits.head := lifq.io.deq.bits.head
   lcu.io.push.bits.tail := lifq.io.deq.bits.tail
-  lcu.io.push_data := lrq.io.deq.bits
+  lcu.io.push_data := lrq.io.deq.bits.asTypeOf(Vec(dLenB, UInt(8.W)))
   lifq.io.deq.ready := lcu.io.push.ready && (lrq.io.deq.valid || lifq.io.deq.bits.masked)
   lrq.io.deq.ready := lcu.io.push.ready && !lifq.io.deq.bits.masked
 
   // Load segment sequencing
   val lss = Module(new LoadSegmenter)
   lss.io.valid := liq_lss_valid
-  lss.io.inst := liq(liq_lss_ptr).inst
+  lss.io.op := liq(liq_lss_ptr).op
   lcu.io.pop <> lss.io.compactor
-  lss.io.compactor_data := lcu.io.pop_data
+  lss.io.compactor_data := lcu.io.pop_data.asUInt
   io.lresp <> lss.io.resp
   liq_lss_fire := lss.io.done
 
   // Store segment sequencing
-  val scu = Module(new Compactor)
+  val scu = Module(new Compactor(dLenB, dLenB, new MaskedByte, true))
   val sss = Module(new StoreSegmenter)
   sss.io.valid := siq_sss_valid
-  sss.io.inst := siq(siq_sss_ptr).inst
+  sss.io.op := siq(siq_sss_ptr).op
   scu.io.push <> sss.io.compactor
   scu.io.push_data := sss.io.compactor_data
   sss.io.stdata <> io.sdata
@@ -202,16 +215,17 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val addr_conflict = (liq(i).bound_all || siq(siq_sas_ptr).bound_all ||
       (liq(i).base < siq(siq_sas_ptr).bound && liq(i).bound > siq(siq_sas_ptr).base)
     )
-    liq_valids(i) && addr_conflict && vatOlder(liq(i).inst.vat, siq(siq_sas_ptr).inst.vat)
+    liq_valids(i) && addr_conflict && vatOlder(liq(i).op.vat, siq(siq_sas_ptr).op.vat)
   }.orR
   sas.io.valid := siq_sas_valid && !sas_order_block
-  sas.io.inst := siq(siq_sas_ptr).inst
+  sas.io.op := siq(siq_sas_ptr).op
   sas.io.maskindex.valid := io.maskindex.valid && !io.maskindex.bits.load
   sas.io.maskindex.bits := io.maskindex.bits
   siq_sas_fire := sas.io.done
 
   io.dmem.store_req <> sas.io.req
-  io.dmem.store_req.bits.data := scu.io.pop_data
+  io.dmem.store_req.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
+  io.dmem.store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & sas.io.req.bits.mask
 
   val sifq = Module(new DCEQueue(new IFQEntry, vParams.vsifqEntries))
   sas.io.out.ready := sifq.io.enq.ready && scu.io.pop.ready
@@ -231,7 +245,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   sifq.io.deq.ready := sifq.io.deq.bits.masked || io.dmem.store_ack
   siq_deq_fire := sifq.io.deq.fire && sifq.io.deq.bits.last
   io.vat_release.valid := siq_deq_fire
-  io.vat_release.bits := siq(siq_deq_ptr).inst.vat
+  io.vat_release.bits := siq(siq_deq_ptr).op.vat
 
   io.busy := liq_valids.orR || siq_valids.orR
 

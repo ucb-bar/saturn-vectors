@@ -19,10 +19,10 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   val vxu = Module(new VectorBackend)
   vxu.io.issue <> trap_check.io.issue
   trap_check.io.index_access <> vxu.io.index_access
+  trap_check.io.mask_access  <> vxu.io.mask_access
   trap_check.io.scalar_check <> vxu.io.mem.scalar_check
   trap_check.io.backend_busy := vxu.io.backend_busy
   trap_check.io.mem_busy := vxu.io.mem_busy
-  trap_check.io.vm       := vxu.io.vm
   trap_check.io.vm_busy  := vxu.io.vm_busy
   io.core.backend_busy   := vxu.io.backend_busy
 
@@ -30,33 +30,46 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   val hella_arb = Module(new HellaCacheArbiter(2))
   hella_simple.io.requestor <> hella_arb.io.mem
   io.dmem <> hella_simple.io.cache
+
   val hella_load = hella_arb.io.requestor(1)
   val hella_store = hella_arb.io.requestor(0)
+
+  val hella_load_q = Module(new Queue(new HellaCacheReq, 2))
+  hella_load.req <> hella_load_q.io.deq
+  val hella_store_q = Module(new Queue(new HellaCacheReq, 2))
+  hella_store.req <> hella_store_q.io.deq
+
+  hella_arb.io.requestor.foreach { h =>
+    h.s1_kill := false.B
+    h.s1_data := DontCare
+    h.s2_kill := false.B
+    h.keep_clock_enabled := vxu.io.backend_busy
+  }
+
 
   val load_tag_oh = RegInit(VecInit.fill(4)(false.B))
   val load_tag = PriorityEncoder(~(load_tag_oh.asUInt))
   val load_tag_available = !load_tag_oh(load_tag)
-  when (hella_load.req.fire) { load_tag_oh(load_tag) := true.B }
-  when (hella_load.resp.fire) { load_tag_oh(hella_load.resp.bits.tag) := false.B }
+  when (hella_load_q.io.enq.fire) { load_tag_oh(load_tag) := true.B }
+  when (hella_load.resp.fire) {
+    assert(load_tag_oh(hella_load.resp.bits.tag))
+    load_tag_oh(hella_load.resp.bits.tag) := false.B
+  }
 
-  vxu.io.mem.load_req.ready  := hella_load.req.ready && load_tag_available
-  hella_load.req.valid       := vxu.io.mem.load_req.valid && load_tag_available
-  hella_load.req.bits.addr   := vxu.io.mem.load_req.bits.addr
-  hella_load.req.bits.size   := log2Ceil(dLenB).U
-  hella_load.req.bits.tag    := load_tag
-  hella_load.req.bits.cmd    := M_XRD
-  hella_load.req.bits.signed := false.B
-  hella_load.req.bits.dprv   := io.core.status.prv
-  hella_load.req.bits.dv     := io.core.status.dv
-  hella_load.req.bits.data   := DontCare
-  hella_load.req.bits.mask   := DontCare
-  hella_load.req.bits.phys   := vxu.io.mem.load_req.bits.phys
-  hella_load.req.bits.no_alloc := false.B
-  hella_load.req.bits.no_xcpt := true.B
-  hella_load.s1_kill := false.B
-  hella_load.s1_data := DontCare
-  hella_load.s2_kill := false.B
-  hella_load.keep_clock_enabled := vxu.io.backend_busy
+  vxu.io.mem.load_req.ready       := hella_load_q.io.enq.ready && load_tag_available
+  hella_load_q.io.enq.valid       := vxu.io.mem.load_req.valid && load_tag_available
+  hella_load_q.io.enq.bits.addr   := vxu.io.mem.load_req.bits.addr
+  hella_load_q.io.enq.bits.size   := log2Ceil(dLenB).U
+  hella_load_q.io.enq.bits.tag    := load_tag
+  hella_load_q.io.enq.bits.cmd    := M_XRD
+  hella_load_q.io.enq.bits.signed := false.B
+  hella_load_q.io.enq.bits.dprv   := io.core.status.prv
+  hella_load_q.io.enq.bits.dv     := io.core.status.dv
+  hella_load_q.io.enq.bits.data   := DontCare
+  hella_load_q.io.enq.bits.mask   := DontCare
+  hella_load_q.io.enq.bits.phys   := vxu.io.mem.load_req.bits.phys
+  hella_load_q.io.enq.bits.no_alloc := false.B
+  hella_load_q.io.enq.bits.no_xcpt := true.B
 
   vxu.io.mem.load_resp.valid := hella_load.resp.valid
   vxu.io.mem.load_resp.bits  := hella_load.resp.bits.data_raw
@@ -64,27 +77,26 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   val store_tag_oh = RegInit(VecInit.fill(4)(false.B))
   val store_tag = PriorityEncoder(~(store_tag_oh.asUInt))
   val store_tag_available = !store_tag_oh(store_tag)
-  when (hella_store.req.fire) { store_tag_oh(store_tag) := true.B }
-  when (hella_store.resp.fire) { store_tag_oh(hella_store.resp.bits.tag) := false.B }
+  when (hella_store_q.io.enq.fire) { store_tag_oh(store_tag) := true.B }
+  when (hella_store.resp.fire) {
+    assert(store_tag_oh(hella_store.resp.bits.tag))
+    store_tag_oh(hella_store.resp.bits.tag) := false.B
+  }
 
-  vxu.io.mem.store_req.ready  := hella_store.req.ready && store_tag_available
-  hella_store.req.valid       := vxu.io.mem.store_req.valid && store_tag_available
-  hella_store.req.bits.addr   := vxu.io.mem.store_req.bits.addr
-  hella_store.req.bits.tag    := store_tag
-  hella_store.req.bits.cmd    := M_PWR
-  hella_store.req.bits.size   := log2Ceil(dLenB).U
-  hella_store.req.bits.signed := false.B
-  hella_store.req.bits.dprv   := io.core.status.prv
-  hella_store.req.bits.dv     := io.core.status.dv
-  hella_store.req.bits.data   := vxu.io.mem.store_req.bits.data
-  hella_store.req.bits.mask   := vxu.io.mem.store_req.bits.mask
-  hella_store.req.bits.phys   := vxu.io.mem.store_req.bits.phys
-  hella_store.req.bits.no_alloc := false.B
-  hella_store.req.bits.no_xcpt := true.B
-  hella_store.s1_kill := false.B
-  hella_store.s1_data := DontCare
-  hella_store.s2_kill := false.B
-  hella_store.keep_clock_enabled := vxu.io.backend_busy
+  vxu.io.mem.store_req.ready  := hella_store_q.io.enq.ready && store_tag_available
+  hella_store_q.io.enq.valid       := vxu.io.mem.store_req.valid && store_tag_available
+  hella_store_q.io.enq.bits.addr   := vxu.io.mem.store_req.bits.addr
+  hella_store_q.io.enq.bits.tag    := store_tag
+  hella_store_q.io.enq.bits.cmd    := M_PWR
+  hella_store_q.io.enq.bits.size   := log2Ceil(dLenB).U
+  hella_store_q.io.enq.bits.signed := false.B
+  hella_store_q.io.enq.bits.dprv   := io.core.status.prv
+  hella_store_q.io.enq.bits.dv     := io.core.status.dv
+  hella_store_q.io.enq.bits.data   := vxu.io.mem.store_req.bits.data
+  hella_store_q.io.enq.bits.mask   := vxu.io.mem.store_req.bits.mask
+  hella_store_q.io.enq.bits.phys   := vxu.io.mem.store_req.bits.phys
+  hella_store_q.io.enq.bits.no_alloc := false.B
+  hella_store_q.io.enq.bits.no_xcpt := true.B
 
   vxu.io.mem.store_ack := hella_store.resp.fire
 
@@ -101,12 +113,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     val mem_busy = Input(Bool())
     val backend_busy = Input(Bool())
 
-    val vm = Input(UInt(maxVLMax.W))
     val vm_busy = Input(Bool())
 
     val scalar_check = Flipped(new ScalarMemOrderCheckIO)
 
     val index_access = Flipped(new VectorIndexAccessIO)
+    val mask_access = Flipped(new VectorMaskAccessIO)
   })
 
   val replay_kill = WireInit(false.B)
@@ -150,11 +162,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_eidx = Mux(x_replay, x_replay_eidx, 0.U)
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
-  val x_masked = !(io.vm >> x_eidx)(0) && !x_inst.vm
   val x_mem_size = x_inst.mem_elem_size
   val x_unit_bound = ((x_inst.nf +& 1.U) * x_inst.vconfig.vl) << x_mem_size
   val x_indexed = x_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val x_index_ready = !x_indexed || io.index_access.ready
+  val x_mask_ready = x_inst.vm || io.mask_access.ready
   val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_idx_size), 0.U)
   val x_baseaddr = Mux(x_replay,
     Mux(x_inst.mop(0), x_inst.rs1_data, x_replay_addr),
@@ -164,20 +176,26 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   def samePage(base: UInt, size: UInt) = (base + size - 1.U)(pgIdxBits) === base(pgIdxBits)
   val x_single_page = samePage(x_baseaddr, x_unit_bound)
   val x_replay_seg_single_page = samePage(x_indexaddr, ((x_inst.nf +& 1.U) << x_mem_size))
-  val x_iterative = !x_single_page || x_inst.vstart =/= 0.U || !x_inst.vm || x_inst.mop =/= mopUnit
-  val x_tlb_valid = ((x_replay || (io.core.ex.valid && io.core.ex.ready && !x_iterative)) &&
-    x_eidx < x_vl &&
-    x_inst.vmu &&
-    x_eidx >= x_inst.vstart &&
-    !x_masked)
-  io.index_access.valid := x_replay && x_indexed
+  val x_iterative = (!x_single_page || x_inst.mop =/= mopUnit)
+  val x_masked = !io.mask_access.mask && !x_inst.vm
+  val x_tlb_valid = Mux(x_replay,
+    x_eidx < x_vl && x_eidx >= x_inst.vstart && !x_masked,
+    io.core.ex.valid && !x_iterative && x_inst.vmu)
+
+  io.index_access.valid := x_replay && x_indexed && x_tlb_backoff === 0.U
   io.index_access.vrs := x_inst.rs2
   io.index_access.eidx := x_eidx
   io.index_access.eew := x_inst.mem_idx_size
 
+  io.mask_access.valid := x_replay && !x_inst.vm && x_tlb_backoff === 0.U
+  io.mask_access.eidx := x_eidx
+
+  when ((io.index_access.valid && !io.index_access.ready) || (io.mask_access.valid && !io.mask_access.ready)) {
+    x_tlb_backoff := 3.U
+  }
 
   io.core.ex.ready := !x_replay && (io.tlb.req.ready || !x_inst.vmu) && !(!x_inst.vm && io.vm_busy) && !(x_indexed && io.backend_busy)
-  io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U && x_index_ready
+  io.tlb.req.valid := x_tlb_valid && x_tlb_backoff === 0.U && ((x_mask_ready && x_index_ready) || !x_replay)
   io.tlb.req.bits.vaddr := x_addr
   io.tlb.req.bits.passthrough := false.B
   io.tlb.req.bits.size := x_mem_size
@@ -185,7 +203,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.tlb.req.bits.prv := io.core.status.prv
   io.tlb.req.bits.v := io.core.status.v
 
-  when (x_replay && x_replay_eidx < x_replay_inst.vconfig.vl && x_tlb_backoff === 0.U) {
+  when (x_replay && x_replay_eidx < x_replay_inst.vconfig.vl && x_tlb_backoff === 0.U && x_index_ready && x_mask_ready) {
     val next_x_replay_eidx = x_replay_eidx + 1.U
     when (x_replay_seg_hi || x_replay_seg_single_page || x_inst.seg_nf === 0.U) {
       x_replay_eidx := next_x_replay_eidx
@@ -292,7 +310,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       io.core.wb.retire := true.B
     } .elsewhen (!io.issue.ready) {
       io.core.wb.replay := true.B
-    } .elsewhen (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss)) {
+    } .elsewhen (w_inst.vmu && (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
       x_set_replay := true.B
     } .elsewhen (w_tlb_resp.miss) {
       io.core.wb.replay := true.B

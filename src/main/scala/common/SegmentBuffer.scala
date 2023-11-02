@@ -100,6 +100,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
       val data = UInt(dLen.W)
+      val mask = UInt(dLenB.W)
       val eew = UInt(2.W)
       val nf = UInt(3.W)
       val rows = UInt(4.W)
@@ -107,7 +108,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
     }))
 
     val out = Decoupled(new Bundle {
-      val data = UInt(dLen.W)
+      val data = new StoreData
       val head = UInt(log2Ceil(dLenB).W)
       val tail = UInt(log2Ceil(dLenB).W)
     })
@@ -123,6 +124,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   val wcol = WireInit(0.U(cols.W))
   val wmode = Wire(Bool())
   val array = Seq.tabulate(rows, cols, 2) { case (_,_,_) => Reg(UInt(8.W)) }
+  val mask = Seq.fill(2) { Reg(UInt(dLenB.W)) }
 
   for (r <- 0 until 8) {
     for (c <- 0 until cols) {
@@ -147,13 +149,19 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   io.in.ready := !modes(in_sel)
   io.out.valid := modes(out_sel)
   val row_sel = out_row + sidxOff(out_sidx, out_eew(out_sel))
-  io.out.bits.data := Mux1H(UIntToOH(row_sel), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
+  io.out.bits.data.data := Mux1H(UIntToOH(row_sel), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
+  io.out.bits.data.mask := Fill(dLenB, (Mux1H(UIntToOH(out_sel), mask) >> (out_row << out_eew(out_sel)))(0))
   io.out.bits.head := 0.U
   val remaining_bytes = (out_nf(out_sel) +& 1.U - out_sidx) << out_eew(out_sel)
   io.out.bits.tail := Mux(remaining_bytes >= dLenB.U, dLenB.U, remaining_bytes)
 
   when (io.in.fire) {
     wrow := ((1.U << (1.U << (log2Ceil(cols).U - io.in.bits.eew))) - 1.U)(7,0) << sidxOff(io.in.bits.sidx, io.in.bits.eew)
+    for (s <- 0 until 2) {
+      when (wmode === s.U && io.in.bits.sidx === 0.U) {
+        mask(s) := io.in.bits.mask
+      }
+    }
   }
   wcol := ((1.U << (1.U << io.in.bits.eew)) - 1.U)(7,0) << (io.in.bits.sidx << io.in.bits.eew)(log2Ceil(cols)-1,0)
 
