@@ -7,14 +7,14 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
+class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+
     val io = IO(new Bundle {
         val eew = Input(UInt(3.W))
         val in1 = Input(Vec(xLenB, UInt(8.W)))
         val in0 = Input(Vec(xLenB, UInt(8.W)))
         
-        val out = Output(Vec(xLenB, UInt(16.W)))
-
+        val out = Output(UInt((xLenB*16).W))
     })
     val vsewMax = if (xLenB==8) 3 else if (xLenB==4) 2 else 0
     if (vsewMax == 0) println("ILLEGAL xLen")
@@ -36,8 +36,8 @@ class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
     val activePProds = Wire(Vec(xLenB, Vec(xLenB, UInt(16.W))))
     for (i <- 0 until xLenB) {
         for (j <- 0 until xLenB) {
-            val pProd = (io.in1(i) * io.in0(j))
-            activePProds(i)(j) := Mux(validPProds(io.eew)(i).asBools(j), pProd, 0.U)
+            val pProd = (in1(i) * in2(j))
+            activePProds(i)(j) := Mux(validPProds(eew)(i).asBools(j), pProd, 0.U)
         }
     }
     //shift and accumulate valid partial products
@@ -47,8 +47,5 @@ class SegmentedIntegerMultiplier(val xLenB: Int) extends Module{
                                 jPartialSum + (activePProds(i)(j) << (8*(i+j)).U)
                             }
                     }
-    //output vector of 8bit elements
-    for (i <- 0 until xLenB) {
-        io.out(i) := vSumsOut((i+1)*16 - 1, i*16)
-    }
+    io.out := vSumsOut
 }
