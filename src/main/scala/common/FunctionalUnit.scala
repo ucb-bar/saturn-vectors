@@ -17,44 +17,33 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
   })
 }
 
-val vMulDepth = 4
-class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit(vMulDepth)(p) {
+class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit(4)(p) {
   // val is_signed = io.pipe(0).bits.inst.opcode(1)
   val eew = io.pipe(0).bits.rvs1_eew
   val in1 = io.pipe(0).bits.rvs1_data
   val in2 = io.pipe(0).bits.rvs2_data
 
   val numSegMul = dLen/xLen
-  val viMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(vMulDepth))}
-  for i in (0 until numSegMul) {
+  val viMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(4))}
+  for (i <- 0 until numSegMul) {
     // viMul(i).io.is_signed := is_signed
     viMul(i).io.eew := eew
-    viMul(i).io.in1 := in1((i+1)*xLen, i*xLen).asTypeOf(Vec(xLenB, UInt(8.W)))
-    viMul(i).io.in2 := in2((i+1)*xLen, i*xLen).asTypeOf(Vec(xLenB, UInt(8.W)))
+    viMul(i).io.in1 := in1((i+1)*xLen, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
+    viMul(i).io.in2 := in2((i+1)*xLen, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
     
-    io.write.bits.data((i+1)*xLen, i*xLen) := viMul(i).io.out
+    io.writes(0).bits.data((i+1)*xLen, i*xLen) := viMul(i).io.out(dLen-1, 0)
+    io.writes(1).bits.data((i+1)*xLen, i*xLen) := viMul(i).io.out(2*dLen-1, dLen)
   }
 
-  io.writes(0).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === 0.U || io.pipe(0).bits.wvd_widen2)
   io.writes(0).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
-  io.writes(0).bits.mask := io.pipe(0).bits.wmask
-  io.writes(0).bits.data := out
-
-  io.writes(1).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === 1.U || io.pipe(0).bits.wvd_widen2)
   io.writes(1).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
-  io.writes(1).bits.mask := io.pipe(0).bits.wmask
-  io.writes(1).bits.data := out
 
+  io.writes(0).valid := io.pipe(0).valid
+  io.writes(1).valid := io.pipe(0).valid
+  
   val wide_mask = FillInterleaved(2, io.pipe(0).bits.wmask)
-  when (io.pipe(0).bits.wvd_widen2) {
-    io.writes(0).valid := io.pipe(0).valid
-    io.writes(1).valid := io.pipe(0).valid
-    io.writes(0).bits.mask := wide_mask(dLenB-1,0)
-    io.writes(1).bits.mask := wide_mask >> dLenB
-    io.writes(0).bits.data := add_wide_out
-    io.writes(1).bits.data := add_wide_out >> dLen
-  }
-
+  io.writes(0).bits.mask := wide_mask(dLenB-1,0)
+  io.writes(1).bits.mask := wide_mask(dLenB*2-1, dLenB)
 }
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {

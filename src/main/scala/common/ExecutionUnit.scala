@@ -44,7 +44,7 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viMul.io.pipe(0).bits := pipe_bits(0)
   // io.writes := viMul.io.writes
 
-  writeArb := Module(new Arbiter(Vec(2, Valid(new VectorWrite)), 2))
+  val writeArb = Module(new Arbiter(Vec(2, Valid(new VectorWrite)), 2))
   writeArb.io.in(0) := viu.io.writes
   writeArb.io.in(1) := viMul.io.writes
   io.writes := writeArb.io.out
