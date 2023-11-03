@@ -35,6 +35,17 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viu.io.iss.bits := io.iss.bits
   viu.io.pipe(0).valid := pipe_valids(0)
   viu.io.pipe(0).bits := pipe_bits(0)
+  // io.writes := viu.io.writes
 
-  io.writes := viu.io.writes
+  val viMul = Module(new VectorIntegerMultiply)
+  viMul.io.iss.valid := io.iss.fire && io.iss.bits.inst.funct3.isOneOf(OPIVI, OPIVX, OPIVV)
+  viMul.io.iss.bits := io.iss.bits
+  viMul.io.pipe(0).valid := pipe_valids(0)
+  viMul.io.pipe(0).bits := pipe_bits(0)
+  // io.writes := viMul.io.writes
+
+  writeArb := Module(new Arbiter(Vec(2, Valid(new VectorWrite)), 2))
+  writeArb.io.in(0) := viu.io.writes
+  writeArb.io.in(1) := viMul.io.writes
+  io.writes := writeArb.io.out
 }

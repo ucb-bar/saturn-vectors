@@ -8,11 +8,10 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
-
     val io = IO(new Bundle {
         val eew = Input(UInt(3.W))
         val in1 = Input(Vec(xLenB, UInt(8.W)))
-        val in0 = Input(Vec(xLenB, UInt(8.W)))
+        val in2 = Input(Vec(xLenB, UInt(8.W)))
         
         val out = Output(UInt((xLenB*16).W))
     })
@@ -47,5 +46,6 @@ class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends Cor
                                 jPartialSum + (activePProds(i)(j) << (8*(i+j)).U)
                             }
                     }
+    //TODO: Implement FMA by adding in3 to output
     io.out := vSumsOut
 }
