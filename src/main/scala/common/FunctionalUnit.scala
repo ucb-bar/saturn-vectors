@@ -9,15 +9,13 @@ import freechips.rocketchip.tile._
 
 abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val iss = Input(Valid(new VectorIssueBeat(depth)))
+    val pipe = Input(Vec(depth, Decoupled(new VectorIssueBeat(depth))))
 
-    val pipe = Input(Vec(depth, Valid(new VectorIssueBeat(depth))))
-
-    val writes = Vec(2, Valid(new VectorWrite))
+    val writes = Vec(2, Decoupled(new VectorWrite))
   })
 }
 
-class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit(4)(p) {
+class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
   // val is_signed = io.pipe(0).bits.inst.opcode(1)
   val eew = io.pipe(0).bits.rvs1_eew
   val in1 = io.pipe(0).bits.rvs1_data
@@ -28,12 +26,13 @@ class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit
   for (i <- 0 until numSegMul) {
     // viMul(i).io.is_signed := is_signed
     viMul(i).io.eew := eew
-    viMul(i).io.in1 := in1((i+1)*xLen, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
-    viMul(i).io.in2 := in2((i+1)*xLen, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
-    
-    io.writes(0).bits.data((i+1)*xLen, i*xLen) := viMul(i).io.out(dLen-1, 0)
-    io.writes(1).bits.data((i+1)*xLen, i*xLen) := viMul(i).io.out(2*dLen-1, dLen)
+    viMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
+    viMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
   }
+
+  val viMulOut = VecInit((0 until numSegMul).map { i => viMul(i).io.out }).asUInt
+  io.writes(0).bits.data := viMulOut(dLen-1, 0)
+  io.writes(1).bits.data := viMulOut(2*dLen-1, dLen)
 
   io.writes(0).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
   io.writes(1).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
