@@ -29,7 +29,7 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
       pipe_bits(i) := pipe_bits(i-1)
     }
   }
-  //TODO: define and connect ready signals
+
   val viu = Module(new VectorIntegerUnit)
   viu.io.pipe(0).valid := pipe_valids(0) && io.iss.bits.inst.isOpi
   viu.io.pipe(0).bits := pipe_bits(0)
@@ -38,11 +38,5 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viMul.io.pipe(0).valid := pipe_valids(0) && io.iss.bits.inst.isOpm
   viMul.io.pipe(0).bits := pipe_bits(0)
 
-  val writeArbs = Seq.fill(2) { Module(new Arbiter(new VectorWrite, 2)) }
-  for (i <- 0 until 2) {
-    writeArbs(i).io.in(0) <> viu.io.writes(i)
-    writeArbs(i).io.in(1) <> viMul.io.writes(i)
-    io.writes(i).valid := writeArbs(i).io.out.valid
-    io.writes(i).bits := writeArbs(i).io.out.bits
-  }
+  io.writes := Mux(viu.io.pipe(0).valid, viu.io.writes, viMul.io.writes)
 }

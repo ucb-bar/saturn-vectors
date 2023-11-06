@@ -9,9 +9,9 @@ import freechips.rocketchip.tile._
 
 abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val pipe = Input(Vec(depth, Decoupled(new VectorIssueBeat(depth))))
+    val pipe = Input(Vec(depth, Valid(new VectorIssueBeat(depth))))
 
-    val writes = Vec(2, Decoupled(new VectorWrite))
+    val writes = Vec(2, Valid(new VectorWrite))
   })
 }
 
