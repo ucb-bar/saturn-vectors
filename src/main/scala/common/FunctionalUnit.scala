@@ -9,9 +9,9 @@ import freechips.rocketchip.tile._
 
 abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val iss = Input(Valid(new VectorIssueBeat(depth)))
+    val iss = Input(Valid(new VectorMicroOp(depth)))
 
-    val pipe = Input(Vec(depth, Valid(new VectorIssueBeat(depth))))
+    val pipe = Input(Vec(depth, Valid(new VectorMicroOp(depth))))
 
     val writes = Vec(2, Valid(new VectorWrite))
   })
@@ -19,7 +19,8 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
 class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
 
-  val ctrl_sub :: ctrl_add_sext :: ctrl_wide_in :: ctrl_cmask :: Nil = VecDecode.applyBools(io.pipe(0).bits.inst,
+  val ctrl_sub :: ctrl_add_sext :: ctrl_wide_in :: ctrl_cmask :: Nil = VecDecode.applyBools(
+    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(4)(BitPat.dontCare(1)), Seq(
       (OPIFunct6.add   , Seq(N,X,N,N)),
       (OPIFunct6.sub   , Seq(Y,X,N,N)),
@@ -35,8 +36,8 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
       (OPIFunct6.adc   , Seq(N,X,N,Y))
     ))
 
-  val rsub = io.pipe(0).bits.inst.isOpi && OPIFunct6(io.pipe(0).bits.inst.funct6) === OPIFunct6.rsub
-  val xunary0 = io.pipe(0).bits.inst.isOpm && OPMFunct6(io.pipe(0).bits.inst.funct6) === OPMFunct6.xunary0
+  val rsub = io.pipe(0).bits.isOpi && OPIFunct6(io.pipe(0).bits.funct6) === OPIFunct6.rsub
+  val xunary0 = io.pipe(0).bits.isOpm && OPMFunct6(io.pipe(0).bits.funct6) === OPMFunct6.xunary0
 
   val add_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -99,7 +100,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
       val in = xunary0_in(mul-1).asTypeOf(Vec(dLenB >> vd_eew, UInt((8 << vs2_eew).W)))
       val out = Wire(Vec(dLenB >> vd_eew, UInt((8 << vd_eew).W)))
       out.zip(in).foreach { case (l, r) => l := Cat(
-        Fill((8 << vd_eew) - (8 << vs2_eew), io.pipe(0).bits.inst.rs1(0) && r((8 << vs2_eew)-1)),
+        Fill((8 << vd_eew) - (8 << vs2_eew), io.pipe(0).bits.rs1(0) && r((8 << vs2_eew)-1)),
         r)
       }
       out.asUInt

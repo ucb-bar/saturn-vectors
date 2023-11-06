@@ -39,7 +39,7 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
 
     val valid = Output(Bool())
     val busy = Output(Bool())
-    val iss = Decoupled(new VectorIssueBeat(depth))
+    val iss = Decoupled(new VectorMicroOp(depth))
     val rvs1 = new VectorReadIO
     val rvs2 = new VectorReadIO
     val rvd  = new VectorReadIO
@@ -175,10 +175,12 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
     !(renvm && !io.rvm.req.ready)
   )
 
-  io.iss.bits.inst := inst
   io.iss.bits.wvd   := wvd
 
   io.iss.bits.rvs1_data := io.rvs1.resp
+  when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX) && !inst.vmu) {
+    io.iss.bits.rvs1_data := dLenSplat(inst.rs1_data, vs1_eew)
+  }
   io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvd_data  := io.rvd.resp
   io.iss.bits.rvs1_eew  := vs1_eew
@@ -188,7 +190,11 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_eg    := getEgId(inst.rd  + (sidx << inst.pos_lmul), eidx, vd_eew + vd_widen2)
   io.iss.bits.wvd_widen2 := vd_widen2
-  io.iss.bits.wlat := lat
+  io.iss.bits.wlat      := lat
+  io.iss.bits.rs1       := inst.rs1
+  io.iss.bits.funct3    := inst.funct3
+  io.iss.bits.funct6    := inst.funct6
+  io.iss.bits.load      := inst.opcode(5)
 
   val dlen_mask = (1.U << (dLenB.U >> sub_dlen)) - 1.U
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)

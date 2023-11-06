@@ -275,10 +275,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.maskindex <> maskindex_q.io.deq
 
   maskindex_q.io.enq.valid := vims.io.iss.valid
-  val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.inst.mem_idx_size)(dLenOffBits-1,0) << 3))
-  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.inst.mem_idx_size)
+  val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
+  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.rvs2_eew)
   maskindex_q.io.enq.bits.mask  := reads(4)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
-  maskindex_q.io.enq.bits.load  := !vims.io.iss.bits.inst.opcode(5)
+  maskindex_q.io.enq.bits.load  := !vims.io.iss.bits.load
   vims.io.iss.ready      := maskindex_q.io.enq.ready
 
 
@@ -289,10 +289,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   vxu.io.iss <> vxs.io.iss
-  when (vxs.io.iss.bits.inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX)) {
-    val scalar = vxs.io.iss.bits.inst.rs1_data
-    vxu.io.iss.bits.rvs1_data := dLenSplat(scalar, vxu.io.iss.bits.rvs1_eew)
-  }
   vrf(0).io.write(1) := vxu.io.writes(0)
   vrf(1).io.write(1) := vxu.io.writes(1)
 

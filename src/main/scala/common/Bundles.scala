@@ -98,10 +98,8 @@ class MaskedByte extends Bundle {
   val mask = Bool()
 }
 
-class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val inst = new VectorIssueInst
+class VectorMicroOp(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val wvd = Bool()
-
   val eidx = UInt(log2Ceil(maxVLMax).W)
 
   val rvs1_data = UInt(dLen.W)
@@ -119,6 +117,15 @@ class VectorIssueBeat(pipe_depth: Int)(implicit p: Parameters) extends CoreBundl
   val wmask   = UInt(dLenB.W)
 
   val wlat = UInt(log2Ceil(pipe_depth+1).W)
+
+  val funct3 = UInt(3.W)
+  def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)
+  def isOpm = funct3.isOneOf(OPMVV, OPMVX)
+  def isOpf = funct3.isOneOf(OPFVV, OPFVF)
+
+  val funct6 = UInt(6.W)
+  val rs1 = UInt(5.W)
+  val load = Bool()
 }
 
 class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
