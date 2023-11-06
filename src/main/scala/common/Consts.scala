@@ -108,13 +108,11 @@ object VecDecode extends VectorConsts {
       table.map(e => enumToUInt(e._1).map(u => (BitPat(u), e._2))).flatten)
   }
 
-  def apply(inst: VectorIssueInst, default: Seq[BitPat], table: Seq[(EnumType, Seq[BitPat])]): Seq[UInt] = apply(
-    inst.funct3, inst.funct6, default, table)
 
-  def applyBools(inst: VectorIssueInst, default: Seq[BitPat], table: Seq[(EnumType, Seq[BitPat])]): Seq[Bool] = apply(
-    inst.funct3, inst.funct6, default, table).map(_(0))
+  def applyBools(funct3: UInt, funct6: UInt, default: Seq[BitPat], table: Seq[(EnumType, Seq[BitPat])]): Seq[Bool] = apply(
+    funct3, funct6, default, table).map(_(0))
 
-  def apply(inst: VectorIssueInst, trues: Seq[EnumType], falses: Seq[EnumType]): Bool = applyBools(
-    inst, Seq(BitPat.dontCare(1)), trues.map(e => (e, Seq(BitPat(true.B)))) ++ falses.map(e => (e, Seq(BitPat(false.B)))))(0)
+  def apply(funct3: UInt, funct6: UInt, trues: Seq[EnumType], falses: Seq[EnumType]): Bool = applyBools(
+    funct3, funct6, Seq(BitPat.dontCare(1)), trues.map(e => (e, Seq(BitPat(true.B)))) ++ falses.map(e => (e, Seq(BitPat(false.B)))))(0)
 }
 
