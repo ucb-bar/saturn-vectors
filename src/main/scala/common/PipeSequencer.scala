@@ -7,15 +7,14 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
-  writeVD: Boolean, readVS1: Boolean, readVS2: Boolean, readVD: Boolean,
-  segmented: Boolean
-)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+abstract class PipeSequencer(val depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val dis = new Bundle {
       val fire = Input(Bool())
       val ready = Output(Bool())
       val inst = Input(new VectorIssueInst)
+
+      // TODO remove
       val clear_vat = Input(Bool())
 
       val wvd = Input(Bool())
@@ -37,13 +36,6 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
       val use_wmask = Input(Bool())
     }
 
-    val valid = Output(Bool())
-    val busy = Output(Bool())
-    val iss = Decoupled(new VectorMicroOp(depth))
-    val rvs1 = new VectorReadIO
-    val rvs2 = new VectorReadIO
-    val rvd  = new VectorReadIO
-    val rvm  = new VectorReadIO
     val seq_hazards = new Bundle {
       val valid = Output(Bool())
       val rintent = Output(UInt(egsTotal.W))
@@ -53,13 +45,35 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
       val writes = Input(UInt(egsTotal.W))
       val reads = Input(UInt(egsTotal.W))
     }
+
+    val busy = Output(Bool())
     val pipe_hazards = Vec(depth, Valid(new PipeHazard(depth)))
-
     val vat_release = Valid(UInt(vParams.vatSz.W))
+
+
+    val rvs1 = new VectorReadIO
+    val rvs2 = new VectorReadIO
+    val rvd  = new VectorReadIO
+    val rvm  = new VectorReadIO
+
+    val iss = Decoupled(new VectorMicroOp(depth))
   })
-
   def min(a: UInt, b: UInt) = Mux(a > b, b, a)
+  def get_head_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask << (eidx << eew)(dLenOffBits-1,0)
+  def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask >> (0.U(dLenOffBits.W) - (eidx << eew)(dLenOffBits-1,0))
+  def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {
+    val vm_off  = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
+    val vm_eidx = eidx & ~(vm_off >> eew)(log2Ceil(dLen)-1,0)
+    val vm_resp = mask_resp >> vm_eidx
+    Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
+  }
 
+}
+
+class OldPipeSequencer(depth: Int, sel: VectorIssueInst => Bool,
+  writeVD: Boolean, readVS1: Boolean, readVS2: Boolean, readVD: Boolean,
+  segmented: Boolean
+)(implicit p: Parameters) extends PipeSequencer(depth)(p) {
   val valid   = RegInit(false.B)
   val inst    = Reg(new VectorIssueInst)
   val wvd_oh  = Reg(UInt(egsTotal.W))
@@ -154,8 +168,6 @@ class PipeSequencer(val depth: Int, sel: VectorIssueInst => Bool,
   val war_hazard = (vd_write_oh & io.seq_hazards.reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-
-  io.valid := valid
 
   io.rvs1.req.bits := getEgId(inst.rs1 + (sidx << inst.pos_lmul), eidx     , vs1_eew)
   io.rvs2.req.bits := getEgId(inst.rs2 + (sidx << inst.pos_lmul), eidx     , vs2_eew)

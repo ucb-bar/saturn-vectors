@@ -76,13 +76,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.vat_tail := vat_tail
 
-  val vls = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && !i.opcode(5),
-    true, false, false, false, true))
-  val vss = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu &&  i.opcode(5),
+  val vls = Module(new LoadSequencer)
+  val vss = Module(new OldPipeSequencer(0, (i: VectorIssueInst) => i.vmu &&  i.opcode(5),
     false, false, false, true, true))
-  val vxs = Module(new PipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
+  val vxs = Module(new OldPipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
     true, true, true, true, false))
-  val vims = Module(new PipeSequencer(0, (i: VectorIssueInst) => i.vmu && ((!i.vm && i.mop =/= mopUnit) || i.mop(0)),
+  val vims = Module(new OldPipeSequencer(0, (i: VectorIssueInst) => i.vmu && ((!i.vm && i.mop =/= mopUnit) || i.mop(0)),
     false, false, true, false, false))
   val seqs = Seq(vls, vss, vxs, vims)
 
@@ -119,11 +118,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.rvm := DontCare
   }
 
-  vls.io.dis.wvd := true.B
   vls.io.dis.clear_vat := true.B
-  vls.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
-  vls.io.dis.vd_eew := vdq.io.deq.bits.mem_elem_size
-  vls.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
 
   vss.io.dis.renvd := true.B
   vss.io.dis.clear_vat := false.B
