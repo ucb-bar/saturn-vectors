@@ -37,7 +37,9 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viu.io.pipe(0).bits := pipe_bits(0)
 
   val viMul = Module(new VectorIntegerMultiply)
-  viMul.io.pipe(0).valid := pipe_valids(0) && io.iss.bits.inst.isOpm
+  viMul.io.iss.valid := io.iss.fire && io.iss.bits.isOpm
+  viMul.io.iss.bits := io.iss.bits
+  viMul.io.pipe(0).valid := pipe_valids(0)
   viMul.io.pipe(0).bits := pipe_bits(0)
 
   io.writes := Mux(viu.io.pipe(0).valid, viu.io.writes, viMul.io.writes)
