@@ -77,8 +77,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.vat_tail := vat_tail
 
   val vls = Module(new LoadSequencer)
-  val vss = Module(new OldPipeSequencer(0, (i: VectorIssueInst) => i.vmu &&  i.opcode(5),
-    false, false, false, true, true))
+  val vss = Module(new StoreSequencer)
   val vxs = Module(new OldPipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
     true, true, true, true, false))
   val vims = Module(new OldPipeSequencer(0, (i: VectorIssueInst) => i.vmu && ((!i.vm && i.mop =/= mopUnit) || i.mop(0)),

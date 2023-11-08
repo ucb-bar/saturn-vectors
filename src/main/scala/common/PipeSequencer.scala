@@ -67,6 +67,18 @@ abstract class PipeSequencer(val depth: Int)(implicit p: Parameters) extends Cor
     val vm_resp = mask_resp >> vm_eidx
     Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
   }
+  def get_next_eidx(vl: UInt, eidx: UInt, eew: UInt, sub_dlen: UInt) = min(vl,
+    (((eidx >> (dLenOffBits.U - eew - sub_dlen)) + 1.U) << (dLenOffBits.U - eew - sub_dlen))(log2Ceil(maxVLMax)+1,0)
+  )
+
+  io.rvs1.req.valid := false.B
+  io.rvs1.req.bits := DontCare
+  io.rvs2.req.valid := false.B
+  io.rvs2.req.bits := DontCare
+  io.rvd.req.valid := false.B
+  io.rvd.req.bits := DontCare
+  io.rvm.req.valid := false.B
+  io.rvm.req.bits := DontCare
 
 }
 

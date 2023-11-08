@@ -12,10 +12,10 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   val inst  = Reg(new VectorIssueInst)
   val eidx  = Reg(UInt(log2Ceil(maxVLMax).W))
   val sidx  = Reg(UInt(3.W))
-  val wvd_oh = Reg(UInt(egsTotal.W))
+  val wvd_mask = Reg(UInt(egsTotal.W))
 
   val renvm     = !inst.vm
-  val next_eidx = min(inst.vconfig.vl, ((eidx >> (dLenOffBits.U - inst.mem_elem_size)) + 1.U) << (dLenOffBits.U - inst.mem_elem_size))
+  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U)
   val last      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
   val active = io.dis.inst.vmu && !io.dis.inst.opcode(5)
@@ -27,38 +27,34 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
     eidx  := io.dis.inst.vstart
     sidx  := 0.U
 
-    val wvd_arch_oh = Wire(Vec(32, Bool()))
+    val wvd_arch_mask = Wire(Vec(32, Bool()))
     for (i <- 0 until 32) {
       val group = i.U >> io.dis.inst.pos_lmul
       val rd_group = io.dis.inst.rd >> io.dis.inst.pos_lmul
-      wvd_arch_oh(i) := group >= rd_group && group <= (rd_group + io.dis.inst.nf)
+      wvd_arch_mask(i) := group >= rd_group && group <= (rd_group + io.dis.inst.nf)
     }
-    wvd_oh := FillInterleaved(egsPerVReg, wvd_arch_oh.asUInt)
+    wvd_mask := FillInterleaved(egsPerVReg, wvd_arch_mask.asUInt)
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
 
   io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := 0.U
-  io.seq_hazards.wintent := wvd_oh
+  io.seq_hazards.rintent := Mux(renvm, ~(0.U(egsPerVReg.W)), 0.U)
+  io.seq_hazards.wintent := wvd_mask
   io.seq_hazards.vat     := inst.vat
 
+  val vm_read_oh  = UIntToOH(io.rvm.req.bits)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
+  val raw_hazard = (vm_read_oh & io.seq_hazards.writes) =/= 0.U
   val waw_hazard = (vd_write_oh & io.seq_hazards.writes) =/= 0.U
   val war_hazard = (vd_write_oh & io.seq_hazards.reads) =/= 0.U
-  val data_hazard = waw_hazard || war_hazard
+  val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-  io.rvs1.req.valid := false.B
-  io.rvs1.req.bits := DontCare
-  io.rvs2.req.valid := false.B
-  io.rvs2.req.bits := DontCare
-  io.rvd.req.valid := false.B
-  io.rvd.req.bits := DontCare
-  io.rvm.req.valid := renvm
+  io.rvm.req.valid := valid && renvm
   io.rvm.req.bits := getEgId(0.U, eidx >> 3, 0.U)
 
-  io.iss.valid := valid && !data_hazard && !(renvm && !io.rvm.req.ready)
+  io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready)
   io.iss.bits.wvd       := true.B
   io.iss.bits.rvs1_data := DontCare
   io.iss.bits.rvs2_data := DontCare
@@ -74,7 +70,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.rs1        := inst.rs1
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare
-  io.iss.bits.load       := inst.opcode(5)
+  io.iss.bits.load       := true.B
 
   val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
@@ -84,7 +80,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
 
   when (io.iss.fire && !last) {
     when (tail_mask(dLenB-1)) {
-      wvd_oh := wvd_oh & ~vd_write_oh
+      wvd_mask := wvd_mask & ~vd_write_oh
     }
     when (sidx === inst.seg_nf) {
       sidx := 0.U
