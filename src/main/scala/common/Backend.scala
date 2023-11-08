@@ -89,14 +89,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   seqs.foreach { s =>
     s.io.dis.fire := vdq.io.deq.fire
     s.io.dis.inst := vdq.io.deq.bits
-    s.io.dis.wvd := false.B
     s.io.dis.renv1 := false.B
     s.io.dis.renv2 := false.B
     s.io.dis.renvd := false.B
     s.io.dis.renvm := false.B
-    s.io.dis.elementwise := false.B
-    s.io.dis.seg_nf := 0.U
-    s.io.dis.sub_dlen := 0.U
     s.io.dis.pipe_lat := s.depth.U
     when (s.io.vat_release.valid) {
       assert(vat_valids(s.io.vat_release.bits))
@@ -116,29 +112,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.rvm := DontCare
   }
 
-  vls.io.dis.clear_vat := true.B
 
-  vss.io.dis.renvd := true.B
-  vss.io.dis.clear_vat := false.B
-  vss.io.dis.seg_nf := vdq.io.deq.bits.seg_nf
-  vss.io.dis.sub_dlen := Mux(
-    vdq.io.deq.bits.seg_nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& vss.io.dis.vs3_eew)),
-    log2Ceil(dLenB).U - 3.U - vss.io.dis.vs3_eew,
-    0.U)
-  vss.io.dis.vs3_eew := vdq.io.deq.bits.mem_elem_size
-  vss.io.dis.incr_eew := vdq.io.deq.bits.mem_elem_size
-  vss.io.dis.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
-
-  vims.io.dis.renv2   := vdq.io.deq.bits.mop(0)
-  vims.io.dis.renvm   := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit
-  vims.io.dis.vs2_eew := vdq.io.deq.bits.mem_idx_size
-  vims.io.dis.elementwise := true.B
-  vims.io.dis.clear_vat := false.B
-
-  vxs.io.dis.clear_vat := true.B
   vxs.io.dis.renv1 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
   vxs.io.dis.renv2 := true.B
-  vxs.io.dis.wvd := true.B
   when (vdq.io.deq.bits.funct3 === OPIVI) {
     vxs.io.dis.inst.rs1_data := Cat(Fill(59, vdq.io.deq.bits.imm4(4)), vdq.io.deq.bits.imm4)
   }
