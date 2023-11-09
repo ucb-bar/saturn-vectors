@@ -27,7 +27,7 @@ object OPIFunct6 extends ChiselEnum {
   val sll = Value
   val _ = Value
   val smul, srl, sra, srrl, srra, nsrl, nsra, nclipu, nclip = Value
-  val wredsumu, wredsum = Value
+  val redsumu, wredsum = Value
 }
 
 object OPMFunct6 extends ChiselEnum {

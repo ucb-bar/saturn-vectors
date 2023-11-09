@@ -31,7 +31,7 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   }
 
   val viu = Module(new VectorIntegerUnit)
-  viu.io.iss.valid := io.iss.fire && io.iss.bits.funct3.isOneOf(OPIVI, OPIVX, OPIVV)
+  viu.io.iss.valid := io.iss.fire && io.iss.bits.isOpi
   viu.io.iss.bits := io.iss.bits
   viu.io.pipe(0).valid := pipe_valids(0)
   viu.io.pipe(0).bits := pipe_bits(0)
@@ -42,5 +42,5 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viMul.io.pipe(0).valid := pipe_valids(0)
   viMul.io.pipe(0).bits := pipe_bits(0)
 
-  io.writes := Mux(viu.io.pipe(0).valid, viu.io.writes, viMul.io.writes)
+  io.writes := Mux(viMul.io.pipe(0).valid, viMul.io.writes, viu.io.writes)
 }
