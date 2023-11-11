@@ -9,8 +9,6 @@ import freechips.rocketchip.tile._
 
 abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val iss = Input(Valid(new VectorMicroOp(depth)))
-
     val pipe = Input(Vec(depth, Valid(new VectorMicroOp(depth))))
 
     val writes = Vec(2, Valid(new VectorWrite))
@@ -46,7 +44,7 @@ class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit
   val in2 = io.pipe(0).bits.rvs2_data
 
   val numSegMul = dLen/xLen
-  val viMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(4))}
+  val viMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(1))}
   for (i <- 0 until numSegMul) {
     // viMul(i).io.is_signed := is_signed
     viMul(i).io.eew := eew
