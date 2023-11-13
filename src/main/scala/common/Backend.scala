@@ -160,7 +160,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
   when (vdq.io.deq.bits.isOpm) {
     val f6 = OPMFunct6(vdq.io.deq.bits.funct6)
-    when (f6.isOneOf(OPMFunct6.waddu, OPMFunct6.wadd, OPMFunct6.wsub, OPMFunct6.wsubu, OPMFunct6.wmulu)) {
+    when (f6.isOneOf(OPMFunct6.waddu, OPMFunct6.wadd, OPMFunct6.wsub, OPMFunct6.wsubu, 
+                      OPMFunct6.wmulu, OPMFunct6.wmulsu, OPMFunct6.wmul, 
+                      OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccus, OPMFunct6.wmaccsu)) {
       vxs.io.dis.vd_widen2 := true.B
     }
     when (f6.isOneOf(OPMFunct6.wadduw, OPMFunct6.waddw, OPMFunct6.wsubuw, OPMFunct6.wsubw)) {

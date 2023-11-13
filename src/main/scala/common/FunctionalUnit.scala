@@ -32,12 +32,18 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 }
 
 class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
-
-  // val ctrl_sub :: ctrl_add_sext :: ctrl_wide_in :: ctrl_cmask :: Nil = VecDecode.applyBools(
-  //   io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-  //   Seq.fill(4)(BitPat.dontCare(1)), Seq(
-  //     (OPMFunct6.wmulu, Seq(Y,N,N,N))
-  //   ))
+  
+  val  ctrl_wide_in :: ctrl_rv1_signed :: ctrl_rv2_signed :: ctrl_cmask :: Nil = VecDecode.applyBools(
+    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
+    Seq.fill(4)(BitPat.dontCare(1)), Seq(
+      (OPMFunct6.wmulu,   Seq(Y,N,N,N)),
+      (OPMFunct6.wmulsu,  Seq(Y,Y,N,N)),
+      (OPMFunct6.wmul,    Seq(Y,Y,Y,N)),
+      (OPMFunct6.wmaccu,  Seq(Y,N,N,N)),
+      (OPMFunct6.wmacc,   Seq(Y,Y,Y,N)),
+      (OPMFunct6.wmaccus, Seq(Y,N,Y,N)),
+      (OPMFunct6.wmaccsu, Seq(Y,Y,N,N)),
+    ))
 
   val eew = io.pipe(0).bits.rvs1_eew
   val in1 = io.pipe(0).bits.rvs1_data
@@ -46,10 +52,11 @@ class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit
   val numSegMul = dLen/xLen
   val viMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(1))}
   for (i <- 0 until numSegMul) {
-    // viMul(i).io.is_signed := is_signed
+    viMul(i).io.rv1_signed := ctrl_rv1_signed
+    viMul(i).io.rv2_signed := ctrl_rv2_signed
     viMul(i).io.eew := eew
-    viMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
-    viMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen).asTypeOf(Vec(xBytes, UInt(8.W)))
+    viMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen)
+    viMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen)
   }
 
   val viMulOut = VecInit((0 until numSegMul).map { i => viMul(i).io.out }).asUInt

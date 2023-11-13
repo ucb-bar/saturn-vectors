@@ -9,11 +9,13 @@ import freechips.rocketchip.tile._
 
 class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
     val io = IO(new Bundle {
+        val rv1_signed = Input(Bool())
+        val rv2_signed = Input(Bool())
         val eew = Input(UInt(3.W))
-        val in1 = Input(Vec(xBytes, UInt(8.W)))
-        val in2 = Input(Vec(xBytes, UInt(8.W)))
+        val in1 = Input(UInt(xLen.W))
+        val in2 = Input(UInt(xLen.W))
         
-        val out = Output(UInt((xBytes*16).W))
+        val out = Output(UInt((2*xLen).W))
     })
     val vsewMax = if (xBytes==8) 3 else if (xBytes==4) 2 else 0
     if (vsewMax == 0) println("ILLEGAL xLen")
@@ -31,21 +33,54 @@ class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends Cor
             }
         }
     }
+    //negate negative elements
+    val vinS1 = Wire(Vec(4, UInt(xLen.W)))
+    val vinS2 = Wire(Vec(4, UInt(xLen.W)))
+    for (vsew <- 0 until 4) {
+        val eew = 8 << vsew
+        val nElems = xBytes >> vsew
+        val vin1 = io.in1.asTypeOf(Vec(nElems, UInt(eew.W)))
+        val vin2 = io.in2.asTypeOf(Vec(nElems, UInt(eew.W)))
+        vinS1(vsew) := (0 until nElems).map {i => 
+            Mux(io.rv1_signed && vin1(i)(eew-1).asBool, (~vin1(i)) + 1.U, vin1(i))
+        }.asUInt
+        vinS2(vsew) := (0 until nElems).map {i => 
+            Mux(io.rv2_signed && vin2(i)(eew-1).asBool, (~vin2(i)) + 1.U, vin2(i))
+        }.asUInt
+    }
     //compute partial products and set invalid PPs = 0
     val activePProds = Wire(Vec(xBytes, Vec(xBytes, UInt(16.W))))
+    val vinB1 = vinS1.asTypeOf(Vec(xBytes, UInt(8.W)))
+    val vinB2 = vinS2.asTypeOf(Vec(xBytes, UInt(8.W)))
     for (i <- 0 until xBytes) {
         for (j <- 0 until xBytes) {
-            val pProd = (io.in1(i) * io.in2(j))
+            val pProd = (vinB1(i) * vinB2(j))
             activePProds(i)(j) := Mux(validPProds(io.eew)(i).asBools(j), pProd, 0.U)
         }
     }
     //shift and accumulate valid partial products
-    val vSumsOut = (0 until xBytes).foldLeft(0.U) { (iPartialSum, i) =>
+    val SumPProdsU = (0 until xBytes).foldLeft(0.U) { (iPartialSum, i) =>
                         iPartialSum + 
                             (0 until xBytes).foldLeft(0.U) { (jPartialSum, j) =>
                                 jPartialSum + (activePProds(i)(j) << (8*(i+j)).U)
                             }
                     }
+    //undo input negation if necessary
+    val SumPProdsS = Wire(Vec(4, UInt((2*xLen).W)))
+    for (vsew <- 0 until 4) {
+        val eew = 8 << vsew
+        val nElems = xBytes >> vsew
+        val vin1 = io.in1.asTypeOf(Vec(nElems, UInt(eew.W)))
+        val vin2 = io.in2.asTypeOf(Vec(nElems, UInt(eew.W)))
+        val vSumPProdsU = SumPProdsU(2*xLen-1, 0).asTypeOf(Vec(nElems, UInt((2*eew).W)))
+        // val vSumPProdsS = Wire(Vec(nElems, UInt((2*eew).W)))
+        SumPProdsS(vsew) := (0 until nElems).map (i => {
+            val snXsp = io.rv1_signed && io.rv2_signed && 
+                (vin1(i)(eew-1).asBool ^ vin2(i)(eew-1).asBool)
+            val snXup = (io.rv1_signed && (~io.rv2_signed) && vin1(i)(eew-1).asBool) || 
+                ((~io.rv1_signed) && io.rv2_signed && vin2(i)(eew-1).asBool)
+            Mux(snXsp || snXup, (~vSumPProdsU(i)) + 1.U, vSumPProdsU(i))
+        }).asUInt
+    }
     //TODO: Implement FMA by adding in3 to output
-    io.out := vSumsOut
-}
+    io.out := Mux1H(UIntToOH(io.eew), SumPProdsS)}
