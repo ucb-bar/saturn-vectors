@@ -37,7 +37,7 @@ class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(4)(BitPat.dontCare(1)), Seq(
       (OPMFunct6.wmulu,   Seq(Y,N,N,N)),
-      (OPMFunct6.wmulsu,  Seq(Y,Y,N,N)),
+      (OPMFunct6.wmulsu,  Seq(Y,N,Y,N)),
       (OPMFunct6.wmul,    Seq(Y,Y,Y,N)),
       (OPMFunct6.wmaccu,  Seq(Y,N,N,N)),
       (OPMFunct6.wmacc,   Seq(Y,Y,Y,N)),
