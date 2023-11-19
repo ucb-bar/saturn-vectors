@@ -42,7 +42,7 @@ class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit
       (OPMFunct6.wmaccu,  Seq(Y,N,N,N)),
       (OPMFunct6.wmacc,   Seq(Y,Y,Y,N)),
       (OPMFunct6.wmaccus, Seq(Y,N,Y,N)),
-      (OPMFunct6.wmaccsu, Seq(Y,Y,N,N)),
+      (OPMFunct6.wmaccsu, Seq(Y,Y,N,N))
     ))
 
   val eew = io.pipe(0).bits.rvs1_eew
