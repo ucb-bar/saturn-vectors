@@ -38,9 +38,13 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viMul.io.pipe(0).valid := pipe_valids(0) && io.iss.bits.isOpm
   viMul.io.pipe(0).bits := pipe_bits(0)
 
-  io.writes := MuxCase(DontCare, Array(
-                viMul.io.writes(0).valid -> viMul.io.writes,
-                viu.io.writes(0).valid -> viu.io.writes
+  io.writes(0) := MuxCase(DontCare, Array(
+                viu.io.writes(0).valid -> viu.io.writes(0),
+                viMul.io.writes(0).valid -> viMul.io.writes(0)
+  ))
+  io.writes(1) := MuxCase(DontCare, Array(
+                viu.io.writes(1).valid -> viu.io.writes(1),
+                viMul.io.writes(1).valid -> viMul.io.writes(1)
   ))
   // io.writes := Mux(viMul.io.writes(0).valid, viMul.io.writes, viu.io.writes)
 }
