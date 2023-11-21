@@ -33,7 +33,7 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
 class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
   
-  val  ctrl_wide_in :: ctrl_rv1_signed :: ctrl_rv2_signed :: ctrl_madd :: ctrl_acc :: ctrl_sub :: ctrl_hi :: Nil = VecDecode.applyBools(
+  val  ctrl_wide_in :: ctrl_rvs1_signed :: ctrl_rvs2_signed :: ctrl_madd :: ctrl_acc :: ctrl_sub :: ctrl_hi :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(7)(BitPat.dontCare(1)), Seq(  
       (OPMFunct6.mulhu,   Seq(N,N,N,N,N,X,Y)),
@@ -54,25 +54,28 @@ class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit
       (OPMFunct6.wmaccsu, Seq(Y,Y,N,N,Y,N,N))
     ))
 
-  val eew = io.pipe(0).bits.rvs1_eew
+  val eew = io.pipe(0).bits.rvs1_eew // = to io.pipe(0).bits.rvs2_eew
   val in1 = io.pipe(0).bits.rvs1_data
   val in2 =  Mux(ctrl_madd, io.pipe(0).bits.rvd_data, io.pipe(0).bits.rvs2_data)
+  val ind = io.pipe(0).bits.rvd_data
 
   val numSegMul = dLen/xLen
   val viMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(1))}
   for (i <- 0 until numSegMul) {
     
-    viMul(i).io.rv1_signed := ctrl_rv1_signed
-    viMul(i).io.rv2_signed := ctrl_rv2_signed
+    viMul(i).io.rvs1_signed := ctrl_rvs1_signed
+    viMul(i).io.rvs2_signed := ctrl_rvs2_signed
     viMul(i).io.ctrl_acc := ctrl_acc
     viMul(i).io.ctrl_madd := ctrl_madd
     viMul(i).io.ctrl_sub := ctrl_sub
+    viMul(i).io.ctrl_wide_in := ctrl_wide_in
     viMul(i).io.eew := eew
-    viMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen)
-    viMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen)
+    viMul(i).io.rvs1_data := in1((i+1)*xLen-1, i*xLen)
+    viMul(i).io.rvs2_data := in2((i+1)*xLen-1, i*xLen)
+    viMul(i).io.rvd_data := ind((i+1)*xLen-1, i*xLen)
   }
 
-  val viMulOut = VecInit((0 until numSegMul).map { i => viMul(i).io.out }).asUInt
+  val viMulOut = VecInit((0 until numSegMul).map { i => viMul(i).io.out_data }).asUInt
   io.writes(0).bits.data := viMulOut
   io.writes(1).bits.data := viMulOut
 
