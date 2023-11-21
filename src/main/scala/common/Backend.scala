@@ -88,23 +88,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   seqs.foreach { s =>
     s.io.dis.fire := vdq.io.deq.fire
     s.io.dis.inst := vdq.io.deq.bits
-    s.io.dis.renv1 := false.B
-    s.io.dis.renv2 := false.B
-    s.io.dis.renvd := false.B
-    s.io.dis.renvm := false.B
-    s.io.dis.pipe_lat := s.depth.U
     when (s.io.vat_release.valid) {
       assert(vat_valids(s.io.vat_release.bits))
       vat_valids(s.io.vat_release.bits) := false.B
     }
-    s.io.dis.vs1_eew  := vdq.io.deq.bits.vconfig.vtype.vsew
-    s.io.dis.vs2_eew  := vdq.io.deq.bits.vconfig.vtype.vsew
-    s.io.dis.vs3_eew  := vdq.io.deq.bits.vconfig.vtype.vsew
-    s.io.dis.vd_eew   := vdq.io.deq.bits.vconfig.vtype.vsew
-    s.io.dis.incr_eew := vdq.io.deq.bits.vconfig.vtype.vsew
-    s.io.dis.vd_widen2 := false.B
-    s.io.dis.renvm := !vdq.io.deq.bits.vm
-    s.io.dis.use_wmask := !vdq.io.deq.bits.vm
     s.io.rvs1 := DontCare
     s.io.rvs2 := DontCare
     s.io.rvd := DontCare
@@ -112,36 +99,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
 
-  vxs.io.dis.renv1 := vdq.io.deq.bits.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
-  vxs.io.dis.renv2 := true.B
-  when (vdq.io.deq.bits.funct3 === OPIVI) {
-    vxs.io.dis.inst.rs1_data := Cat(Fill(59, vdq.io.deq.bits.imm4(4)), vdq.io.deq.bits.imm4)
-  }
-  when (vdq.io.deq.bits.isOpi) {
-    when (OPIFunct6(vdq.io.deq.bits.funct6) === OPIFunct6.adc) {
-      vxs.io.dis.use_wmask := false.B
-    }
-  }
-
-  when (vdq.io.deq.bits.isOpi || vdq.io.deq.bits.isOpm) {
-    vxs.io.dis.pipe_lat := 1.U
-  }
-  when (vdq.io.deq.bits.isOpm) {
-    val f6 = OPMFunct6(vdq.io.deq.bits.funct6)
-    when (f6.isOneOf(OPMFunct6.waddu, OPMFunct6.wadd, OPMFunct6.wsub, OPMFunct6.wsubu)) {
-      vxs.io.dis.vd_widen2 := true.B
-    }
-    when (f6.isOneOf(OPMFunct6.wadduw, OPMFunct6.waddw, OPMFunct6.wsubuw, OPMFunct6.wsubw)) {
-      vxs.io.dis.vs2_eew := vdq.io.deq.bits.vconfig.vtype.vsew + 1.U
-      vxs.io.dis.vd_eew := vdq.io.deq.bits.vconfig.vtype.vsew + 1.U
-      vxs.io.dis.incr_eew := vdq.io.deq.bits.vconfig.vtype.vsew + 1.U
-    }
-    when (f6 === OPMFunct6.xunary0) {
-      val div = ~vdq.io.deq.bits.rs1(2,1) + 1.U
-      vxs.io.dis.vs2_eew := vdq.io.deq.bits.vconfig.vtype.vsew - div
-      vxs.io.dis.incr_eew := vdq.io.deq.bits.vconfig.vtype.vsew
-    }
-  }
 
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)

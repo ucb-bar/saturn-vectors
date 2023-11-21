@@ -13,21 +13,6 @@ abstract class PipeSequencer(val depth: Int)(implicit p: Parameters) extends Cor
       val fire = Input(Bool())
       val ready = Output(Bool())
       val inst = Input(new VectorIssueInst)
-
-      // TODO remove
-      val renv1 = Input(Bool())
-      val renv2 = Input(Bool())
-      val renvd = Input(Bool())
-      val renvm = Input(Bool())
-
-      val vs1_eew = Input(UInt(2.W))
-      val vs2_eew = Input(UInt(2.W))
-      val vs3_eew = Input(UInt(2.W))
-      val vd_eew = Input(UInt(2.W))
-      val vd_widen2 = Input(Bool())
-      val incr_eew = Input(UInt(2.W))
-      val pipe_lat = Input(UInt((log2Ceil(depth+1)).W))
-      val use_wmask = Input(Bool())
     }
 
     val seq_hazards = new Bundle {
