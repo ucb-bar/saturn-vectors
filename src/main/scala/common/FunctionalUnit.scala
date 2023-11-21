@@ -33,27 +33,40 @@ abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends 
 
 class VectorIntegerMultiply(implicit p: Parameters) extends VectorFunctionalUnit(1)(p) {
   
-  val  ctrl_wide_in :: ctrl_rv1_signed :: ctrl_rv2_signed :: ctrl_cmask :: Nil = VecDecode.applyBools(
+  val  ctrl_wide_in :: ctrl_rv1_signed :: ctrl_rv2_signed :: ctrl_madd :: ctrl_acc :: ctrl_sub :: ctrl_hi :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(4)(BitPat.dontCare(1)), Seq(
-      (OPMFunct6.wmulu,   Seq(Y,N,N,N)),
-      (OPMFunct6.wmulsu,  Seq(Y,N,Y,N)),
-      (OPMFunct6.wmul,    Seq(Y,Y,Y,N)),
-      (OPMFunct6.wmaccu,  Seq(Y,N,N,N)),
-      (OPMFunct6.wmacc,   Seq(Y,Y,Y,N)),
-      (OPMFunct6.wmaccus, Seq(Y,N,Y,N)),
-      (OPMFunct6.wmaccsu, Seq(Y,Y,N,N))
+    Seq.fill(7)(BitPat.dontCare(1)), Seq(  
+      (OPMFunct6.mulhu,   Seq(N,N,N,N,N,X,Y)),
+      (OPMFunct6.mul,     Seq(N,Y,Y,N,N,X,N)),
+      (OPMFunct6.mulhsu,  Seq(N,N,Y,N,N,X,Y)),
+      (OPMFunct6.mulh,    Seq(N,Y,Y,N,N,X,Y)),
+      (OPMFunct6.madd,    Seq(N,Y,Y,Y,Y,N,N)),
+      (OPMFunct6.nmsub,   Seq(N,Y,Y,Y,Y,Y,N)),
+      (OPMFunct6.macc,    Seq(N,Y,Y,N,Y,N,N)),
+      (OPMFunct6.nmsac,   Seq(N,Y,Y,N,Y,Y,N)),
+
+      (OPMFunct6.wmulu,   Seq(Y,N,N,N,N,X,N)),
+      (OPMFunct6.wmulsu,  Seq(Y,N,Y,N,N,X,N)),
+      (OPMFunct6.wmul,    Seq(Y,Y,Y,N,N,X,N)),
+      (OPMFunct6.wmaccu,  Seq(Y,N,N,N,Y,N,N)),
+      (OPMFunct6.wmacc,   Seq(Y,Y,Y,N,Y,N,N)),
+      (OPMFunct6.wmaccus, Seq(Y,N,Y,N,Y,N,N)),
+      (OPMFunct6.wmaccsu, Seq(Y,Y,N,N,Y,N,N))
     ))
 
   val eew = io.pipe(0).bits.rvs1_eew
   val in1 = io.pipe(0).bits.rvs1_data
-  val in2 = io.pipe(0).bits.rvs2_data
+  val in2 =  Mux(ctrl_madd, io.pipe(0).bits.rvd_data, io.pipe(0).bits.rvs2_data)
 
   val numSegMul = dLen/xLen
   val viMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(1))}
   for (i <- 0 until numSegMul) {
+    
     viMul(i).io.rv1_signed := ctrl_rv1_signed
     viMul(i).io.rv2_signed := ctrl_rv2_signed
+    viMul(i).io.ctrl_acc := ctrl_acc
+    viMul(i).io.ctrl_madd := ctrl_madd
+    viMul(i).io.ctrl_sub := ctrl_sub
     viMul(i).io.eew := eew
     viMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen)
     viMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen)
