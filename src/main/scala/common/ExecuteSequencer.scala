@@ -106,7 +106,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
 
   io.iss.bits.rvs1_data := io.rvs1.resp
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX) && !inst.vmu) {
-    io.iss.bits.rvs1_data := dLenSplat(inst.rs1_data, vs1_eew)
+    val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(56, inst.imm4(4)), inst.imm4), inst.rs1_data)
+    io.iss.bits.rvs1_data := dLenSplat(rs1_data, vs1_eew)
   }
   io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvd_data  := io.rvd.resp
@@ -121,7 +122,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.iss.bits.rs1       := inst.rs1
   io.iss.bits.funct3    := inst.funct3
   io.iss.bits.funct6    := inst.funct6
-  io.iss.bits.load      := false.B
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)

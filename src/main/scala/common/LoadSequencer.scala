@@ -70,7 +70,6 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.rs1        := inst.rs1
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare
-  io.iss.bits.load       := true.B
 
   val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)

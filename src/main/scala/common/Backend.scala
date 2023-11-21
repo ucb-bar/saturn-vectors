@@ -203,7 +203,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
   maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.rvs2_eew)
   maskindex_q.io.enq.bits.mask  := reads(4)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
-  maskindex_q.io.enq.bits.load  := !vims.io.iss.bits.load
   vims.io.iss.ready      := maskindex_q.io.enq.ready
 
 

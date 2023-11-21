@@ -31,7 +31,6 @@ class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorP
 class MaskIndex(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val mask = Bool()
   val index = UInt(64.W)
-  val load = Bool()
 }
 
 class ScalarMemOrderCheckIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -157,6 +156,8 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }.orR
   io.dmem.scalar_check.conflict := scalar_store_conflict || (scalar_load_conflict && io.dmem.scalar_check.store)
 
+  val maskindex_load = Wire(Bool())
+
   // Load Addr Sequencing
   val las = Module(new AddrGen)
   val las_order_block = (0 until vParams.vsiqEntries).map { i =>
@@ -168,7 +169,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   las.io.valid := liq_las_valid && !las_order_block
   las.io.op := liq(liq_las_ptr).op
 
-  las.io.maskindex.valid := io.maskindex.valid && io.maskindex.bits.load
+  las.io.maskindex.valid := io.maskindex.valid && maskindex_load
   las.io.maskindex.bits := io.maskindex.bits
 
   io.dmem.load_req <> las.io.req
@@ -219,7 +220,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }.orR
   sas.io.valid := siq_sas_valid && !sas_order_block
   sas.io.op := siq(siq_sas_ptr).op
-  sas.io.maskindex.valid := io.maskindex.valid && !io.maskindex.bits.load
+  sas.io.maskindex.valid := io.maskindex.valid && !maskindex_load
   sas.io.maskindex.bits := io.maskindex.bits
   siq_sas_fire := sas.io.done
 
@@ -249,5 +250,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.busy := liq_valids.orR || siq_valids.orR
 
-  io.maskindex.ready := Mux(io.maskindex.bits.load, las.io.maskindex.ready, sas.io.maskindex.ready)
+  maskindex_load := (vatOlder(las.io.op.vat, sas.io.op.vat) || !sas.io.valid)
+  io.maskindex.ready := Mux(maskindex_load, las.io.maskindex.ready, sas.io.maskindex.ready)
 }
