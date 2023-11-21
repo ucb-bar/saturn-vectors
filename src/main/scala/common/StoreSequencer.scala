@@ -84,7 +84,7 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.rmask := vm_mask
 
   when (io.iss.fire && !last) {
-    when (tail_mask(dLenB-1)) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size)) {
       rvd_mask := rvd_mask & ~vd_read_oh
     }
     when (sidx === inst.seg_nf) {

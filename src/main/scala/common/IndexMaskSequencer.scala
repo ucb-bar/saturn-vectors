@@ -26,13 +26,10 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
     inst  := io.dis.inst
     eidx  := io.dis.inst.vstart
 
-    val renv2_arch_mask = Wire(Vec(32, Bool()))
-    for (i <- 0 until 32) {
-      val group = i.U >> io.dis.inst.pos_lmul
-      val rs2_group = io.dis.inst.rs2 >> io.dis.inst.pos_lmul
-      renv2_arch_mask(i) := group === rs2_group
-    }
-    rvs2_mask := FillInterleaved(egsPerVReg, renv2_arch_mask.asUInt)
+    val group_mask = get_group_mask(io.dis.inst.pos_lmul, 3)
+    val renv2_arch_mask = get_arch_mask(io.dis.inst.rs2, group_mask)
+
+    rvs2_mask := FillInterleaved(egsPerVReg, renv2_arch_mask)
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }

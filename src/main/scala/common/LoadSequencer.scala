@@ -43,7 +43,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.seq_hazards.wintent := wvd_mask
   io.seq_hazards.vat     := inst.vat
 
-  val vm_read_oh  = UIntToOH(io.rvm.req.bits)
+  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
   val raw_hazard = (vm_read_oh & io.seq_hazards.writes) =/= 0.U
@@ -79,7 +79,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.rmask := DontCare
 
   when (io.iss.fire && !last) {
-    when (tail_mask(dLenB-1)) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size)) {
       wvd_mask := wvd_mask & ~vd_write_oh
     }
     when (sidx === inst.seg_nf) {
