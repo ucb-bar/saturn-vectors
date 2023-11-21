@@ -58,7 +58,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def rd  = bits(11,7)
   def may_write_v0 = rd === 0.U && opcode =/= opcStore
   def funct3 = bits(14,12)
-  def imm4 = bits(19,15)
+  def imm5 = bits(19,15)
   def funct6 = bits(31,26)
 
   def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)

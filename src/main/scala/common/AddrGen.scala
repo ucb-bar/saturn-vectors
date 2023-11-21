@@ -88,7 +88,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
       r_saddr := next_eaddr
       r_eidx := next_eidx
       r_sidx := 0.U
-      io.maskindex.ready := true.B
+      io.maskindex.ready := needs_mask || needs_index
     } .otherwise {
       r_eaddr := io.op.base_addr
       r_saddr := next_saddr

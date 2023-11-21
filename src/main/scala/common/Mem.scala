@@ -250,6 +250,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.busy := liq_valids.orR || siq_valids.orR
 
-  maskindex_load := (vatOlder(las.io.op.vat, sas.io.op.vat) || !sas.io.valid)
+  maskindex_load := las.io.valid && (vatOlder(las.io.op.vat, sas.io.op.vat) || !sas.io.valid)
   io.maskindex.ready := Mux(maskindex_load, las.io.maskindex.ready, sas.io.maskindex.ready)
 }
