@@ -78,8 +78,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vxs = Module(new OldPipeSequencer(3, (i: VectorIssueInst) => !i.vmu,
-    true, true, true, true, false))
+  val vxs = Module(new ExecuteSequencer)
   val vims = Module(new IndexMaskSequencer)
   val seqs = Seq(vls, vss, vxs, vims)
 
