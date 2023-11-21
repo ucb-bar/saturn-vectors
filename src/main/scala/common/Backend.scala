@@ -94,7 +94,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.rvm := DontCare
   }
 
-
+  val pipe_hazards = vxu.io.pipe_hazards
 
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)
@@ -106,9 +106,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat) && s.io.seq_hazards.valid,
         s.io.seq_hazards.rintent, 0.U)
     }).reduce(_|_)
-    val older_pipe_writes = (otherSeqs.map(_.io.pipe_hazards).flatten.map(h =>
-      Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid && h.bits.hazard =/= 0.U,
-        h.bits.eg_oh, 0.U)) :+ 0.U).reduce(_|_)
+    val older_pipe_writes = pipe_hazards.map(h =>
+      Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid,
+        h.bits.eg_oh, 0.U)).reduce(_|_)
 
     seq.io.seq_hazards.writes := older_pipe_writes | older_wintents
     seq.io.seq_hazards.reads := older_rintents
@@ -224,8 +224,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
-  } ++ seqs.map(_.io.pipe_hazards).flatten.map { h =>
-    h.valid && h.bits.hazard && (h.bits.eg < egsPerVReg.U)
+  } ++ pipe_hazards.map { h =>
+    h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>
     h.valid && h.bits.may_write_v0
@@ -234,5 +234,5 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.mem_busy := vmu.io.busy
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || resetting
+  io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
 }

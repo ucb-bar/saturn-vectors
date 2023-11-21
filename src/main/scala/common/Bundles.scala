@@ -135,11 +135,9 @@ class VectorMicroOp(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle(
   val vat = UInt(vParams.vatSz.W)
 }
 
-class PipeHazard(depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val eg = UInt(log2Ceil(egsTotal).W)
-  val wvd_widen2 = Bool()
+class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val vat = UInt(vParams.vatSz.W)
-  val hazard_oh = UInt(depth.W)
-  def hazard = hazard_oh(0)
-  def eg_oh = Mux(wvd_widen2, FillInterleaved(2, UIntToOH(eg >> 1) ), UIntToOH(eg))
+  val eg = UInt(log2Ceil(egsTotal).W)
+  val widen2 = Bool()
+  def eg_oh = Mux(widen2, FillInterleaved(2, UIntToOH(eg >> 1) ), UIntToOH(eg))
 }

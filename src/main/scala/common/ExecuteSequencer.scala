@@ -70,15 +70,15 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.seq_hazards.wintent := wvd_mask
   io.seq_hazards.vat := inst.vat
 
-  val pipe_writes = io.pipe_hazards.map(h => Mux(h.valid && h.bits.hazard, h.bits.eg_oh, 0.U)).reduce(_|_)
+  // val pipe_writes = io.pipe_hazards.map(h => Mux(h.valid && h.bits.hazard, h.bits.eg_oh, 0.U)).reduce(_|_)
 
   val vs1_read_oh = Mux(renv1, UIntToOH(io.rvs1.req.bits), 0.U)
   val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits), 0.U)
   val vd_read_oh  = Mux(renvd, UIntToOH(io.rvd.req.bits ) , 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
-  val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh) & (pipe_writes | io.seq_hazards.writes)) =/= 0.U
-  val waw_hazard = (vd_write_oh & (pipe_writes | io.seq_hazards.writes)) =/= 0.U
+  val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh) & io.seq_hazards.writes) =/= 0.U
+  val waw_hazard = (vd_write_oh & io.seq_hazards.writes) =/= 0.U
   val war_hazard = (vd_write_oh & io.seq_hazards.reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
@@ -137,9 +137,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.iss.bits.wmask := head_mask & tail_mask & vm_mask
   io.iss.bits.rmask := Mux(renvm, vm_resp, ~(0.U(dLenB.W)))
 
-  val pipe_valids = Seq.fill(depth) { RegInit(false.B) }
-  val pipe_hazards = Seq.fill(depth) { Reg(new PipeHazard(depth)) }
-
   when (io.iss.fire && !last) {
     when (next_is_new_eg(eidx, next_eidx, vd_eew)) {
       val wvd_clr_mask = Mux(widen2, FillInterleaved(2, UIntToOH(io.iss.bits.wvd_eg >> 1)), UIntToOH(io.iss.bits.wvd_eg))
@@ -157,27 +154,5 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     eidx := next_eidx
   }
 
-  for (i <- 0 until depth) {
-    io.pipe_hazards(i).valid := pipe_valids(i)
-    io.pipe_hazards(i).bits := pipe_hazards(i)
-  }
-
-  when (io.iss.fire) {
-    pipe_valids.head := true.B
-    pipe_hazards.head.eg := io.iss.bits.wvd_eg
-    pipe_hazards.head.vat := inst.vat
-    pipe_hazards.head.hazard_oh := (1.U << lat) - 1.U
-    pipe_hazards.head.wvd_widen2 := widen2
-  } .otherwise {
-    pipe_valids.head := false.B
-  }
-  for (i <- 1 until depth) {
-    pipe_valids(i) := pipe_valids(i-1)
-    when (pipe_valids(i-1)) {
-      pipe_hazards(i) := pipe_hazards(i-1)
-      pipe_hazards(i).hazard_oh := pipe_hazards(i-1).hazard_oh >> 1
-    }
-  }
-
-  io.busy := (pipe_valids :+ valid).reduce(_||_)
+  io.busy := valid
 }
