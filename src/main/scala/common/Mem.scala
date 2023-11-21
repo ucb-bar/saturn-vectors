@@ -166,6 +166,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     )
     siq_valids(i) && addr_conflict && vatOlder(siq(i).op.vat, liq(liq_las_ptr).op.vat)
   }.orR
+  dontTouch(las_order_block)
   las.io.valid := liq_las_valid && !las_order_block
   las.io.op := liq(liq_las_ptr).op
 
@@ -218,6 +219,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     )
     liq_valids(i) && addr_conflict && vatOlder(liq(i).op.vat, siq(siq_sas_ptr).op.vat)
   }.orR
+  dontTouch(sas_order_block)
   sas.io.valid := siq_sas_valid && !sas_order_block
   sas.io.op := siq(siq_sas_ptr).op
   sas.io.maskindex.valid := io.maskindex.valid && !maskindex_load

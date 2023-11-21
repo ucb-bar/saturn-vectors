@@ -12,6 +12,7 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
     val iss = Flipped(Decoupled(new VectorMicroOp(depth)))
 
     val writes = Vec(2, Valid(new VectorWrite))
+    val vat_release = Valid(UInt(vParams.vatSz.W))
   })
 
   val wmask = RegInit(0.U(depth.W))
@@ -29,6 +30,11 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
       pipe_bits(i) := pipe_bits(i-1)
     }
   }
+  val vat_release_oh = pipe_valids.zip(pipe_bits).zipWithIndex.map { case ((v, b), i) =>
+    (v && b.wlat === i.U && b.last)
+  }
+  io.vat_release.valid := vat_release_oh.orR
+  io.vat_release.bits := Mux1H(vat_release_oh, pipe_bits.map(_.vat))
 
   val viu = Module(new VectorIntegerUnit)
   viu.io.iss.valid := io.iss.fire && io.iss.bits.funct3.isOneOf(OPIVI, OPIVX, OPIVV)

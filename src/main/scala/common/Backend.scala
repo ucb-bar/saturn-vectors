@@ -88,10 +88,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   seqs.foreach { s =>
     s.io.dis.fire := vdq.io.deq.fire
     s.io.dis.inst := vdq.io.deq.bits
-    when (s.io.vat_release.valid) {
-      assert(vat_valids(s.io.vat_release.bits))
-      vat_valids(s.io.vat_release.bits) := false.B
-    }
     s.io.rvs1 := DontCare
     s.io.rvs2 := DontCare
     s.io.rvd := DontCare
@@ -206,9 +202,19 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vims.io.iss.ready      := maskindex_q.io.enq.ready
 
 
+  when (vls.io.iss.fire && vls.io.iss.bits.last) {
+    assert(vat_valids(vls.io.iss.bits.vat))
+    vat_valids(vls.io.iss.bits.vat) := false.B
+  }
+
   when (vmu.io.vat_release.valid) {
     assert(vat_valids(vmu.io.vat_release.bits))
     vat_valids(vmu.io.vat_release.bits) := false.B
+  }
+
+  when (vxu.io.vat_release.valid) {
+    assert(vat_valids(vxu.io.vat_release.bits))
+    vat_valids(vxu.io.vat_release.bits) := false.B
   }
 
 

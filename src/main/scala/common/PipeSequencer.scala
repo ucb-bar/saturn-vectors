@@ -27,8 +27,6 @@ abstract class PipeSequencer(val depth: Int)(implicit p: Parameters) extends Cor
 
     val busy = Output(Bool())
     val pipe_hazards = Vec(depth, Valid(new PipeHazard(depth)))
-    val vat_release = Valid(UInt(vParams.vatSz.W))
-
 
     val rvs1 = new VectorReadIO
     val rvs2 = new VectorReadIO

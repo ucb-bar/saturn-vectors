@@ -122,6 +122,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.iss.bits.rs1       := inst.rs1
   io.iss.bits.funct3    := inst.funct3
   io.iss.bits.funct6    := inst.funct6
+  io.iss.bits.last       := last
+  io.iss.bits.vat        := inst.vat
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
@@ -164,7 +166,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     pipe_valids.head := true.B
     pipe_hazards.head.eg := io.iss.bits.wvd_eg
     pipe_hazards.head.vat := inst.vat
-    pipe_hazards.head.clear_vat := last
     pipe_hazards.head.hazard_oh := (1.U << lat) - 1.U
     pipe_hazards.head.wvd_widen2 := widen2
   } .otherwise {
@@ -177,8 +178,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
       pipe_hazards(i).hazard_oh := pipe_hazards(i-1).hazard_oh >> 1
     }
   }
-  io.vat_release.valid := pipe_valids.last && pipe_hazards.last.clear_vat
-  io.vat_release.bits := pipe_hazards.last.vat
 
   io.busy := (pipe_valids :+ valid).reduce(_||_)
 }
