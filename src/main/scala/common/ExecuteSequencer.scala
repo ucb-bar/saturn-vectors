@@ -22,8 +22,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   val renvm = !inst.vm
 
   val widen2 = inst.opmf6.isOneOf(OPMFunct6.waddu, OPMFunct6.wadd, OPMFunct6.wsub, OPMFunct6.wsubu)
-  val writes_mask = inst.opif6 === OPIFunct6.madc
-  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc)
+  val writes_mask = inst.opif6.isOneOf(OPIFunct6.madc, OPIFunct6.msbc)
+  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc)
 
   val wide_in = inst.opmf6.isOneOf(OPMFunct6.wadduw, OPMFunct6.waddw, OPMFunct6.wsubuw, OPMFunct6.wsubw)
   val vs1_eew = inst.vconfig.vtype.vsew

@@ -11,7 +11,7 @@ object OPIFunct6 extends ChiselEnum {
   val _ = Value
   val sub, rsub, minu, min, maxu, max = Value
   val _ = Value
-  val vand, vor, vxor, vrgather = Value
+  val and, or, xor, rgather = Value
   val _ = Value
   val slideup, slidedown = Value
   def rgatherei16 = slideup
