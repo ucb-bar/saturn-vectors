@@ -14,6 +14,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   val rvs1_mask = Reg(UInt(egsTotal.W))
   val rvs2_mask = Reg(UInt(egsTotal.W))
   val rvd_mask  = Reg(UInt(egsTotal.W))
+  val rvm_mask  = Reg(UInt(egsPerVReg.W))
 
   val renv1 = inst.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
   val renv2 = true.B
@@ -21,7 +22,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   val renvm = !inst.vm
 
   val widen2 = inst.opmf6.isOneOf(OPMFunct6.waddu, OPMFunct6.wadd, OPMFunct6.wsub, OPMFunct6.wsubu)
-  val use_wmask = !inst.vm && !(inst.opif6 === OPIFunct6.adc)
+  val writes_mask = inst.opif6 === OPIFunct6.madc
+  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc)
 
   val wide_in = inst.opmf6.isOneOf(OPMFunct6.wadduw, OPMFunct6.waddw, OPMFunct6.wsubuw, OPMFunct6.wsubw)
   val vs1_eew = inst.vconfig.vtype.vsew
@@ -57,16 +59,18 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
     val dis_renv2 = true.B
     val dis_renvd = false.B
+    val dis_renvm = !inst.vm
     wvd_mask      := FillInterleaved(egsPerVReg, vd_arch_mask)
     rvs1_mask := Mux(dis_renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
     rvs2_mask := Mux(dis_renv2, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
     rvd_mask  := Mux(dis_renvd, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
+    rvm_mask  := Mux(dis_renvm, ~(0.U(egsPerVReg.W)), 0.U)
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
 
   io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := rvs1_mask | rvs2_mask | rvd_mask | Mux(renvm, ~(0.U(egsPerVReg.W)), 0.U)
+  io.seq_hazards.rintent := rvs1_mask | rvs2_mask | rvd_mask | rvm_mask
   io.seq_hazards.wintent := wvd_mask
   io.seq_hazards.vat := inst.vat
 
@@ -74,10 +78,11 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
 
   val vs1_read_oh = Mux(renv1, UIntToOH(io.rvs1.req.bits), 0.U)
   val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits), 0.U)
-  val vd_read_oh  = Mux(renvd, UIntToOH(io.rvd.req.bits ) , 0.U)
+  val vd_read_oh  = Mux(renvd, UIntToOH(io.rvd.req.bits ), 0.U)
+  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits ), 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
-  val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh) & io.seq_hazards.writes) =/= 0.U
+  val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh | vm_read_oh) & io.seq_hazards.writes) =/= 0.U
   val waw_hazard = (vd_write_oh & io.seq_hazards.writes) =/= 0.U
   val war_hazard = (vd_write_oh & io.seq_hazards.reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
@@ -116,7 +121,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.iss.bits.rvd_eew   := vs3_eew
   io.iss.bits.vd_eew    := vd_eew
   io.iss.bits.eidx      := eidx
-  io.iss.bits.wvd_eg    := getEgId(inst.rd, eidx, vd_eew + widen2)
+  io.iss.bits.wvd_eg    := getEgId(inst.rd, Mux(writes_mask, eidx >> 3, eidx), Mux(writes_mask, 0.U, vd_eew + widen2))
   io.iss.bits.wvd_widen2 := widen2
   io.iss.bits.wlat      := lat
   io.iss.bits.rs1       := inst.rs1
@@ -124,6 +129,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.iss.bits.funct6    := inst.funct6
   io.iss.bits.last       := last
   io.iss.bits.vat        := inst.vat
+  io.iss.bits.vm         := inst.vm
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
@@ -138,7 +144,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.iss.bits.rmask := Mux(renvm, vm_resp, ~(0.U(dLenB.W)))
 
   when (io.iss.fire && !last) {
-    when (next_is_new_eg(eidx, next_eidx, vd_eew)) {
+    when (Mux(writes_mask, next_mask_is_new_eg(eidx, next_eidx), next_is_new_eg(eidx, next_eidx, vd_eew))) {
       val wvd_clr_mask = Mux(widen2, FillInterleaved(2, UIntToOH(io.iss.bits.wvd_eg >> 1)), UIntToOH(io.iss.bits.wvd_eg))
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }
@@ -150,6 +156,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     }
     when (next_is_new_eg(eidx, next_eidx, vs3_eew)) {
       rvd_mask  := rvd_mask  & ~UIntToOH(io.rvd.req.bits)
+    }
+    when (next_mask_is_new_eg(eidx, next_eidx)) {
+      rvm_mask  := rvm_mask  & ~UIntToOH(io.rvm.req.bits)
     }
     eidx := next_eidx
   }

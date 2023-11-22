@@ -50,5 +50,6 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
   viu.io.pipe(0).bits := pipe_bits(0)
 
   io.writes := viu.io.writes
+
   io.busy := pipe_valids.orR
 }

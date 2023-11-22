@@ -139,13 +139,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   load_write.valid := vls.io.iss.fire
   load_write.bits.eg := vls.io.iss.bits.wvd_eg
   load_write.bits.data := vmu.io.lresp.bits
-  load_write.bits.mask := vls.io.iss.bits.wmask
+  load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
 
   when (resetting) {
     load_write.valid := true.B
     load_write.bits.eg := reset_ctr
     load_write.bits.data := 0.U
-    load_write.bits.mask := ~(0.U(dLenB.W))
+    load_write.bits.mask := ~(0.U(dLen.W))
   }
 
   vrf(0).io.write(0) := vrfWrite(0, load_write)

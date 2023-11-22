@@ -73,7 +73,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 class VectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
   val data = UInt(dLen.W)
-  val mask = UInt(dLenB.W)
+  val mask = UInt(dLen.W)
 }
 
 class VectorReadIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -128,8 +128,13 @@ class VectorMicroOp(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle(
   def isOpm = funct3.isOneOf(OPMVV, OPMVX)
   def isOpf = funct3.isOneOf(OPFVV, OPFVF)
 
+  def opmf6 = Mux(isOpm, OPMFunct6(funct6), OPMFunct6.illegal)
+  def opif6 = Mux(isOpi, OPIFunct6(funct6), OPIFunct6.illegal)
+  def opff6 = Mux(isOpf, OPFFunct6(funct6), OPFFunct6.illegal)
+
   val funct6 = UInt(6.W)
   val rs1 = UInt(5.W)
+  val vm = Bool()
 
   val last = Bool()
   val vat = UInt(vParams.vatSz.W)

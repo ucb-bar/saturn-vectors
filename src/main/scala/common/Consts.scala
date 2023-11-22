@@ -17,7 +17,6 @@ object OPIFunct6 extends ChiselEnum {
   def rgatherei16 = slideup
 
   val adc = Value
-  val _ = Value
   val madc, sbc, msbc = Value
   val _, _, _ = Value
   val merge, mseq, msne, msltu, mslt, msleu, msle, msgtu, msgt = Value

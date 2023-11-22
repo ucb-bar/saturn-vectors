@@ -13,6 +13,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   val eidx  = Reg(UInt(log2Ceil(maxVLMax).W))
   val sidx  = Reg(UInt(3.W))
   val wvd_mask = Reg(UInt(egsTotal.W))
+  val rvm_mask = Reg(UInt(egsPerVReg.W))
 
   val renvm     = !inst.vm
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U)
@@ -34,12 +35,13 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
       wvd_arch_mask(i) := group >= rd_group && group <= (rd_group + io.dis.inst.nf)
     }
     wvd_mask := FillInterleaved(egsPerVReg, wvd_arch_mask.asUInt)
+    rvm_mask := Mux(!io.dis.inst.vm, ~(0.U(egsPerVReg.W)), 0.U)
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
 
   io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := Mux(renvm, ~(0.U(egsPerVReg.W)), 0.U)
+  io.seq_hazards.rintent := rvm_mask
   io.seq_hazards.wintent := wvd_mask
   io.seq_hazards.vat     := inst.vat
 
@@ -72,6 +74,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.funct6     := DontCare
   io.iss.bits.last       := last
   io.iss.bits.vat        := inst.vat
+  io.iss.bits.vm         := inst.vm
 
   val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
@@ -82,6 +85,9 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   when (io.iss.fire && !last) {
     when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size)) {
       wvd_mask := wvd_mask & ~vd_write_oh
+    }
+    when (next_mask_is_new_eg(eidx, next_eidx)) {
+      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits)
     }
     when (sidx === inst.seg_nf) {
       sidx := 0.U

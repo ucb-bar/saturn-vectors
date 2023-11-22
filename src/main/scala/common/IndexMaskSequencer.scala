@@ -12,6 +12,7 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   val inst  = Reg(new VectorIssueInst)
   val eidx  = Reg(UInt(log2Ceil(maxVLMax).W))
   val rvs2_mask = Reg(UInt(egsTotal.W))
+  val rvm_mask = Reg(UInt(egsPerVReg.W))
 
   val renvm = !inst.vm && inst.mop =/= mopUnit
   val renv2 = inst.mop(0)
@@ -30,12 +31,13 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
     val renv2_arch_mask = get_arch_mask(io.dis.inst.rs2, group_mask)
 
     rvs2_mask := FillInterleaved(egsPerVReg, renv2_arch_mask)
+    rvm_mask := Mux(!inst.vm && inst.mop =/= mopUnit, ~(0.U(egsPerVReg.W)), 0.U)
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
 
   io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := rvs2_mask | Mux(renvm, ~(0.U(egsPerVReg.W)), 0.U)
+  io.seq_hazards.rintent := rvs2_mask | rvm_mask
   io.seq_hazards.wintent := false.B
   io.seq_hazards.vat := inst.vat
 
@@ -68,6 +70,7 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.funct6     := DontCare
   io.iss.bits.last       := last
   io.iss.bits.vat        := inst.vat
+  io.iss.bits.vm         := inst.vm
 
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
   val vm_mask = Mux(!renvm, ~(0.U(dLenB.W)), get_vm_mask(io.rvm.resp, eidx, inst.mem_elem_size))
@@ -75,8 +78,11 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.rmask      := vm_mask
 
   when (io.iss.fire && !last) {
-    when (tail_mask(dLenB-1)) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_idx_size)) {
       rvs2_mask := rvs2_mask & ~vs2_read_oh
+    }
+    when (next_mask_is_new_eg(eidx, next_eidx)) {
+      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits)
     }
     eidx := next_eidx
   }

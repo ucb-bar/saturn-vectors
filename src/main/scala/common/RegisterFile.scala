@@ -40,7 +40,7 @@ class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameter
     val write = Vec(writes, Input(Valid(new VectorWrite)))
   })
 
-  val vrf = Mem(rows, Vec(dLenB, UInt(8.W)))
+  val vrf = Mem(rows, Vec(dLen, Bool()))
   for (read <- io.read) {
     read.req.ready := true.B
     read.resp := vrf.read(read.req.bits).asUInt
@@ -50,7 +50,7 @@ class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameter
     when (write.valid) {
       vrf.write(
         write.bits.eg,
-        write.bits.data.asTypeOf(Vec(dLenB, UInt(8.W))),
+        VecInit(write.bits.data.asBools),
         write.bits.mask.asBools)
     }
   }
