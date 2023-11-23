@@ -17,6 +17,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   val rvm_mask  = Reg(UInt(egsPerVReg.W))
   val wide_vd = Reg(Bool())
   val wide_vs2 = Reg(Bool())
+  val writes_mask = Reg(Bool())
 
   val vs1_eew  = inst.vconfig.vtype.vsew
   val vs2_eew  = inst.vconfig.vtype.vsew + wide_vs2 - Mux(inst.opmf6 === OPMFunct6.xunary0,
@@ -25,12 +26,11 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   val vd_eew   = inst.vconfig.vtype.vsew + wide_vd
   val incr_eew = inst.vconfig.vtype.vsew + wide_vs2
 
-  val renv1 = inst.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
+  val renv1 = Reg(Bool())
   val renv2 = true.B
   val renvd = false.B
   val renvm = !inst.vm
 
-  val writes_mask = inst.opif6.isOneOf(OPIFunct6.madc, OPIFunct6.msbc)
   val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc)
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -45,19 +45,29 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     inst := io.dis.inst
     eidx := io.dis.inst.vstart
 
-    val dis_wide_vd :: dis_wide_vs2 :: Nil = VecDecode.applyBools(
+    val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: Nil = VecDecode.applyBools(
       io.dis.inst.funct3, io.dis.inst.funct6,
-      Seq.fill(2)(false.B), Seq(
-        (OPMFunct6.waddu , Seq(Y,N)),
-        (OPMFunct6.wadd  , Seq(Y,N)),
-        (OPMFunct6.wsubu , Seq(Y,N)),
-        (OPMFunct6.wsub  , Seq(Y,N)),
-        (OPMFunct6.wadduw, Seq(Y,Y)),
-        (OPMFunct6.waddw , Seq(Y,Y)),
-        (OPMFunct6.wsubuw, Seq(Y,Y)),
-        (OPMFunct6.wsubw , Seq(Y,Y)),
-        (OPIFunct6.nsra  , Seq(N,Y)),
-        (OPIFunct6.nsrl  , Seq(N,Y))
+      Seq.fill(3)(false.B), Seq(
+        (OPMFunct6.waddu , Seq(Y,N,N)),
+        (OPMFunct6.wadd  , Seq(Y,N,N)),
+        (OPMFunct6.wsubu , Seq(Y,N,N)),
+        (OPMFunct6.wsub  , Seq(Y,N,N)),
+        (OPMFunct6.wadduw, Seq(Y,Y,N)),
+        (OPMFunct6.waddw , Seq(Y,Y,N)),
+        (OPMFunct6.wsubuw, Seq(Y,Y,N)),
+        (OPMFunct6.wsubw , Seq(Y,Y,N)),
+        (OPIFunct6.nsra  , Seq(N,Y,N)),
+        (OPIFunct6.nsrl  , Seq(N,Y,N)),
+        (OPIFunct6.madc  , Seq(N,N,Y)),
+        (OPIFunct6.msbc  , Seq(N,N,Y)),
+        (OPIFunct6.mseq  , Seq(N,N,Y)),
+        (OPIFunct6.msne  , Seq(N,N,Y)),
+        (OPIFunct6.msltu , Seq(N,N,Y)),
+        (OPIFunct6.mslt  , Seq(N,N,Y)),
+        (OPIFunct6.msleu , Seq(N,N,Y)),
+        (OPIFunct6.msle  , Seq(N,N,Y)),
+        (OPIFunct6.msgtu , Seq(N,N,Y)),
+        (OPIFunct6.msgt  , Seq(N,N,Y)),
       )
     )
 
@@ -69,7 +79,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     val vs1_arch_mask = get_arch_mask(io.dis.inst.rs1, group_mask)
     val vs2_arch_mask = get_arch_mask(io.dis.inst.rs2, vs2_group_mask)
 
-    val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVI, OPFVV, OPMVV)
+    val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
     val dis_renv2 = true.B
     val dis_renvd = false.B
     val dis_renvm = !inst.vm
@@ -80,6 +90,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     rvm_mask  := Mux(dis_renvm, ~(0.U(egsPerVReg.W)), 0.U)
     wide_vd := dis_wide_vd
     wide_vs2 := dis_wide_vs2
+    writes_mask := dis_writes_mask
+    renv1 := dis_renv1
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
