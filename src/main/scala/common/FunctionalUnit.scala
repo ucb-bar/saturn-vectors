@@ -182,7 +182,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
       (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
     })(rvs2_eew))
-    val shift_hi = shift_sra & VecInit.tabulate(4)({eew =>
+    val shift_hi = !ctrl_shift_left & shift_sra & VecInit.tabulate(4)({eew =>
       rvs2_bytes(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
     })(rvs2_eew)
     val shift_left_in = Reverse(VecInit(Seq(0.U(8.W)) ++ rvs2_bytes.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
@@ -191,7 +191,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
       shift_left_in,
       shift_right_in)
 
-    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt).asUInt
+    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt).asUInt(7,0)
     shift_out(i) := Mux(ctrl_shift_left,
       Reverse(shifted),
       shifted)
