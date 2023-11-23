@@ -47,7 +47,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
       (OPMFunct6.xunary0, Seq(X,X,X,N,N,X,N,X,X,X)),
       (OPIFunct6.sll    , Seq(X,X,N,N,Y,Y,N,X,X,X)),
       (OPIFunct6.sra    , Seq(X,X,N,N,Y,N,N,X,X,X)),
-      (OPIFunct6.srl    , Seq(X,N,Y,N,Y,N,N,X,X,X)),
+      (OPIFunct6.srl    , Seq(X,N,N,N,Y,N,N,X,X,X)),
       (OPIFunct6.nsra   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
       (OPIFunct6.nsrl   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
       (OPIFunct6.mseq   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
@@ -177,7 +177,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     })(rvs1_eew) & shamt_mask
 
     val shift_left_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
-      ((1 << (1 + (i % (1 << eew)))) - 1).U
+      ((1 << (1 + (i % (1 << eew)))) - 1).U(8.W)
     })(rvs2_eew))
     val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
       (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
@@ -185,8 +185,8 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     val shift_hi = !ctrl_shift_left & shift_sra & VecInit.tabulate(4)({eew =>
       rvs2_bytes(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
     })(rvs2_eew)
-    val shift_left_in = Reverse(VecInit(Seq(0.U(8.W)) ++ rvs2_bytes.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
-    val shift_right_in = (VecInit(rvs2_bytes.drop(i).take(8-i)).asUInt & shift_right_zero_mask) | Mux(shift_hi, ~shift_right_zero_mask, 0.U)
+    val shift_left_in = Reverse(VecInit(rvs2_bytes.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
+    val shift_right_in = (VecInit(rvs2_bytes.drop(i).take(8-(i%8))).asUInt & shift_right_zero_mask) | Mux(shift_hi, ~shift_right_zero_mask, 0.U)
     val shift_in = Mux(ctrl_shift_left,
       shift_left_in,
       shift_right_in)
