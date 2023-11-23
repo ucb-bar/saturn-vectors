@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu.{VectorExecutionUnit}
+import vector.exu.{ExecutionUnit}
 
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -84,7 +84,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vims = Module(new IndexMaskSequencer)
   val seqs = Seq(vls, vss, vxs, vims)
 
-  val vxu = Module(new VectorExecutionUnit(3))
+  val vxu = Module(new ExecutionUnit(3))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
   seqs.foreach { s =>

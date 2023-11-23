@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class ExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new VectorMicroOp(depth)))
 
@@ -44,7 +44,7 @@ class VectorExecutionUnit(depth: Int)(implicit p: Parameters) extends CoreModule
     io.pipe_hazards(i).bits.widen2 := pipe_bits(i).wvd_widen2
   }
 
-  val viu = Module(new VectorIntegerUnit)
+  val viu = Module(new IntegerPipe)
   viu.io.iss.valid := io.iss.fire && io.iss.bits.funct3.isOneOf(OPIVI, OPIVX, OPIVV)
   viu.io.iss.bits := io.iss.bits
   viu.io.pipe(0).valid := pipe_valids(0)
