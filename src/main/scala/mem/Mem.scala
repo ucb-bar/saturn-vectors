@@ -1,4 +1,4 @@
-package vector.common
+package vector.mem
 
 import chisel3._
 import chisel3.util._
@@ -6,6 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+import vector.common._
 
 class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val op = new VectorMemMacroOp
@@ -40,7 +41,7 @@ class ScalarMemOrderCheckIO(implicit p: Parameters) extends CoreBundle()(p) with
   val conflict = Output(Bool())
 }
 
-class VectorMemInterface(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val load_req = Decoupled(new MemRequest)
   val load_resp = Input(Valid(UInt(dLen.W)))
   val store_req = Decoupled(new MemRequest)
@@ -66,7 +67,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new VectorMemMacroOp))
 
-    val dmem = new VectorMemInterface
+    val dmem = new VectorMemIO
 
     val lresp = Decoupled(UInt(dLen.W))
     val sdata = Flipped(Decoupled(new StoreData))

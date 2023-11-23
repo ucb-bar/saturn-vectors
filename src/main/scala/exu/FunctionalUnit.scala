@@ -1,4 +1,4 @@
-package vector.common
+package vector.exu
 
 import chisel3._
 import chisel3.util._
@@ -6,6 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+import vector.common._
 
 abstract class VectorFunctionalUnit(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
@@ -166,6 +167,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   }
 
   val shift_out = Wire(Vec(dLenB, UInt(8.W)))
+  dontTouch(shift_out)
   val shift_narrowing_out = VecInit.tabulate(3)({eew =>
     Fill(2, VecInit(shift_out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq).asUInt)
   })(rvs1_eew)

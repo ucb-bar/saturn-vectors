@@ -6,13 +6,15 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
+import vector.exu.{VectorExecutionUnit}
 
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val issue = Flipped(Decoupled(new VectorIssueInst))
 
-    val mem = new VectorMemInterface
+    val mem = new VectorMemIO
 
     val backend_busy = Output(Bool())
     val mem_busy = Output(Bool())
