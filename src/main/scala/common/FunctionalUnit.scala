@@ -23,31 +23,33 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
 
-  val ctrl_sub :: ctrl_add_sext :: ctrl_wide_in :: ctrl_bw :: ctrl_shift :: Nil = VecDecode.applyBools(
+  val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(5)(BitPat.dontCare(1)), Seq(
-      (OPIFunct6.add    , Seq(N,X,N,N,N)),
-      (OPIFunct6.sub    , Seq(Y,X,N,N,N)),
-      (OPIFunct6.rsub   , Seq(Y,X,N,N,N)),
-      (OPMFunct6.waddu  , Seq(N,N,N,N,N)),
-      (OPMFunct6.wadd   , Seq(N,Y,N,N,N)),
-      (OPMFunct6.wsubu  , Seq(Y,N,N,N,N)),
-      (OPMFunct6.wsub   , Seq(Y,Y,N,N,N)),
-      (OPMFunct6.wadduw , Seq(N,N,Y,N,N)),
-      (OPMFunct6.waddw  , Seq(N,Y,Y,N,N)),
-      (OPMFunct6.wsubuw , Seq(Y,N,Y,N,N)),
-      (OPMFunct6.wsubw  , Seq(Y,Y,Y,N,N)),
-      (OPIFunct6.adc    , Seq(N,X,N,N,N)),
-      (OPIFunct6.madc   , Seq(N,X,N,N,N)),
-      (OPIFunct6.sbc    , Seq(Y,X,N,N,N)),
-      (OPIFunct6.msbc   , Seq(Y,X,N,N,N)),
-      (OPIFunct6.and    , Seq(X,X,X,Y,N)),
-      (OPIFunct6.or     , Seq(X,X,X,Y,N)),
-      (OPIFunct6.xor    , Seq(X,X,X,Y,N)),
-      (OPMFunct6.xunary0, Seq(X,X,X,N,N)),
-      (OPIFunct6.sll    , Seq(X,X,X,N,Y)),
-      (OPIFunct6.sra    , Seq(X,X,X,N,Y)),
-      (OPIFunct6.srl    , Seq(X,X,X,N,Y)),
+    Seq.fill(6)(BitPat.dontCare(1)), Seq(
+      (OPIFunct6.add    , Seq(N,X,N,N,N,X)),
+      (OPIFunct6.sub    , Seq(Y,X,N,N,N,X)),
+      (OPIFunct6.rsub   , Seq(Y,X,N,N,N,X)),
+      (OPMFunct6.waddu  , Seq(N,N,N,N,N,X)),
+      (OPMFunct6.wadd   , Seq(N,Y,N,N,N,X)),
+      (OPMFunct6.wsubu  , Seq(Y,N,N,N,N,X)),
+      (OPMFunct6.wsub   , Seq(Y,Y,N,N,N,X)),
+      (OPMFunct6.wadduw , Seq(N,N,Y,N,N,X)),
+      (OPMFunct6.waddw  , Seq(N,Y,Y,N,N,X)),
+      (OPMFunct6.wsubuw , Seq(Y,N,Y,N,N,X)),
+      (OPMFunct6.wsubw  , Seq(Y,Y,Y,N,N,X)),
+      (OPIFunct6.adc    , Seq(N,X,N,N,N,X)),
+      (OPIFunct6.madc   , Seq(N,X,N,N,N,X)),
+      (OPIFunct6.sbc    , Seq(Y,X,N,N,N,X)),
+      (OPIFunct6.msbc   , Seq(Y,X,N,N,N,X)),
+      (OPIFunct6.and    , Seq(X,X,X,Y,N,X)),
+      (OPIFunct6.or     , Seq(X,X,X,Y,N,X)),
+      (OPIFunct6.xor    , Seq(X,X,X,Y,N,X)),
+      (OPMFunct6.xunary0, Seq(X,X,X,N,N,X)),
+      (OPIFunct6.sll    , Seq(X,X,N,N,Y,Y)),
+      (OPIFunct6.sra    , Seq(X,X,N,N,Y,N)),
+      (OPIFunct6.srl    , Seq(X,N,Y,N,Y,N)),
+      (OPIFunct6.nsra   , Seq(X,N,Y,N,Y,N)),
+      (OPIFunct6.nsrl   , Seq(X,N,Y,N,Y,N)),
     ))
   val ctrl_cmask = (
     io.pipe(0).bits.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.sbc) ||
@@ -66,9 +68,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     (bw_xor, (io.pipe(0).bits.rvs1_data ^ io.pipe(0).bits.rvs2_data))
   ))
 
-  val shift_sll = io.pipe(0).bits.funct6(2)
-  val shift_sra = !shift_sll && io.pipe(0).bits.funct6(0)
-  val shift_srl = !shift_sll && !shift_sra
+  val shift_sra = io.pipe(0).bits.funct6(0)
 
   val add_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -83,8 +83,8 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   val add_out = Wire(Vec(dLenB, UInt(8.W)))
   val add_wide_out_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> eew, UInt((16 << eew).W))) }
   val add_wide_out = VecInit(add_wide_out_eew.map(_.asUInt))(rvs2_eew)
-  val add_wide_in1_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
-  val add_wide_in1 = VecInit(add_wide_in1_eew.map(_.asTypeOf(Vec(dLenB, UInt(8.W)))))(rvs1_eew)
+  val add_narrow_vs1_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
+  val add_narrow_vs1 = VecInit(add_narrow_vs1_eew.map(_.asUInt))(rvs1_eew).asTypeOf(Vec(dLenB, UInt(8.W)))
   val add_mask_out = Fill(8, VecInit.tabulate(4)({ eew =>
     Fill(1 << eew, VecInit(add_carryborrow.grouped(1 << eew).map(_.last).toSeq).asUInt)
   })(rvs1_eew))
@@ -94,7 +94,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   add_carry(0) := ctrl_sub
 
   for (i <- 0 until dLenB) {
-    val in1 = Mux(ctrl_wide_in, add_wide_in1(i), Mux(rsub, add_in2(i), add_in1(i)))
+    val in1 = Mux(ctrl_narrow_vs1, add_narrow_vs1(i), Mux(rsub, add_in2(i), add_in1(i)))
     val in2 = Mux(rsub, add_in1(i), add_in2(i))
     val full = (Mux(ctrl_sub, ~in1, in1) +&
       in2 +&
@@ -108,9 +108,10 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   for (eew <- 0 until 3) {
     val in_vec = add_in1.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
     for (i <- 0 until dLenB >> (eew + 1)) {
-      val lo = Mux(io.pipe(0).bits.wvd_eg(0), in_vec(i + (dLenB >> (eew + 1))), in_vec(i))
+      val hi_sel = Mux(ctrl_shift, (io.pipe(0).bits.eidx >> (dLenOffBits.U - rvs2_eew))(0), io.pipe(0).bits.wvd_eg(0))
+      val lo = Mux(hi_sel, in_vec(i + (dLenB >> (eew + 1))), in_vec(i))
       val hi = Fill(16 << eew, lo((8 << eew)-1) && ctrl_add_sext)
-      add_wide_in1_eew(eew)(i) := Cat(hi, lo)
+      add_narrow_vs1_eew(eew)(i) := Cat(hi, lo)
     }
 
     val out_vec = add_out.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
@@ -124,10 +125,14 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   }
 
   val shift_out = Wire(Vec(dLenB, UInt(8.W)))
+  val shift_narrowing_out = VecInit.tabulate(3)({eew =>
+    Fill(2, VecInit(shift_out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq).asUInt)
+  })(rvs1_eew)
   val shamt_mask = VecInit.tabulate(4)({eew => ((8 << eew) - 1).U})(rvs2_eew)(5,0)
+  val shamt_arr = Mux(ctrl_narrow_vs1, add_narrow_vs1, add_in1)
   for (i <- 0 until dLenB) {
     val shamt = VecInit.tabulate(4)({ eew =>
-      add_in1((i / (1 << eew)) << eew)
+      shamt_arr((i / (1 << eew)) << eew)
     })(rvs1_eew) & shamt_mask
 
     val shift_left_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
@@ -135,18 +140,18 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     })(rvs2_eew))
     val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
       (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
-    })(rvs1_eew))
+    })(rvs2_eew))
     val shift_hi = shift_sra & VecInit.tabulate(4)({eew =>
       add_in2(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
-    })(rvs1_eew)
+    })(rvs2_eew)
     val shift_left_in = Reverse(VecInit(Seq(0.U(8.W)) ++ add_in2.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
     val shift_right_in = (VecInit(add_in2.drop(i).take(8-i)).asUInt & shift_right_zero_mask) | Mux(shift_hi, ~shift_right_zero_mask, 0.U)
-    val shift_in = Mux(shift_sll,
+    val shift_in = Mux(ctrl_shift_left,
       shift_left_in,
       shift_right_in)
 
-    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt)(7,0)
-    shift_out(i) := Mux(shift_sll,
+    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt).asUInt
+    shift_out(i) := Mux(ctrl_shift_left,
       Reverse(shifted),
       shifted)
   }
@@ -176,7 +181,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     (xunary0             , xunary0_out),
     (ctrl_bw             , bw_out),
     (add_mask_write      , add_mask_out),
-    (ctrl_shift          , shift_out.asUInt)
+    (ctrl_shift          , Mux(ctrl_narrow_vs1, shift_narrowing_out, shift_out.asUInt))
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 
