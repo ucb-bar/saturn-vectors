@@ -26,30 +26,30 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(10)(BitPat.dontCare(1)), Seq(
-      (OPIFunct6.add    , Seq(N,X,N,N,N,X,N,N,N,X)),
-      (OPIFunct6.sub    , Seq(Y,X,N,N,N,X,N,N,N,X)),
-      (OPIFunct6.rsub   , Seq(Y,X,N,N,N,X,N,N,Y,X)),
-      (OPMFunct6.waddu  , Seq(N,N,N,N,N,X,N,N,N,X)),
-      (OPMFunct6.wadd   , Seq(N,Y,N,N,N,X,N,N,N,X)),
-      (OPMFunct6.wsubu  , Seq(Y,N,N,N,N,X,N,N,N,X)),
-      (OPMFunct6.wsub   , Seq(Y,Y,N,N,N,X,N,N,N,X)),
-      (OPMFunct6.wadduw , Seq(N,N,Y,N,N,X,N,N,N,X)),
-      (OPMFunct6.waddw  , Seq(N,Y,Y,N,N,X,N,N,N,X)),
-      (OPMFunct6.wsubuw , Seq(Y,N,Y,N,N,X,N,N,N,X)),
-      (OPMFunct6.wsubw  , Seq(Y,Y,Y,N,N,X,N,N,N,X)),
-      (OPIFunct6.adc    , Seq(N,X,N,N,N,X,N,N,N,X)),
+      (OPIFunct6.add    , Seq(N,X,N,N,N,X,N,X,N,X)),
+      (OPIFunct6.sub    , Seq(Y,X,N,N,N,X,N,X,N,X)),
+      (OPIFunct6.rsub   , Seq(Y,X,N,N,N,X,N,X,Y,X)),
+      (OPMFunct6.waddu  , Seq(N,N,N,N,N,X,N,X,N,X)),
+      (OPMFunct6.wadd   , Seq(N,Y,N,N,N,X,N,X,N,X)),
+      (OPMFunct6.wsubu  , Seq(Y,N,N,N,N,X,N,X,N,X)),
+      (OPMFunct6.wsub   , Seq(Y,Y,N,N,N,X,N,X,N,X)),
+      (OPMFunct6.wadduw , Seq(N,N,Y,N,N,X,N,X,N,X)),
+      (OPMFunct6.waddw  , Seq(N,Y,Y,N,N,X,N,X,N,X)),
+      (OPMFunct6.wsubuw , Seq(Y,N,Y,N,N,X,N,X,N,X)),
+      (OPMFunct6.wsubw  , Seq(Y,Y,Y,N,N,X,N,X,N,X)),
+      (OPIFunct6.adc    , Seq(N,X,N,N,N,X,N,X,N,X)),
       (OPIFunct6.madc   , Seq(N,X,N,N,N,X,Y,N,N,X)),
-      (OPIFunct6.sbc    , Seq(Y,X,N,N,N,X,N,N,N,X)),
+      (OPIFunct6.sbc    , Seq(Y,X,N,N,N,X,N,X,N,X)),
       (OPIFunct6.msbc   , Seq(Y,X,N,N,N,X,Y,N,N,X)),
-      (OPIFunct6.and    , Seq(X,X,X,Y,N,X,N,N,X,X)),
-      (OPIFunct6.or     , Seq(X,X,X,Y,N,X,N,N,X,X)),
-      (OPIFunct6.xor    , Seq(X,X,X,Y,N,X,N,N,X,X)),
-      (OPMFunct6.xunary0, Seq(X,X,X,N,N,X,N,N,X,X)),
-      (OPIFunct6.sll    , Seq(X,X,N,N,Y,Y,N,N,X,X)),
-      (OPIFunct6.sra    , Seq(X,X,N,N,Y,N,N,N,X,X)),
-      (OPIFunct6.srl    , Seq(X,N,Y,N,Y,N,N,N,X,X)),
-      (OPIFunct6.nsra   , Seq(X,N,Y,N,Y,N,N,N,X,X)),
-      (OPIFunct6.nsrl   , Seq(X,N,Y,N,Y,N,N,N,X,X)),
+      (OPIFunct6.and    , Seq(X,X,X,Y,N,X,N,X,X,X)),
+      (OPIFunct6.or     , Seq(X,X,X,Y,N,X,N,X,X,X)),
+      (OPIFunct6.xor    , Seq(X,X,X,Y,N,X,N,X,X,X)),
+      (OPMFunct6.xunary0, Seq(X,X,X,N,N,X,N,X,X,X)),
+      (OPIFunct6.sll    , Seq(X,X,N,N,Y,Y,N,X,X,X)),
+      (OPIFunct6.sra    , Seq(X,X,N,N,Y,N,N,X,X,X)),
+      (OPIFunct6.srl    , Seq(X,N,Y,N,Y,N,N,X,X,X)),
+      (OPIFunct6.nsra   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
+      (OPIFunct6.nsrl   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
       (OPIFunct6.mseq   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
       (OPIFunct6.msne   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
       (OPIFunct6.msltu  , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
@@ -58,6 +58,10 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
       (OPIFunct6.msle   , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
       (OPIFunct6.msgtu  , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
       (OPIFunct6.msgt   , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
+      (OPIFunct6.minu   , Seq(X,X,X,N,N,X,N,X,N,Y)),
+      (OPIFunct6.min    , Seq(X,X,X,N,N,X,N,X,N,Y)),
+      (OPIFunct6.maxu   , Seq(X,X,X,N,N,X,N,X,Y,Y)),
+      (OPIFunct6.max    , Seq(X,X,X,N,N,X,N,X,Y,Y)),
     ))
   val ctrl_cmask = (
     io.pipe(0).bits.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.sbc) ||
@@ -66,6 +70,7 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
 
   val ctrl_rsub = io.pipe(0).bits.opif6 === OPIFunct6.rsub
   val ctrl_xunary0 = io.pipe(0).bits.opmf6 === OPMFunct6.xunary0
+  val ctrl_minmax = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.minu, OPIFunct6.min, OPIFunct6.maxu, OPIFunct6.max)
 
   val bw_and = io.pipe(0).bits.funct6(1,0) === 1.U
   val bw_or  = io.pipe(0).bits.funct6(1,0) === 2.U
@@ -102,12 +107,12 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
   val add_narrow_vs1_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
   val add_narrow_vs1 = VecInit(add_narrow_vs1_eew.map(_.asUInt))(rvs1_eew).asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  val cmp_lt = Wire(Vec(dLenB, Bool()))
-  val cmp_eq = Wire(Vec(dLenB, Bool()))
-  val cmp_res = VecInit.tabulate(4)({eew =>
+  val cmp_lt = VecInit(in2_bytes.zip(in1_bytes).map { x => x._1 < x._2 })
+  val cmp_eq = VecInit(in2_bytes.zip(in1_bytes).map { x => x._1 === x._2 })
+  val cmp_minmax = VecInit.tabulate(4)({eew =>
     val lts = cmp_lt.grouped(1 << eew)
     val eqs = cmp_eq.grouped(1 << eew)
-    Fill(1 << eew, VecInit((lts zip eqs).zipWithIndex.map { case ((elts, eeqs), i) =>
+    val bits = VecInit((lts zip eqs).zipWithIndex.map { case ((elts, eeqs), i) =>
       val eq = eeqs.andR
       val in1_hi = in1_bytes((i+1)*(1<<eew)-1)(7)
       val in2_hi = in2_bytes((i+1)*(1<<eew)-1)(7)
@@ -115,8 +120,13 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
       val hi_eq = in1_hi === in2_hi
       val lt = ((elts :+ hi_lt) zip (eeqs :+ hi_eq)).foldLeft(false.B) { case (p, (l, e)) => l || (e && p) }
       Mux(cmp_less, lt || (cmp_sle & eq), cmp_inv ^ eq)
-    }.toSeq).asUInt)
+    }.toSeq).asUInt
+    VecInit(Seq(Fill(1 << eew, bits), FillInterleaved(1 << eew, bits)))
   })(rvs1_eew)
+  val cmp_res = cmp_minmax(0)
+  val minmax_sel = cmp_minmax(1).asBools
+  val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(minmax_sel).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
+
   val carryborrow_res = VecInit.tabulate(4)({ eew =>
     Fill(1 << eew, VecInit(add_carryborrow.grouped(1 << eew).map(_.last).toSeq).asUInt)
   })(rvs1_eew)
@@ -135,9 +145,6 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     add_out(i) := full(7,0)
     add_carry(i+1) := full(8)
     add_carryborrow(i) := full(8) ^ ctrl_sub
-
-    cmp_eq(i) := in2_bytes(i) === in1_bytes(i)
-    cmp_lt(i) := in2_bytes(i) <   in1_bytes(i)
   }
   for (eew <- 0 until 3) {
     val in_vec = rvs1_bytes.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
@@ -215,7 +222,8 @@ class VectorIntegerUnit(implicit p: Parameters) extends VectorFunctionalUnit(1)(
     (ctrl_xunary0        , xunary0_out),
     (ctrl_bw             , bw_out),
     (ctrl_mask_write     , mask_out),
-    (ctrl_shift          , Mux(ctrl_narrow_vs1, shift_narrowing_out, shift_out.asUInt))
+    (ctrl_shift          , Mux(ctrl_narrow_vs1, shift_narrowing_out, shift_out.asUInt)),
+    (ctrl_minmax         , minmax_out)
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 
