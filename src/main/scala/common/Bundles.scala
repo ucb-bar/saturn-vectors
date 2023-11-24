@@ -102,7 +102,7 @@ class MaskedByte extends Bundle {
   val mask = Bool()
 }
 
-class VectorMicroOp(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val wvd = Bool()
   val eidx = UInt(log2Ceil(maxVLMax).W)
 
@@ -120,8 +120,6 @@ class VectorMicroOp(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle(
 
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
   val wvd_widen2 = Bool()
-
-  val wlat = UInt(log2Ceil(pipe_depth+1).W)
 
   val funct3 = UInt(3.W)
   def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)

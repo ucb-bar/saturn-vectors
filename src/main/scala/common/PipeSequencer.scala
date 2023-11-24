@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-abstract class PipeSequencer(val depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val dis = new Bundle {
       val fire = Input(Bool())
@@ -32,7 +32,7 @@ abstract class PipeSequencer(val depth: Int)(implicit p: Parameters) extends Cor
     val rvd  = new VectorReadIO
     val rvm  = new VectorReadIO
 
-    val iss = Decoupled(new VectorMicroOp(depth))
+    val iss = Decoupled(new VectorMicroOp)
   })
   def min(a: UInt, b: UInt) = Mux(a > b, b, a)
   def get_group_mask(log2mul: UInt, max: Int) = Mux1H((0 until max).map { i =>

@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu.{ExecutionUnit}
+import vector.exu.{ExecutionUnit, IntegerPipe}
 
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -84,7 +84,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vims = Module(new IndexMaskSequencer)
   val seqs = Seq(vls, vss, vxs, vims)
 
-  val vxu = Module(new ExecutionUnit(3))
+  val vxu = Module(new ExecutionUnit(Seq(() => new IntegerPipe)))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
   seqs.foreach { s =>
@@ -96,7 +96,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.rvm := DontCare
   }
 
-  val pipe_hazards = vxu.io.pipe_hazards
+  val hazards = vxu.io.hazards
 
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)
@@ -108,11 +108,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat) && s.io.seq_hazards.valid,
         s.io.seq_hazards.rintent, 0.U)
     }).reduce(_|_)
-    val older_pipe_writes = pipe_hazards.map(h =>
+    val older_writes = hazards.map(h =>
       Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid,
         h.bits.eg_oh, 0.U)).reduce(_|_)
 
-    seq.io.seq_hazards.writes := older_pipe_writes | older_wintents
+    seq.io.seq_hazards.writes := older_writes | older_wintents
     seq.io.seq_hazards.reads := older_rintents
   }
 
@@ -226,7 +226,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
-  } ++ pipe_hazards.map { h =>
+  } ++ hazards.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>

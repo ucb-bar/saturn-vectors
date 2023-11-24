@@ -8,7 +8,9 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class IntegerPipe(implicit p: Parameters) extends FunctionalUnit(1)(p) {
+class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+
+  override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPIVI, OPIVX, OPIVV, OPMVV, OPMVX)
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew

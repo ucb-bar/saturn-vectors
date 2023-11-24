@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
+class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val valid = RegInit(false.B)
   val inst  = Reg(new VectorIssueInst)
   val wvd_mask  = Reg(UInt(egsTotal.W))
@@ -130,7 +130,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
     !(renvd && !io.rvd.req.ready) &&
     !(renvm && !io.rvm.req.ready)
   )
-  val lat = 1.U
 
   val widen2 = wide_vd && !wide_vs2
   io.iss.bits.wvd   := true.B
@@ -148,7 +147,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(3)(p) {
   io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_eg    := getEgId(inst.rd, Mux(writes_mask, eidx >> 3, eidx), Mux(writes_mask, 0.U, vd_eew))
   io.iss.bits.wvd_widen2 := widen2
-  io.iss.bits.wlat      := lat
   io.iss.bits.rs1       := inst.rs1
   io.iss.bits.funct3    := inst.funct3
   io.iss.bits.funct6    := inst.funct6

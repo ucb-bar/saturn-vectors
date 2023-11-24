@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
+class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val valid = RegInit(false.B)
   val inst  = Reg(new VectorIssueInst)
   val eidx  = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -64,7 +64,6 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(0)(p) {
   io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_eg    := DontCare
   io.iss.bits.wvd_widen2 := false.B
-  io.iss.bits.wlat       := 0.U
   io.iss.bits.rs1        := inst.rs1
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare
