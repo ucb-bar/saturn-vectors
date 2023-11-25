@@ -16,15 +16,15 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
   }
 }
 
-class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends FunctionalUnitIO {
-  val writes = Vec(2, Valid(new VectorWrite))
+class PipelinedFunctionalUnitIO(depth: Int, wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnitIO {
+  val write = Valid(new VectorWrite(if (wideWrite) (dLen << 1) else dLen))
   val pipe = Input(Vec(depth, Valid(new VectorMicroOp)))
 }
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {
   val iss_op = Input(Valid(new VectorMicroOp))
 
-  val write = Decoupled(new VectorWrite)
+  val write = Decoupled(new VectorWrite(dLen))
   val vat = Output(Valid(UInt(vParams.vatSz.W)))
   val hazard = Output(Valid(new PipeHazard))
 
@@ -37,8 +37,8 @@ abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) wi
   def accepts(f3: UInt, f6: UInt): Bool
 }
 
-abstract class PipelinedFunctionalUnit(val depth: Int)(implicit p: Parameters) extends FunctionalUnit()(p) {
-  val io = IO(new PipelinedFunctionalUnitIO(depth))
+abstract class PipelinedFunctionalUnit(val depth: Int, wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnit()(p) {
+  val io = IO(new PipelinedFunctionalUnitIO(depth, wideWrite))
 
   require (depth > 0)
   io.iss.ready := accepts(io.iss.funct3, io.iss.funct6)

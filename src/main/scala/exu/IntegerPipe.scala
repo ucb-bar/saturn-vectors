@@ -8,54 +8,53 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
-
-  override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPIVI, OPIVX, OPIVV, OPMVV, OPMVX)
-
+class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true)(p) {
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
 
+  lazy val ctrl_table = Seq(
+    (OPIFunct6.add    , Seq(N,X,N,N,N,X,N,X,N,X)),
+    (OPIFunct6.sub    , Seq(Y,X,N,N,N,X,N,X,N,X)),
+    (OPIFunct6.rsub   , Seq(Y,X,N,N,N,X,N,X,Y,X)),
+    (OPMFunct6.waddu  , Seq(N,N,N,N,N,X,N,X,N,X)),
+    (OPMFunct6.wadd   , Seq(N,Y,N,N,N,X,N,X,N,X)),
+    (OPMFunct6.wsubu  , Seq(Y,N,N,N,N,X,N,X,N,X)),
+    (OPMFunct6.wsub   , Seq(Y,Y,N,N,N,X,N,X,N,X)),
+    (OPMFunct6.wadduw , Seq(N,N,Y,N,N,X,N,X,N,X)),
+    (OPMFunct6.waddw  , Seq(N,Y,Y,N,N,X,N,X,N,X)),
+    (OPMFunct6.wsubuw , Seq(Y,N,Y,N,N,X,N,X,N,X)),
+    (OPMFunct6.wsubw  , Seq(Y,Y,Y,N,N,X,N,X,N,X)),
+    (OPIFunct6.adc    , Seq(N,X,N,N,N,X,N,X,N,X)),
+    (OPIFunct6.madc   , Seq(N,X,N,N,N,X,Y,N,N,X)),
+    (OPIFunct6.sbc    , Seq(Y,X,N,N,N,X,N,X,N,X)),
+    (OPIFunct6.msbc   , Seq(Y,X,N,N,N,X,Y,N,N,X)),
+    (OPIFunct6.and    , Seq(X,X,X,Y,N,X,N,X,X,X)),
+    (OPIFunct6.or     , Seq(X,X,X,Y,N,X,N,X,X,X)),
+    (OPIFunct6.xor    , Seq(X,X,X,Y,N,X,N,X,X,X)),
+    (OPMFunct6.xunary0, Seq(X,X,X,N,N,X,N,X,X,X)),
+    (OPIFunct6.sll    , Seq(X,X,N,N,Y,Y,N,X,X,X)),
+    (OPIFunct6.sra    , Seq(X,X,N,N,Y,N,N,X,X,X)),
+    (OPIFunct6.srl    , Seq(X,N,N,N,Y,N,N,X,X,X)),
+    (OPIFunct6.nsra   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
+    (OPIFunct6.nsrl   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
+    (OPIFunct6.mseq   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
+    (OPIFunct6.msne   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
+    (OPIFunct6.msltu  , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
+    (OPIFunct6.mslt   , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
+    (OPIFunct6.msleu  , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
+    (OPIFunct6.msle   , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
+    (OPIFunct6.msgtu  , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
+    (OPIFunct6.msgt   , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
+    (OPIFunct6.minu   , Seq(X,X,X,N,N,X,N,X,N,Y)),
+    (OPIFunct6.min    , Seq(X,X,X,N,N,X,N,X,N,Y)),
+    (OPIFunct6.maxu   , Seq(X,X,X,N,N,X,N,X,Y,Y)),
+    (OPIFunct6.max    , Seq(X,X,X,N,N,X,N,X,Y,Y)),
+  )
+  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(10)(BitPat.dontCare(1)), Seq(
-      (OPIFunct6.add    , Seq(N,X,N,N,N,X,N,X,N,X)),
-      (OPIFunct6.sub    , Seq(Y,X,N,N,N,X,N,X,N,X)),
-      (OPIFunct6.rsub   , Seq(Y,X,N,N,N,X,N,X,Y,X)),
-      (OPMFunct6.waddu  , Seq(N,N,N,N,N,X,N,X,N,X)),
-      (OPMFunct6.wadd   , Seq(N,Y,N,N,N,X,N,X,N,X)),
-      (OPMFunct6.wsubu  , Seq(Y,N,N,N,N,X,N,X,N,X)),
-      (OPMFunct6.wsub   , Seq(Y,Y,N,N,N,X,N,X,N,X)),
-      (OPMFunct6.wadduw , Seq(N,N,Y,N,N,X,N,X,N,X)),
-      (OPMFunct6.waddw  , Seq(N,Y,Y,N,N,X,N,X,N,X)),
-      (OPMFunct6.wsubuw , Seq(Y,N,Y,N,N,X,N,X,N,X)),
-      (OPMFunct6.wsubw  , Seq(Y,Y,Y,N,N,X,N,X,N,X)),
-      (OPIFunct6.adc    , Seq(N,X,N,N,N,X,N,X,N,X)),
-      (OPIFunct6.madc   , Seq(N,X,N,N,N,X,Y,N,N,X)),
-      (OPIFunct6.sbc    , Seq(Y,X,N,N,N,X,N,X,N,X)),
-      (OPIFunct6.msbc   , Seq(Y,X,N,N,N,X,Y,N,N,X)),
-      (OPIFunct6.and    , Seq(X,X,X,Y,N,X,N,X,X,X)),
-      (OPIFunct6.or     , Seq(X,X,X,Y,N,X,N,X,X,X)),
-      (OPIFunct6.xor    , Seq(X,X,X,Y,N,X,N,X,X,X)),
-      (OPMFunct6.xunary0, Seq(X,X,X,N,N,X,N,X,X,X)),
-      (OPIFunct6.sll    , Seq(X,X,N,N,Y,Y,N,X,X,X)),
-      (OPIFunct6.sra    , Seq(X,X,N,N,Y,N,N,X,X,X)),
-      (OPIFunct6.srl    , Seq(X,N,N,N,Y,N,N,X,X,X)),
-      (OPIFunct6.nsra   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
-      (OPIFunct6.nsrl   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
-      (OPIFunct6.mseq   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
-      (OPIFunct6.msne   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
-      (OPIFunct6.msltu  , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-      (OPIFunct6.mslt   , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-      (OPIFunct6.msleu  , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-      (OPIFunct6.msle   , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-      (OPIFunct6.msgtu  , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
-      (OPIFunct6.msgt   , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
-      (OPIFunct6.minu   , Seq(X,X,X,N,N,X,N,X,N,Y)),
-      (OPIFunct6.min    , Seq(X,X,X,N,N,X,N,X,N,Y)),
-      (OPIFunct6.maxu   , Seq(X,X,X,N,N,X,N,X,Y,Y)),
-      (OPIFunct6.max    , Seq(X,X,X,N,N,X,N,X,Y,Y)),
-    ))
+    Seq.fill(10)(BitPat.dontCare(1)), ctrl_table)
   val ctrl_cmask = (
     io.pipe(0).bits.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.sbc) ||
     ((io.pipe(0).bits.opif6.isOneOf(OPIFunct6.madc, OPIFunct6.msbc)) && !io.pipe(0).bits.vm)
@@ -224,27 +223,17 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val mask_write_offset = VecInit.tabulate(4)({ eew =>
     Cat(io.pipe(0).bits.eidx(log2Ceil(dLen)-1, dLenOffBits-eew), 0.U((dLenOffBits-eew).W))
   })(rvs1_eew)
-  val mask_write_mask = VecInit.tabulate(4)({ eew =>
+  val mask_write_mask = (VecInit.tabulate(4)({ eew =>
     VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
-  })(rvs1_eew)
+  })(rvs1_eew) << mask_write_offset)(dLen-1,0)
 
-  for (b <- 0 until 2) {
-    io.writes(b).valid     := io.pipe(0).valid && (io.pipe(0).bits.wvd_eg(0) === b.U || io.pipe(0).bits.wvd_widen2)
-    io.writes(b).bits.eg   := io.pipe(0).bits.wvd_eg >> 1
-    io.writes(b).bits.mask := FillInterleaved(8, io.pipe(0).bits.wmask)
-    io.writes(b).bits.data := out
-    when (ctrl_mask_write) {
-      io.writes(b).bits.mask := mask_write_mask << mask_write_offset
-    }
-  }
+  io.write.valid     := io.pipe(0).valid
+  io.write.bits.eg   := io.pipe(0).bits.wvd_eg >> 1
+  io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
+  io.write.bits.data := Fill(2, out)
 
-  val wide_mask = FillInterleaved(2, io.pipe(0).bits.wmask)
   when (io.pipe(0).bits.wvd_widen2) {
-    io.writes(0).valid := io.pipe(0).valid
-    io.writes(1).valid := io.pipe(0).valid
-    io.writes(0).bits.mask := FillInterleaved(8, wide_mask(dLenB-1,0))
-    io.writes(1).bits.mask := FillInterleaved(8, wide_mask >> dLenB)
-    io.writes(0).bits.data := add_wide_out
-    io.writes(1).bits.data := add_wide_out >> dLen
+    io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(0).bits.wmask))
+    io.write.bits.data := add_wide_out
   }
 }

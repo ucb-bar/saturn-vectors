@@ -70,10 +70,10 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def opff6 = Mux(isOpf, OPFFunct6(funct6), OPFFunct6.illegal)
 }
 
-class VectorWrite(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val eg = UInt(log2Ceil(egsTotal).W)
-  val data = UInt(dLen.W)
-  val mask = UInt(dLen.W)
+class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val eg = UInt(log2Ceil(32 * vLen / writeBits).W)
+  val data = UInt(writeBits.W)
+  val mask = UInt(writeBits.W)
 }
 
 class VectorReadIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

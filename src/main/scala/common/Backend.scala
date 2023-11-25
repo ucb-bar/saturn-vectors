@@ -119,7 +119,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vrf = Seq.fill(2) { Module(new RegisterFileBank(5, 2, egsTotal/2)) }
 
   def vrfWrite(bankId: Int, write: Valid[VectorWrite]) = {
-    val out = Wire(Valid(new VectorWrite))
+    val out = Wire(Valid(new VectorWrite(dLen)))
     out.valid := write.valid && write.bits.eg(0) === bankId.U
     out.bits := write.bits
     out.bits.eg := write.bits.eg >> 1
@@ -137,7 +137,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
   when (~reset_ctr === 0.U) { resetting := false.B }
 
-  val load_write = Wire(Valid(new VectorWrite))
+  val load_write = Wire(Valid(new VectorWrite(dLen)))
   load_write.valid := vls.io.iss.fire
   load_write.bits.eg := vls.io.iss.bits.wvd_eg
   load_write.bits.data := vmu.io.lresp.bits
@@ -214,9 +214,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vat_valids(vmu.io.vat_release.bits) := false.B
   }
 
-  when (vxu.io.vat_release.valid) {
-    assert(vat_valids(vxu.io.vat_release.bits))
-    vat_valids(vxu.io.vat_release.bits) := false.B
+  for (v <- vxu.io.vat_release) {
+    when (v.valid) {
+      assert(vat_valids(v.bits))
+      vat_valids(v.bits) := false.B
+    }
   }
 
 

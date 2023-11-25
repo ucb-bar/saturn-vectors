@@ -37,7 +37,7 @@ class RegisterReadXbar(n: Int)(implicit p: Parameters) extends CoreModule()(p) w
 class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val read = Vec(reads, Flipped(new VectorReadIO))
-    val write = Vec(writes, Input(Valid(new VectorWrite)))
+    val write = Vec(writes, Input(Valid(new VectorWrite(dLen))))
   })
 
   val vrf = Mem(rows, Vec(dLen, Bool()))

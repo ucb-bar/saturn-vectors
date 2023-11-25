@@ -76,6 +76,7 @@ trait VectorConsts {
   def lumopMask  = "b01011".U
   def lumopFF    = "b10000".U
 
+
   def sumopUnit  = "b00000".U
   def sumopWhole = "b01000".U
   def sumopMask  = "b01011".U
@@ -117,5 +118,7 @@ object VecDecode extends VectorConsts {
 
   def apply(funct3: UInt, funct6: UInt, trues: Seq[EnumType], falses: Seq[EnumType]): Bool = applyBools(
     funct3, funct6, Seq(BitPat.dontCare(1)), trues.map(e => (e, Seq(BitPat(true.B)))) ++ falses.map(e => (e, Seq(BitPat(false.B)))))(0)
+  def apply(funct3: UInt, funct6: UInt, trues: Seq[EnumType]): Bool = applyBools(
+    funct3, funct6, Seq(BitPat(false.B)), trues.map(e => (e, Seq(BitPat(true.B)))))(0)
 }
 
