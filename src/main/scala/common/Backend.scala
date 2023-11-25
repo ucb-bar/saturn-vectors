@@ -86,6 +86,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   //val vxu = Module(new ExecutionUnit(Seq(() => new IntegerPipe)))
   val vxu = Module(new ExecutionUnit(Seq(() => new FPPipe)))
+  //val vxu = Module(new ExecutionUnit(Seq(() => new IntegerPipe, () => new FPPipe)))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
   seqs.foreach { s =>

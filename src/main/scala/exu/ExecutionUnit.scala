@@ -75,10 +75,12 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
         pipe_latencies(i) := pipe_latencies(i-1) - 1.U
       }
     }
-    for (i <- 0 until pipe_depth) {
-      pipe_fus.foreach(_.io.pipe(i).valid := pipe_valids(i))
-      pipe_fus.foreach(_.io.pipe(i).bits  := pipe_bits(i))
-    }
+    pipe_fus.foreach( fu =>
+      for (i <- 0 until fu.depth) {
+        fu.io.pipe(i).valid := pipe_valids(i)
+        fu.io.pipe(i).bits  := pipe_bits(i)
+      }      
+    )
 
     for (b <- 0 until 2) {
       val write_sel = pipe_valids.zip(pipe_latencies).zip(pipe_wbanks)
