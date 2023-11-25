@@ -13,12 +13,12 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with 
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
 
   private val X2 = BitPat.dontCare(2)
-  val default = List(X,X,X,X,X,X,X,X2,X2,X,X,X,X,X,X,X)
+  val default = List(X,X,X,X,X,X,X,X,X,X,X,X,X,X)
 
-  val ldst :: wen :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: typeTagIn :: typeTagOut :: fromint :: toint :: fastpipe :: fma :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
+  val ldst :: wen :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     default, Seq(
-      (OPFFunct6.vfmacc, Seq(N,N,Y,Y,Y,N,N,S,S,N,N,N,Y,N,N,Y))
+      (OPFFunct6.vfmacc, Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,N,N,Y))
     ))  
 
   val sfma_count = dLen / 32
@@ -34,7 +34,7 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with 
   val vec_in2_dfma = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dfma_count, UInt(64.W)))
   val vec_in3_dfma = io.pipe(0).bits.rvd_data.asTypeOf(Vec(dfma_count, UInt(64.W)))
 
-  def fuInput(fType: Option[FType], fmt: UInt, in1: UInt, in2: UInt, in3: UInt): FPInput = {
+  def fuInput(fType: Option[FType], typeTagIn: UInt, typeTagOut: UInt, fmt: UInt, in1: UInt, in2: UInt, in3: UInt): FPInput = {
     val req = Wire(new FPInput)
     req.ldst := ldst
     req.wen := wen
@@ -69,7 +69,7 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with 
 
   for (i <- 0 until sfma_count) {
     sfmas(i).io.in.valid := io.pipe(0).valid && fma && (io.pipe(0).bits.vd_eew === 2.U)
-    sfmas(i).io.in.bits := fuInput(Some(FType.S), 0.U, vec_in1(i), vec_in2(i), vec_in3(i))
+    sfmas(i).io.in.bits := fuInput(Some(FType.S), S, S, 0.U, vec_in1(i), vec_in2(i), vec_in3(i))
     ieee_s_out(i) := FType.S.ieee(sfmas(i).io.out.bits.data)
   }
 
@@ -78,17 +78,15 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with 
 
   for (i <- 0 until dfma_count) {
     dfmas(i).io.in.valid := io.pipe(0).valid && fma && (io.pipe(0).bits.vd_eew === 3.U)
-    dfmas(i).io.in.bits := fuInput(Some(FType.D), 1.U, vec_in1_dfma(i), vec_in2_dfma(i), vec_in3_dfma(i))
+    dfmas(i).io.in.bits := fuInput(Some(FType.D), D, D, 1.U, vec_in1_dfma(i), vec_in2_dfma(i), vec_in3_dfma(i))
     ieee_d_out(i) := FType.D.ieee(dfmas(i).io.out.bits.data)
   }
 
-  //when (io.pipe(depth-1).bits.vd_eew === 3.U) {
-  //  ieee_out := ieee_d_out.asTypeOf(UInt(dLen.W))
-  //} .otherwise {
-  //  ieee_out := ieee_s_out.asTypeOf(UInt(dLen.W))  
-  //}
-
-  ieee_out := ieee_s_out.asTypeOf(UInt(dLen.W))
+  when (io.pipe(depth-1).bits.vd_eew === 3.U) {
+    ieee_out := ieee_d_out.asTypeOf(UInt(dLen.W))
+  } .otherwise {
+    ieee_out := ieee_s_out.asTypeOf(UInt(dLen.W))  
+  }
 
   io.writes(0).valid := io.pipe(depth-1).valid && (io.pipe(depth-1).bits.wvd_eg(0) === 0.U)
   io.writes(0).bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
