@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with HasFPUParameters {
+class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p) with HasFPUParameters {
 
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
 
@@ -88,13 +88,8 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with 
     ieee_out := ieee_s_out.asTypeOf(UInt(dLen.W))  
   }
 
-  io.writes(0).valid := io.pipe(depth-1).valid && (io.pipe(depth-1).bits.wvd_eg(0) === 0.U)
-  io.writes(0).bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
-  io.writes(0).bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
-  io.writes(0).bits.data := ieee_out
-
-  io.writes(1).valid := io.pipe(depth-1).valid && (io.pipe(depth-1).bits.wvd_eg(0) === 1.U)
-  io.writes(1).bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
-  io.writes(1).bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
-  io.writes(1).bits.data := ieee_out
+  io.write.valid := io.pipe(depth-1).valid
+  io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
+  io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(depth-1).bits.wmask))
+  io.write.bits.data := Fill(2, ieee_out)
 }

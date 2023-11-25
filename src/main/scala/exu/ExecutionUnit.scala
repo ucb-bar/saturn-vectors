@@ -75,6 +75,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
         pipe_latencies(i) := pipe_latencies(i-1) - 1.U
       }
     }
+    
     pipe_fus.foreach( fu =>
       for (i <- 0 until fu.depth) {
         fu.io.pipe(i).valid := pipe_valids(i)
