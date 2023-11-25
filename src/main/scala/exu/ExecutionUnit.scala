@@ -76,8 +76,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
       }
     }
     for (i <- 0 until pipe_depth) {
-      pipe_fus.foreach(_.io.pipe(0).valid := pipe_valids(i))
-      pipe_fus.foreach(_.io.pipe(0).bits  := pipe_bits(i))
+      pipe_fus.foreach(_.io.pipe(i).valid := pipe_valids(i))
+      pipe_fus.foreach(_.io.pipe(i).bits  := pipe_bits(i))
     }
 
     for (b <- 0 until 2) {

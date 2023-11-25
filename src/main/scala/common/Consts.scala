@@ -63,6 +63,7 @@ object OPMFunct6 extends ChiselEnum {
 
 object OPFFunct6 extends ChiselEnum {
   val illegal = Value
+  val vfmacc = Value(44.U)
 }
 
 trait VectorConsts {
