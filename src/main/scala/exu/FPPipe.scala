@@ -14,12 +14,15 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
 
   private val X2 = BitPat.dontCare(2)
-  val default = List(X,X,X,X,X,X,X,X,X,X,X,X,X,X)
+  val default = List(X,X,X,X,X,X,X,X,X,X,X,X2,X,X,X)
 
-  val ldst :: wen :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
+  val ldst :: wen :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: fmaCmd :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     default, Seq(
-      (OPFFunct6.vfmacc, Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,N,N,Y))
+      (OPFFunct6.vfmacc,  Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,BitPat("b00"),N,N,Y)),
+      (OPFFunct6.vfnmacc, Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,BitPat("b11"),N,N,Y)),
+      (OPFFunct6.vfmsac,  Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,BitPat("b01"),N,N,Y)),
+      (OPFFunct6.vfnmsac, Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,BitPat("b10"),N,N,Y))
     ))  
 
   val sfma_count = dLen / 32
@@ -54,7 +57,7 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
     req.sqrt := sqrt
     req.wflags := wflags
     req.rm := 0.U
-    req.fmaCmd := 0.U
+    req.fmaCmd := fmaCmd
     req.typ := 0.U
     req.fmt := fmt
     req.in1 := fType.get.recode(in1) 
