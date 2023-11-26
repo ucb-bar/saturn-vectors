@@ -9,6 +9,7 @@ import freechips.rocketchip.tile._
 import vector.common._
 
 class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p) with HasFPUParameters {
+  io.iss.sub_dlen := 0.U
 
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
 
