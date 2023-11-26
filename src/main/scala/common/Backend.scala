@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu.{ExecutionUnit, IntegerPipe}
+import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe}
 
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -84,7 +84,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vims = Module(new IndexMaskSequencer)
   val seqs = Seq(vls, vss, vxs, vims)
 
-  val vxu = Module(new ExecutionUnit(Seq(() => new IntegerPipe)))
+  val vxu = Module(new ExecutionUnit(Seq(
+    () => new IntegerPipe,
+    () => {
+      if (iterMulU) {
+        new ElementwiseMultiplyPipe(3)
+      } else {
+        new SegmentedMultiplyPipe(3)
+      }
+    }
+  )))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
   seqs.foreach { s =>
@@ -94,6 +103,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     s.io.rvs2 := DontCare
     s.io.rvd := DontCare
     s.io.rvm := DontCare
+    s.io.sub_dlen := 0.U
   }
 
   val hazards = vxu.io.hazards
@@ -203,7 +213,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   maskindex_q.io.enq.bits.mask  := reads(4)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
   vims.io.iss.ready      := maskindex_q.io.enq.ready
 
-
   when (vls.io.iss.fire && vls.io.iss.bits.last) {
     assert(vat_valids(vls.io.iss.bits.vat))
     vat_valids(vls.io.iss.bits.vat) := false.B
@@ -221,8 +230,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
   }
 
-
   vxu.io.iss <> vxs.io.iss
+  vxs.io.sub_dlen := vxu.io.iss_sub_dlen
   vrf(0).io.write(1) := vxu.io.writes(0)
   vrf(1).io.write(1) := vxu.io.writes(1)
 
@@ -234,7 +243,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>
     h.valid && h.bits.may_write_v0
   }.orR
-
 
   io.mem_busy := vmu.io.busy
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0

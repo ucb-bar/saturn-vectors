@@ -10,8 +10,9 @@ import vector.common._
 
 abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val iss = new Bundle {
-    val funct3 = Input(UInt(3.W))
-    val funct6 = Input(UInt(6.W))
+    val valid = Input(Bool())
+    val op = Input(new VectorMicroOp)
+    val sub_dlen = Output(UInt(log2Ceil(dLenB).W))
     val ready = Output(Bool())
   }
 }
@@ -22,8 +23,6 @@ class PipelinedFunctionalUnitIO(depth: Int, wideWrite: Boolean)(implicit p: Para
 }
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {
-  val iss_op = Input(Valid(new VectorMicroOp))
-
   val write = Decoupled(new VectorWrite(dLen))
   val vat = Output(Valid(UInt(vParams.vatSz.W)))
   val hazard = Output(Valid(new PipeHazard))
@@ -37,11 +36,11 @@ abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) wi
   def accepts(f3: UInt, f6: UInt): Bool
 }
 
-abstract class PipelinedFunctionalUnit(val depth: Int, wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnit()(p) {
+abstract class PipelinedFunctionalUnit(val depth: Int, val wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnit()(p) {
   val io = IO(new PipelinedFunctionalUnitIO(depth, wideWrite))
 
   require (depth > 0)
-  io.iss.ready := accepts(io.iss.funct3, io.iss.funct6)
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 }
 abstract class IterativeFunctionalUnit(implicit p: Parameters) extends FunctionalUnit()(p) {
   val io = IO(new IterativeFunctionalUnitIO)
@@ -50,14 +49,14 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   val op = Reg(new VectorMicroOp)
   val last = Wire(Bool())
 
-  io.iss.ready := accepts(io.iss.funct3, io.iss.funct6) && (!valid || last)
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
   io.vat.valid := valid && op.last
   io.vat.bits  := op.vat
   io.busy := valid
 
-  when (io.iss_op.valid && io.iss.ready) {
+  when (io.iss.valid && io.iss.ready) {
     valid := true.B
-    op := io.iss_op.bits
+    op := io.iss.op
   } .elsewhen (last) {
     valid := false.B
   }
