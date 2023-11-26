@@ -17,6 +17,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
   val nHazards = pipe_depth + iter_fus.size
 
   val io = IO(new Bundle {
+    val iss_sub_dlen = Output(UInt(log2Ceil(dLenB).W))
     val iss = Flipped(Decoupled(new VectorMicroOp))
 
     val writes = Vec(2, Valid(new VectorWrite(dLen)))
@@ -26,17 +27,14 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
   })
 
   fus.map(_.io.iss).foreach { iss =>
-    iss.funct3 := io.iss.bits.funct3
-    iss.funct6 := io.iss.bits.funct6
-  }
-  iter_fus.map(_.io.iss_op).foreach { iss =>
+    iss.op := io.iss.bits
     iss.valid := io.iss.valid
-    iss.bits := io.iss.bits
   }
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
   io.iss.ready := readies.orR && !pipe_write_hazard
+  io.iss_sub_dlen := Mux1H(readies, fus.map(_.io.iss.sub_dlen))
   when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
 
   val pipe_writes = Seq.fill(2)(WireInit(false.B))
@@ -52,10 +50,12 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     val iss_wbank = Mux(io.iss.bits.wvd_widen2, 3.U, UIntToOH(io.iss.bits.wvd_eg(0)))
     val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
 
-    val pipe_valids = Seq.fill(pipe_depth)(RegInit(false.B))
-    val pipe_bits = Seq.fill(pipe_depth)(Reg(new VectorMicroOp))
+    val pipe_valids    = Seq.fill(pipe_depth)(RegInit(false.B))
+    val pipe_sels      = Seq.fill(pipe_depth)(Reg(UInt(pipe_fus.size.W)))
+    val pipe_bits      = Seq.fill(pipe_depth)(Reg(new VectorMicroOp))
     val pipe_latencies = Seq.fill(pipe_depth)(Reg(UInt(log2Ceil(pipe_depth).W)))
-    val pipe_wbanks = pipe_bits.map { b => Mux(b.wvd_widen2, 3.U, UIntToOH(b.wvd_eg(0))) }
+    val pipe_wbanks    = pipe_bits.map { b => Mux(b.wvd_widen2, 3.U, UIntToOH(b.wvd_eg(0))) }
+
 
     pipe_write_hazard := (0 until pipe_depth).map { i =>
       pipe_valids(i) && pipe_latencies(i) === pipe_iss_depth && ((pipe_wbanks(i) & iss_wbank) =/= 0.U)
@@ -66,34 +66,52 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     when (pipe_iss) {
       pipe_bits.head      := io.iss.bits
       pipe_latencies.head := pipe_iss_depth - 1.U
+      pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
     }
     for (i <- 1 until pipe_depth) {
       val fire = pipe_valids(i-1) && pipe_latencies(i-1) =/= 0.U
       pipe_valids(i) := fire
       when (fire) {
-        pipe_bits(i) := pipe_bits(i-1)
+        pipe_bits(i)      := pipe_bits(i-1)
         pipe_latencies(i) := pipe_latencies(i-1) - 1.U
+        pipe_sels(i)      := pipe_sels(i-1)
       }
     }
-    
-    pipe_fus.foreach( fu =>
+    for ((fu, j) <- pipe_fus.zipWithIndex) {
       for (i <- 0 until fu.depth) {
-        fu.io.pipe(i).valid := pipe_valids(i)
+        fu.io.pipe(i).valid := pipe_valids(i) && pipe_sels(i)(j)
         fu.io.pipe(i).bits  := pipe_bits(i)
-      }      
-    )
+      }
+    }
+
+    val pipe_narrow_writes = pipe_fus.map { pipe => 
+      val writes = Wire(Vec(2, Valid(new VectorWrite(dLen))))
+      for (b <- 0 until 2) {
+        if (pipe.wideWrite) {
+          val mask = pipe.io.write.bits.mask.asTypeOf(Vec(2, UInt(dLen.W)))(b)
+          val data = pipe.io.write.bits.data.asTypeOf(Vec(2, UInt(dLen.W)))(b)
+          writes(b).valid      := pipe.io.write.valid && mask =/= 0.U
+          writes(b).bits.eg    := pipe.io.write.bits.eg
+          writes(b).bits.data  := pipe.io.write.bits.data
+          writes(b).bits.mask  := pipe.io.write.bits.mask
+        } else {
+          writes(b).valid      := pipe.io.write.valid && pipe.io.write.bits.eg(0) === b.U
+          writes(b).bits.eg    := pipe.io.write.bits.eg >> 1
+          writes(b).bits.data  := pipe.io.write.bits.data
+          writes(b).bits.mask  := pipe.io.write.bits.mask
+        }
+      }
+      writes
+    }
 
     for (b <- 0 until 2) {
       val write_sel = pipe_valids.zip(pipe_latencies).zip(pipe_wbanks)
         .map { case ((v, l), k) => v && l === 0.U && k(b) }
+      val fu_sel = Mux1H(write_sel, pipe_sels)
       val vat_release = Mux1H(write_sel, pipe_bits.map(_.last))
       pipe_writes(b) := write_sel.orR
       when (write_sel.orR) {
-        val mask = Mux1H(write_sel, pipe_fus.map(_.io.write.bits.mask)) >> (b * dLen)
-        io.writes(b).valid     := mask =/= 0.U
-        io.writes(b).bits.eg   := Mux1H(write_sel, pipe_fus.map(_.io.write.bits.eg))
-        io.writes(b).bits.mask := mask
-        io.writes(b).bits.data := Mux1H(write_sel, pipe_fus.map(_.io.write.bits.data)) >> (b * dLen)
+        io.writes(b) := Mux1H(fu_sel, pipe_narrow_writes.map(_(b)))
         io.vat_release(b).valid   := vat_release
         io.vat_release(b).bits    := Mux1H(write_sel, pipe_bits.map(_.vat))
       }

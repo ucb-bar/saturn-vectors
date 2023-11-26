@@ -34,7 +34,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc)
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
-  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, incr_eew, 0.U)
+  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, incr_eew, io.sub_dlen)
   val last      = next_eidx === inst.vconfig.vl
 
   val active    = !io.dis.inst.vmu

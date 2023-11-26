@@ -9,6 +9,8 @@ import freechips.rocketchip.tile._
 import vector.common._
 
 class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true)(p) {
+  io.iss.sub_dlen := 0.U
+
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
@@ -54,7 +56,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(10)(BitPat.dontCare(1)), ctrl_table)
+    Seq.fill(10)(X), ctrl_table)
   val ctrl_cmask = (
     io.pipe(0).bits.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.sbc) ||
     ((io.pipe(0).bits.opif6.isOneOf(OPIFunct6.madc, OPIFunct6.msbc)) && !io.pipe(0).bits.vm)
