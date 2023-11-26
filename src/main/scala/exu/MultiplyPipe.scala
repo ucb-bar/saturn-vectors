@@ -78,7 +78,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   val  ctrl_wide_in :: ctrl_rvs1_signed :: ctrl_rvs2_signed :: ctrl_madd :: ctrl_acc :: ctrl_sub :: ctrl_hi :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(10)(BitPat.dontCare(1)), ctrl_table)
+    Seq.fill(7)(BitPat.dontCare(1)), ctrl_table)
 
   val wvd_eg = io.pipe(0).bits.wvd_eg(0)
   val eew = io.pipe(0).bits.rvs1_eew // = to io.pipe(0).bits.rvs2_eew
@@ -107,12 +107,13 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   viAcc.io.in1 := Mux(ctrl_wide_in, viMulOut >> dLen, viMulOut)
   viAcc.io.in2 := ind
     // io.out_data := Mux(io.ctrl_acc, viAcc(i).io.out_data, mulOut)
-  
-  io.writes(0).bits.data := Mux(ctrl_acc, viAcc.io.out, viMulOut)
-  io.writes(1).bits.data := Mux(ctrl_acc, viAcc.io.out, viMulOut)
+  val wide_out = Mux(ctrl_acc, viAcc.io.out, viMulOut)
+  io.write.valid     := io.pipe(0).valid
+  io.write.bits.eg   := io.pipe(0).bits.wvd_eg >> 1
+  io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(0).bits.wmask))
+  io.write.bits.data := Fill(2, wide_out)
 
   when (io.pipe(0).bits.wvd_widen2 && ~ctrl_acc) {
-    io.writes(0).bits.data := viMulOut
-    io.writes(1).bits.data := viMulOut >> dLen
+    io.write.bits.data := wide_out
   }
 }

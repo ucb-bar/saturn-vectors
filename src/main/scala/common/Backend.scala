@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe}
+import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, SegmentedMultiplyPipe}
 
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
