@@ -57,6 +57,8 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
 
 class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth, false)(p) {
 
+  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
+
   lazy val ctrl_table = Seq(  
       (OPMFunct6.mulhu,   Seq(N,N,N,N,N,X,Y)),
       (OPMFunct6.mul,     Seq(N,Y,Y,N,N,X,N)),

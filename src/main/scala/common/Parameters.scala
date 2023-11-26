@@ -31,6 +31,8 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
 
+  def iterMulU: Boolean = false
+
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)
     val off = eidx >> (log2Ceil(dLenB).U - eew)
