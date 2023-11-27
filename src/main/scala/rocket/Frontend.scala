@@ -165,7 +165,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
   val x_mem_size = x_inst.mem_elem_size
   val x_unit_bound = ((x_inst.nf +& 1.U) * x_inst.vconfig.vl) << x_mem_size
-  val x_indexed = x_inst.mop.isOneOf(mopOrdered, mopUnordered)
+  val x_indexed = x_inst.vmu && x_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val x_index_ready = !x_indexed || io.index_access.ready
   val x_mask_ready = x_inst.vm || io.mask_access.ready
   val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_idx_size), 0.U)
@@ -177,7 +177,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   def samePage(base: UInt, size: UInt) = (base + size - 1.U)(pgIdxBits) === base(pgIdxBits)
   val x_single_page = samePage(x_baseaddr, x_unit_bound)
   val x_replay_seg_single_page = samePage(x_indexaddr, ((x_inst.nf +& 1.U) << x_mem_size))
-  val x_iterative = (!x_single_page || x_inst.mop =/= mopUnit)
+  val x_iterative = (!x_single_page || (x_inst.vmu && x_inst.mop =/= mopUnit))
   val x_masked = !io.mask_access.mask && !x_inst.vm
   val x_tlb_valid = Mux(x_replay,
     x_eidx < x_vl && x_eidx >= x_inst.vstart && !x_masked,
