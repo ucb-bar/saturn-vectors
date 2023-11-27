@@ -28,11 +28,11 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val incr_eew = inst.vconfig.vtype.vsew + wide_vs2
 
   val renv1 = Reg(Bool())
-  val renv2 = true.B
+  val renv2 = Reg(Bool())
   val renvd = Reg(Bool())
-  val renvm = !inst.vm
+  val renvm = Reg(Bool())
 
-  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc)
+  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge)
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, incr_eew, io.sub_dlen)
@@ -75,7 +75,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
         (OPMFunct6.wmaccu , Seq(Y,N,N,N)),
         (OPMFunct6.wmacc  , Seq(Y,N,N,N)),
         (OPMFunct6.wmaccsu, Seq(Y,N,N,N)),
-        (OPMFunct6.wmaccus, Seq(Y,N,N,N)),
+        (OPMFunct6.wmaccus, Seq(Y,N,N,N))
       )
     )
 
@@ -88,11 +88,11 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val vs2_arch_mask = get_arch_mask(io.dis.inst.rs2, vs2_group_mask)
 
     val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
-    val dis_renv2 = true.B
+    val dis_renv2 = !(io.dis.inst.opif6 === OPIFunct6.merge && io.dis.inst.vm)
     val dis_renvd = io.dis.inst.opmf6.isOneOf(
       OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
       OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
-    val dis_renvm = !inst.vm
+    val dis_renvm = !inst.vm || io.dis.inst.opif6 === OPIFunct6.merge
     wvd_mask      := FillInterleaved(egsPerVReg, vd_arch_mask)
     rvs1_mask := Mux(dis_renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
     rvs2_mask := Mux(dis_renv2, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
@@ -103,7 +103,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     writes_mask := dis_writes_mask
     widen2      := dis_widen2
     renv1       := dis_renv1
+    renv2       := dis_renv2
     renvd       := dis_renvd
+    renvm       := dis_renvm
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
@@ -175,7 +177,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     FillInterleaved(1 << sew, vm_resp)
   })(vd_eew - widen2), ~(0.U(dLenB.W)))
   io.iss.bits.wmask := head_mask & tail_mask & vm_mask
-  io.iss.bits.rmask := Mux(renvm, vm_resp, ~(0.U(dLenB.W)))
+  io.iss.bits.rmask := Mux(inst.vm, ~(0.U(dLenB.W)), vm_resp)
 
   when (io.iss.fire && !last) {
     when (Mux(writes_mask, next_mask_is_new_eg(eidx, next_eidx), next_is_new_eg(eidx, next_eidx, vd_eew))) {

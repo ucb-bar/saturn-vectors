@@ -52,6 +52,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (OPIFunct6.min    , Seq(X,X,X,N,N,X,N,X,N,Y)),
     (OPIFunct6.maxu   , Seq(X,X,X,N,N,X,N,X,Y,Y)),
     (OPIFunct6.max    , Seq(X,X,X,N,N,X,N,X,Y,Y)),
+    (OPIFunct6.merge  , Seq(X,X,X,N,N,X,N,N,N,X))
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: Nil = VecDecode.applyBools(
@@ -65,6 +66,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val ctrl_rsub = io.pipe(0).bits.opif6 === OPIFunct6.rsub
   val ctrl_xunary0 = io.pipe(0).bits.opmf6 === OPMFunct6.xunary0
   val ctrl_minmax = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.minu, OPIFunct6.min, OPIFunct6.maxu, OPIFunct6.max)
+  val ctrl_merge = io.pipe(0).bits.opif6 === OPIFunct6.merge
 
   val bw_and = io.pipe(0).bits.funct6(1,0) === 1.U
   val bw_or  = io.pipe(0).bits.funct6(1,0) === 2.U
@@ -120,6 +122,9 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val cmp_res = cmp_minmax(0)
   val minmax_sel = cmp_minmax(1).asBools
   val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(minmax_sel).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
+
+  val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
+  val merge_out  = VecInit((0 until dLenB).map { i => Mux(merge_mask(i), rvs1_bytes(i), rvs2_bytes(i)) }).asUInt
 
   val carryborrow_res = VecInit.tabulate(4)({ eew =>
     Fill(1 << eew, VecInit(add_carryborrow.grouped(1 << eew).map(_.last).toSeq).asUInt)
@@ -218,7 +223,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (ctrl_bw             , bw_out),
     (ctrl_mask_write     , mask_out),
     (ctrl_shift          , Mux(ctrl_narrow_vs1, shift_narrowing_out, shift_out.asUInt)),
-    (ctrl_minmax         , minmax_out)
+    (ctrl_minmax         , minmax_out),
+    (ctrl_merge          , merge_out)
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 
