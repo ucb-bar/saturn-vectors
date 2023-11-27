@@ -13,7 +13,6 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
 
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
 
-  private val X2 = BitPat.dontCare(2)
   val default = List(X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X)
 
   val useOne :: ldst :: wen :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: fmaCmd0 :: fmaCmd1 :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
@@ -83,10 +82,6 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
       Mux(useOne, vec_in1(i), vec_in3(i)))
     ieee_s_out(i) := FType.S.ieee(sfmas(i).io.out.bits.data)
   }
-
-  val debug_useOne = Reg(Bool())
-  debug_useOne := useOne
-  chisel3.dontTouch(debug_useOne)
 
   val dfmas = Seq.fill(dfma_count)(Module(new FPUFMAPipe(depth-1, FType.D)))
   val ieee_d_out = Wire(Vec(dfma_count, UInt(64.W)))
