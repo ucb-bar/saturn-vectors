@@ -15,7 +15,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val rvs2_mask = Reg(UInt(egsTotal.W))
   val rvd_mask  = Reg(UInt(egsTotal.W))
   val rvm_mask  = Reg(UInt(egsPerVReg.W))
-  val wide_vd     = Reg(Bool()) // vd writes at 2xSEW
+  val wide_vd     = Reg(Bool()) // vd reads/writes at 2xSEW
   val wide_vs2    = Reg(Bool()) // vs2 reads at 2xSEW
   val writes_mask = Reg(Bool()) // writes dest as a mask
   val widen2      = Reg(Bool()) // writes to 2x RF banks/cycle
@@ -23,7 +23,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val vs1_eew  = inst.vconfig.vtype.vsew
   val vs2_eew  = inst.vconfig.vtype.vsew + wide_vs2 - Mux(inst.opmf6 === OPMFunct6.xunary0,
     ~inst.rs1(2,1) + 1.U, 0.U)
-  val vs3_eew  = inst.vconfig.vtype.vsew
+  val vs3_eew  = inst.vconfig.vtype.vsew + wide_vd
   val vd_eew   = inst.vconfig.vtype.vsew + wide_vd
   val incr_eew = inst.vconfig.vtype.vsew + wide_vs2
 
@@ -49,29 +49,33 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: dis_widen2 :: Nil = VecDecode.applyBools(
       io.dis.inst.funct3, io.dis.inst.funct6,
       Seq.fill(4)(false.B), Seq(
-        (OPMFunct6.waddu , Seq(Y,N,N,Y)),
-        (OPMFunct6.wadd  , Seq(Y,N,N,Y)),
-        (OPMFunct6.wsubu , Seq(Y,N,N,Y)),
-        (OPMFunct6.wsub  , Seq(Y,N,N,Y)),
-        (OPMFunct6.wadduw, Seq(Y,Y,N,N)),
-        (OPMFunct6.waddw , Seq(Y,Y,N,N)),
-        (OPMFunct6.wsubuw, Seq(Y,Y,N,N)),
-        (OPMFunct6.wsubw , Seq(Y,Y,N,N)),
-        (OPIFunct6.nsra  , Seq(N,Y,N,N)),
-        (OPIFunct6.nsrl  , Seq(N,Y,N,N)),
-        (OPIFunct6.madc  , Seq(N,N,Y,N)),
-        (OPIFunct6.msbc  , Seq(N,N,Y,N)),
-        (OPIFunct6.mseq  , Seq(N,N,Y,N)),
-        (OPIFunct6.msne  , Seq(N,N,Y,N)),
-        (OPIFunct6.msltu , Seq(N,N,Y,N)),
-        (OPIFunct6.mslt  , Seq(N,N,Y,N)),
-        (OPIFunct6.msleu , Seq(N,N,Y,N)),
-        (OPIFunct6.msle  , Seq(N,N,Y,N)),
-        (OPIFunct6.msgtu , Seq(N,N,Y,N)),
-        (OPIFunct6.msgt  , Seq(N,N,Y,N)),
-        (OPMFunct6.wmul  , Seq(Y,N,N,N)),
-        (OPMFunct6.wmulu , Seq(Y,N,N,N)),
-        (OPMFunct6.wmulsu, Seq(Y,N,N,N)),
+        (OPMFunct6.waddu  , Seq(Y,N,N,Y)),
+        (OPMFunct6.wadd   , Seq(Y,N,N,Y)),
+        (OPMFunct6.wsubu  , Seq(Y,N,N,Y)),
+        (OPMFunct6.wsub   , Seq(Y,N,N,Y)),
+        (OPMFunct6.wadduw , Seq(Y,Y,N,N)),
+        (OPMFunct6.waddw  , Seq(Y,Y,N,N)),
+        (OPMFunct6.wsubuw , Seq(Y,Y,N,N)),
+        (OPMFunct6.wsubw  , Seq(Y,Y,N,N)),
+        (OPIFunct6.nsra   , Seq(N,Y,N,N)),
+        (OPIFunct6.nsrl   , Seq(N,Y,N,N)),
+        (OPIFunct6.madc   , Seq(N,N,Y,N)),
+        (OPIFunct6.msbc   , Seq(N,N,Y,N)),
+        (OPIFunct6.mseq   , Seq(N,N,Y,N)),
+        (OPIFunct6.msne   , Seq(N,N,Y,N)),
+        (OPIFunct6.msltu  , Seq(N,N,Y,N)),
+        (OPIFunct6.mslt   , Seq(N,N,Y,N)),
+        (OPIFunct6.msleu  , Seq(N,N,Y,N)),
+        (OPIFunct6.msle   , Seq(N,N,Y,N)),
+        (OPIFunct6.msgtu  , Seq(N,N,Y,N)),
+        (OPIFunct6.msgt   , Seq(N,N,Y,N)),
+        (OPMFunct6.wmul   , Seq(Y,N,N,N)),
+        (OPMFunct6.wmulu  , Seq(Y,N,N,N)),
+        (OPMFunct6.wmulsu , Seq(Y,N,N,N)),
+        (OPMFunct6.wmaccu , Seq(Y,N,N,N)),
+        (OPMFunct6.wmacc  , Seq(Y,N,N,N)),
+        (OPMFunct6.wmaccsu, Seq(Y,N,N,N)),
+        (OPMFunct6.wmaccus, Seq(Y,N,N,N)),
       )
     )
 
@@ -85,7 +89,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
 
     val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
     val dis_renv2 = true.B
-    val dis_renvd = io.dis.inst.opmf6.isOneOf(OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub)
+    val dis_renvd = io.dis.inst.opmf6.isOneOf(
+      OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
+      OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
     val dis_renvm = !inst.vm
     wvd_mask      := FillInterleaved(egsPerVReg, vd_arch_mask)
     rvs1_mask := Mux(dis_renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
