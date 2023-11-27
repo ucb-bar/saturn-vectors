@@ -29,7 +29,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
 
   val renv1 = Reg(Bool())
   val renv2 = true.B
-  val renvd = false.B
+  val renvd = Reg(Bool())
   val renvm = !inst.vm
 
   val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc)
@@ -85,7 +85,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
 
     val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
     val dis_renv2 = true.B
-    val dis_renvd = false.B
+    val dis_renvd = io.dis.inst.opmf6.isOneOf(OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub)
     val dis_renvm = !inst.vm
     wvd_mask      := FillInterleaved(egsPerVReg, vd_arch_mask)
     rvs1_mask := Mux(dis_renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
@@ -97,6 +97,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     writes_mask := dis_writes_mask
     widen2      := dis_widen2
     renv1       := dis_renv1
+    renvd       := dis_renvd
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }

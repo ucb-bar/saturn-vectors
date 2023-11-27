@@ -14,33 +14,42 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
 
   val aluFn = new ALUFN
   lazy val ctrl_table = Seq(
-    (OPMFunct6.mul   , Seq(N,X,X)),
-    (OPMFunct6.mulh  , Seq(Y,Y,Y)),
-    (OPMFunct6.mulhu , Seq(Y,N,N)),
-    (OPMFunct6.mulhsu, Seq(Y,N,Y)),
-    (OPMFunct6.wmul  , Seq(N,Y,Y)),
-    (OPMFunct6.wmulu , Seq(N,N,N)),
-    (OPMFunct6.wmulsu, Seq(N,N,Y))
+    (OPMFunct6.mul   , Seq(N,X,X,N,N,X)),
+    (OPMFunct6.mulh  , Seq(Y,Y,Y,N,N,X)),
+    (OPMFunct6.mulhu , Seq(Y,N,N,N,N,X)),
+    (OPMFunct6.mulhsu, Seq(Y,N,Y,N,N,X)),
+    (OPMFunct6.wmul  , Seq(N,Y,Y,N,N,X)),
+    (OPMFunct6.wmulu , Seq(N,N,N,N,N,X)),
+    (OPMFunct6.wmulsu, Seq(N,N,Y,N,N,X)),
+    (OPMFunct6.macc  , Seq(X,X,X,N,Y,N)),
+    (OPMFunct6.nmsac , Seq(X,X,X,N,Y,Y)),
+    (OPMFunct6.madd  , Seq(X,X,X,Y,Y,N)),
+    (OPMFunct6.nmsub , Seq(X,X,X,Y,Y,Y)),
   )
 
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
 
-  val ctrl_hi :: ctrl_sign1 :: ctrl_sign2 :: Nil = VecDecode.applyBools(
+  val ctrl_hi :: ctrl_sign1 :: ctrl_sign2 :: ctrl_swapvdvs2 :: ctrl_madd :: ctrl_sub :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(3)(X), ctrl_table)
+    Seq.fill(6)(X), ctrl_table)
 
   val in_eew = io.pipe(0).bits.rvs1_eew
   val out_eew = io.pipe(0).bits.vd_eew
   val eidx = io.pipe(0).bits.eidx
 
-  val in1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1, in_eew, eidx)(64,0).asSInt
-  val in2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2, in_eew, eidx)(64,0).asSInt
+  val in_vs1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1, in_eew, eidx)(64,0)
+  val in_vs2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2, in_eew, eidx)(64,0)
+  val in_vd  = extract(io.pipe(0).bits.rvd_data , false.B   , in_eew, eidx)(64,0)
 
-  val prod = in1 * in2
-  val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(out_eew)
-  val out = Pipe(io.pipe(0).valid, Mux(ctrl_hi, hi, prod)(63,0), depth-1).bits
+  val prod = in_vs1.asSInt * Mux(ctrl_swapvdvs2, in_vd, in_vs2).asSInt
+  val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(out_eew)(63,0)
+  val lo = VecInit.tabulate(4)({ eew => prod((8 << eew)-1,0)})(out_eew)(63,0)
+  val madd = Mux(ctrl_sub, ~lo, lo) + ctrl_sub + Mux(ctrl_swapvdvs2, in_vs2, in_vd)
+  val out = Mux(ctrl_madd, madd, Mux(ctrl_hi, hi, lo))
 
-  val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, out((8<<eew)-1,0)) })(io.pipe(depth-1).bits.vd_eew)
+  val pipe_out = Pipe(io.pipe(0).valid, out, depth-1).bits
+
+  val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, pipe_out((8<<eew)-1,0)) })(io.pipe(depth-1).bits.vd_eew)
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.data := wdata
