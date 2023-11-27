@@ -34,6 +34,19 @@ abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) wi
   val io: FunctionalUnitIO
 
   def accepts(f3: UInt, f6: UInt): Bool
+
+  def extract(in: UInt, sext: Bool, in_eew: UInt, eidx: UInt): SInt = {
+    val bytes = in.asTypeOf(Vec(dLenB, UInt(8.W)))
+    VecInit.tabulate(4) { eew =>
+      val elem = if (dLen == 64 && eew == 3) {
+        in
+      } else {
+        VecInit(bytes.grouped(1 << eew).map(g => VecInit(g).asUInt).toSeq)(eidx(log2Ceil(dLenB)-1-eew,0))
+      }
+      val hi = sext && elem((8 << eew)-1)
+      Cat(hi, elem((8 << eew)-1,0)).asSInt
+    }(in_eew)
+  }
 }
 
 abstract class PipelinedFunctionalUnit(val depth: Int, val wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnit()(p) {

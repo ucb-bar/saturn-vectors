@@ -92,8 +92,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
           val data = pipe.io.write.bits.data.asTypeOf(Vec(2, UInt(dLen.W)))(b)
           writes(b).valid      := pipe.io.write.valid && mask =/= 0.U
           writes(b).bits.eg    := pipe.io.write.bits.eg
-          writes(b).bits.data  := pipe.io.write.bits.data
-          writes(b).bits.mask  := pipe.io.write.bits.mask
+          writes(b).bits.data  := data
+          writes(b).bits.mask  := mask
         } else {
           writes(b).valid      := pipe.io.write.valid && pipe.io.write.bits.eg(0) === b.U
           writes(b).bits.eg    := pipe.io.write.bits.eg >> 1
@@ -136,12 +136,14 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
         io.writes(b).bits.eg   := iter_write_arb.io.out.bits.eg >> 1
         io.writes(b).bits.mask := iter_write_arb.io.out.bits.mask
         io.writes(b).bits.data := iter_write_arb.io.out.bits.data
+        io.vat_release(b).valid := iter_write_arb.io.out.fire() && Mux1H(iter_write_arb.io.in.map(_.ready), iter_fus.map(_.io.vat.valid))
+        io.vat_release(b).bits  := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat.bits))
+
       }
-      io.vat_release(b) := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat))
     }
     when (iter_fus.map(_.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {
-      io.hazards(i+pipe_depth).valid := iter_fus(i).io.hazard
+      io.hazards(i+pipe_depth) := iter_fus(i).io.hazard
     }
   }
 }

@@ -7,8 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, SegmentedMultiplyPipe}
-
+import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, SegmentedMultiplyPipe, IterativeIntegerDivider}
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
@@ -93,6 +92,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
         new SegmentedMultiplyPipe(3)
       }
     }
+    () => new IterativeIntegerDivider
   )))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
