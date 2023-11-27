@@ -17,7 +17,10 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
     (OPMFunct6.mul   , Seq(N,X,X)),
     (OPMFunct6.mulh  , Seq(Y,Y,Y)),
     (OPMFunct6.mulhu , Seq(Y,N,N)),
-    (OPMFunct6.mulhsu, Seq(Y,N,Y))
+    (OPMFunct6.mulhsu, Seq(Y,N,Y)),
+    (OPMFunct6.wmul  , Seq(N,Y,Y)),
+    (OPMFunct6.wmulu , Seq(N,N,N)),
+    (OPMFunct6.wmulsu, Seq(N,N,Y))
   )
 
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
@@ -27,16 +30,17 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
     Seq.fill(3)(X), ctrl_table)
 
   val in_eew = io.pipe(0).bits.rvs1_eew
+  val out_eew = io.pipe(0).bits.vd_eew
   val eidx = io.pipe(0).bits.eidx
 
   val in1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1, in_eew, eidx)(64,0).asSInt
   val in2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2, in_eew, eidx)(64,0).asSInt
 
   val prod = in1 * in2
-  val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(in_eew)
+  val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(out_eew)
   val out = Pipe(io.pipe(0).valid, Mux(ctrl_hi, hi, prod)(63,0), depth-1).bits
 
-  val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, out((8<<eew)-1,0)) })(io.pipe(depth-1).bits.rvs1_eew)
+  val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, out((8<<eew)-1,0)) })(io.pipe(depth-1).bits.vd_eew)
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.data := wdata
