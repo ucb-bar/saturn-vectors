@@ -14,22 +14,25 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
 
   private val X2 = BitPat.dontCare(2)
-  val default = List(X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X)
+  val default = List(X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X,X)
 
-  val ldst :: wen :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: fmaCmd0 :: fmaCmd1 :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
+  val useOne :: ldst :: wen :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: fmaCmd0 :: fmaCmd1 :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     default, Seq(
-      (OPFFunct6.vfmacc,  Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,N,N,N,N,Y)),
-      (OPFFunct6.vfnmacc, Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,N,N,Y)),
-      (OPFFunct6.vfmsac,  Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,Y,N,N,N,Y)),
-      (OPFFunct6.vfnmsac, Seq(N,N,Y,Y,Y,N,N,N,N,N,Y,N,Y,N,N,Y))
+      (OPFFunct6.vfadd,   Seq(Y,N,N,Y,Y,Y,N,N,N,N,N,Y,N,N,N,N,N)),
+      (OPFFunct6.vfmacc,  Seq(N,N,N,Y,Y,Y,N,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.vfnmacc, Seq(N,N,N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,N,N,Y)),
+      (OPFFunct6.vfmsac,  Seq(N,N,N,Y,Y,Y,N,N,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.vfnmsac, Seq(N,N,N,Y,Y,Y,N,N,N,N,N,Y,N,Y,N,N,Y)),
     ))  
 
+  val fma_count = dLen / 64
   val sfma_count = dLen / 32
   val dfma_count = dLen / 64
 
-  val eidx = io.pipe(0).bits.eidx
-  val elemsPerEg = (dLen/32).U
+  val one_dp = "h3FF0000000000000".U
+  val one_sp = "h3F800000".U
+
   val vec_in1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(sfma_count, UInt(32.W)))
   val vec_in2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(sfma_count, UInt(32.W)))
   val vec_in3 = io.pipe(0).bits.rvd_data.asTypeOf(Vec(sfma_count, UInt(32.W)))
@@ -73,16 +76,26 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
 
   for (i <- 0 until sfma_count) {
     sfmas(i).io.in.valid := io.pipe(0).valid && fma && (io.pipe(0).bits.vd_eew === 2.U)
-    sfmas(i).io.in.bits := fuInput(Some(FType.S), S, S, 0.U, vec_in1(i), vec_in2(i), vec_in3(i))
+    sfmas(i).io.in.bits := fuInput(Some(FType.S), S, S, 0.U, 
+      vec_in2(i), 
+      Mux(useOne, one_sp, vec_in1(i)), 
+      Mux(useOne, vec_in1(i), vec_in3(i)))
     ieee_s_out(i) := FType.S.ieee(sfmas(i).io.out.bits.data)
   }
+
+  val debug_useOne = Reg(Bool())
+  debug_useOne := useOne
+  chisel3.dontTouch(debug_useOne)
 
   val dfmas = Seq.fill(dfma_count)(Module(new FPUFMAPipe(depth-1, FType.D)))
   val ieee_d_out = Wire(Vec(dfma_count, UInt(64.W)))
 
   for (i <- 0 until dfma_count) {
     dfmas(i).io.in.valid := io.pipe(0).valid && fma && (io.pipe(0).bits.vd_eew === 3.U)
-    dfmas(i).io.in.bits := fuInput(Some(FType.D), D, D, 1.U, vec_in1_dfma(i), vec_in2_dfma(i), vec_in3_dfma(i))
+    dfmas(i).io.in.bits := fuInput(Some(FType.D), D, D, 1.U, 
+      vec_in2_dfma(i), 
+      Mux(useOne, one_dp, vec_in1_dfma(i)), 
+      Mux(useOne, vec_in1_dfma(i), vec_in3_dfma(i)))
     ieee_d_out(i) := FType.D.ieee(dfmas(i).io.out.bits.data)
   }
 
