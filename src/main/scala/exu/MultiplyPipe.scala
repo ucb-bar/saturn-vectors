@@ -29,20 +29,8 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val in_eew = io.pipe(0).bits.rvs1_eew
   val eidx = io.pipe(0).bits.eidx
 
-  def extract(in: UInt, sext: Bool): SInt = {
-    val bytes = in.asTypeOf(Vec(dLenB, UInt(8.W)))
-    VecInit.tabulate(4) { eew =>
-      val elem = if (dLen == 64 && eew == 3) {
-        in
-      } else {
-        VecInit(bytes.grouped(1 << eew).map(g => VecInit(g).asUInt).toSeq)(eidx(log2Ceil(dLenB)-1-eew,0))
-      }
-      val hi = sext && elem((8 << eew)-1)
-      Cat(hi, elem((8 << eew)-1,0)).asSInt
-    }(in_eew)
-  }
-  val in1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1)(64,0).asSInt
-  val in2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2)(64,0).asSInt
+  val in1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1, in_eew, eidx)(64,0).asSInt
+  val in2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2, in_eew, eidx)(64,0).asSInt
 
   val prod = in1 * in2
   val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(in_eew)
