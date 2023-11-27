@@ -92,8 +92,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
           val data = pipe.io.write.bits.data.asTypeOf(Vec(2, UInt(dLen.W)))(b)
           writes(b).valid      := pipe.io.write.valid && mask =/= 0.U
           writes(b).bits.eg    := pipe.io.write.bits.eg
-          writes(b).bits.data  := pipe.io.write.bits.data
-          writes(b).bits.mask  := pipe.io.write.bits.mask
+          writes(b).bits.data  := data
+          writes(b).bits.mask  := mask
         } else {
           writes(b).valid      := pipe.io.write.valid && pipe.io.write.bits.eg(0) === b.U
           writes(b).bits.eg    := pipe.io.write.bits.eg >> 1
