@@ -62,11 +62,21 @@ object OPMFunct6 extends ChiselEnum {
 }
 
 object OPFFunct6 extends ChiselEnum {
+  val vfadd, vfredusum, vfsub, vfredosum, vfmin, vfredmin, vfmax, vfredmax, vfsgnj, vfsgnjn, vfsgnjx = Value
+  val _, _, _ = Value
+  val vfslide1up, vfslide1down = Value
+  val _, _, _, _, _, _, _ = Value
+  val vfmerge, vmfeq, vfmfle = Value
+  val _ = Value
+  val vmflt, vmfne, vmfgt = Value
+  val _ = Value
+  val vmfge, vfdiv, vfrdiv = Value
+  val _, _ = Value
+  val vfmul = Value
+  val _, _ = Value
+  val vfrsub = Value
+  val vfmadd, vfnmadd, vfmsub, vfnmsub, vfmacc, vfnmacc, vfmsac, vfnmsac, vfwadd, vwfredusum, vfwsub, vfwredosum = Value
   val illegal = Value
-  val vfmacc = Value(44.U)
-  val vfnmacc = Value(45.U)
-  val vfmsac = Value(46.U)
-  val vfnmsac = Value(47.U)
 }
 
 trait VectorConsts {
