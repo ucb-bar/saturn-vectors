@@ -22,6 +22,7 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes) && div.io.req.ready
 
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
+  io.set_vxsat := false.B
 
   div.io.req.valid := io.iss.valid && io.iss.ready
 

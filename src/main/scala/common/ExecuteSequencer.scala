@@ -15,7 +15,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val rvs2_mask = Reg(UInt(egsTotal.W))
   val rvd_mask  = Reg(UInt(egsTotal.W))
   val rvm_mask  = Reg(UInt(egsPerVReg.W))
-  val wide_vd     = Reg(Bool()) // vd writes at 2xSEW
+  val wide_vd     = Reg(Bool()) // vd reads/writes at 2xSEW
   val wide_vs2    = Reg(Bool()) // vs2 reads at 2xSEW
   val writes_mask = Reg(Bool()) // writes dest as a mask
   val widen2      = Reg(Bool()) // writes to 2x RF banks/cycle
@@ -23,16 +23,16 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val vs1_eew  = inst.vconfig.vtype.vsew
   val vs2_eew  = inst.vconfig.vtype.vsew + wide_vs2 - Mux(inst.opmf6 === OPMFunct6.xunary0,
     ~inst.rs1(2,1) + 1.U, 0.U)
-  val vs3_eew  = inst.vconfig.vtype.vsew
+  val vs3_eew  = inst.vconfig.vtype.vsew + wide_vd
   val vd_eew   = inst.vconfig.vtype.vsew + wide_vd
   val incr_eew = inst.vconfig.vtype.vsew + wide_vs2
 
   val renv1 = Reg(Bool())
-  val renv2 = true.B
+  val renv2 = Reg(Bool())
   val renvd = Reg(Bool())
-  val renvm = !inst.vm
+  val renvm = Reg(Bool())
 
-  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc)
+  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge)
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, incr_eew, io.sub_dlen)
@@ -49,29 +49,34 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: dis_widen2 :: Nil = VecDecode.applyBools(
       io.dis.inst.funct3, io.dis.inst.funct6,
       Seq.fill(4)(false.B), Seq(
-        (OPMFunct6.waddu , Seq(Y,N,N,Y)),
-        (OPMFunct6.wadd  , Seq(Y,N,N,Y)),
-        (OPMFunct6.wsubu , Seq(Y,N,N,Y)),
-        (OPMFunct6.wsub  , Seq(Y,N,N,Y)),
-        (OPMFunct6.wadduw, Seq(Y,Y,N,N)),
-        (OPMFunct6.waddw , Seq(Y,Y,N,N)),
-        (OPMFunct6.wsubuw, Seq(Y,Y,N,N)),
-        (OPMFunct6.wsubw , Seq(Y,Y,N,N)),
-        (OPIFunct6.nsra  , Seq(N,Y,N,N)),
-        (OPIFunct6.nsrl  , Seq(N,Y,N,N)),
-        (OPIFunct6.madc  , Seq(N,N,Y,N)),
-        (OPIFunct6.msbc  , Seq(N,N,Y,N)),
-        (OPIFunct6.mseq  , Seq(N,N,Y,N)),
-        (OPIFunct6.msne  , Seq(N,N,Y,N)),
-        (OPIFunct6.msltu , Seq(N,N,Y,N)),
-        (OPIFunct6.mslt  , Seq(N,N,Y,N)),
-        (OPIFunct6.msleu , Seq(N,N,Y,N)),
-        (OPIFunct6.msle  , Seq(N,N,Y,N)),
-        (OPIFunct6.msgtu , Seq(N,N,Y,N)),
-        (OPIFunct6.msgt  , Seq(N,N,Y,N)),
-        (OPMFunct6.wmul  , Seq(Y,N,N,Y)),
-        (OPMFunct6.wmulu , Seq(Y,N,N,Y)),
-        (OPMFunct6.wmulsu, Seq(Y,N,N,Y)),
+        (OPMFunct6.waddu  , Seq(Y,N,N,Y)),
+        (OPMFunct6.wadd   , Seq(Y,N,N,Y)),
+        (OPMFunct6.wsubu  , Seq(Y,N,N,Y)),
+        (OPMFunct6.wsub   , Seq(Y,N,N,Y)),
+        (OPMFunct6.wadduw , Seq(Y,Y,N,N)),
+        (OPMFunct6.waddw  , Seq(Y,Y,N,N)),
+        (OPMFunct6.wsubuw , Seq(Y,Y,N,N)),
+        (OPMFunct6.wsubw  , Seq(Y,Y,N,N)),
+        (OPIFunct6.nsra   , Seq(N,Y,N,N)),
+        (OPIFunct6.nsrl   , Seq(N,Y,N,N)),
+        (OPIFunct6.madc   , Seq(N,N,Y,N)),
+        (OPIFunct6.msbc   , Seq(N,N,Y,N)),
+        (OPIFunct6.mseq   , Seq(N,N,Y,N)),
+        (OPIFunct6.msne   , Seq(N,N,Y,N)),
+        (OPIFunct6.msltu  , Seq(N,N,Y,N)),
+        (OPIFunct6.mslt   , Seq(N,N,Y,N)),
+        (OPIFunct6.msleu  , Seq(N,N,Y,N)),
+        (OPIFunct6.msle   , Seq(N,N,Y,N)),
+        (OPIFunct6.msgtu  , Seq(N,N,Y,N)),
+        (OPIFunct6.msgt   , Seq(N,N,Y,N)),
+        //if vector Mul FU, wmul writes to 2x RF banks/cycle
+        (OPMFunct6.wmul   , Seq(Y,N,N,Y)),
+        (OPMFunct6.wmulu  , Seq(Y,N,N,Y)),
+        (OPMFunct6.wmulsu , Seq(Y,N,N,Y)),
+        (OPMFunct6.wmaccu , Seq(Y,N,N,Y)),
+        (OPMFunct6.wmacc  , Seq(Y,N,N,Y)),
+        (OPMFunct6.wmaccsu, Seq(Y,N,N,Y)),
+        (OPMFunct6.wmaccus, Seq(Y,N,N,Y))
       )
     )
 
@@ -84,10 +89,11 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val vs2_arch_mask = get_arch_mask(io.dis.inst.rs2, vs2_group_mask)
 
     val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
-    val dis_renv2 = true.B
-    val dis_renvd = io.dis.inst.opmf6.isOneOf(OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
-                      OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccus, OPMFunct6.wmaccsu)
-    val dis_renvm = !inst.vm
+    val dis_renv2 = !(io.dis.inst.opif6 === OPIFunct6.merge && io.dis.inst.vm)
+    val dis_renvd = io.dis.inst.opmf6.isOneOf(
+      OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
+      OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
+    val dis_renvm = !inst.vm || io.dis.inst.opif6 === OPIFunct6.merge
     wvd_mask      := FillInterleaved(egsPerVReg, vd_arch_mask)
     rvs1_mask := Mux(dis_renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
     rvs2_mask := Mux(dis_renv2, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
@@ -100,7 +106,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     renvd := dis_renvd
     widen2      := dis_widen2
     renv1       := dis_renv1
+    renv2       := dis_renv2
     renvd       := dis_renvd
+    renvm       := dis_renvm
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
@@ -158,9 +166,10 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rs1       := inst.rs1
   io.iss.bits.funct3    := inst.funct3
   io.iss.bits.funct6    := inst.funct6
-  io.iss.bits.last       := last
-  io.iss.bits.vat        := inst.vat
-  io.iss.bits.vm         := inst.vm
+  io.iss.bits.last      := last
+  io.iss.bits.vat       := inst.vat
+  io.iss.bits.vm        := inst.vm
+  io.iss.bits.vxrm      := inst.vxrm
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << (vd_eew - widen2))(dLenOffBits-1,0)
@@ -172,7 +181,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     FillInterleaved(1 << sew, vm_resp)
   })(vd_eew - widen2), ~(0.U(dLenB.W)))
   io.iss.bits.wmask := head_mask & tail_mask & vm_mask
-  io.iss.bits.rmask := Mux(renvm, vm_resp, ~(0.U(dLenB.W)))
+  io.iss.bits.rmask := Mux(inst.vm, ~(0.U(dLenB.W)), vm_resp)
 
   when (io.iss.fire && !last) {
     when (Mux(writes_mask, next_mask_is_new_eg(eidx, next_eidx), next_is_new_eg(eidx, next_eidx, vd_eew))) {

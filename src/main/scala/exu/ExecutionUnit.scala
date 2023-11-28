@@ -24,6 +24,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     val vat_release = Vec(2, Valid(UInt(vParams.vatSz.W)))
     val hazards = Vec(nHazards, Valid(new PipeHazard))
     val busy = Output(Bool())
+
+    val set_vxsat = Output(Bool())
   })
 
   fus.map(_.io.iss).foreach { iss =>
@@ -45,6 +47,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
   io.writes.foreach(_.valid := false.B)
   io.writes.foreach(_.bits := DontCare)
   io.busy := false.B
+  io.set_vxsat := fus.map(_.io.set_vxsat).orR
 
   if (pipe_fus.size > 0) {
     val iss_wbank = Mux(io.iss.bits.wvd_widen2, 3.U, UIntToOH(io.iss.bits.wvd_eg(0)))

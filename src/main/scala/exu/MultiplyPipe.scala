@@ -11,20 +11,25 @@ import vector.common._
 class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth, false)(p) {
 
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
+  io.set_vxsat := false.B
 
   val aluFn = new ALUFN
   lazy val ctrl_table = Seq(
-    (OPMFunct6.mul   , Seq(N,X,X,N,N,X)),
-    (OPMFunct6.mulh  , Seq(Y,Y,Y,N,N,X)),
-    (OPMFunct6.mulhu , Seq(Y,N,N,N,N,X)),
-    (OPMFunct6.mulhsu, Seq(Y,N,Y,N,N,X)),
-    (OPMFunct6.wmul  , Seq(N,Y,Y,N,N,X)),
-    (OPMFunct6.wmulu , Seq(N,N,N,N,N,X)),
-    (OPMFunct6.wmulsu, Seq(N,N,Y,N,N,X)),
-    (OPMFunct6.macc  , Seq(X,X,X,N,Y,N)),
-    (OPMFunct6.nmsac , Seq(X,X,X,N,Y,Y)),
-    (OPMFunct6.madd  , Seq(X,X,X,Y,Y,N)),
-    (OPMFunct6.nmsub , Seq(X,X,X,Y,Y,Y)),
+    (OPMFunct6.mul    , Seq(N,X,X,N,N,X)),
+    (OPMFunct6.mulh   , Seq(Y,Y,Y,N,N,X)),
+    (OPMFunct6.mulhu  , Seq(Y,N,N,N,N,X)),
+    (OPMFunct6.mulhsu , Seq(Y,N,Y,N,N,X)),
+    (OPMFunct6.wmul   , Seq(N,Y,Y,N,N,X)),
+    (OPMFunct6.wmulu  , Seq(N,N,N,N,N,X)),
+    (OPMFunct6.wmulsu , Seq(N,N,Y,N,N,X)),
+    (OPMFunct6.macc   , Seq(X,X,X,N,Y,N)),
+    (OPMFunct6.nmsac  , Seq(X,X,X,N,Y,Y)),
+    (OPMFunct6.madd   , Seq(X,X,X,Y,Y,N)),
+    (OPMFunct6.nmsub  , Seq(X,X,X,Y,Y,Y)),
+    (OPMFunct6.wmaccu , Seq(X,N,N,N,Y,N)),
+    (OPMFunct6.wmacc  , Seq(X,Y,Y,N,Y,N)),
+    (OPMFunct6.wmaccsu, Seq(X,Y,N,N,Y,N)),
+    (OPMFunct6.wmaccus, Seq(X,N,Y,N,Y,N)),
   )
 
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
@@ -37,9 +42,9 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val out_eew = io.pipe(0).bits.vd_eew
   val eidx = io.pipe(0).bits.eidx
 
-  val in_vs1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1, in_eew, eidx)(64,0)
-  val in_vs2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2, in_eew, eidx)(64,0)
-  val in_vd  = extract(io.pipe(0).bits.rvd_data , false.B   , in_eew, eidx)(64,0)
+  val in_vs1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1, in_eew , eidx)(64,0)
+  val in_vs2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2, in_eew , eidx)(64,0)
+  val in_vd  = extract(io.pipe(0).bits.rvd_data , false.B   , out_eew, eidx)(64,0)
 
   val prod = in_vs1.asSInt * Mux(ctrl_swapvdvs2, in_vd, in_vs2).asSInt
   val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(out_eew)(63,0)
