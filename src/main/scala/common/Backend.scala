@@ -89,9 +89,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       if (iterMulU) {
         new ElementwiseMultiplyPipe(3)
       } else {
-        new SegmentedMultiplyPipe(3)
+        new SegmentedMultiplyPipe(1)
       }
-    }
+    },
     () => new IterativeIntegerDivider
   )))
 

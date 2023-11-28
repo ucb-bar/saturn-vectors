@@ -82,8 +82,10 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(6)(BitPat.dontCare(1)), ctrl_table)
   val ctrl_wide_in = io.pipe(0).bits.wvd_widen2
-  // val wvd_eg = io.pipe(0).bits.wvd_eg(0)
-  val eew = io.pipe(0).bits.rvs1_eew // = to io.pipe(0).bits.rvs2_eew
+
+  val in_eew = io.pipe(0).bits.rvs1_eew
+  val out_eew = io.pipe(0).bits.vd_eew
+
   val in1 = io.pipe(0).bits.rvs1_data
   val in2 = Mux(ctrl_madd, io.pipe(0).bits.rvd_data, io.pipe(0).bits.rvs2_data)
   val ind = Mux(ctrl_madd, io.pipe(0).bits.rvs2_data, io.pipe(0).bits.rvd_data)
@@ -97,7 +99,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     vMul(i).io.ctrl_madd := ctrl_madd
     vMul(i).io.ctrl_sub := ctrl_sub
     vMul(i).io.ctrl_wide_in := ctrl_wide_in
-    vMul(i).io.eew := eew
+    vMul(i).io.eew := in_eew
     vMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen)
     vMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen)
   }
@@ -106,16 +108,20 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   for (eew <- 0 until 4) {
     val wide = vWideMulOut.asTypeOf(Vec(dLenB >> eew, UInt((16 << eew).W)))
     vNarrowMulOutEew(eew) := wide.map { i => 
+    println("i: " + i + " eew: " + eew + " wide: " + wide)
+    println("(16 << eew)-1, (8 << eew)", (16 << eew)-1, (8 << eew))
       val lo = wide(i)((8 << eew)-1, 0)
       val hi = wide(i)((16 << eew)-1, (8 << eew))
       Mux(ctrl_hi, hi, lo)
     }.asUInt
   }
-  val vNarrowMulOut = vNarrowMulOutEew(eew)
+  val vNarrowMulOut = vNarrowMulOutEew(out_eew)
+  val add_narrow_vs1 = VecInit(vNarrowMulOutEew.map(_.asUInt))(out_eew)
+
   val vAcc = Module(new SegmentedAdd)
   vAcc.io.ctrl_sub := ctrl_sub
-  vAcc.io.eew := Mux(ctrl_wide_in, eew + 1.U, eew)
-  vAcc.io.in1 := Mux(ctrl_wide_in, vWideMulOut >> dLen, vWideMulOut)
+  vAcc.io.eew := out_eew
+  vAcc.io.in1 := Mux(ctrl_wide_in, vWideMulOut, vNarrowMulOut)
   vAcc.io.in2 := ind
 
   val narrow_out = Mux(ctrl_acc, vAcc.io.out, vNarrowMulOut)
@@ -128,6 +134,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
-  io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(0).bits.wmask))
+  io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
   io.write.bits.data := out
 }
