@@ -61,8 +61,9 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
 }
 
-class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth, false)(p) {
+class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth, true)(p) {
   io.iss.sub_dlen := 0.U
+  io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(  
       (OPMFunct6.mulhu,   Seq(N,N,N,N,X,Y)),
@@ -126,6 +127,8 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val vAcc = Module(new SegmentedAdd)
   vAcc.io.ctrl_sub := ctrl_sub
   vAcc.io.eew := out_eew
+  //TODO: do something like this to support vwmacc
+  // val acc_in1 = Mux(io.pipe(0).bits.wvd_eg(0), vWideMulOut, vWideMulOut >> (dLen >> 1))
   vAcc.io.in1 := Mux(ctrl_wide_in, vWideMulOut, vNarrowMulOut)
   vAcc.io.in2 := ind
 
@@ -138,7 +141,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   ).bits
   
   io.write.valid     := io.pipe(depth-1).valid
-  io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
-  io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
+  io.write.bits.eg   := io.pipe(0).bits.wvd_eg >> 1
+    io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(0).bits.wmask))
   io.write.bits.data := out
 }
