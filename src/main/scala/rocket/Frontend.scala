@@ -139,7 +139,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_core_inst = Wire(new VectorIssueInst)
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
-
+  x_core_inst.vxrm := DontCare // set at wb
   when (x_core_inst.mop === mopUnit && x_core_inst.vmu) {
     when (x_core_inst.umop === lumopMask) {
       x_core_inst.vconfig.vl := (io.core.ex.vconfig.vl >> 3) + Mux(io.core.ex.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
