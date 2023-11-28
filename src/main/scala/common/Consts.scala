@@ -5,6 +5,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
+import chisel3.util.experimental.decode._
 
 object OPIFunct6 extends ChiselEnum {
   val add = Value
@@ -107,9 +108,19 @@ object VecDecode extends VectorConsts {
       case v: OPMFunct6.Type => Seq(OPMVV, OPMVX       ).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
       case v: OPFFunct6.Type => Seq(OPFVV, OPFVF       ).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }
     }
-    DecodeLogic(Cat(funct3(2,0), funct6(5,0)),
-      default,
-      table.map(e => enumToUInt(e._1).map(u => (BitPat(u), e._2))).flatten)
+    val nElts = default.size
+    require(table.forall(_._2.size == nElts))
+
+    val elementsGrouped = table.map(_._2).transpose
+    val elementWidths = elementsGrouped.zip(default).map { case (elts, default) =>
+      require(elts.forall(_.getWidth == default.getWidth))
+      default.getWidth
+    }
+    val resultWidth = elementWidths.sum
+    val elementIndices = elementWidths.scan(resultWidth - 1) { case (l, r) => l - r }
+    val truthTable = TruthTable(table.map(e => enumToUInt(e._1).map(u => (BitPat(u), e._2.reduce(_ ## _)))).flatten, default.reduce(_ ## _))
+    val decoded = chisel3.util.experimental.decode.decoder(Cat(funct3(2,0), funct6(5,0)), truthTable)
+    elementIndices.zip(elementIndices.tail).map { case (msb, lsb) => decoded(msb, lsb + 1) }.toSeq
   }
 
 

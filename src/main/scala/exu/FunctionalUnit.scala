@@ -15,6 +15,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
     val sub_dlen = Output(UInt(log2Ceil(dLenB).W))
     val ready = Output(Bool())
   }
+  val set_vxsat = Output(Bool())
 }
 
 class PipelinedFunctionalUnitIO(depth: Int, wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnitIO {

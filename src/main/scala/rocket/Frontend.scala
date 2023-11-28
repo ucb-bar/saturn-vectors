@@ -26,6 +26,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   trap_check.io.mem_busy := vu.io.mem_busy
   trap_check.io.vm_busy  := vu.io.vm_busy
   io.core.backend_busy   := vu.io.backend_busy
+  io.core.set_vxsat      := vu.io.set_vxsat
 
   val hella_simple = Module(new SimpleHellaCacheIF)
   val hella_arb = Module(new HellaCacheArbiter(2))

@@ -22,6 +22,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     val index_access = new VectorIndexAccessIO
     val mask_access = new VectorMaskAccessIO
+
+    val set_vxsat = Output(Bool())
   })
 
   require(vLen >= 64)
@@ -208,22 +210,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   maskindex_q.io.enq.bits.mask  := reads(4)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
   vims.io.iss.ready      := maskindex_q.io.enq.ready
 
-  when (vls.io.iss.fire && vls.io.iss.bits.last) {
-    assert(vat_valids(vls.io.iss.bits.vat))
-    vat_valids(vls.io.iss.bits.vat) := false.B
+  def clearVat(fire: Bool, tag: UInt) = when (fire) {
+    assert(vat_valids(tag))
+    vat_valids(tag) := false.B
   }
 
-  when (vmu.io.vat_release.valid) {
-    assert(vat_valids(vmu.io.vat_release.bits))
-    vat_valids(vmu.io.vat_release.bits) := false.B
-  }
-
-  for (v <- vxu.io.vat_release) {
-    when (v.valid) {
-      assert(vat_valids(v.bits))
-      vat_valids(v.bits) := false.B
-    }
-  }
+  clearVat(vls.io.iss.fire && vls.io.iss.bits.last, vls.io.iss.bits.vat)
+  clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
+  for (v <- vxu.io.vat_release)
+    clearVat(v.valid                              , v.bits)
 
   vxu.io.iss <> vxs.io.iss
   vxs.io.sub_dlen := vxu.io.iss_sub_dlen
@@ -242,4 +237,5 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.mem_busy := vmu.io.busy
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
   io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
+  io.set_vxsat := vxu.io.set_vxsat
 }
