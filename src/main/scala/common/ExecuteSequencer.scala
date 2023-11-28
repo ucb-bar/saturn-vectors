@@ -163,9 +163,10 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rs1       := inst.rs1
   io.iss.bits.funct3    := inst.funct3
   io.iss.bits.funct6    := inst.funct6
-  io.iss.bits.last       := last
-  io.iss.bits.vat        := inst.vat
-  io.iss.bits.vm         := inst.vm
+  io.iss.bits.last      := last
+  io.iss.bits.vat       := inst.vat
+  io.iss.bits.vm        := inst.vm
+  io.iss.bits.vxrm      := inst.vxrm
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << (vd_eew - widen2))(dLenOffBits-1,0)

@@ -289,6 +289,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
   io.issue.valid := false.B
   io.issue.bits := w_inst
+  io.issue.bits.vxrm := io.core.wb.vxrm
   io.issue.bits.phys := false.B
   when (w_inst.vmu) {
     val phys = w_inst.seg_nf === 0.U && w_inst.mop.isOneOf(mopUnit, mopStrided)
