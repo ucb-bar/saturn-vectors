@@ -66,28 +66,27 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(  
-      (OPMFunct6.mulhu,   Seq(N,N,N,N,X,Y)),
-      (OPMFunct6.mul,     Seq(Y,Y,N,N,X,N)),
-      (OPMFunct6.mulhsu,  Seq(N,Y,N,N,X,Y)),
-      (OPMFunct6.mulh,    Seq(Y,Y,N,N,X,Y)),
-      (OPMFunct6.madd,    Seq(Y,Y,Y,Y,N,N)),
-      (OPMFunct6.nmsub,   Seq(Y,Y,Y,Y,Y,N)),
-      (OPMFunct6.macc,    Seq(Y,Y,N,Y,N,N)),
-      (OPMFunct6.nmsac,   Seq(Y,Y,N,Y,Y,N)),
+      (OPMFunct6.mulhu,   Seq(N,N,N,N,X,X,Y)),
+      (OPMFunct6.mul,     Seq(Y,Y,N,N,X,X,N)),
+      (OPMFunct6.mulhsu,  Seq(N,Y,N,N,X,X,Y)),
+      (OPMFunct6.mulh,    Seq(Y,Y,N,N,X,X,Y)),
+      (OPMFunct6.madd,    Seq(Y,Y,Y,Y,N,N,N)),
+      (OPMFunct6.nmsub,   Seq(Y,Y,Y,Y,N,Y,N)),
+      (OPMFunct6.macc,    Seq(Y,Y,N,Y,N,N,N)),
+      (OPMFunct6.nmsac,   Seq(Y,Y,N,Y,N,Y,N)),
 
-      (OPMFunct6.wmulu,   Seq(N,N,N,N,X,X)),
-      (OPMFunct6.wmulsu,  Seq(N,Y,N,N,X,X)),
-      (OPMFunct6.wmul,    Seq(Y,Y,N,N,X,X)),
-      (OPMFunct6.wmaccu,  Seq(N,N,N,Y,N,X)),
-      (OPMFunct6.wmacc,   Seq(Y,Y,N,Y,N,X)),
-      (OPMFunct6.wmaccus, Seq(N,Y,N,Y,N,X)),
-      (OPMFunct6.wmaccsu, Seq(Y,N,N,Y,N,X))
+      (OPMFunct6.wmulu,   Seq(N,N,N,N,X,X,X)),
+      (OPMFunct6.wmulsu,  Seq(N,Y,N,N,X,X,X)),
+      (OPMFunct6.wmul,    Seq(Y,Y,N,N,X,X,X)),
+      (OPMFunct6.wmaccu,  Seq(N,N,N,Y,Y,N,X)),
+      (OPMFunct6.wmacc,   Seq(Y,Y,N,Y,Y,N,X)),
+      (OPMFunct6.wmaccus, Seq(N,Y,N,Y,Y,N,X)),
+      (OPMFunct6.wmaccsu, Seq(Y,N,N,Y,Y,N,X))
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  val ctrl_rvs1_signed :: ctrl_rvs2_signed :: ctrl_madd :: ctrl_acc :: ctrl_sub :: ctrl_hi :: Nil = VecDecode.applyBools(
+  val ctrl_rvs1_signed :: ctrl_rvs2_signed :: ctrl_madd :: ctrl_acc :: ctrl_wacc :: ctrl_sub :: ctrl_hi :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(6)(BitPat.dontCare(1)), ctrl_table)
-  val ctrl_wide_in = io.pipe(0).bits.wvd_widen2
+    Seq.fill(7)(BitPat.dontCare(1)), ctrl_table)
 
   val in_eew = io.pipe(0).bits.rvs1_eew
   val out_eew = io.pipe(0).bits.vd_eew
@@ -104,7 +103,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     vMul(i).io.ctrl_acc := ctrl_acc
     vMul(i).io.ctrl_madd := ctrl_madd
     vMul(i).io.ctrl_sub := ctrl_sub
-    vMul(i).io.ctrl_wide_in := ctrl_wide_in
     vMul(i).io.eew := in_eew
     vMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen)
     vMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen)
@@ -122,26 +120,27 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     }.asUInt
   }
   val vNarrowMulOut = vNarrowMulOutEew(out_eew)
-  val add_narrow_vs1 = VecInit(vNarrowMulOutEew.map(_.asUInt))(out_eew)
 
   val vAcc = Module(new SegmentedAdd)
   vAcc.io.ctrl_sub := ctrl_sub
   vAcc.io.eew := out_eew
   //TODO: do something like this to support vwmacc
-  // val acc_in1 = Mux(io.pipe(0).bits.wvd_eg(0), vWideMulOut, vWideMulOut >> (dLen >> 1))
-  vAcc.io.in1 := Mux(ctrl_wide_in, vWideMulOut, vNarrowMulOut)
+  // val acc_in1 = Mux(io.pipe(0).bits.wvd_eg(0), vWideMulOut, vWideMulOut >> dLen)
+  vAcc.io.in1 := Mux(ctrl_wacc, 
+                  Mux(io.pipe(0).bits.wvd_eg(0), vWideMulOut >> dLen, vWideMulOut), 
+                  vNarrowMulOut)
   vAcc.io.in2 := ind
 
   val narrow_out = Mux(ctrl_acc, vAcc.io.out, vNarrowMulOut)
   val wide_out = vWideMulOut
   val out = Pipe(
     io.pipe(0).valid, 
-    Mux(ctrl_wide_in && ~ctrl_acc, wide_out, Fill(2, narrow_out)), 
+    Mux(io.pipe(0).bits.wvd_widen2, wide_out, Fill(2, narrow_out)), 
     depth-1
   ).bits
   
   io.write.valid     := io.pipe(depth-1).valid
-  io.write.bits.eg   := io.pipe(0).bits.wvd_eg >> 1
-    io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(0).bits.wmask))
+  io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg >> 1
+  io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(depth-1).bits.wmask))
   io.write.bits.data := out
 }

@@ -14,7 +14,6 @@ class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends Cor
         val ctrl_acc = Input(Bool())
         val ctrl_madd = Input(Bool())
         val ctrl_sub = Input(Bool())
-        val ctrl_wide_in = Input(Bool())
         val eew = Input(UInt(2.W))
         
         val in1 = Input(UInt(xLen.W))
