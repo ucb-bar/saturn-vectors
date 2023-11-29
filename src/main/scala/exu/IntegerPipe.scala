@@ -78,6 +78,44 @@ class CompareArray(dLenB: Int) extends Module {
   }
 }
 
+class ShiftArray(dLenB: Int) extends Module {
+  val io = IO(new Bundle {
+    val in_eew    = Input(UInt(2.W))
+    val in        = Input(Vec(dLenB, UInt(8.W)))
+    val shamt_eew = Input(UInt(2.W))
+    val shamt     = Input(Vec(dLenB, UInt(8.W)))
+    val shl       = Input(Bool())
+    val sra       = Input(Bool())
+
+    val out = Output(Vec(dLenB, UInt(8.W)))
+  })
+
+  val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
+
+  for (i <- 0 until dLenB) {
+    val shamt = VecInit.tabulate(4)({ eew => io.shamt((i / (1 << eew)) << eew) })(io.shamt_eew) & shamt_mask
+    val shift_left_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
+      ((1 << (1 + (i % (1 << eew)))) - 1).U(8.W)
+    })(io.in_eew))
+    val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
+      (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
+    })(io.in_eew))
+    val shift_hi = !io.shl & io.sra & VecInit.tabulate(4)({eew =>
+      io.in(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
+    })(io.in_eew)
+    val shift_left_in = Reverse(VecInit(io.in.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
+    val shift_right_in = (VecInit(io.in.drop(i).take(8-(i%8))).asUInt & shift_right_zero_mask) | Mux(shift_hi, ~shift_right_zero_mask, 0.U)
+    val shift_in = Mux(io.shl,
+      shift_left_in,
+      shift_right_in)
+
+    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt).asUInt(7,0)
+    io.out(i) := Mux(io.shl,
+      Reverse(shifted),
+      shifted)
+  }
+}
+
 class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true)(p) {
   io.iss.sub_dlen := 0.U
 
@@ -151,8 +189,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (bw_or , (io.pipe(0).bits.rvs1_data | io.pipe(0).bits.rvs2_data)),
     (bw_xor, (io.pipe(0).bits.rvs1_data ^ io.pipe(0).bits.rvs2_data))
   ))
-
-  val shift_sra = io.pipe(0).bits.funct6(0)
 
   val sat_signed = io.pipe(0).bits.funct6(0)
   val sat_addu   = io.pipe(0).bits.funct6(1,0) === 0.U
@@ -252,38 +288,18 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     }
   }
 
-  val shift_out = Wire(Vec(dLenB, UInt(8.W)))
-  dontTouch(shift_out)
+  val shift_arr = Module(new ShiftArray(dLenB))
+  shift_arr.io.in_eew := rvs2_eew
+  shift_arr.io.in     := rvs2_bytes
+  shift_arr.io.shamt_eew := rvs1_eew
+  shift_arr.io.shamt     := Mux(ctrl_narrow_vs1, add_narrow_vs1, rvs1_bytes)
+  shift_arr.io.shl       := ctrl_shift_left
+  shift_arr.io.sra       := io.pipe(0).bits.funct6(0)
+
+  val shift_out = shift_arr.io.out
   val shift_narrowing_out = VecInit.tabulate(3)({eew =>
     Fill(2, VecInit(shift_out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq).asUInt)
   })(rvs1_eew)
-  val shamt_mask = VecInit.tabulate(4)({eew => ((8 << eew) - 1).U})(rvs2_eew)(5,0)
-  val shamt_arr = Mux(ctrl_narrow_vs1, add_narrow_vs1, rvs1_bytes)
-  for (i <- 0 until dLenB) {
-    val shamt = VecInit.tabulate(4)({ eew =>
-      shamt_arr((i / (1 << eew)) << eew)
-    })(rvs1_eew) & shamt_mask
-
-    val shift_left_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
-      ((1 << (1 + (i % (1 << eew)))) - 1).U(8.W)
-    })(rvs2_eew))
-    val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
-      (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
-    })(rvs2_eew))
-    val shift_hi = !ctrl_shift_left & shift_sra & VecInit.tabulate(4)({eew =>
-      rvs2_bytes(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
-    })(rvs2_eew)
-    val shift_left_in = Reverse(VecInit(rvs2_bytes.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
-    val shift_right_in = (VecInit(rvs2_bytes.drop(i).take(8-(i%8))).asUInt & shift_right_zero_mask) | Mux(shift_hi, ~shift_right_zero_mask, 0.U)
-    val shift_in = Mux(ctrl_shift_left,
-      shift_left_in,
-      shift_right_in)
-
-    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt).asUInt(7,0)
-    shift_out(i) := Mux(ctrl_shift_left,
-      Reverse(shifted),
-      shifted)
-  }
 
   val xunary0_eew_mul = io.pipe(0).bits.vd_eew - rvs2_eew
   val xunary0_in = (1 until 4).map { m =>
