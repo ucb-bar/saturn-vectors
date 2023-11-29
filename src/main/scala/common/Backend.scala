@@ -123,42 +123,53 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.seq_hazards.reads := older_rintents
   }
 
-  val vrf = Seq.fill(2) { Module(new RegisterFileBank(4, 2, egsTotal/2)) }
+  val vrf = Seq.fill(2) { Module(new RegisterFileBank(4, 1, egsTotal/2)) }
 
-  def vrfWrite(bankId: Int, write: Valid[VectorWrite]) = {
-    val out = Wire(Valid(new VectorWrite(dLen)))
-    out.valid := write.valid && write.bits.eg(0) === bankId.U
-    out.bits := write.bits
-    out.bits.eg := write.bits.eg >> 1
-    out
-  }
-
-  vmu.io.lresp.ready := vls.io.iss.valid
-  vls.io.iss.ready := vmu.io.lresp.valid
+  val load_write = Wire(Decoupled(new VectorWrite(dLen)))
+  vmu.io.lresp.ready := vls.io.iss.valid && load_write.ready
+  vls.io.iss.ready := vmu.io.lresp.valid && load_write.ready
+  load_write.valid := vls.io.iss.valid && vmu.io.lresp.valid
+  load_write.bits.eg   := vls.io.iss.bits.wvd_eg
+  load_write.bits.data := vmu.io.lresp.bits
+  load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
 
   val resetting = RegInit(true.B)
-  val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
+  val reset_ctr = RegInit(0.U(log2Ceil(egsTotal/2).W))
   when (resetting) {
     reset_ctr := reset_ctr + 1.U
     io.issue.ready := false.B
   }
   when (~reset_ctr === 0.U) { resetting := false.B }
 
-  val load_write = Wire(Valid(new VectorWrite(dLen)))
-  load_write.valid := vls.io.iss.fire
-  load_write.bits.eg := vls.io.iss.bits.wvd_eg
-  load_write.bits.data := vmu.io.lresp.bits
-  load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
-
-  when (resetting) {
-    load_write.valid := true.B
-    load_write.bits.eg := reset_ctr
-    load_write.bits.data := 0.U
-    load_write.bits.mask := ~(0.U(dLen.W))
+  // Write ports
+  // vxu/lresp/reset
+  val writes = Seq.tabulate(2) { i =>
+    val arb = Module(new Arbiter(new VectorWrite(dLen), 3))
+    vrf(i).io.write(0).valid := arb.io.out.valid
+    vrf(i).io.write(0).bits  := arb.io.out.bits
+    arb.io.out.ready := true.B
+    arb.io.in
   }
 
-  vrf(0).io.write(0) := vrfWrite(0, load_write)
-  vrf(1).io.write(0) := vrfWrite(1, load_write)
+  writes(0)(0).valid := vxu.io.writes(0).valid
+  writes(0)(0).bits  := vxu.io.writes(0).bits
+  when (vxu.io.writes(0).valid) { assert(writes(0)(0).ready) }
+
+  writes(1)(0).valid := vxu.io.writes(1).valid
+  writes(1)(0).bits  := vxu.io.writes(1).bits
+  when (vxu.io.writes(1).valid) { assert(writes(1)(0).ready) }
+
+  load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(0)), writes.map(_(1).ready))
+  for (b <- 0 until 2) {
+    writes(b)(1).valid := load_write.valid && load_write.bits.eg(0) === b.U
+    writes(b)(1).bits.eg   := load_write.bits.eg >> 1
+    writes(b)(1).bits.data := load_write.bits.data
+    writes(b)(1).bits.mask := load_write.bits.mask
+    writes(b)(2).valid := resetting
+    writes(b)(2).bits.eg := reset_ctr
+    writes(b)(2).bits.data := 0.U
+    writes(b)(2).bits.mask := ~(0.U(dLen.W))
+  }
 
   // Read ports are
   // vxs-vrs1, vmu-index, frontend-index
@@ -190,8 +201,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.sdata.bits.mask := vss.io.iss.bits.rmask
   vss.io.iss.ready     := vmu.io.sdata.ready
 
-
-
   reads(3)(0) <> vls.io.rvm
   reads(3)(1) <> vss.io.rvm
   reads(3)(2) <> vxs.io.rvm
@@ -211,6 +220,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   maskindex_q.io.enq.bits.mask  := reads(3)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
   vims.io.iss.ready      := maskindex_q.io.enq.ready
 
+  // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {
     assert(vat_valids(tag))
     vat_valids(tag) := false.B
@@ -223,9 +233,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vxu.io.iss <> vxs.io.iss
   vxs.io.sub_dlen := vxu.io.iss_sub_dlen
-  vrf(0).io.write(1) := vxu.io.writes(0)
-  vrf(1).io.write(1) := vxu.io.writes(1)
 
+
+  // Signalling to frontend
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ hazards.map { h =>
