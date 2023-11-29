@@ -19,7 +19,7 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
     val stdata = Flipped(Decoupled(new StoreData))
   })
 
-  val segbuf = Module(new StoreSegmentBuffer)
+  val segbuf = Module(new StoreSegmentBuffer(vParams.doubleBufferSegments))
 
   val r_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
   val r_head = RegInit(true.B)
