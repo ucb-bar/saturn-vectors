@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class AdderArray(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class AdderArray(dLenB: Int) extends Module {
   val io = IO(new Bundle {
     val in1 = Input(Vec(dLenB, UInt(8.W)))
     val in2 = Input(Vec(dLenB, UInt(8.W)))
@@ -35,6 +35,46 @@ class AdderArray(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
 
     io.out(i) := sum(7,0)
     carries(i+1) := sum(8)
+  }
+}
+
+class CompareArray(dLenB: Int) extends Module {
+  val io = IO(new Bundle {
+    val in1 = Input(Vec(dLenB, UInt(8.W)))
+    val in2 = Input(Vec(dLenB, UInt(8.W)))
+    val eew = Input(UInt(2.W))
+    val signed = Input(Bool())
+    val less   = Input(Bool())
+    val sle    = Input(Bool())
+    val inv    = Input(Bool())
+
+    val minmax = Output(UInt(dLenB.W))
+    val result = Output(UInt(dLenB.W))
+  })
+
+  val eq = io.in2.zip(io.in1).map { x => x._1 === x._2 }
+  val lt = io.in2.zip(io.in1).map { x => x._1  <  x._2 }
+
+  val minmax_bits = Wire(Vec(4, UInt(dLenB.W)))
+  val result_bits  = Wire(Vec(4, UInt(dLenB.W)))
+
+  io.minmax := minmax_bits(io.eew)
+  io.result := result_bits(io.eew)
+
+  for (eew <- 0 until 4) {
+    val lts = lt.grouped(1 << eew)
+    val eqs = eq.grouped(1 << eew)
+    val bits = VecInit(lts.zip(eqs).zipWithIndex.map { case ((e_lts, e_eqs), i) =>
+      val eq = e_eqs.andR
+      val in1_hi = io.in1((i+1)*(1<<eew)-1)(7)
+      val in2_hi = io.in2((i+1)*(1<<eew)-1)(7)
+      val hi_lt = Mux(io.signed, in2_hi & !in1_hi, !in2_hi & in1_hi)
+      val hi_eq = in1_hi === in2_hi
+      val lt = (e_lts :+ hi_lt).zip(e_eqs :+ hi_eq).foldLeft(false.B) { case (p, (l, e)) => l || (e && p) }
+      Mux(io.less, lt || (io.sle && eq), io.inv ^ eq)
+    }.toSeq).asUInt
+    minmax_bits(eew) := FillInterleaved(1 << eew, bits)
+    result_bits(eew) := Fill(1 << eew, bits)
   }
 }
 
@@ -114,10 +154,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
 
   val shift_sra = io.pipe(0).bits.funct6(0)
 
-  val cmp_signed = io.pipe(0).bits.funct6(0)
-  val cmp_inv = io.pipe(0).bits.funct6(0)
-  val cmp_sle = io.pipe(0).bits.funct6(2,1) === 2.U
-
   val sat_signed = io.pipe(0).bits.funct6(0)
   val sat_addu   = io.pipe(0).bits.funct6(1,0) === 0.U
   val sat_subu   = io.pipe(0).bits.funct6(1,0) === 2.U
@@ -168,43 +204,34 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val sat_clip = Mux(sat_signed, sat_signed_clip, sat_unsigned_clip)
   val sat_out = VecInit(add_out.zipWithIndex.map { case (o,i) => Mux(sat_mask(i), sat_clip(i), o) })
 
-  val cmp_lt = VecInit(in2_bytes.zip(in1_bytes).map { x => x._1 < x._2 })
-  val cmp_eq = VecInit(in2_bytes.zip(in1_bytes).map { x => x._1 === x._2 })
-  val cmp_minmax = VecInit.tabulate(4)({eew =>
-    val lts = cmp_lt.grouped(1 << eew)
-    val eqs = cmp_eq.grouped(1 << eew)
-    val bits = VecInit((lts zip eqs).zipWithIndex.map { case ((elts, eeqs), i) =>
-      val eq = eeqs.andR
-      val in1_hi = in1_bytes((i+1)*(1<<eew)-1)(7)
-      val in2_hi = in2_bytes((i+1)*(1<<eew)-1)(7)
-      val hi_lt = Mux(cmp_signed, in2_hi & !in1_hi, !in2_hi & in1_hi)
-      val hi_eq = in1_hi === in2_hi
-      val lt = ((elts :+ hi_lt) zip (eeqs :+ hi_eq)).foldLeft(false.B) { case (p, (l, e)) => l || (e && p) }
-      Mux(cmp_less, lt || (cmp_sle & eq), cmp_inv ^ eq)
-    }.toSeq).asUInt
-    VecInit(Seq(Fill(1 << eew, bits), FillInterleaved(1 << eew, bits)))
-  })(rvs1_eew)
-  val cmp_res = cmp_minmax(0)
-  val minmax_sel = cmp_minmax(1).asBools
-  val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(minmax_sel).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
-
   val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
   val merge_out  = VecInit((0 until dLenB).map { i => Mux(merge_mask(i), rvs1_bytes(i), rvs2_bytes(i)) }).asUInt
 
   val carryborrow_res = VecInit.tabulate(4)({ eew =>
     Fill(1 << eew, VecInit(add_carry.grouped(1 << eew).map(_.last).toSeq).asUInt)
   })(rvs1_eew)
-  val mask_out = Fill(8, Mux(ctrl_cmp, cmp_res, carryborrow_res ^ Fill(dLenB, ctrl_sub)))
 
-  val adders = Module(new AdderArray)
-  adders.io.in1 := Mux(ctrl_narrow_vs1, add_narrow_vs1, in1_bytes)
-  adders.io.in2 := in2_bytes
-  adders.io.use_carry  := add_use_carry
-  adders.io.mask_carry := add_mask_carry
-  adders.io.sub        := ctrl_sub
-  adders.io.cmask      := ctrl_cmask
-  add_out   := adders.io.out
-  add_carry := adders.io.carry
+  val adder_arr = Module(new AdderArray(dLenB))
+  adder_arr.io.in1 := Mux(ctrl_narrow_vs1, add_narrow_vs1, in1_bytes)
+  adder_arr.io.in2 := in2_bytes
+  adder_arr.io.use_carry  := add_use_carry
+  adder_arr.io.mask_carry := add_mask_carry
+  adder_arr.io.sub        := ctrl_sub
+  adder_arr.io.cmask      := ctrl_cmask
+  add_out   := adder_arr.io.out
+  add_carry := adder_arr.io.carry
+
+  val cmp_arr = Module(new CompareArray(dLenB))
+  cmp_arr.io.in1 := in1_bytes
+  cmp_arr.io.in2 := in2_bytes
+  cmp_arr.io.eew := rvs1_eew
+  cmp_arr.io.signed := io.pipe(0).bits.funct6(0)
+  cmp_arr.io.less   := cmp_less
+  cmp_arr.io.sle    := io.pipe(0).bits.funct6(1,0) === 2.U
+  cmp_arr.io.inv    := io.pipe(0).bits.funct6(0)
+  val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(cmp_arr.io.minmax.asBools).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
+
+  val mask_out = Fill(8, Mux(ctrl_cmp, cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl_sub)))
 
   for (eew <- 0 until 3) {
     val in_vec = rvs1_bytes.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
