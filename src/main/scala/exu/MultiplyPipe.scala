@@ -109,8 +109,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   for (eew <- 0 until 4) {
     val wide = vWideMulOut.asTypeOf(Vec(dLenB >> eew, UInt((16 << eew).W)))
     vNarrowMulOutEew(eew) := wide.map { wideElem => 
-    println("wideElem: " + wideElem + " eew: " + eew + " wide: " + wide)
-    println("(16 << eew)-1, (8 << eew)", (16 << eew)-1, (8 << eew))
       val lo = wideElem((8 << eew)-1, 0)
       val hi = wideElem((16 << eew)-1, (8 << eew))
       Mux(ctrl_hi, hi, lo)
@@ -120,10 +118,10 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
 
 
   //TODO: do something like this to support vwmacc
-  val halfSel = VecInit((0 until 3).map { eew =>
-    (io.pipe(0).bits.eidx(log2Ceil(vLen)-eew-1 - 1))
+  val halfSel = VecInit((1 until 4).map { eew =>
+    (io.pipe(0).bits.eidx(log2Ceil(dLenB)+1 - eew - 1))
   })(out_eew)
-  // val halfSel = io.pipe(0).bits.eidx(log2Ceil(dLen)+1 - 1)
+  // val halfSel = io.pipe(0).bits.wvd_eg(0)
   val wacc_in1 = Mux(halfSel, vWideMulOut >> dLen, vWideMulOut)
   val vAcc = Module(new SegmentedAdd)
   vAcc.io.ctrl_sub := ctrl_sub

@@ -102,8 +102,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     wide_vd     := dis_wide_vd
     wide_vs2    := dis_wide_vs2
     writes_mask := dis_writes_mask
-    renv1 := dis_renv1
-    renvd := dis_renvd
     widen2      := dis_widen2
     renv1       := dis_renv1
     renv2       := dis_renv2
