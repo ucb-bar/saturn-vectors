@@ -48,6 +48,7 @@ abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) wit
     val vm_resp = mask_resp >> vm_eidx
     Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
   }
+  def get_reduction_mask(reg: UInt) = VecInit.tabulate(egsTotal) { i => (i.U === (reg * egsPerVReg.U)) }.asUInt
   def get_next_eidx(vl: UInt, eidx: UInt, eew: UInt, sub_dlen: UInt) = min(vl,
     (((eidx >> (dLenOffBits.U - eew - sub_dlen)) +& 1.U) << (dLenOffBits.U - eew - sub_dlen))(log2Ceil(maxVLMax)+1,0)
   )
