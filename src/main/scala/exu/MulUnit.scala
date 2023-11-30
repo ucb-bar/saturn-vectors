@@ -11,9 +11,6 @@ class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends Cor
     val io = IO(new Bundle {
         val in1_signed = Input(Bool())
         val in2_signed = Input(Bool())
-        val ctrl_acc = Input(Bool())
-        val ctrl_madd = Input(Bool())
-        val ctrl_sub = Input(Bool())
         val eew = Input(UInt(2.W))
         
         val in1 = Input(UInt(xLen.W))
@@ -101,9 +98,13 @@ class SegmentedAdd(implicit p: Parameters) extends CoreModule()(p) with HasVecto
 
   val in1 = io.in1.asTypeOf(Vec(dLenB, UInt(8.W)))
   val in2 = io.in2.asTypeOf(Vec(dLenB, UInt(8.W)))
-  val add_use_carry = Mux1H(UIntToOH(io.eew),
-    (0 until 4).map { eew => Fill(dLenB >> eew, ~(1.U((1 << eew).W))) }
-  )
+//   val add_use_carry = Mux1H(UIntToOH(io.eew),
+//     (0 until 4).map { eew => Fill(dLenB >> eew, ~(1.U((1 << eew).W))) }
+//   )
+  val add_use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
+    Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
+  })(io.eew))
+
   println("add_use_carry: " + add_use_carry)
   val add_carry = Wire(Vec(dLenB+1, UInt(1.W)))
   val add_out = Wire(Vec(dLenB, UInt(8.W)))

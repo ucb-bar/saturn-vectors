@@ -100,9 +100,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   for (i <- 0 until numSegMul) {
     vMul(i).io.in1_signed := ctrl_rvs1_signed
     vMul(i).io.in2_signed := ctrl_rvs2_signed
-    vMul(i).io.ctrl_acc := ctrl_acc
-    vMul(i).io.ctrl_madd := ctrl_madd
-    vMul(i).io.ctrl_sub := ctrl_sub
     vMul(i).io.eew := in_eew
     vMul(i).io.in1 := in1((i+1)*xLen-1, i*xLen)
     vMul(i).io.in2 := in2((i+1)*xLen-1, i*xLen)
@@ -121,14 +118,17 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   }
   val vNarrowMulOut = vNarrowMulOutEew(out_eew)
 
+
+  //TODO: do something like this to support vwmacc
+  val halfSel = VecInit((0 until 3).map { eew =>
+    (io.pipe(0).bits.eidx(log2Ceil(vLen)-eew-1 - 1))
+  })(out_eew)
+  // val halfSel = io.pipe(0).bits.eidx(log2Ceil(dLen)+1 - 1)
+  val wacc_in1 = Mux(halfSel, vWideMulOut >> dLen, vWideMulOut)
   val vAcc = Module(new SegmentedAdd)
   vAcc.io.ctrl_sub := ctrl_sub
   vAcc.io.eew := out_eew
-  //TODO: do something like this to support vwmacc
-  // val acc_in1 = Mux(io.pipe(0).bits.wvd_eg(0), vWideMulOut, vWideMulOut >> dLen)
-  vAcc.io.in1 := Mux(ctrl_wacc, 
-                  Mux(io.pipe(0).bits.wvd_eg(0), vWideMulOut >> dLen, vWideMulOut), 
-                  vNarrowMulOut)
+  vAcc.io.in1 := Mux(ctrl_wacc, wacc_in1, vNarrowMulOut)
   vAcc.io.in2 := ind
 
   val narrow_out = Mux(ctrl_acc, vAcc.io.out, vNarrowMulOut)
@@ -141,6 +141,9 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg >> 1
-  io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(depth-1).bits.wmask))
+  io.write.bits.mask := Mux(io.pipe(depth-1).bits.wvd_widen2, 
+    FillInterleaved(8, FillInterleaved(2, io.pipe(depth-1).bits.wmask)),
+    Fill(2, FillInterleaved(8, io.pipe(depth-1).bits.wmask))
+  )
   io.write.bits.data := out
 }
