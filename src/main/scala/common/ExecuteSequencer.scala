@@ -186,7 +186,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rmask := Mux(inst.vm, ~(0.U(dLenB.W)), vm_resp)
 
   when (io.iss.fire && !last) {
-    when (Mux(writes_mask, next_mask_is_new_eg(eidx, next_eidx), next_is_new_eg(eidx, next_eidx, vd_eew)) && !reduction) {
+    when (Mux(writes_mask, next_mask_is_new_eg(eidx, next_eidx), next_is_new_eg(eidx, next_eidx, vd_eew))) {
       val wvd_clr_mask = Mux(widen2, FillInterleaved(2, UIntToOH(io.iss.bits.wvd_eg >> 1)), UIntToOH(io.iss.bits.wvd_eg))
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }

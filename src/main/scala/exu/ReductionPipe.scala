@@ -18,9 +18,7 @@ class IntegerReductionPipe(implicit p: Parameters) extends IterativeFunctionalUn
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
   io.set_vxsat := false.B
 
-  // Capture vs1[0] and wvd_eg
   val vs1_0 = Reg(UInt(64.W))
-  val wvd_eg = Reg(UInt(log2Ceil(egsTotal).W))
 
   val in_eew = io.iss.op.rvs2_eew
   val out_eew = io.iss.op.vd_eew
@@ -39,12 +37,12 @@ class IntegerReductionPipe(implicit p: Parameters) extends IterativeFunctionalUn
   
   io.hazard.valid := active
   io.hazard.bits.vat := op.vat
-  io.hazard.bits.eg := wvd_eg
+  io.hazard.bits.eg := op.wvd_eg
   io.hazard.bits.widen2 := false.B
 
+  // Capture vs1[0]
   when (io.iss.valid && !active) {
     vs1_0 := extract(io.iss.op.rvs1_data, false.B, in_eew, 0.U)(63,0)
-    wvd_eg := io.iss.op.wvd_eg
   }
 
   // Accumulator register
@@ -65,7 +63,7 @@ class IntegerReductionPipe(implicit p: Parameters) extends IterativeFunctionalUn
   wdata := red_accum + vs1_0.asSInt
 
   io.write.valid := active && op.last
-  io.write.bits.eg := wvd_eg
+  io.write.bits.eg := op.wvd_eg
   io.write.bits.data := Cat(0.U((dLen-32).W), wdata)
   io.write.bits.mask := mask_select(out_eew) 
 
