@@ -17,7 +17,10 @@ case class VectorParams(
   vsifqEntries: Int = 4,
 
   dLen: Int = 64,
-  vatSz: Int = 3)
+  vatSz: Int = 3,
+
+  doubleBufferSegments: Boolean = true
+)
 
 case object VectorParamsKey extends Field[VectorParams]
 

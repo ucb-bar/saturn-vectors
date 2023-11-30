@@ -124,82 +124,92 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.seq_hazards.reads := older_rintents
   }
 
-  val vrf = Seq.fill(2) { Module(new RegisterFileBank(5, 2, egsTotal/2)) }
+  val vrf = Seq.fill(2) { Module(new RegisterFileBank(4, 1, egsTotal/2)) }
 
-  def vrfWrite(bankId: Int, write: Valid[VectorWrite]) = {
-    val out = Wire(Valid(new VectorWrite(dLen)))
-    out.valid := write.valid && write.bits.eg(0) === bankId.U
-    out.bits := write.bits
-    out.bits.eg := write.bits.eg >> 1
-    out
-  }
-
-  vmu.io.lresp.ready := vls.io.iss.valid
-  vls.io.iss.ready := vmu.io.lresp.valid
+  val load_write = Wire(Decoupled(new VectorWrite(dLen)))
+  vmu.io.lresp.ready := vls.io.iss.valid && load_write.ready
+  vls.io.iss.ready := vmu.io.lresp.valid && load_write.ready
+  load_write.valid := vls.io.iss.valid && vmu.io.lresp.valid
+  load_write.bits.eg   := vls.io.iss.bits.wvd_eg
+  load_write.bits.data := vmu.io.lresp.bits
+  load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
 
   val resetting = RegInit(true.B)
-  val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
+  val reset_ctr = RegInit(0.U(log2Ceil(egsTotal/2).W))
   when (resetting) {
     reset_ctr := reset_ctr + 1.U
     io.issue.ready := false.B
   }
   when (~reset_ctr === 0.U) { resetting := false.B }
 
-  val load_write = Wire(Valid(new VectorWrite(dLen)))
-  load_write.valid := vls.io.iss.fire
-  load_write.bits.eg := vls.io.iss.bits.wvd_eg
-  load_write.bits.data := vmu.io.lresp.bits
-  load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
-
-  when (resetting) {
-    load_write.valid := true.B
-    load_write.bits.eg := reset_ctr
-    load_write.bits.data := 0.U
-    load_write.bits.mask := ~(0.U(dLen.W))
+  // Write ports
+  // vxu/lresp/reset
+  val writes = Seq.tabulate(2) { i =>
+    val arb = Module(new Arbiter(new VectorWrite(dLen), 3))
+    vrf(i).io.write(0).valid := arb.io.out.valid
+    vrf(i).io.write(0).bits  := arb.io.out.bits
+    arb.io.out.ready := true.B
+    arb.io.in
   }
 
-  vrf(0).io.write(0) := vrfWrite(0, load_write)
-  vrf(1).io.write(0) := vrfWrite(1, load_write)
+  writes(0)(0).valid := vxu.io.writes(0).valid
+  writes(0)(0).bits  := vxu.io.writes(0).bits
+  when (vxu.io.writes(0).valid) { assert(writes(0)(0).ready) }
+
+  writes(1)(0).valid := vxu.io.writes(1).valid
+  writes(1)(0).bits  := vxu.io.writes(1).bits
+  when (vxu.io.writes(1).valid) { assert(writes(1)(0).ready) }
+
+  load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(0)), writes.map(_(1).ready))
+  for (b <- 0 until 2) {
+    writes(b)(1).valid := load_write.valid && load_write.bits.eg(0) === b.U
+    writes(b)(1).bits.eg   := load_write.bits.eg >> 1
+    writes(b)(1).bits.data := load_write.bits.data
+    writes(b)(1).bits.mask := load_write.bits.mask
+    writes(b)(2).valid := resetting
+    writes(b)(2).bits.eg := reset_ctr
+    writes(b)(2).bits.data := 0.U
+    writes(b)(2).bits.mask := ~(0.U(dLen.W))
+  }
 
   // Read ports are
-  // vss-vrd
-  // vxs-vrs1
+  // vxs-vrs1, vmu-index, frontend-index
   // vxs-vrs2
-  // vxs-vrs3, vmu-index, frontend-index
+  // vxs-vrs3, vss-vrd
   // vls-mask, vss-mask, vxs-mask, vims-mask, frontend-mask
-  val reads = Seq(1, 1, 1, 3, 5).zipWithIndex.map { case (rc, i) =>
+  val reads = Seq(3, 1, 2, 5).zipWithIndex.map { case (rc, i) =>
     val arb = Module(new RegisterReadXbar(rc))
     vrf(0).io.read(i) <> arb.io.out(0)
     vrf(1).io.read(i) <> arb.io.out(1)
     arb.io.in
   }
 
-  reads(0)(0) <> vss.io.rvd
+  reads(0)(1) <> vims.io.rvs2
+  vims.io.rvs1.req.ready := true.B
+
+  reads(0)(2).req.valid := io.index_access.valid
+  io.index_access.ready := reads(0)(2).req.ready
+  reads(0)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
+  io.index_access.idx   := reads(0)(2).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
+
+  reads(0)(0) <> vxs.io.rvs1
+  reads(1)(0) <> vxs.io.rvs2
+  reads(2)(0) <> vxs.io.rvd
+
+  reads(2)(1) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
   vmu.io.sdata.bits.data := vss.io.iss.bits.rvd_data
   vmu.io.sdata.bits.mask := vss.io.iss.bits.rmask
   vss.io.iss.ready     := vmu.io.sdata.ready
 
-  reads(1)(0) <> vxs.io.rvs1
-  reads(2)(0) <> vxs.io.rvs2
-  reads(3)(0) <> vxs.io.rvd
-
-  reads(3)(1) <> vims.io.rvs2
-  vims.io.rvs1.req.ready := true.B
-
-  reads(3)(2).req.valid := io.index_access.valid
-  io.index_access.ready := reads(3)(2).req.ready
-  reads(3)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
-  io.index_access.idx   := reads(3)(2).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
-
-  reads(4)(0) <> vls.io.rvm
-  reads(4)(1) <> vss.io.rvm
-  reads(4)(2) <> vxs.io.rvm
-  reads(4)(3) <> vims.io.rvm
-  reads(4)(4).req.valid := io.mask_access.valid
-  reads(4)(4).req.bits  := getEgId(0.U, io.mask_access.eidx >> 3, 0.U)
-  io.mask_access.ready  := reads(4)(4).req.ready
-  io.mask_access.mask   := reads(4)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
+  reads(3)(0) <> vls.io.rvm
+  reads(3)(1) <> vss.io.rvm
+  reads(3)(2) <> vxs.io.rvm
+  reads(3)(3) <> vims.io.rvm
+  reads(3)(4).req.valid := io.mask_access.valid
+  reads(3)(4).req.bits  := getEgId(0.U, io.mask_access.eidx >> 3, 0.U)
+  io.mask_access.ready  := reads(3)(4).req.ready
+  io.mask_access.mask   := reads(3)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
   val maskindex_q = Module(new Queue(new MaskIndex, 2))
@@ -208,9 +218,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   maskindex_q.io.enq.valid := vims.io.iss.valid
   val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
   maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.rvs2_eew)
-  maskindex_q.io.enq.bits.mask  := reads(4)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
+  maskindex_q.io.enq.bits.mask  := reads(3)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
   vims.io.iss.ready      := maskindex_q.io.enq.ready
 
+  // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {
     assert(vat_valids(tag))
     vat_valids(tag) := false.B
@@ -223,9 +234,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vxu.io.iss <> vxs.io.iss
   vxs.io.sub_dlen := vxu.io.iss_sub_dlen
-  vrf(0).io.write(1) := vxu.io.writes(0)
-  vrf(1).io.write(1) := vxu.io.writes(1)
 
+
+  // Signalling to frontend
   val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
     h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ hazards.map { h =>

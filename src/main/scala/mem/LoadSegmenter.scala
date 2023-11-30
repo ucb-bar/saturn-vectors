@@ -20,7 +20,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val resp = Decoupled(UInt(dLen.W))
   })
 
-  val segbuf = Module(new LoadSegmentBuffer)
+  val segbuf = Module(new LoadSegmentBuffer(vParams.doubleBufferSegments))
 
   val r_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
   val r_head = RegInit(true.B)

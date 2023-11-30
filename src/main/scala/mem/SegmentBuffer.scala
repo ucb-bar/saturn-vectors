@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class LoadSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
       val data = UInt(dLen.W)
@@ -23,6 +23,8 @@ class LoadSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Has
     val busy = Output(Bool())
   })
 
+  val nB = if (doubleBuffer) 2 else 1
+
   val rows = 8
   val cols = dLenB
 
@@ -31,11 +33,11 @@ class LoadSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Has
   val wrow = WireInit(0.U(rows.W))
   val wcol = WireInit(0.U(cols.W))
   val wmode = Wire(Bool())
-  val array = Seq.tabulate(rows, cols, 2) { case (_,_,_) => Reg(UInt(8.W)) }
+  val array = Seq.tabulate(rows, cols, nB) { case (_,_,_) => Reg(UInt(8.W)) }
 
   for (r <- 0 until 8) {
     for (c <- 0 until cols) {
-      for (s <- 0 until 2) {
+      for (s <- 0 until nB) {
         when (wrow(r) && wcol(c) && wmode === s.U) {
           array(r)(c)(s) := warr(r)(c % 8)
         }
@@ -43,11 +45,11 @@ class LoadSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Has
     }
   }
 
-  val modes = RegInit(VecInit.fill(2)(false.B))
+  val modes = RegInit(VecInit.fill(nB)(false.B))
   val in_sel = RegInit(false.B)
   val out_sel = RegInit(false.B)
   val out_row = RegInit(0.U(log2Ceil(8).W))
-  val out_nf  = Reg(Vec(2, UInt(3.W)))
+  val out_nf  = Reg(Vec(nB, UInt(3.W)))
 
   io.in.ready := !modes(in_sel)
   io.out.valid := modes(out_sel)
@@ -78,14 +80,14 @@ class LoadSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Has
   }
 
   when (io.in.fire && io.in.bits.sidx_tail && (wcol(cols-1) || io.in.bits.tail)) {
-    in_sel := !in_sel
+    in_sel := (if (doubleBuffer) (!in_sel) else false.B)
     modes(in_sel) := true.B
     out_nf(in_sel) := io.in.bits.nf
   }
 
   when (io.out.fire) {
     when (out_row === out_nf(out_sel)) {
-      out_sel := !out_sel
+      out_sel := (if (doubleBuffer) (!out_sel) else false.B)
       out_row := 0.U
       modes(out_sel) := false.B
     } .otherwise {
@@ -96,7 +98,7 @@ class LoadSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Has
   io.busy := modes.orR
 }
 
-class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
@@ -116,6 +118,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
     val busy = Output(Bool())
   })
 
+  val nB = if (doubleBuffer) 2 else 1
   val rows = 8
   val cols = dLenB
 
@@ -124,26 +127,26 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   val wrow = WireInit(0.U(rows.W))
   val wcol = WireInit(0.U(cols.W))
   val wmode = Wire(Bool())
-  val array = Seq.tabulate(rows, cols, 2) { case (_,_,_) => Reg(UInt(8.W)) }
-  val mask = Seq.fill(2) { Reg(UInt(dLenB.W)) }
+  val array = Seq.tabulate(rows, cols, nB) { case (_,_,_) => Reg(UInt(8.W)) }
+  val mask = Seq.fill(nB) { Reg(UInt(dLenB.W)) }
 
   for (r <- 0 until 8) {
     for (c <- 0 until cols) {
-      for (s <- 0 until 2) {
+      for (s <- 0 until nB) {
         when (wrow(r) && wcol(c) && wmode === s.U) {
           array(r)(c)(s) := warr(r)(c % 8)
         }
       }
     }
   }
-  val modes = RegInit(VecInit.fill(2)(false.B))
+  val modes = RegInit(VecInit.fill(nB)(false.B))
   val in_sel = RegInit(false.B)
   val out_sidx = RegInit(0.U(3.W))
   val out_row = RegInit(0.U(3.W))
   val out_sel = RegInit(false.B)
-  val out_nf = Reg(Vec(2, UInt(3.W)))
-  val out_eew = Reg(Vec(2, UInt(2.W)))
-  val out_rows = Reg(Vec(2, UInt(4.W)))
+  val out_nf = Reg(Vec(nB, UInt(3.W)))
+  val out_eew = Reg(Vec(nB, UInt(2.W)))
+  val out_rows = Reg(Vec(nB, UInt(4.W)))
 
   def sidxOff(sidx: UInt, eew: UInt) = sidx & ~((1.U << (log2Ceil(cols).U - eew)) - 1.U)
 
@@ -158,7 +161,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
 
   when (io.in.fire) {
     wrow := ((1.U << (1.U << (log2Ceil(cols).U - io.in.bits.eew))) - 1.U)(7,0) << sidxOff(io.in.bits.sidx, io.in.bits.eew)
-    for (s <- 0 until 2) {
+    for (s <- 0 until nB) {
       when (wmode === s.U && io.in.bits.sidx === 0.U) {
         mask(s) := io.in.bits.mask
       }
@@ -187,7 +190,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   }
 
   when (io.in.fire && io.in.bits.sidx === io.in.bits.nf) {
-    in_sel := !in_sel
+    in_sel := (if (doubleBuffer) (!in_sel) else false.B)
     modes(in_sel) := true.B
     out_nf(in_sel) := io.in.bits.nf
     out_eew(in_sel) := io.in.bits.eew
@@ -197,7 +200,7 @@ class StoreSegmentBuffer(implicit p: Parameters) extends CoreModule()(p) with Ha
   when (io.out.fire) {
     val sidx_tail = ((out_sidx +& (cols.U >> out_eew(out_sel))) > out_nf(out_sel))
     when ((out_row +& 1.U === out_rows(out_sel)) && sidx_tail) {
-      out_sel := !out_sel
+      out_sel := (if (doubleBuffer) (!out_sel) else false.B)
       out_row := 0.U
       out_sidx := 0.U
       modes(out_sel) := false.B
