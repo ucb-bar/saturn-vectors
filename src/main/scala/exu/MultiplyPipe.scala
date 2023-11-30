@@ -108,11 +108,11 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val vNarrowMulOutEew = Wire(Vec(4, UInt(dLen.W)))
   for (eew <- 0 until 4) {
     val wide = vWideMulOut.asTypeOf(Vec(dLenB >> eew, UInt((16 << eew).W)))
-    vNarrowMulOutEew(eew) := wide.map { i => 
-    println("i: " + i + " eew: " + eew + " wide: " + wide)
+    vNarrowMulOutEew(eew) := wide.map { wideElem => 
+    println("wideElem: " + wideElem + " eew: " + eew + " wide: " + wide)
     println("(16 << eew)-1, (8 << eew)", (16 << eew)-1, (8 << eew))
-      val lo = wide(i)((8 << eew)-1, 0)
-      val hi = wide(i)((16 << eew)-1, (8 << eew))
+      val lo = wideElem((8 << eew)-1, 0)
+      val hi = wideElem((16 << eew)-1, (8 << eew))
       Mux(ctrl_hi, hi, lo)
     }.asUInt
   }
