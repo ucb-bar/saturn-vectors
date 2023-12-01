@@ -98,19 +98,14 @@ class SegmentedAdd(implicit p: Parameters) extends CoreModule()(p) with HasVecto
 
   val in1 = io.in1.asTypeOf(Vec(dLenB, UInt(8.W)))
   val in2 = io.in2.asTypeOf(Vec(dLenB, UInt(8.W)))
-//   val add_use_carry = Mux1H(UIntToOH(io.eew),
-//     (0 until 4).map { eew => Fill(dLenB >> eew, ~(1.U((1 << eew).W))) }
-//   )
+
   val add_use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
     Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
   })(io.eew))
-
-  println("add_use_carry: " + add_use_carry)
   val add_carry = Wire(Vec(dLenB+1, UInt(1.W)))
   val add_out = Wire(Vec(dLenB, UInt(8.W)))
   
   add_carry(0) := io.ctrl_sub
-
   for (i <- 0 until dLenB) {
     val full = (Mux(io.ctrl_sub, ~in1(i), in1(i)) +&
       in2(i) +&

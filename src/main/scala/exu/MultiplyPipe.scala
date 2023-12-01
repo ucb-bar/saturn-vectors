@@ -91,8 +91,14 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val in_eew = io.pipe(0).bits.rvs1_eew
   val out_eew = io.pipe(0).bits.vd_eew
 
-  val in1 = io.pipe(0).bits.rvs1_data
-  val in2 = Mux(ctrl_madd, io.pipe(0).bits.rvd_data, io.pipe(0).bits.rvs2_data)
+  val halfSel = (io.pipe(0).bits.eidx >> (dLenOffBits.U - out_eew))(0)
+  val in1 = Mux(ctrl_wacc, Mux(halfSel, Fill(2, io.pipe(0).bits.rvs1_data(dLen/2-1, 0)), 
+    Fill(2, io.pipe(0).bits.rvs1_data(dLen-1, dLen/2))), 
+    io.pipe(0).bits.rvs1_data)
+  val in2 = Mux(ctrl_madd, io.pipe(0).bits.rvd_data, 
+    Mux(ctrl_wacc, Mux(halfSel, Fill(2, io.pipe(0).bits.rvs2_data(dLen/2-1, 0)), 
+    Fill(2, io.pipe(0).bits.rvs1_data(dLen-1, dLen/2))), 
+    io.pipe(0).bits.rvs2_data))
   val ind = Mux(ctrl_madd, io.pipe(0).bits.rvs2_data, io.pipe(0).bits.rvd_data)
 
   val numSegMul = dLen/xLen
@@ -118,22 +124,29 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
 
 
   //TODO: do something like this to support vwmacc
-  val halfSel = VecInit((1 until 4).map { eew =>
-    (io.pipe(0).bits.eidx(log2Ceil(dLenB)+1 - eew - 1))
-  })(out_eew)
+  
+  // val halfSel = VecInit((0 until 4).map { eew =>
+  // println("(log2Ceil(dLenB)+1 - eew - 1): " + (log2Ceil(dLenB)+1 - eew - 1))
+  //   (io.pipe(0).bits.eidx(log2Ceil(dLenB)+1 - eew - 1))
+  //   (io.pipe(0).bits.eidx >> (dLenOffBits.U - rvs2_eew))(0)
+  // })(out_eew)
+  // println("(io.pipe(0).bits.eidx : " + io.pipe(0).bits.eidx)
+  // println(" (dLenOffBits.U - out_eew))(0): " +  (dLenOffBits.U - out_eew))
   // val halfSel = io.pipe(0).bits.wvd_eg(0)
-  val wacc_in1 = Mux(halfSel, vWideMulOut >> dLen, vWideMulOut)
+  // println("halfSel: " + halfSel)
+  // val wacc_in1 = Mux(halfSel, vWideMulOut(2*dLen-1, dLen), 
+  //   vWideMulOut(dLen-1, 0))
   val vAcc = Module(new SegmentedAdd)
   vAcc.io.ctrl_sub := ctrl_sub
   vAcc.io.eew := out_eew
-  vAcc.io.in1 := Mux(ctrl_wacc, wacc_in1, vNarrowMulOut)
+  // vAcc.io.in1 := Mux(ctrl_wacc, wacc_in1, vNarrowMulOut)
+  vAcc.io.in1 := vWideMulOut(dLen-1, 0)
   vAcc.io.in2 := ind
 
   val narrow_out = Mux(ctrl_acc, vAcc.io.out, vNarrowMulOut)
-  val wide_out = vWideMulOut
   val out = Pipe(
     io.pipe(0).valid, 
-    Mux(io.pipe(0).bits.wvd_widen2, wide_out, Fill(2, narrow_out)), 
+    Mux(io.pipe(0).bits.wvd_widen2, vWideMulOut, Fill(2, narrow_out)), 
     depth-1
   ).bits
   
