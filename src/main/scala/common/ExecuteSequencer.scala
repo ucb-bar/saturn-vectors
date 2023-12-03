@@ -96,7 +96,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
       OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
     val dis_renvm = !inst.vm || io.dis.inst.opif6 === OPIFunct6.merge
 
-    reduction := io.dis.inst.funct3.isOneOf(OPMVV) && io.dis.inst.opmf6.isOneOf(OPMFunct6.redsum)
+    reduction := io.dis.inst.funct3.isOneOf(OPMVV) && io.dis.inst.opmf6.isOneOf(OPMFunct6.redsum, OPMFunct6.redmaxu, OPMFunct6.redmax,
+                                            OPMFunct6.redminu, OPMFunct6.redmin, OPMFunct6.redand, OPMFunct6.redor, OPMFunct6.redsum)
 
     wvd_mask  := Mux(reduction, get_reduction_mask(io.dis.inst.rd), FillInterleaved(egsPerVReg, vd_arch_mask))
     rvs1_mask := Mux(dis_renv1, Mux(reduction, get_reduction_mask(io.dis.inst.rs1), FillInterleaved(egsPerVReg, vs1_arch_mask)), 0.U)
