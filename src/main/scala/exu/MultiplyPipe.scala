@@ -61,7 +61,7 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
 }
 
-class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth, true)(p) {
+class VectorMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth, true)(p) {
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
@@ -96,7 +96,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val ind = Mux(ctrl_madd, io.pipe(0).bits.rvs2_data, io.pipe(0).bits.rvd_data)
 
   val numSegMul = dLen/xLen
-  val vMul = Seq.fill(numSegMul) {Module(new SegmentedIntegerMultiplier(1))}
+  val vMul = Seq.fill(numSegMul) {Module(new VectorIntegerMultiply(depth-1))}
   for (i <- 0 until numSegMul) {
     vMul(i).io.in1_signed := ctrl_rvs1_signed
     vMul(i).io.in2_signed := ctrl_rvs2_signed
@@ -116,21 +116,12 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   }
   val vNarrowMulOut = vNarrowMulOutEew(out_eew)
 
-
-  //TODO: do something like this to support vwmacc
-  // val halfSel = VecInit((0 until 4).map { eew =>
-  // println("(log2Ceil(dLenB)+1 - eew - 1): " + (log2Ceil(dLenB)+1 - eew - 1))
-  //   (io.pipe(0).bits.eidx(log2Ceil(dLenB)+1 - eew - 1))
-  //   (io.pipe(0).bits.eidx >> (dLenOffBits.U - rvs2_eew))(0)
-  // })(out_eew)
-  println("(io.pipe(0).bits.eidx : " + io.pipe(0).bits.eidx)
-  println(" (dLenOffBits.U - out_eew))(0): " +  (dLenOffBits.U - out_eew))
+  //to support vwmacc
   val halfSel = (io.pipe(0).bits.eidx >> (dLenOffBits.U - out_eew))(0)
   // val halfSel = io.pipe(0).bits.wvd_eg(0)
-  println("halfSel: " + halfSel)
   val wacc_in1 = Mux(halfSel, vWideMulOut(2*dLen-1, dLen), 
     vWideMulOut(dLen-1, 0))
-  val vAcc = Module(new SegmentedAdd)
+  val vAcc = Module(new VectorAdd)
   vAcc.io.ctrl_sub := ctrl_sub
   vAcc.io.eew := out_eew
   vAcc.io.in1 := Mux(ctrl_wacc, wacc_in1, vNarrowMulOut)

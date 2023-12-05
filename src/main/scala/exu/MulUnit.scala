@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorIntegerMultiply(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
     val io = IO(new Bundle {
         val in1_signed = Input(Bool())
         val in2_signed = Input(Bool())
@@ -84,7 +84,7 @@ class SegmentedIntegerMultiplier(depth: Int)(implicit p: Parameters) extends Cor
     io.out_data := Mux1H(UIntToOH(io.eew), SumPProdsS)
 }
 
-class SegmentedAdd(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorAdd(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
     val io = IO(new Bundle {
         // val rvs_signed = Input(Bool())
         val ctrl_sub = Input(Bool())
