@@ -19,14 +19,14 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val wide_vs2    = Reg(Bool()) // vs2 reads at 2xSEW
   val writes_mask = Reg(Bool()) // writes dest as a mask
   val widen2      = Reg(Bool()) // writes to 2x RF banks/cycle
+  val wacc        = Reg(Bool()) // incr_eew requires special case for wacc
 
   val vs1_eew  = inst.vconfig.vtype.vsew
   val vs2_eew  = inst.vconfig.vtype.vsew + wide_vs2 - Mux(inst.opmf6 === OPMFunct6.xunary0,
     ~inst.rs1(2,1) + 1.U, 0.U)
   val vs3_eew  = inst.vconfig.vtype.vsew + wide_vd
   val vd_eew   = inst.vconfig.vtype.vsew + wide_vd
-  val wacc = inst.opmf6.isOneOf(OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
-  val incr_eew = inst.vconfig.vtype.vsew + wide_vs2 + wacc
+  val incr_eew = inst.vconfig.vtype.vsew + (wide_vs2 || wacc)
 
   val renv1 = Reg(Bool())
   val renv2 = Reg(Bool())
@@ -71,13 +71,13 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
         (OPIFunct6.msgtu  , Seq(N,N,Y,N)),
         (OPIFunct6.msgt   , Seq(N,N,Y,N)),
         //if vector Mul FU, wmul writes to 2x RF banks/cycle
-        (OPMFunct6.wmul   , Seq(Y,N,N,Y)),
-        (OPMFunct6.wmulu  , Seq(Y,N,N,Y)),
-        (OPMFunct6.wmulsu , Seq(Y,N,N,Y)),
         (OPMFunct6.wmaccu , Seq(Y,N,N,N)),
         (OPMFunct6.wmacc  , Seq(Y,N,N,N)),
         (OPMFunct6.wmaccsu, Seq(Y,N,N,N)),
-        (OPMFunct6.wmaccus, Seq(Y,N,N,N))
+        (OPMFunct6.wmaccus, Seq(Y,N,N,N)),
+        (OPMFunct6.wmul   , if (iterMulU) Seq(Y,N,N,N) else Seq(Y,N,N,Y)),
+        (OPMFunct6.wmulu  , if (iterMulU) Seq(Y,N,N,N) else Seq(Y,N,N,Y)),
+        (OPMFunct6.wmulsu , if (iterMulU) Seq(Y,N,N,N) else Seq(Y,N,N,Y)),
       )
     )
 
@@ -94,6 +94,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val dis_renvd = io.dis.inst.opmf6.isOneOf(
       OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
       OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
+    val dis_wacc = io.dis.inst.opmf6.isOneOf(
+      OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
     val dis_renvm = !inst.vm || io.dis.inst.opif6 === OPIFunct6.merge
     wvd_mask      := FillInterleaved(egsPerVReg, vd_arch_mask)
     rvs1_mask := Mux(dis_renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
@@ -102,6 +104,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     rvm_mask  := Mux(dis_renvm, ~(0.U(egsPerVReg.W)), 0.U)
     wide_vd     := dis_wide_vd
     wide_vs2    := dis_wide_vs2
+    wacc :=  dis_wacc
     writes_mask := dis_writes_mask
     widen2      := dis_widen2
     renv1       := dis_renv1
