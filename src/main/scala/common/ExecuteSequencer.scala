@@ -26,8 +26,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     ~inst.rs1(2,1) + 1.U, 0.U)
   val vs3_eew  = inst.vconfig.vtype.vsew + wide_vd
   val vd_eew   = inst.vconfig.vtype.vsew + wide_vd
-  val incr_eew = inst.vconfig.vtype.vsew + (wide_vs2 || wacc)
-
+  val incr_eew = inst.vconfig.vtype.vsew + (if (iterMulU) wide_vs2 else (wide_vs2 || wacc))
   val renv1 = Reg(Bool())
   val renv2 = Reg(Bool())
   val renvd = Reg(Bool())
