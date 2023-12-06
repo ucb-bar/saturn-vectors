@@ -37,9 +37,11 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val vstart = UInt(log2Ceil(maxVLMax).W)
   val rs1_data = UInt(xLen.W)
   val rs2_data = UInt(xLen.W)
+  val frs1_data = UInt(fLen.W)
   val vat = UInt(vParams.vatSz.W)
   val phys = Bool()
   val vxrm = UInt(2.W)
+  val frm = UInt(3.W)
 
   def opcode = bits(6,0)
   def store = opcode(5)
@@ -107,6 +109,8 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val wvd = Bool()
   val eidx = UInt(log2Ceil(maxVLMax).W)
 
+  val frs1_data = UInt(fLen.W)
+
   val rvs1_data = UInt(dLen.W)
   val rvs2_data = UInt(dLen.W)
   val rvd_data  = UInt(dLen.W)
@@ -139,6 +143,7 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val vat = UInt(vParams.vatSz.W)
 
   val vxrm = UInt(2.W)
+  val frm = UInt(3.W)
 }
 
 class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

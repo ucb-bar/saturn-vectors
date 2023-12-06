@@ -28,6 +28,10 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
       (OPFFunct6.vfnmsac, Seq(N,N,N,Y,Y,Y,N,N,N,N,N,Y,N,Y,N,N,Y)),
     ))  
 
+  val scalar_rs1 = io.pipe(0).bits.funct3.isOneOf(OPFVF)
+
+  val frm = io.pipe(0).bits.frm
+
   val fma_count = dLen / 64
 
   val one_d = "h3FF0000000000000".U
@@ -57,35 +61,35 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
   val fmaCmd = Cat(fmaCmd1, fmaCmd0)
 
   for (i <- 0 until fma_count) {
-    wider_rvs1(i).io.in := FType.S.recode(vec_rvs1_s(i))
-    wider_rvs1(i).io.roundingMode := 0.U
+    wider_rvs1(i).io.in := Mux(scalar_rs1, FType.S.recode(io.pipe(0).bits.frs1_data(63,32)), FType.S.recode(vec_rvs1_s(i)))
+    wider_rvs1(i).io.roundingMode := frm
     wider_rvs1(i).io.detectTininess := hardfloat.consts.tininess_afterRounding
     wider_rvs2(i).io.in := FType.S.recode(vec_rvs2_s(i))
-    wider_rvs2(i).io.roundingMode := 0.U
+    wider_rvs2(i).io.roundingMode := frm
     wider_rvs2(i).io.detectTininess := hardfloat.consts.tininess_afterRounding
     wider_rvd(i).io.in := FType.S.recode(vec_rvd_s(i))
-    wider_rvd(i).io.roundingMode := 0.U
+    wider_rvd(i).io.roundingMode := frm
     wider_rvd(i).io.detectTininess := hardfloat.consts.tininess_afterRounding
 
     dfmas(i).io.validin := io.pipe(0).valid
     dfmas(i).io.a := Mux(io.pipe(0).bits.vd_eew === 3.U, FType.D.recode(vec_rvs2_d(i)), wider_rvs2(i).io.out)
-    dfmas(i).io.b := Mux(useOne, rec_one_d, Mux(io.pipe(0).bits.vd_eew === 3.U, FType.D.recode(vec_rvs1_d(i)), wider_rvs1(i).io.out))
+    dfmas(i).io.b := Mux(useOne, rec_one_d, Mux(io.pipe(0).bits.vd_eew === 3.U, Mux(scalar_rs1, FType.D.recode(io.pipe(0).bits.frs1_data), FType.D.recode(vec_rvs1_d(i))), wider_rvs1(i).io.out))
     dfmas(i).io.c := Mux(useOne, Mux(io.pipe(0).bits.vd_eew === 3.U, FType.D.recode(vec_rvs1_d(i)), wider_rvs1(i).io.out), Mux(io.pipe(0).bits.vd_eew === 3.U, FType.D.recode(vec_rvd_d(i)), wider_rvd(i).io.out))
     dfmas(i).io.op := fmaCmd
-    dfmas(i).io.roundingMode := 0.U
+    dfmas(i).io.roundingMode := frm
     dfmas(i).io.detectTininess := hardfloat.consts.tininess_afterRounding
     ieee_d_out(i) := FType.D.ieee(dfmas(i).io.out)
 
     narrower(i).io.in := dfmas(i).io.out
-    narrower(i).io.roundingMode := 0.U
+    narrower(i).io.roundingMode := frm
     narrower(i).io.detectTininess := hardfloat.consts.tininess_afterRounding
     
     sfmas(i).io.validin := io.pipe(0).valid && (io.pipe(0).bits.vd_eew === 2.U)
     sfmas(i).io.a := FType.S.recode(vec_rvs2_s(fma_count + i))
-    sfmas(i).io.b := Mux(useOne, rec_one_s, FType.S.recode(vec_rvs1_s(fma_count + i)))
+    sfmas(i).io.b := Mux(useOne, rec_one_s, Mux(scalar_rs1, FType.S.recode(io.pipe(0).bits.frs1_data(63,32)), FType.S.recode(vec_rvs1_s(fma_count + i))))
     sfmas(i).io.c := Mux(useOne, FType.S.recode(vec_rvs1_s(fma_count + i)), FType.S.recode(vec_rvd_s(fma_count + i)))
     sfmas(i).io.op := fmaCmd
-    sfmas(i).io.roundingMode := 0.U
+    sfmas(i).io.roundingMode := frm
     sfmas(i).io.detectTininess := hardfloat.consts.tininess_afterRounding 
     ieee_s_out(fma_count + i) := FType.S.ieee(sfmas(i).io.out)
 

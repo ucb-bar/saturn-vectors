@@ -79,6 +79,8 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.vat        := inst.vat
   io.iss.bits.vm         := inst.vm
   io.iss.bits.vxrm      := inst.vxrm
+  io.iss.bits.frm       := DontCare 
+  io.iss.bits.frs1_data := DontCare
 
   val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)

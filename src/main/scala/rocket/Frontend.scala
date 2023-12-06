@@ -140,6 +140,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
   x_core_inst.vxrm := DontCare // set at wb
+  x_core_inst.frm := DontCare // set at wb
+  x_core_inst.frs1_data := DontCare // set at wb
   when (x_core_inst.mop === mopUnit && x_core_inst.vmu) {
     when (x_core_inst.umop === lumopMask) {
       x_core_inst.vconfig.vl := (io.core.ex.vconfig.vl >> 3) + Mux(io.core.ex.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
@@ -290,6 +292,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.issue.valid := false.B
   io.issue.bits := w_inst
   io.issue.bits.vxrm := io.core.wb.vxrm
+  io.issue.bits.frm := io.core.wb.frm
+  io.issue.bits.frs1_data := io.core.wb.frs1
   io.issue.bits.phys := false.B
   when (w_inst.vmu) {
     val phys = w_inst.seg_nf === 0.U && w_inst.mop.isOneOf(mopUnit, mopStrided)
