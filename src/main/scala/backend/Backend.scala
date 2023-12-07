@@ -24,6 +24,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
+
+    val fp_req = Decoupled(new FPInput()) 
+    val fp_resp = Flipped(Decoupled(new FPResult()))
   })
 
   require(vLen >= 64)
@@ -93,6 +96,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => new IterativeIntegerDivider,
     () => new FMAPipe(vParams.fmaPipeDepth)
   )))
+
+
+  io.fp_req <> vxu.io.fp_req
+  vxu.io.fp_resp <> io.fp_resp
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
 

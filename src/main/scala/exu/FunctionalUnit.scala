@@ -58,21 +58,22 @@ abstract class PipelinedFunctionalUnit(val depth: Int)(implicit p: Parameters) e
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 }
 abstract class IterativeFunctionalUnit(implicit p: Parameters) extends FunctionalUnit()(p) {
-  val io = IO(new IterativeFunctionalUnitIO)
+  //val io = IO(new IterativeFunctionalUnitIO)
+  val io: IterativeFunctionalUnitIO
 
-  val valid = RegInit(false.B)
-  val op = Reg(new VectorMicroOp)
-  val last = Wire(Bool())
+  //val valid = RegInit(false.B)
+  //val op = Reg(new VectorMicroOp)
+  //val last = Wire(Bool())
 
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
-  io.vat.valid := valid && op.last
-  io.vat.bits  := op.vat
-  io.busy := valid
+  ////io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
+  //io.vat.valid := valid && op.last
+  //io.vat.bits  := op.vat
+  //io.busy := valid
 
-  when (io.iss.valid && io.iss.ready) {
-    valid := true.B
-    op := io.iss.op
-  } .elsewhen (last) {
-    valid := false.B
-  }
+  //when (io.iss.valid && io.iss.ready) {
+  //  valid := true.B
+  //  op := io.iss.op
+  //} .elsewhen (last) {
+  //  valid := false.B
+  //}
 }

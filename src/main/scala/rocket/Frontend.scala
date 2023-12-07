@@ -30,6 +30,9 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   io.core.set_vxsat      := vu.io.set_vxsat
   io.core.set_fflags     := vu.io.set_fflags
 
+  io.core.fp_req <> vu.io.fp_req
+  vu.io.fp_resp <> io.core.fp_resp
+
   val hella_simple = Module(new SimpleHellaCacheIF)
   val hella_arb = Module(new HellaCacheArbiter(2))
   hella_simple.io.requestor <> hella_arb.io.mem
@@ -124,6 +127,10 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     val index_access = Flipped(new VectorIndexAccessIO)
     val mask_access = Flipped(new VectorMaskAccessIO)
   })
+
+  io.core.fp_req.valid := DontCare
+  io.core.fp_req.bits := DontCare
+  io.core.fp_resp.ready := DontCare
 
   val replay_kill = WireInit(false.B)
 

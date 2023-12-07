@@ -9,6 +9,24 @@ import freechips.rocketchip.tile._
 import vector.common._
 
 class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctionalUnit()(p) {
+  val io = IO(new IterativeFunctionalUnitIO)
+
+  val valid = RegInit(false.B)
+  val op = Reg(new VectorMicroOp)
+  val last = Wire(Bool())
+
+  //io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
+  io.vat.valid := valid && op.last
+  io.vat.bits  := op.vat
+  io.busy := valid
+
+  when (io.iss.valid && io.iss.ready) {
+    valid := true.B
+    op := io.iss.op
+  } .elsewhen (last) {
+    valid := false.B
+  }
+
   lazy val aluFn = new ALUFN
   lazy val opcodes = Seq(
     OPMFunct6.divu,
@@ -51,4 +69,5 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   io.write.bits.data := wdata
 
   last := io.write.fire()
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
 }

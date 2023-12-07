@@ -9,7 +9,9 @@ import freechips.rocketchip.tile._
 import vector.common._
 
 class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
-  val fus = genFUs.map(gen => Module(gen()))
+  val elemwise_fpu = Module(new ElementwiseFPU) 
+
+  val fus = genFUs.map(gen => Module(gen())) ++ Seq(elemwise_fpu)
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
 
@@ -27,7 +29,13 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
+
+    val fp_req = Decoupled(new FPInput()) 
+    val fp_resp = Flipped(Decoupled(new FPResult()))
   })
+
+  io.fp_req <> elemwise_fpu.io.fp_req
+  elemwise_fpu.io.fp_resp <> io.fp_resp
 
   fus.map(_.io.iss).foreach { iss =>
     iss.op := io.iss.bits
