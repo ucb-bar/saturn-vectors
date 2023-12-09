@@ -30,6 +30,7 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
   def dLen = vParams.dLen
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
+  def fmaCount = dLenB / 8
 
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32

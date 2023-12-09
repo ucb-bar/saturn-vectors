@@ -8,53 +8,57 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class VFMAPipe(depth: Int, maxType: FType)(implicit p: Parameters) extends FPUModule()(p) {
+
+class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {
     val valid = Input(Bool())
     val frm = Input(UInt(3.W))
     val op = Input(UInt(2.W))
     val eew = Input(UInt(2.W))
-    val a = Input(UInt((maxType.ieeeWidth).W))
-    val b = Input(UInt((maxType.ieeeWidth).W))
-    val c = Input(UInt((maxType.ieeeWidth).W))
-    val out = Output(UInt((maxType.ieeeWidth).W))
+    val a = Input(UInt(64.W))
+    val b = Input(UInt(64.W))
+    val c = Input(UInt(64.W))
+    val out = Output(UInt(64.W))
+    val exc = Output(UInt(5.W))
   }) 
 
   val eew_pipe = Pipe(io.valid, io.eew, depth-1)
   val frm_pipe = Pipe(io.valid, io.frm, depth-1)
 
-  val fma_pipe = Module(new MulAddRecFNPipe(depth-1, maxType.exp, maxType.sig))
-  fma_pipe.io.validin := io.valid
-  fma_pipe.io.op := io.op
-  fma_pipe.io.roundingMode := io.frm
-  fma_pipe.io.detectTininess := hardfloat.consts.tininess_afterRounding
+  val sfma = Module(new MulAddRecFNPipe(depth-1, 8, 24))
+  sfma.io.validin := io.valid && (io.eew === 2.U)
+  sfma.io.op := io.op
+  sfma.io.roundingMode := io.frm
+  sfma.io.detectTininess := hardfloat.consts.tininess_afterRounding
+  sfma.io.a := FType.S.recode(io.a(63,32))
+  sfma.io.b := FType.S.recode(io.b(63,32))
+  sfma.io.c := FType.S.recode(io.c(63,32))
 
-  if (maxType == FType.D) {
-    val input_data = Seq(io.a, io.b, io.c)
-    val widen = input_data.zip(Seq.fill(3)(Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53)))).map { case(input, upconvert) =>
-      upconvert.io.in := FType.S.recode(input(31,0))
-      upconvert.io.roundingMode := io.frm
-      upconvert.io.detectTininess := hardfloat.consts.tininess_afterRounding
-      upconvert
-    }
-
-    fma_pipe.io.a := Mux(io.eew === 2.U, widen(0).io.out, FType.D.recode(io.a))
-    fma_pipe.io.b := Mux(io.eew === 2.U, widen(1).io.out, FType.D.recode(io.b))
-    fma_pipe.io.c := Mux(io.eew === 2.U, widen(2).io.out, FType.D.recode(io.c))
-
-    val narrow = Module(new hardfloat.RecFNToRecFN(11, 53, 8, 24))
-    narrow.io.roundingMode := frm_pipe.bits
-    narrow.io.detectTininess := hardfloat.consts.tininess_afterRounding
-    narrow.io.in := fma_pipe.io.out
-
-    io.out := Mux(eew_pipe.bits === 2.U, Cat("h00000000".U, FType.S.ieee(narrow.io.out)), FType.D.ieee(fma_pipe.io.out))
-  } else {
-    fma_pipe.io.a := FType.S.recode(io.a)
-    fma_pipe.io.b := FType.S.recode(io.b)
-    fma_pipe.io.c := FType.S.recode(io.c)
-    io.out := FType.S.ieee(fma_pipe.io.out)
+  val widen = Seq(io.a, io.b, io.c).zip(Seq.fill(3)(Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53)))).map { case(input, upconvert) =>
+    upconvert.io.in := FType.S.recode(input(31,0))
+    upconvert.io.roundingMode := io.frm
+    upconvert.io.detectTininess := hardfloat.consts.tininess_afterRounding
+    upconvert
   }
+
+  val dfma = Module(new MulAddRecFNPipe(depth-1, 11, 53))
+  dfma.io.validin := io.valid
+  dfma.io.op := io.op
+  dfma.io.roundingMode := io.frm
+  dfma.io.detectTininess := hardfloat.consts.tininess_afterRounding
+  dfma.io.a := Mux(io.eew === 3.U, FType.D.recode(io.a), widen(0).io.out)
+  dfma.io.b := Mux(io.eew === 3.U, FType.D.recode(io.b), widen(1).io.out)
+  dfma.io.c := Mux(io.eew === 3.U, FType.D.recode(io.c), widen(2).io.out)
+
+  val narrow = Module(new hardfloat.RecFNToRecFN(11, 53, 8, 24))
+  narrow.io.roundingMode := frm_pipe.bits
+  narrow.io.detectTininess := hardfloat.consts.tininess_afterRounding
+  narrow.io.in := dfma.io.out
+
+  io.out := Mux(eew_pipe.bits === 3.U, FType.D.ieee(dfma.io.out), Cat(FType.S.ieee(sfma.io.out), FType.S.ieee(narrow.io.out)))
+  io.exc := dfma.io.exceptionFlags | sfma.io.exceptionFlags
 }
+
 
 class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p) with HasFPUParameters {
   io.iss.sub_dlen := 0.U
@@ -75,57 +79,43 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
       (OPFFunct6.vfnmsac, Seq(N,N,N,Y,Y,Y,N,N,N,N,N,Y,N,Y,N,N,Y)),
     ))  
 
-  val scalar_rs1 = io.pipe(0).bits.funct3.isOneOf(OPFVF)
-  val frm = io.pipe(0).bits.frm
-  val fma_count = dLen / 64
+  val is_opfvf = io.pipe(0).bits.funct3.isOneOf(OPFVF)
+
   val one_d = "h3FF0000000000000".U
   val one_s = "h3F800000".U
-  val rec_one_d = FType.D.recode(one_d)
-  val rec_one_s = FType.S.recode(one_s)
-  val ieee_s_out = Wire(Vec(2 * fma_count, UInt(32.W)))
-  val ieee_d_out = Wire(Vec(fma_count, UInt(64.W)))
+  val frs1_data = io.pipe(0).bits.frs1_data
 
   val fmaCmd = Cat(fmaCmd1, fmaCmd0)
 
-  val vec_rvs1_s = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(2 * fma_count, UInt(32.W)))
-  val vec_rvs2_s = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(2 * fma_count, UInt(32.W)))
-  val vec_rvd_s = io.pipe(0).bits.rvd_data.asTypeOf(Vec(2 * fma_count, UInt(32.W)))
+  val one_bits = Mux(io.pipe(0).bits.vd_eew === 3.U, "h3FF0000000000000".U, "h3F8000003F800000".U)
+  val scalar_operand_bits = Mux(io.pipe(0).bits.vd_eew === 3.U, frs1_data, Fill(2, frs1_data))
 
-  val vec_rvs1_d = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(fma_count, UInt(64.W)))
-  val vec_rvs2_d = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(fma_count, UInt(64.W)))
-  val vec_rvd_d = io.pipe(0).bits.rvd_data.asTypeOf(Vec(fma_count, UInt(64.W)))
+  val vec_rvs1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
+  val vec_rvs2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
+  val vec_rvd = io.pipe(0).bits.rvd_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
 
-  val sfmas = Seq.fill(fma_count)(Module(new VFMAPipe(3, FType.S)))
-  val dfmas = Seq.fill(fma_count)(Module(new VFMAPipe(3, FType.D)))
+  val ieee_out = Wire(Vec(fmaCount, UInt(64.W)))
+  val exc = Wire(Vec(fmaCount, UInt(5.W))) 
 
-  sfmas.zipWithIndex.foreach { case(sfma,i) =>
-    sfma.io.valid := io.pipe(0).valid
-    sfma.io.frm := io.pipe(0).bits.frm
-    sfma.io.op := fmaCmd
-    sfma.io.eew := io.pipe(0).bits.vd_eew
-    sfma.io.a := Mux(useOne, one_s, Mux(scalar_rs1, io.pipe(0).bits.frs1_data(63,32), vec_rvs1_s(fma_count + i)))
-    sfma.io.b := vec_rvs2_s(fma_count + i)
-    sfma.io.c := Mux(useOne, vec_rvs1_s(fma_count + i), vec_rvd_s(fma_count + i))
-    ieee_s_out(fma_count + i) := sfma.io.out
+  val fma_pipes = Seq.fill(fmaCount)(Module(new TandemFMAPipe(depth))).zipWithIndex.map { case(fma_pipe, i) =>
+    val multiplier_bits = Mux(useOne, one_bits, Mux(is_opfvf, scalar_operand_bits, vec_rvs1(i)))
+    val multiplicand_bits = vec_rvs2(i)
+    val addend_bits = Mux(useOne, vec_rvs1(i), vec_rvd(i))
+    
+    fma_pipe.io.valid := io.pipe(0).valid
+    fma_pipe.io.frm := io.pipe(0).bits.frm
+    fma_pipe.io.op := fmaCmd
+    fma_pipe.io.eew := io.pipe(0).bits.vd_eew
+    fma_pipe.io.a := multiplicand_bits
+    fma_pipe.io.b := multiplier_bits
+    fma_pipe.io.c := addend_bits
+    ieee_out(i) := fma_pipe.io.out
+    exc(i) := fma_pipe.io.exc
+    fma_pipe
   }
-
-  dfmas.zipWithIndex.foreach { case(dfma, i) =>
-    dfma.io.valid := io.pipe(0).valid
-    dfma.io.frm := io.pipe(0).bits.frm
-    dfma.io.op := fmaCmd
-    dfma.io.eew := io.pipe(0).bits.vd_eew
-    dfma.io.a := Mux(useOne, one_d, Mux(io.pipe(0).bits.vd_eew === 2.U, Mux(scalar_rs1, io.pipe(0).bits.frs1_data(63,32), vec_rvs1_s(i)), Mux(scalar_rs1, io.pipe(0).bits.frs1_data, vec_rvs1_d(i))))
-    dfma.io.b := Mux(io.pipe(0).bits.vd_eew === 2.U, vec_rvs2_s(i), vec_rvs2_d(i))
-    dfma.io.c := Mux(io.pipe(0).bits.vd_eew === 2.U, Mux(useOne, vec_rvs1_s(i), vec_rvd_s(i)), Mux(useOne, vec_rvs1_d(i), vec_rvd_d(i))) 
-    ieee_s_out(i) := dfma.io.out(31,0)
-    ieee_d_out(i) := dfma.io.out
-  }
-
-  val ieee_out = Wire(UInt(dLen.W))
-  ieee_out := Mux(io.pipe(depth-1).bits.vd_eew === 3.U, ieee_d_out.asTypeOf(UInt(dLen.W)), ieee_s_out.asTypeOf(UInt(dLen.W)))
 
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
   io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(depth-1).bits.wmask))
-  io.write.bits.data := Fill(2, ieee_out)
+  io.write.bits.data := Fill(2, ieee_out.asTypeOf(UInt(dLen.W)))
 }
