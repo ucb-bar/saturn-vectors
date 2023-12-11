@@ -81,7 +81,13 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
     (OPFFunct6.vfmsub,    Seq(Y,Y,Y,Y,N,N,N)),
     (OPFFunct6.vfnmsub,   Seq(Y,Y,Y,N,Y,N,N)),
     (OPFFunct6.vfwadd,    Seq(Y,N,N,N,N,N,Y)),
+    (OPFFunct6.vfwsub,    Seq(Y,N,N,Y,N,N,Y)),
     (OPFFunct6.vfwaddw,   Seq(Y,N,N,N,N,Y,Y)),
+    (OPFFunct6.vfwsubw,   Seq(Y,N,N,Y,N,Y,Y)),
+    (OPFFunct6.vfwmacc,   Seq(Y,Y,N,N,N,N,Y)),
+    (OPFFunct6.vfwnmacc,  Seq(Y,Y,N,Y,Y,N,Y)),
+    (OPFFunct6.vfwmsac,   Seq(Y,Y,N,Y,N,N,Y)),
+    (OPFFunct6.vfwnmsac,  Seq(Y,Y,N,N,Y,N,Y)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
   val ctrl_add :: ctrl_fma :: ctrl_swap23 :: ctrl_fmaCmd0 :: ctrl_fmaCmd1 :: ctrl_widen_vs2 :: ctrl_widen_vd :: Nil = VecDecode.applyBools(
