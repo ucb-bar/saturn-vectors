@@ -50,5 +50,7 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := wdata
 
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
+
   last := io.write.fire()
 }

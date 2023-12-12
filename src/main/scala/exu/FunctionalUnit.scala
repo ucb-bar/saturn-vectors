@@ -64,7 +64,6 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   val op = Reg(new VectorMicroOp)
   val last = Wire(Bool())
 
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
   io.vat.valid := valid && op.last
   io.vat.bits  := op.vat
   io.busy := valid
