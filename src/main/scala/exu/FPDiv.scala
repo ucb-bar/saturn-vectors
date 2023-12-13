@@ -29,10 +29,12 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val is_opfvf = io.iss.op.funct3.isOneOf(OPFVF)
   //val scalar_operand_bits = Mux(io.iss.op.vd_eew === 3.U, io.iss.op.frs1_data)
+  val scalar_operand_bits = Mux(io.iss.op.rvd_eew === 3.U, io.iss.op.frs1_data, Fill(2, io.iss.op.frs1_data(31,0)))
 
   val rvs2_bits = extract(io.iss.op.rvs2_data, false.B, io.iss.op.rvs2_eew, io.iss.op.eidx)(63,0)
   //val rvs1_bits = extract(io.iss.op.rvs1_data, false.B, io.iss.op.rvs1_eew, io.iss.op.eidx)(63,0)
-  val rvs1_bits = Mux(is_opfvf, io.iss.op.frs1_data, extract(io.iss.op.rvs1_data, false.B, io.iss.op.rvs1_eew, io.iss.op.eidx)(63,0))
+  //val rvs1_bits = Mux(is_opfvf, io.iss.op.frs1_data, extract(io.iss.op.rvs1_data, false.B, io.iss.op.rvs1_eew, io.iss.op.eidx)(63,0))
+  val rvs1_bits = Mux(is_opfvf, scalar_operand_bits, extract(io.iss.op.rvs1_data, false.B, io.iss.op.rvs1_eew, io.iss.op.eidx)(63,0))
 
   divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
   divSqrt.io.roundingMode := io.iss.op.frm
@@ -50,7 +52,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     divSqrt.io.b := Mux(ctrl_swap12, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
   } .otherwise {
     val narrow_rvs2_bits = rvs2_bits(31,0)
-    //val narrow_rvs1_bits = Mux(is_opfvf, scalar_operand_bits(31,0), rvs1_bits(31,0))
+    //val narrow_rvs1_bits = Mux(is_opfvf, io.iss.op.frs1_data(63,32), rvs1_bits(31,0))
     val narrow_rvs1_bits = rvs1_bits(31,0)
     val widen = Seq(FType.S.recode(narrow_rvs2_bits), FType.S.recode(narrow_rvs1_bits)).zip(
       Seq.fill(2)(Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53)))).map { case(input, upconvert) =>
@@ -61,7 +63,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     }
 
     divSqrt.io.a := Mux(ctrl_swap12, widen(1).io.out, widen(0).io.out) 
-    divSqrt.io.b := Mux(ctrl_swap12, widen(0).io.out, widen(0).io.out)
+    divSqrt.io.b := Mux(ctrl_swap12, widen(0).io.out, widen(1).io.out)
   }
 
   val divSqrt_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
@@ -71,7 +73,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   narrow.io.detectTininess := hardfloat.consts.tininess_afterRounding
   narrow.io.in := divSqrt.io.out
 
-  val divSqrt_out = Mux(op.vd_eew === 3.U, FType.D.ieee(divSqrt.io.out), FType.S.ieee(narrow.io.out))
+  val divSqrt_out = Mux(op.vd_eew === 3.U, FType.D.ieee(divSqrt.io.out), Fill(2, FType.S.ieee(narrow.io.out)))
 
   val out_buffer = RegEnable(divSqrt_out, divSqrt_valid)
   val out_toWrite = RegInit(false.B)
