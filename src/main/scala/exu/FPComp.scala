@@ -112,10 +112,10 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
       d_bit := rs1(63) ^ rvs2(63)
       s_bit := rs1(31) ^ rvs2(31)
     } .otherwise {
-      d_bit := !rs1(63)
-      s_bit := !rs1(31)
+      d_bit := rs1(63)
+      s_bit := rs1(31)
     }
-    Cat(d_bit,Cat(rvs1(62,32),Cat(Mux(io.pipe(0).bits.vd_eew === 3.U, rs1(31), s_bit), rvs1(30,0))))
+    Cat(d_bit,Cat(rvs2(62,32),Cat(Mux(io.pipe(0).bits.vd_eew === 3.U, rvs2(31), s_bit), rvs2(30,0))))
   }
 
   val out = Wire(UInt(dLen.W))
