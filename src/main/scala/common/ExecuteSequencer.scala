@@ -85,6 +85,12 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
         (OPFFunct6.vfwnmacc , Seq(Y,N,N,N)),
         (OPFFunct6.vfwmsac  , Seq(Y,N,N,N)),
         (OPFFunct6.vfwnmsac , Seq(Y,N,N,N)),
+        (OPFFunct6.vmfeq    , Seq(N,N,Y,N)),
+        (OPFFunct6.vmfne    , Seq(N,N,Y,N)),
+        (OPFFunct6.vmflt    , Seq(N,N,Y,N)),
+        (OPFFunct6.vmfle    , Seq(N,N,Y,N)),
+        (OPFFunct6.vmfgt    , Seq(N,N,Y,N)),
+        (OPFFunct6.vmfge    , Seq(N,N,Y,N)),
       )
     )
 
