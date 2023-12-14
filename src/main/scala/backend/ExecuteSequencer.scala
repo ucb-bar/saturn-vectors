@@ -59,6 +59,12 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     (OPFFunct6.fwnmacc, Seq(Y,N,N)),
     (OPFFunct6.fwmsac , Seq(Y,N,N)),
     (OPFFunct6.fwnmsac, Seq(Y,N,N)),
+    (OPFFunct6.vmfeq  , Seq(N,N,Y)),
+    (OPFFunct6.vmfne  , Seq(N,N,Y)),
+    (OPFFunct6.vmflt  , Seq(N,N,Y)),
+    (OPFFunct6.vmfle  , Seq(N,N,Y)),
+    (OPFFunct6.vmfgt  , Seq(N,N,Y)),
+    (OPFFunct6.vmfge  , Seq(N,N,Y)),
   )
 
   def issQEntries = vParams.vxissqEntries
@@ -74,14 +80,14 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   issq.io.enq.bits.wide_vs2    := dis_wide_vs2
   issq.io.enq.bits.writes_mask := dis_writes_mask
   issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
-  issq.io.enq.bits.renv2       := !(io.dis.bits.opif6 === OPIFunct6.merge && io.dis.bits.vm)
+  issq.io.enq.bits.renv2       := !((io.dis.inst.opif6 === OPIFunct6.merge || io.dis.inst.opff6 === OPFFunct6.vfmerge) && io.dis.inst.vm)
   issq.io.enq.bits.renvd       := io.dis.bits.opmf6.isOneOf(
     OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
     OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) || io.dis.bits.opff6.isOneOf(
     OPFFunct6.fmacc, OPFFunct6.fnmacc, OPFFunct6.fmsac, OPFFunct6.fnmsac,
     OPFFunct6.fmadd, OPFFunct6.fnmadd, OPFFunct6.fmsub, OPFFunct6.fnmsub,
     OPFFunct6.fwmacc, OPFFunct6.fwnmacc, OPFFunct6.fwmsac, OPFFunct6.fwnmsac)
-  issq.io.enq.bits.renvm       := !io.dis.bits.vm || io.dis.bits.opif6 === OPIFunct6.merge
+  issq.io.enq.bits.renvm       := !inst.vm || io.dis.inst.opif6 === OPIFunct6.merge || io.dis.inst.opff6 === OPFFunct6.vfmerge
 
   for (i <- 0 until issQEntries) {
     val inst = issq.io.peek(i).bits

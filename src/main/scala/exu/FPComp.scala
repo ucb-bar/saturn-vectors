@@ -15,15 +15,15 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   lazy val ctrl_table = Seq(
     (OPFFunct6.vfmin    ,   Seq(Y,Y, N,N,N, N,X,X)),
     (OPFFunct6.vfmax    ,   Seq(N,Y, N,N,N, N,X,X)),
-    (OPFFunct6.vfsgnj   ,   Seq(X,X, N,N,N, Y,N,N)), 
-    (OPFFunct6.vfsgnjn  ,   Seq(X,X, N,N,N, Y,Y,N)), 
-    (OPFFunct6.vfsgnjx  ,   Seq(X,X, N,N,N, Y,N,Y)), 
-    (OPFFunct6.vmfeq    ,   Seq(X,X, Y,Y,N, N,X,X)),
-    (OPFFunct6.vmfne    ,   Seq(X,X, Y,N,N, N,X,X)),
-    (OPFFunct6.vmflt    ,   Seq(X,X, Y,N,Y, N,X,X)),
-    (OPFFunct6.vmfle    ,   Seq(X,X, Y,Y,Y, N,X,X)),
-    (OPFFunct6.vmfgt    ,   Seq(X,X, Y,N,N, N,X,X)),
-    (OPFFunct6.vmfge    ,   Seq(X,X, Y,Y,N, N,X,X)),
+    (OPFFunct6.vfsgnj   ,   Seq(X,N, N,N,N, Y,N,N)), 
+    (OPFFunct6.vfsgnjn  ,   Seq(X,N, N,N,N, Y,Y,N)), 
+    (OPFFunct6.vfsgnjx  ,   Seq(X,N, N,N,N, Y,N,Y)), 
+    (OPFFunct6.vmfeq    ,   Seq(X,N, Y,Y,N, N,X,X)),
+    (OPFFunct6.vmfne    ,   Seq(X,N, Y,N,N, N,X,X)),
+    (OPFFunct6.vmflt    ,   Seq(X,N, Y,N,Y, N,X,X)),
+    (OPFFunct6.vmfle    ,   Seq(X,N, Y,Y,Y, N,X,X)),
+    (OPFFunct6.vmfgt    ,   Seq(X,N, Y,N,N, N,X,X)),
+    (OPFFunct6.vmfge    ,   Seq(X,N, Y,Y,N, N,X,X)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
 
@@ -45,6 +45,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
 
   val fTypes = Seq(FType.S, FType.D)
   val minmax_results = Wire(Vec(2, UInt(dLen.W))) // results for vfmin/vfmax
+  val comp_results = Wire(Vec(2, UInt((dLen / 32).W)))
   //val comp_results = Wire(Vec(2, Bool()))         // results for the comparison mask instructions
 
   for (eew <- 2 until 4) {
@@ -96,6 +97,20 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
     // I need to collect all the results from the eew chunks and assign them
     //minmax_results(eew.U - 2.U) := minmax.asUInt
     minmax_results(eew - 2) := minmax.asUInt
+
+    val comparisons = gen_compares.map{ case(comp, rvs2, rvs2_man, rs1, rs1_nan) =>
+      val comparison_out = Wire(UInt(1.W))
+      when (ctrl_eq) {
+        comparison_out := comp.eq
+      } .elsewhen (ctrl_cmp_less) {
+        comparison_out := comp.lt
+      } .otherwise {   
+        comparison_out := comp.gt
+      }
+      comparison_out
+    } 
+    
+    comp_results(eew-2) := Fill(eew + 1, comparisons.asUInt)
   }
 
   //val results = comp_results(vs1_eew - 2.U) 
@@ -215,6 +230,8 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   val out = Wire(UInt(dLen.W))
   when (ctrl_cmp) {
     out := Mux(vs1_eew === 3.U, minmax_results(1), minmax_results(0)) 
+  } .elsewhen (ctrl_mask_write) {
+    out := Fill(64, Mux(vs1_eew === 3.U, comp_results(1), comp_results(0)))
   } .otherwise {
     out := sgnj.asUInt 
   }
@@ -230,16 +247,16 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   //}
 
   // Mask writing
-  //val mask_write_offset = VecInit.tabulate(4)({ eew =>
-  //  Cat(io.pipe(0).bits.eidx(log2Ceil(dLen)-1, dLenOffBits-eew), 0.U((dLenOffBits-eew).W))
-  //})(io.pipe(0).bits.rvs1_eew)
-  //val mask_write_mask = (VecInit.tabulate(4)({ eew =>
-  //  VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
-  //})(io.pipe(0).bits.rvs1_eew) << mask_write_offset)(dLen-1,0)
+  val mask_write_offset = VecInit.tabulate(4)({ eew =>
+    Cat(io.pipe(0).bits.eidx(log2Ceil(dLen)-1, dLenOffBits-eew), 0.U((dLenOffBits-eew).W))
+  })(vs1_eew)
+  val mask_write_mask = (VecInit.tabulate(4)({ eew =>
+    VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
+  })(vs1_eew) << mask_write_offset)(dLen-1,0)
 
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg >> 1
-  io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(0).bits.wmask))
-  //io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
+  //io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(0).bits.wmask))
+  io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
   io.write.bits.data := Fill(2, out)
 }
