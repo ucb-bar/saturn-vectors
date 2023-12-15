@@ -163,6 +163,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX) && !inst.vmu) {
     val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(59, inst.imm5(4)), inst.imm5), inst.rs1_data)
     io.iss.bits.rvs1_data := dLenSplat(rs1_data, vs1_eew)
+  } .elsewhen (inst.funct3.isOneOf(OPFVF) && !inst.vmu) {
+    io.iss.bits.rvs1_data := Mux(vs1_eew === 3.U, dLenSplat(inst.frs1_data, vs1_eew), dLenSplat(inst.frs1_data(31,0), vs1_eew)) 
   }
   io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvd_data  := io.rvd.resp

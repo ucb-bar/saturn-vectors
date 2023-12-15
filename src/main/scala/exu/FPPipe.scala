@@ -96,10 +96,8 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
   )
 
   val eidx = io.pipe(0).bits.eidx
-  val is_opfvf = io.pipe(0).bits.funct3.isOneOf(OPFVF)
   val frs1_data = io.pipe(0).bits.frs1_data
   val one_bits = Mux(io.pipe(0).bits.rvs1_eew === 3.U, "h3FF0000000000000".U, "h3F8000003F800000".U)
-  val scalar_operand_bits = Mux(io.pipe(0).bits.rvs1_eew === 3.U, frs1_data, Fill(2, frs1_data(31,0)))
   val vec_rvs1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
   val vec_rvs2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
   val vec_rvd = io.pipe(0).bits.rvd_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
@@ -113,7 +111,7 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
 
   val fma_pipes = Seq.fill(fmaCount)(Module(new TandemFMAPipe(depth))).zipWithIndex.map { case(fma_pipe, i) =>
     val widening_vs1_bits = extract(io.pipe(0).bits.rvs1_data, false.B, 2.U, eidx + i.U)(31,0)
-    val rs1_bits = Mux(is_opfvf, scalar_operand_bits, Mux(ctrl_widen_vd, widening_vs1_bits, vec_rvs1(i)))
+    val rs1_bits = Mux(ctrl_widen_vd, widening_vs1_bits, vec_rvs1(i))
     val widening_vs2_bits = extract(io.pipe(0).bits.rvs2_data, false.B, 2.U, eidx + i.U)(31,0)
     val vs2_bits = Mux(ctrl_widen_vd && !ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
 
