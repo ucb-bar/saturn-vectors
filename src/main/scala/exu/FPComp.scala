@@ -123,10 +123,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   // FP Merge Instruction
   val rvs2_elems = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB/4, UInt(32.W)))
   val frs1_elems = dLenSplat(Mux(rvs2_eew === 3.U, frs1_data, Fill(2, frs1_data(31,0))), 3.U).asTypeOf(Vec(dLenB/4, UInt(32.W)))
-  //val frs1_elems = dLenSplat(frs1_data, rvs2_eew)
-  //val fs1_elems = Mux(vs2_eew === 3.U, dLenSplat(frs1_data, 3.U), )
-
-  //val merge_mask = VecInit.tabulate(2)({eew => FillInterleaved(1 << (eew+2), io.pipe(0).bits.rmask(((dLenB >> (eew+2))-1,0)))})(rvs2_eew - 2.U)
   val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
   val merge_out = VecInit((0 until (dLenB / 4)).map {i => Mux(merge_mask(i), frs1_elems(i), rvs2_elems(i))}).asUInt
 
