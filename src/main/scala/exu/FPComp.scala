@@ -14,30 +14,35 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
 
   lazy val ctrl_table = Seq(
     (OPFFunct6.vfmin    ,   Seq(Y,Y, N,N,N, N,X,X)),
-    (OPFFunct6.vfmax    ,   Seq(N,Y, N,N,N, N,X,X)),
-    (OPFFunct6.vfsgnj   ,   Seq(X,N, N,N,N, Y,N,N)), 
-    (OPFFunct6.vfsgnjn  ,   Seq(X,N, N,N,N, Y,Y,N)), 
-    (OPFFunct6.vfsgnjx  ,   Seq(X,N, N,N,N, Y,N,Y)), 
-    (OPFFunct6.vmfeq    ,   Seq(X,N, Y,Y,N, N,X,X)),
-    (OPFFunct6.vmfne    ,   Seq(X,N, Y,N,N, N,X,X)),
-    (OPFFunct6.vmflt    ,   Seq(X,N, Y,N,Y, N,X,X)),
-    (OPFFunct6.vmfle    ,   Seq(X,N, Y,Y,Y, N,X,X)),
-    (OPFFunct6.vmfgt    ,   Seq(X,N, Y,N,N, N,X,X)),
-    (OPFFunct6.vmfge    ,   Seq(X,N, Y,Y,N, N,X,X)),
+    (OPFFunct6.vfmax    ,   Seq(Y,N, N,N,N, N,X,X)),
+    (OPFFunct6.vfsgnj   ,   Seq(N,X, N,N,N, Y,N,N)), 
+    (OPFFunct6.vfsgnjn  ,   Seq(N,X, N,N,N, Y,Y,N)), 
+    (OPFFunct6.vfsgnjx  ,   Seq(N,X, N,N,N, Y,N,Y)), 
+    (OPFFunct6.vmfeq    ,   Seq(N,X, Y,Y,N, N,X,X)),
+    (OPFFunct6.vmfne    ,   Seq(N,X, Y,N,N, N,X,X)),
+    (OPFFunct6.vmflt    ,   Seq(N,X, Y,N,Y, N,X,X)),
+    (OPFFunct6.vmfle    ,   Seq(N,X, Y,Y,Y, N,X,X)),
+    (OPFFunct6.vmfgt    ,   Seq(N,X, Y,N,N, N,X,X)),
+    (OPFFunct6.vmfge    ,   Seq(N,X, Y,Y,N, N,X,X)),
+    (OPFFunct6.vfmerge  ,   Seq(N,X, N,X,X, N,X,X)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
 
-  val ctrl_min :: ctrl_cmp :: ctrl_mask_write :: ctrl_eq :: ctrl_cmp_less :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
+  val ctrl_cmp :: ctrl_min :: ctrl_mask_write :: ctrl_eq :: ctrl_cmp_less :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(8)(X), ctrl_table
   ) 
   
   val is_opfvf = io.pipe(0).bits.funct3.isOneOf(OPFVF)
 
-  val vs1_eew = io.pipe(0).bits.rvs1_eew
+  val rvs1_eew = io.pipe(0).bits.rvs1_eew
+  val rvs2_eew = io.pipe(0).bits.rvs2_eew
+  val rvd_eew  = io.pipe(0).bits.rvd_eew
   val rvs2_data = io.pipe(0).bits.rvs2_data
   val rvs1_data = io.pipe(0).bits.rvs1_data
   val frs1_data = io.pipe(0).bits.frs1_data
+
+  val ctrl_merge = io.pipe(0).bits.opff6 === OPFFunct6.vfmerge
 
   val fTypes = Seq(FType.S, FType.D)
   val minmax_results = Wire(Vec(2, UInt(dLen.W)))       // results for vfmin/vfmax
@@ -96,6 +101,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   val rvs1_vals = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
   val rvs2_vals = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
 
+  // Sign-Injection Instructions
   val sgnj = rvs2_vals.zip(rvs1_vals).map{ case(rvs2, rvs1) =>
     val rs1 = Mux(is_opfvf, io.pipe(0).bits.frs1_data, rvs1)
     val d_bit = Wire(Bool())
@@ -111,14 +117,26 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
       d_bit := rs1(63)
       s_bit := rs1(31)
     }
-    Cat(d_bit,Cat(rvs2(62,32),Cat(Mux(io.pipe(0).bits.vd_eew === 3.U, rvs2(31), s_bit), rvs2(30,0))))
+    Cat(d_bit,Cat(rvs2(62,32),Cat(Mux(io.pipe(0).bits.rvd_eew === 3.U, rvs2(31), s_bit), rvs2(30,0))))
   }
 
+  // FP Merge Instruction
+  val rvs2_elems = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB/4, UInt(32.W)))
+  val frs1_elems = dLenSplat(Mux(rvs2_eew === 3.U, frs1_data, Fill(2, frs1_data(31,0))), 3.U).asTypeOf(Vec(dLenB/4, UInt(32.W)))
+  //val frs1_elems = dLenSplat(frs1_data, rvs2_eew)
+  //val fs1_elems = Mux(vs2_eew === 3.U, dLenSplat(frs1_data, 3.U), )
+
+  //val merge_mask = VecInit.tabulate(2)({eew => FillInterleaved(1 << (eew+2), io.pipe(0).bits.rmask(((dLenB >> (eew+2))-1,0)))})(rvs2_eew - 2.U)
+  val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
+  val merge_out = VecInit((0 until (dLenB / 4)).map {i => Mux(merge_mask(i), frs1_elems(i), rvs2_elems(i))}).asUInt
+
   val out = Wire(UInt(dLen.W))
-  when (ctrl_cmp) {
-    out := Mux(vs1_eew === 3.U, minmax_results(1), minmax_results(0)) 
+  when (ctrl_merge) {
+    out := merge_out
+  } .elsewhen (ctrl_cmp) {
+    out := Mux(rvs1_eew === 3.U, minmax_results(1), minmax_results(0)) 
   } .elsewhen (ctrl_mask_write) {
-    out := Fill(64, Mux(vs1_eew === 3.U, comp_results(1), comp_results(0)))
+    out := Fill(64, Mux(rvs1_eew === 3.U, comp_results(1), comp_results(0)))
   } .otherwise {
     out := sgnj.asUInt 
   }
@@ -126,10 +144,10 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   // Mask writing
   val mask_write_offset = VecInit.tabulate(4)({ eew =>
     Cat(io.pipe(0).bits.eidx(log2Ceil(dLen)-1, dLenOffBits-eew), 0.U((dLenOffBits-eew).W))
-  })(vs1_eew)
+  })(rvs1_eew)
   val mask_write_mask = (VecInit.tabulate(4)({ eew =>
     VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
-  })(vs1_eew) << mask_write_offset)(dLen-1,0)
+  })(rvs1_eew) << mask_write_offset)(dLen-1,0)
 
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg >> 1

@@ -32,7 +32,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val renvd = Reg(Bool())
   val renvm = Reg(Bool())
 
-  val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge)
+  val use_wmask = !inst.vm && (!inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge) || !inst.opff6.isOneOf(OPFFunct6.vfmerge))
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, incr_eew, io.sub_dlen)
@@ -103,7 +103,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val vs2_arch_mask = get_arch_mask(io.dis.inst.rs2, vs2_group_mask)
 
     val dis_renv1 = io.dis.inst.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
-    val dis_renv2 = !(io.dis.inst.opif6 === OPIFunct6.merge && io.dis.inst.vm)
+    val dis_renv2 = !((io.dis.inst.opif6 === OPIFunct6.merge || io.dis.inst.opff6 === OPFFunct6.vfmerge) && io.dis.inst.vm)
     val dis_renvd = io.dis.inst.opmf6.isOneOf(
       OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
       OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) ||
@@ -111,7 +111,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
       OPFFunct6.vfmacc, OPFFunct6.vfnmacc, OPFFunct6.vfmsac, OPFFunct6.vfnmsac,
       OPFFunct6.vfmadd, OPFFunct6.vfnmadd, OPFFunct6.vfmsub, OPFFunct6.vfnmsub,
       OPFFunct6.vfwmacc, OPFFunct6.vfwnmacc, OPFFunct6.vfwmsac, OPFFunct6.vfwnmsac))
-    val dis_renvm = !inst.vm || io.dis.inst.opif6 === OPIFunct6.merge
+    val dis_renvm = !inst.vm || io.dis.inst.opif6 === OPIFunct6.merge || io.dis.inst.opff6 === OPFFunct6.vfmerge
     wvd_mask      := FillInterleaved(egsPerVReg, vd_arch_mask)
     rvs1_mask := Mux(dis_renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
     rvs2_mask := Mux(dis_renv2, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
