@@ -92,7 +92,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
     () => new IterativeIntegerDivider,
     () => new FMAPipe(vParams.fmaPipeDepth),
-    () => new FPCompPipe
+    () => new FPCompPipe,
+    () => new FPConvPipe
   )))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
