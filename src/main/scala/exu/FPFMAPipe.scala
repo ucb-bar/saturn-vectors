@@ -111,7 +111,7 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)
     val widening_vs2_bits = extract(io.pipe(0).bits.rvs2_data, false.B, 2.U, eidx + i.U)(31,0)
     val vs2_bits = Mux(ctrl_widen_vd && !ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
 
-    fma_pipe.io.mask := Cat(io.pipe(0).bits.wmask((i*8)+4), io.pipe(0).bits.wmask(i*8))
+    fma_pipe.io.mask := Cat((io.pipe(0).bits.rvs1_eew === 2.U) && io.pipe(0).bits.wmask((i*8)+4), io.pipe(0).bits.wmask(i*8))
     fma_pipe.io.fma := ctrl_fma && ctrl_add
 
     // FMA
