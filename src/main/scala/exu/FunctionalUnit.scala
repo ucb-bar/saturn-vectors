@@ -16,6 +16,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
     val ready = Output(Bool())
   }
   val set_vxsat = Output(Bool())
+  val exc = Valid(UInt(5.W))
 }
 
 class PipelinedFunctionalUnitIO(depth: Int, wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnitIO {
