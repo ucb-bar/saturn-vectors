@@ -9,10 +9,8 @@ import freechips.rocketchip.tile._
 import vector.common._
 
 class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
-  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
+  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs2_eew
   io.set_vxsat := false.B
-  io.exc.valid := false.B
-  io.exc.bits := 0.U
 
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)
 
@@ -86,4 +84,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last) 
   last := io.write.fire()
+
+  io.exc.valid := divSqrt_valid
+  io.exc.bits := divSqrt.io.exceptionFlags
 }
