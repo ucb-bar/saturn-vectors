@@ -19,7 +19,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   lazy val ctrl_table = Seq(
     (OPFFunct6.vfdiv     ,   Seq(Y,N)),
     (OPFFunct6.vfrdiv    ,   Seq(Y,Y)),
-    (OPFFunct6.vfunary1  ,   Seq(N,X)),
+    (OPFFunct6.vfunary1  ,   Seq(N,N)),
   )
   val ctrl_isDiv :: ctrl_swap12 :: Nil = VecDecode.applyBools(
     io.iss.op.funct3, io.iss.op.funct6,
@@ -44,8 +44,8 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.hazard.bits.widen2 := false.B
 
   when (io.iss.op.rvs1_eew === 3.U) {
-    divSqrt.io.a := Mux(ctrl_swap12, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
-    divSqrt.io.b := Mux(ctrl_swap12, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
+    divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
+    divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
   } .otherwise {
     val narrow_rvs2_bits = rvs2_bits(31,0)
     val narrow_rvs1_bits = rvs1_bits(31,0)
@@ -57,8 +57,8 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
       upconvert
     }
 
-    divSqrt.io.a := Mux(ctrl_swap12, widen(1).io.out, widen(0).io.out) 
-    divSqrt.io.b := Mux(ctrl_swap12, widen(0).io.out, widen(1).io.out)
+    divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, widen(1).io.out, widen(0).io.out) 
+    divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
   }
 
   val divSqrt_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
