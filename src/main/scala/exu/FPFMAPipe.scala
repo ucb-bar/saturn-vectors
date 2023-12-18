@@ -21,15 +21,17 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
     val a = Input(UInt(64.W))
     val b = Input(UInt(64.W))
     val c = Input(UInt(64.W))
+    val mask = Input(UInt(2.W))
     val out = Output(UInt(64.W))
     val exc = Output(UInt(5.W))
   }) 
 
   val vd_eew_pipe = Pipe(io.valid, io.vd_eew, depth-1)
   val frm_pipe = Pipe(io.valid, io.frm, depth-1)
+  val mask_pipe = Pipe(io.valid, io.mask, depth-1)
 
   val sfma = Module(new MulAddRecFNPipe(depth-1, 8, 24))
-  sfma.io.validin := io.valid && (io.vd_eew === 2.U)
+  sfma.io.validin := io.valid && (io.vd_eew === 2.U) && io.mask(1)
   sfma.io.op := io.op
   sfma.io.roundingMode := io.frm
   sfma.io.detectTininess := hardfloat.consts.tininess_afterRounding
@@ -45,7 +47,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   }
 
   val dfma = Module(new MulAddRecFNPipe(depth-1, 11, 53))
-  dfma.io.validin := io.valid
+  dfma.io.validin := io.valid && io.mask(0)
   dfma.io.op := io.op
   dfma.io.roundingMode := io.frm
   dfma.io.detectTininess := hardfloat.consts.tininess_afterRounding
@@ -59,11 +61,11 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   narrow.io.in := dfma.io.out
 
   io.out := Mux(vd_eew_pipe.bits === 3.U, FType.D.ieee(dfma.io.out), Cat(FType.S.ieee(sfma.io.out), FType.S.ieee(narrow.io.out)))
-  io.exc := dfma.io.exceptionFlags | sfma.io.exceptionFlags
+  io.exc := (dfma.io.exceptionFlags & Fill(5, mask_pipe.bits(0))) | (sfma.io.exceptionFlags & Fill(5, mask_pipe.bits(1)))
 }
 
 
-class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p) with HasFPUParameters {
+class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p) with HasFPUParameters {
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
@@ -96,27 +98,20 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
   )
 
   val eidx = io.pipe(0).bits.eidx
-  val is_opfvf = io.pipe(0).bits.funct3.isOneOf(OPFVF)
-  val frs1_data = io.pipe(0).bits.frs1_data
   val one_bits = Mux(io.pipe(0).bits.rvs1_eew === 3.U, "h3FF0000000000000".U, "h3F8000003F800000".U)
-  val scalar_operand_bits = Mux(io.pipe(0).bits.rvs1_eew === 3.U, frs1_data, Fill(2, frs1_data(31,0)))
+  val fmaCmd = Cat(ctrl_fmaCmd1, ctrl_fmaCmd0)
+
   val vec_rvs1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
   val vec_rvs2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
   val vec_rvd = io.pipe(0).bits.rvd_data.asTypeOf(Vec(fmaCount, UInt(64.W)))
-  
-  val widening_w = io.pipe(0).bits.rvs2_eew > io.pipe(0).bits.rvs1_eew
-
-  val fmaCmd = Cat(ctrl_fmaCmd1, ctrl_fmaCmd0)
-
-  val ieee_out = Wire(Vec(fmaCount, UInt(64.W)))
-  val exc = Wire(Vec(fmaCount, UInt(5.W))) 
 
   val fma_pipes = Seq.fill(fmaCount)(Module(new TandemFMAPipe(depth))).zipWithIndex.map { case(fma_pipe, i) =>
     val widening_vs1_bits = extract(io.pipe(0).bits.rvs1_data, false.B, 2.U, eidx + i.U)(31,0)
-    val rs1_bits = Mux(is_opfvf, scalar_operand_bits, Mux(ctrl_widen_vd, widening_vs1_bits, vec_rvs1(i)))
+    val rs1_bits = Mux(ctrl_widen_vd, widening_vs1_bits, vec_rvs1(i))
     val widening_vs2_bits = extract(io.pipe(0).bits.rvs2_data, false.B, 2.U, eidx + i.U)(31,0)
     val vs2_bits = Mux(ctrl_widen_vd && !ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
 
+    fma_pipe.io.mask := Cat((io.pipe(0).bits.rvs1_eew === 2.U) && io.pipe(0).bits.wmask((i*8)+4), io.pipe(0).bits.wmask(i*8))
     fma_pipe.io.fma := ctrl_fma && ctrl_add
 
     // FMA
@@ -153,13 +148,15 @@ class FPPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p)
     fma_pipe.io.rvs1_eew := io.pipe(0).bits.rvs1_eew
     fma_pipe.io.rvs2_eew := io.pipe(0).bits.rvs2_eew
     fma_pipe.io.vd_eew := io.pipe(0).bits.vd_eew
-    ieee_out(i) := fma_pipe.io.out
-    exc(i) := fma_pipe.io.exc
-    fma_pipe
+
+    fma_pipe.io
   }
 
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
   io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(depth-1).bits.wmask))
-  io.write.bits.data := Fill(2, ieee_out.asTypeOf(UInt(dLen.W)))
+  io.write.bits.data := Fill(2, fma_pipes.map(pipe => pipe.out).asUInt)
+
+  io.exc.valid := io.write.valid
+  io.exc.bits := fma_pipes.map(pipe => pipe.exc).reduce(_ | _) 
 }

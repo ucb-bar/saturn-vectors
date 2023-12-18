@@ -7,7 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, IterativeIntegerDivider, FPPipe, FPCompPipe, FPConvPipe}
+import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, IterativeIntegerDivider, FPFMAPipe, FPCompPipe, FPConvPipe}
 
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -24,6 +24,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val mask_access = new VectorMaskAccessIO
 
     val set_vxsat = Output(Bool())
+    val exc = Valid(UInt(5.W))
   })
 
   require(vLen >= 64)
@@ -90,7 +91,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => new IntegerPipe,
     () => new ElementwiseMultiplyPipe(3),
     () => new IterativeIntegerDivider,
-    () => new FPPipe,
+    () => new FPFMAPipe,
     () => new FPCompPipe,
     () => new FPConvPipe
   )))
@@ -252,4 +253,5 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
   io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
   io.set_vxsat := vxu.io.set_vxsat
+  io.exc <> vxu.io.exc
 }

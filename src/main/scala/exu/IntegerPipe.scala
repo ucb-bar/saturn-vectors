@@ -346,6 +346,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   io.write.bits.data := Fill(2, out)
 
   io.set_vxsat := io.pipe(0).valid && ctrl_sat && sat_mask.orR
+  io.exc.bits := 0.U
+  io.exc.valid := false.B
 
   when (io.pipe(0).bits.wvd_widen2) {
     io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(0).bits.wmask))
