@@ -29,6 +29,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val rvs2_bits = extract(io.iss.op.rvs2_data, false.B, io.iss.op.rvs2_eew, io.iss.op.eidx)(63,0)
   val rvs1_bits = extract(io.iss.op.rvs1_data, false.B, io.iss.op.rvs1_eew, io.iss.op.eidx)(63,0)
+  val rvs2_op_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
 
   divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
   divSqrt.io.roundingMode := io.iss.op.frm
@@ -70,18 +71,28 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val out_buffer = RegEnable(divSqrt_out, divSqrt_valid)
   val out_toWrite = RegInit(false.B)
+  val divSqrt_write = Mux(out_toWrite, out_buffer, divSqrt_out)
 
+  // vfclass instruction
+  val gen_vfclass = Seq(FType.S, FType.D).zipWithIndex.map { case(fType, i) =>
+    Fill(2, Cat(0.U((fType.ieeeWidth-10).W), fType.classify(fType.recode(rvs2_op_bits(fType.ieeeWidth-1,0)))))
+  }
+
+  // Capture result in case of write port backpressure
   when (io.write.fire()) {
     out_toWrite := false.B
   } .elsewhen (divSqrt_valid) {
     out_toWrite := true.B
   }
 
-  io.write.valid := out_toWrite || divSqrt_valid 
+  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 16.U
+
+  io.write.valid := (vfclass_inst && valid) || out_toWrite || divSqrt_valid 
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
-  io.write.bits.data := Mux(out_toWrite, out_buffer, divSqrt_out)
-  
+  io.write.bits.data := Mux(vfclass_inst, 
+                            Mux(op.rvs2_eew === 3.U, gen_vfclass(1), gen_vfclass(0)),
+                            divSqrt_write)
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last) 
   last := io.write.fire()
 
