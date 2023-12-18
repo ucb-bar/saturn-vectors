@@ -26,10 +26,10 @@ object OPIFunct6 extends ChiselEnum {
   val _ = Value
   val sll = Value
   val _ = Value
-  val smul, srl, sra, srrl, srra, nsrl, nsra, nclipu, nclip = Value
+  val smul, srl, sra, ssrl, ssra, nsrl, nsra, nclipu, nclip = Value
   val wredsumu, wredsum = Value
 
-  val illegal = Value
+  val illegal = Value(0x40.U)
 }
 
 object OPMFunct6 extends ChiselEnum {
@@ -59,11 +59,11 @@ object OPMFunct6 extends ChiselEnum {
   val _ = Value
   val wmulsu, wmul, wmaccu, wmacc, wmaccus, wmaccsu = Value
 
-  val illegal = Value
+  val illegal = Value(0x40.U)
 }
 
 object OPFFunct6 extends ChiselEnum {
-  val illegal = Value
+  val illegal = Value(0x40.U)
 }
 
 trait VectorConsts {
