@@ -263,7 +263,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   cmp_arr.io.eew := rvs1_eew
   cmp_arr.io.signed := io.pipe(0).bits.funct6(0)
   cmp_arr.io.less   := cmp_less
-  cmp_arr.io.sle    := io.pipe(0).bits.funct6(1,0) === 2.U
+  cmp_arr.io.sle    := io.pipe(0).bits.funct6(2,1) === 2.U
   cmp_arr.io.inv    := io.pipe(0).bits.funct6(0)
   val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(cmp_arr.io.minmax.asBools).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
 
