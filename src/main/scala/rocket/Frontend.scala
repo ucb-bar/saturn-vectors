@@ -6,13 +6,24 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+import freechips.rocketchip.tilelink._
+import freechips.rocketchip.diplomacy._
 
 import vector.common._
 import vector.backend.{VectorBackend}
-import vector.mem.{ScalarMemOrderCheckIO}
+import vector.mem.{ScalarMemOrderCheckIO, MemRequest}
 
-class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {
+class VectorUnit(implicit p: Parameters) extends RocketVectorUnit with HasVectorParams with HasCoreParameters {
+  override lazy val module = new VectorUnitModuleImp(this)
+  override val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
+    name      = "Vector Unit",
+    sourceId  = IdRange(0, vParams.tlMaxInflight))))))
+}
+
+class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends RocketVectorUnitModuleImp(outer) with HasVectorParams with HasCoreParameters {
   require(dLen == vMemDataBits)
+
+  val (tl_out, edge) = outer.node.out(0)
 
   val trap_check = Module(new FrontendTrapCheck)
   trap_check.io.core <> io.core
@@ -61,7 +72,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
     load_tag_oh(hella_load.resp.bits.tag) := false.B
   }
 
-  vu.io.mem.load_req.ready       := hella_load_q.io.enq.ready && load_tag_available
+  //vu.io.mem.load_req.ready       := hella_load_q.io.enq.ready && load_tag_available
   hella_load_q.io.enq.valid       := vu.io.mem.load_req.valid && load_tag_available
   hella_load_q.io.enq.bits.addr   := vu.io.mem.load_req.bits.addr
   hella_load_q.io.enq.bits.size   := log2Ceil(dLenB).U
@@ -76,8 +87,8 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   hella_load_q.io.enq.bits.no_alloc := false.B
   hella_load_q.io.enq.bits.no_xcpt := true.B
 
-  vu.io.mem.load_resp.valid := hella_load.resp.valid
-  vu.io.mem.load_resp.bits  := hella_load.resp.bits.data_raw
+  //vu.io.mem.load_resp.valid := hella_load.resp.valid
+  //vu.io.mem.load_resp.bits  := hella_load.resp.bits.data_raw
 
   val store_tag_oh = RegInit(VecInit.fill(4)(false.B))
   val store_tag = PriorityEncoder(~(store_tag_oh.asUInt))
@@ -88,7 +99,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
     store_tag_oh(hella_store.resp.bits.tag) := false.B
   }
 
-  vu.io.mem.store_req.ready  := hella_store_q.io.enq.ready && store_tag_available
+  //vu.io.mem.store_req.ready  := hella_store_q.io.enq.ready && store_tag_available
   hella_store_q.io.enq.valid       := vu.io.mem.store_req.valid && store_tag_available
   hella_store_q.io.enq.bits.addr   := vu.io.mem.store_req.bits.addr
   hella_store_q.io.enq.bits.tag    := store_tag
@@ -103,7 +114,82 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   hella_store_q.io.enq.bits.no_alloc := false.B
   hella_store_q.io.enq.bits.no_xcpt := true.B
 
-  vu.io.mem.store_ack := hella_store.resp.fire
+  //vu.io.mem.store_ack := hella_store.resp.fire
+
+
+
+  val inflightBits = log2Ceil(vParams.tlMaxInflight)
+
+  // Arbitrator between load reqs and store reqs from vu
+  val dmem_arb = Module(new Arbiter(new MemRequest, 2))
+
+  // Load queue: stores TL source ID for each load request
+  val load_resp_q = Module(new Queue(UInt(inflightBits.W), vParams.tlMaxInflight)) 
+
+  // Track inflight requests and load data
+  val inflight_reqs_valid = RegInit(VecInit.fill(vParams.tlMaxInflight)(false.B))
+  val inflight_reqs_data = RegInit(VecInit.fill(vParams.tlMaxInflight)(0.U.asTypeOf(Valid(UInt(dLen.W))))) //Initialize each data to valid=false, data=0
+
+  // Manage available TL source IDs
+  val next_id = Wire(UInt(inflightBits.W))
+  val next_id_available = Wire(Bool())
+  next_id := PriorityEncoder(~(inflight_reqs_valid.asUInt))
+  next_id_available := inflight_reqs_valid.exists(v => ~v)
+
+  dmem_arb.io.in(0) <> vu.io.mem.store_req
+  dmem_arb.io.in(1) <> vu.io.mem.load_req
+  dmem_arb.io.out.ready := tl_out.a.ready && next_id_available
+
+  // Generate TL load and store messages
+  val dmem_get = edge.Get(next_id, dmem_arb.io.out.bits.addr, log2Ceil(dLenB).U)._2
+  val dmem_put = edge.Put(next_id, dmem_arb.io.out.bits.addr, log2Ceil(dLenB).U, dmem_arb.io.out.bits.data, dmem_arb.io.out.bits.mask)._2
+
+  val is_load = Wire(Bool())
+  is_load := dmem_arb.io.chosen.asBool
+
+  // Set TL A
+  tl_out.a.valid := dmem_arb.io.out.valid && next_id_available
+  tl_out.a.bits := Mux(is_load, dmem_get, dmem_put)
+
+  // Set TL D
+  tl_out.d.ready := true.B
+
+  // Store response to vector unit
+  vu.io.mem.store_ack := (tl_out.d.bits.opcode === TLMessages.AccessAck) && tl_out.d.valid
+
+  // Load response to vector unit, read data from source ID at top of queue
+  vu.io.mem.load_resp.valid := inflight_reqs_data(load_resp_q.io.deq.bits).valid
+  vu.io.mem.load_resp.bits := inflight_reqs_data(load_resp_q.io.deq.bits).bits
+
+  // Set source ID as inflight when A sends request
+  when(tl_out.a.fire) {
+    inflight_reqs_valid(next_id) := true.B
+  }
+
+  // Dequeue if data for source ID at top of queue has been received
+  load_resp_q.io.deq.ready := inflight_reqs_data(load_resp_q.io.deq.bits).valid
+
+  // Enqueue next available source ID if there is a load req from vu
+  load_resp_q.io.enq.valid := tl_out.a.fire && is_load 
+  load_resp_q.io.enq.bits := next_id
+
+  // Set data invalid if data has been read and free up source ID
+  when (inflight_reqs_data(load_resp_q.io.deq.bits).valid) {
+    inflight_reqs_data(load_resp_q.io.deq.bits).valid := false.B
+    inflight_reqs_valid(load_resp_q.io.deq.bits) := false.B
+  }
+
+  val d_load = Wire(Bool())
+  d_load := tl_out.d.bits.opcode === TLMessages.AccessAckData
+
+  // Save data returning on D channel
+  for (i <- 0 until vParams.tlMaxInflight) {
+    when(tl_out.d.bits.source === i.U && tl_out.d.valid) {
+      inflight_reqs_data(i.U).valid := d_load
+      inflight_reqs_data(i.U).bits := tl_out.d.bits.data
+      inflight_reqs_valid(i.U) := d_load //if d message was store, then free source id
+    }
+  }
 
   when (store_tag_oh.orR || load_tag_oh.orR) { trap_check.io.mem_busy := true.B }
 }
@@ -157,6 +243,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.emul := Mux(io.core.ex.vconfig.vtype.vlmul_sign, 0.U, io.core.ex.vconfig.vtype.vlmul_mag)
   x_core_inst.vat := DontCare
   x_core_inst.phys := DontCare
+  x_core_inst.vxrm := DontCare // set at wb TODO: GIT FIX THIS
 
   def nextPage(addr: UInt) = ((addr + (1 << pgIdxBits).U) >> pgIdxBits) << pgIdxBits
 

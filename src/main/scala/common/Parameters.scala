@@ -38,7 +38,9 @@ case class VectorParams(
   useScalarFPUFMAPipe: Boolean = false,
   fmaPipeDepth: Int = 3,
 
-  doubleBufferSegments: Boolean = false
+  doubleBufferSegments: Boolean = false,
+
+  tlMaxInflight: Int = 8
 )
 
 case object VectorParamsKey extends Field[VectorParams]
