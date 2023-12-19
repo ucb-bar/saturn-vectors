@@ -12,9 +12,12 @@ class AdderArray(dLenB: Int) extends Module {
   val io = IO(new Bundle {
     val in1 = Input(Vec(dLenB, UInt(8.W)))
     val in2 = Input(Vec(dLenB, UInt(8.W)))
-    val use_carry  = Input(UInt(dLenB.W))
     val mask_carry = Input(UInt(dLenB.W))
 
+    val signed    = Input(Bool())
+    val eew       = Input(UInt(2.W))
+    val avg       = Input(Bool())
+    val rm        = Input(UInt(2.W))
     val sub       = Input(Bool())
     val cmask     = Input(Bool())
 
@@ -22,15 +25,37 @@ class AdderArray(dLenB: Int) extends Module {
     val carry = Output(Vec(dLenB, Bool()))
   })
 
+  val use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
+    Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
+  })(io.eew))
+
+  val avg_in1 = VecInit.tabulate(4) { eew =>
+    VecInit(io.in1.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(e => Cat(io.signed && e((8<<eew)-1), e) >> 1)).asUInt
+  }(io.eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+  val avg_in2 = VecInit.tabulate(4) { eew =>
+    VecInit(io.in2.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(e => Cat(io.signed && e((8<<eew)-1), e) >> 1)).asUInt
+  }(io.eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  val in1 = Mux(io.avg, avg_in1, io.in1)
+  val in2 = Mux(io.avg, avg_in2, io.in2)
+
+  val round_incrs = io.in1.zip(io.in2).map { case (l, r) =>
+    val lo = Mux(io.sub, ~l(0), l(0)) +& r(0) +& io.sub
+    val hi = lo(1) + Mux(io.sub, ~l(1), l(1)) +& r(1)
+    val sum = Cat(hi(0), lo(0))
+    RoundingIncrement(io.rm, sum(1,0)) +& lo(1)
+  }
+
   val carries = Wire(Vec(dLenB+1, Bool()))
   carries(0) := io.sub
   io.carry := carries.drop(1)
 
   for (i <- 0 until dLenB) {
-    val sum = (Mux(io.sub, ~io.in1(i), io.in1(i)) +&
-      io.in2(i) +&
-      Mux(io.use_carry(i), carries(i), io.sub) +&
-      (io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i))
+    val sum = (Mux(io.sub, ~in1(i), in1(i)) +&
+      in2(i) +&
+      Mux(use_carry(i), carries(i), io.sub) +& Mux(io.avg,
+        Mux(!use_carry(i), round_incrs(i), 0.U(1.W)),
+        (io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i)))
     )
 
     io.out(i) := sum(7,0)
@@ -166,9 +191,12 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (OPIFunct6.ssubu  , Seq(Y,X,N,N,N,X,N,X,N,X,N)),
     (OPIFunct6.ssub   , Seq(Y,X,N,N,N,X,N,X,N,X,N)),
     (OPMFunct6.aadd   , Seq(N,X,N,N,N,X,N,X,N,X,Y)),
+    (OPMFunct6.aaddu  , Seq(N,X,N,N,N,X,N,X,N,X,Y)),
+    (OPMFunct6.asub   , Seq(Y,X,N,N,N,X,N,X,N,X,Y)),
+    (OPMFunct6.asubu  , Seq(Y,X,N,N,N,X,N,X,N,X,Y)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_round :: Nil = VecDecode.applyBools(
+  val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(11)(X), ctrl_table)
   val ctrl_cmask = (
@@ -201,9 +229,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val in1_bytes = Mux(ctrl_rev12, rvs2_bytes, rvs1_bytes)
   val in2_bytes = Mux(ctrl_rev12, rvs1_bytes, rvs2_bytes)
 
-  val add_use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
-    Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
-  })(rvs2_eew))
   val add_mask_carry = VecInit.tabulate(4)({ eew =>
     VecInit((0 until dLenB >> eew).map { i => io.pipe(0).bits.rmask(i) | 0.U((1 << eew).W) }).asUInt
   })(rvs2_eew)
@@ -251,10 +276,13 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val adder_arr = Module(new AdderArray(dLenB))
   adder_arr.io.in1 := Mux(ctrl_narrow_vs1, add_narrow_vs1, in1_bytes)
   adder_arr.io.in2 := in2_bytes
-  adder_arr.io.use_carry  := add_use_carry
+  adder_arr.io.avg := ctrl_avg
+  adder_arr.io.eew := rvs2_eew
+  adder_arr.io.rm  := io.pipe(0).bits.vxrm
   adder_arr.io.mask_carry := add_mask_carry
   adder_arr.io.sub        := ctrl_sub
   adder_arr.io.cmask      := ctrl_cmask
+  adder_arr.io.signed     := io.pipe(0).bits.funct6(0)
   add_out   := adder_arr.io.out
   add_carry := adder_arr.io.carry
 
@@ -341,7 +369,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
   })(rvs1_eew) << mask_write_offset)(dLen-1,0)
 
-  io.write.valid     := io.pipe(0).valid && !ctrl_round
+  io.write.valid     := io.pipe(0).valid
   io.write.bits.eg   := io.pipe(0).bits.wvd_eg >> 1
   io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
   io.write.bits.data := Fill(2, out)
