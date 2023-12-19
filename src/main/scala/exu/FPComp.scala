@@ -13,24 +13,24 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(
-    (OPFFunct6.vfmin    ,   Seq(Y,Y, N,N,N, N,X,X)),
-    (OPFFunct6.vfmax    ,   Seq(Y,N, N,N,N, N,X,X)),
-    (OPFFunct6.vfsgnj   ,   Seq(N,X, N,N,N, Y,N,N)), 
-    (OPFFunct6.vfsgnjn  ,   Seq(N,X, N,N,N, Y,Y,N)), 
-    (OPFFunct6.vfsgnjx  ,   Seq(N,X, N,N,N, Y,N,Y)), 
-    (OPFFunct6.vmfeq    ,   Seq(N,X, Y,Y,N, N,X,X)),
-    (OPFFunct6.vmfne    ,   Seq(N,X, Y,N,N, N,X,X)),
-    (OPFFunct6.vmflt    ,   Seq(N,X, Y,N,Y, N,X,X)),
-    (OPFFunct6.vmfle    ,   Seq(N,X, Y,Y,Y, N,X,X)),
-    (OPFFunct6.vmfgt    ,   Seq(N,X, Y,N,N, N,X,X)),
-    (OPFFunct6.vmfge    ,   Seq(N,X, Y,Y,N, N,X,X)),
-    (OPFFunct6.vfmerge  ,   Seq(N,X, N,X,X, N,X,X)),
+    (OPFFunct6.vfmin    ,   Seq(Y,Y, N,N,N,N, N,X,X)),
+    (OPFFunct6.vfmax    ,   Seq(Y,N, N,N,N,N, N,X,X)),
+    (OPFFunct6.vfsgnj   ,   Seq(N,X, N,N,N,N, Y,N,N)), 
+    (OPFFunct6.vfsgnjn  ,   Seq(N,X, N,N,N,N, Y,Y,N)), 
+    (OPFFunct6.vfsgnjx  ,   Seq(N,X, N,N,N,N, Y,N,Y)), 
+    (OPFFunct6.vmfeq    ,   Seq(N,X, Y,Y,N,N, N,X,X)),
+    (OPFFunct6.vmfne    ,   Seq(N,X, Y,N,Y,N, N,X,X)),
+    (OPFFunct6.vmflt    ,   Seq(N,X, Y,N,N,Y, N,X,X)),
+    (OPFFunct6.vmfle    ,   Seq(N,X, Y,Y,N,Y, N,X,X)),
+    (OPFFunct6.vmfgt    ,   Seq(N,X, Y,N,N,N, N,X,X)),
+    (OPFFunct6.vmfge    ,   Seq(N,X, Y,Y,N,N, N,X,X)),
+    (OPFFunct6.vfmerge  ,   Seq(N,X, N,X,X,X, N,X,X)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
 
-  val ctrl_cmp :: ctrl_min :: ctrl_mask_write :: ctrl_eq :: ctrl_cmp_less :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
+  val ctrl_cmp :: ctrl_min :: ctrl_mask_write :: ctrl_eq :: ctrl_ne :: ctrl_cmp_less :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(8)(X), ctrl_table
+    Seq.fill(9)(X), ctrl_table
   ) 
   
   val is_opfvf = io.pipe(0).bits.funct3.isOneOf(OPFVF)
@@ -84,10 +84,18 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
     }    
     minmax_results(eew - 2) := minmax.asUInt
 
-    val comparisons = gen_compares.map{ case(comp, rvs2, rvs2_man, rs1, rs1_nan) =>
+    val comparisons = gen_compares.map{ case(comp, rvs2, rvs2_nan, rs1, rs1_nan) =>
       val comparison_out = Wire(UInt(1.W))
-      when (ctrl_eq) {
-        comparison_out := comp.eq
+      when (ctrl_ne) {
+        when (rvs2_nan || rs1_nan) {
+          comparison_out := 1.U
+        } .otherwise {
+          comparison_out := !comp.eq
+        }
+      } .elsewhen (rvs2_nan || rs1_nan) {
+        comparison_out := 0.U
+      } .elsewhen (ctrl_eq) {
+        comparison_out := comp.eq || (comp.lt && ctrl_cmp_less) || (!comp.gt && !ctrl_cmp_less)
       } .elsewhen (ctrl_cmp_less) {
         comparison_out := comp.lt
       } .otherwise {   
@@ -149,4 +157,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   io.write.bits.eg := io.pipe(0).bits.wvd_eg >> 1
   io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
   io.write.bits.data := Fill(2, out)
+
+  io.exc.valid := false.B
+  io.exc.bits := 0.U
 }

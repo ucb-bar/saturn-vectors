@@ -42,7 +42,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
     // FP to Int
     val fptoint_modules = Seq.fill(num_chunks)(Module(new hardfloat.RecFNToIN(fType.exp, fType.sig, fType.ieeeWidth)))
     val gen_fptoint = rvs2_chunks.zip(fptoint_modules).map { case(rvs2, conv) =>
-      val rvs2_rec = fType.recode(Mux(ctrl_truncating, Cat(rvs2(fType.ieeeWidth-1,fType.sig), 0.U((fType.sig-1).W)), rvs2))
+      val rvs2_rec = fType.recode(Mux(ctrl_truncating, Cat(rvs2(fType.ieeeWidth-1,fType.sig), 0.U(fType.sig.W)), rvs2))
       conv.io.signedOut := ctrl_signed
       conv.io.roundingMode := io.pipe(0).bits.frm
       conv.io.in := rvs2_rec
@@ -136,4 +136,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(0).bits.wmask))
   //io.write.bits.data := Mux(ctrl_widen, widening_out_final, Fill(2, single_out_final))
   io.write.bits.data := Fill(2, single_out_final)
+
+  io.exc.valid := false.B
+  io.exc.bits := 0.U
 }
