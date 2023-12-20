@@ -162,6 +162,47 @@ class ShiftArray(dLenB: Int) extends Module {
   io.out := Mux(io.shl, shifted_left, Mux(io.scaling, scaling_array.io.out, shifted_right))
 }
 
+class SaturatedSumArray(dLenB: Int) extends Module {
+  val dLen = dLenB * 8
+  val io = IO(new Bundle {
+    val sum      = Input(Vec(dLenB, UInt(8.W)))
+    val carry    = Input(Vec(dLenB, Bool()))
+    val in1_sign = Input(Vec(dLenB, Bool()))
+    val in2_sign = Input(Vec(dLenB, Bool()))
+    val sub      = Input(Bool())
+    val eew      = Input(UInt(2.W))
+    val signed   = Input(Bool())
+
+    val set_vxsat = Output(Bool())
+    val out       = Output(Vec(dLenB, UInt(8.W)))
+  })
+
+  val unsigned_mask = VecInit.tabulate(4)({ eew =>
+    FillInterleaved(1 << eew, VecInit.tabulate(dLenB >> eew)(i => io.sub ^ io.carry(((i+1) << eew)-1)).asUInt)
+  })(io.eew)
+  val unsigned_clip = Mux(io.sub, 0.U(dLen.W), ~(0.U(dLen.W))).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  val (signed_masks, signed_clips): (Seq[UInt], Seq[UInt]) = Seq.tabulate(4)({ eew =>
+    val out_sign = VecInit.tabulate(dLenB >> eew)(i =>      io.sum(((i+1)<<eew)-1)(7)).asUInt
+    val vs2_sign = VecInit.tabulate(dLenB >> eew)(i => io.in2_sign(((i+1)<<eew)-1)   ).asUInt
+    val vs1_sign = VecInit.tabulate(dLenB >> eew)(i => io.in1_sign(((i+1)<<eew)-1)   ).asUInt
+    val input_xor  = vs2_sign ^ vs1_sign
+    val may_clip   = Mux(io.sub, input_xor, ~input_xor) // add clips when signs match, sub clips when signs mismatch
+    val clip       = (vs2_sign ^ out_sign) & may_clip   // clips if the output sign doesn't match the input sign
+    val clip_neg   = Cat(1.U, 0.U(((8 << eew)-1).W))
+    val clip_pos   = ~clip_neg
+    val clip_value = VecInit(vs2_sign.asBools.map(sign => Mux(sign, clip_neg, clip_pos))).asUInt
+    (FillInterleaved((1 << eew), clip), clip_value)
+  }).unzip
+  val signed_mask = VecInit(signed_masks)(io.eew)
+  val signed_clip = VecInit(signed_clips)(io.eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  val mask = Mux(io.signed, signed_mask, unsigned_mask)
+  val clip = Mux(io.signed, signed_clip, unsigned_clip)
+  io.out := io.sum.zipWithIndex.map { case (o,i) => Mux(mask(i), clip(i), o) }
+  io.set_vxsat := mask.orR
+}
+
 class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true)(p) {
   io.iss.sub_dlen := 0.U
 
@@ -264,33 +305,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val add_narrow_vs1_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
   val add_narrow_vs1 = VecInit(add_narrow_vs1_eew.map(_.asUInt))(rvs1_eew).asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  val sat_hi_bits = (0 until 4).map { eew => Mux(sat_signed,
-    VecInit.tabulate(dLenB >> eew)(i => add_out((i << eew))(7)).asUInt,
-    VecInit.tabulate(dLenB >> eew)(i => add_carry(((i+1) << eew)-1)).asUInt
-  )}
-  val sat_unsigned_mask = VecInit.tabulate(4)({ eew =>
-    FillInterleaved(1 << eew, VecInit.tabulate(dLenB >> eew)(i => ctrl_sub ^ add_carry(((i+1) << eew)-1)).asUInt)
-  })(vd_eew)
-  val sat_unsigned_clip = Mux(sat_addu, ~(0.U(dLen.W)), 0.U(dLen.W)).asTypeOf(Vec(dLenB, UInt(8.W)))
-
-  val (sat_signed_masks, sat_signed_clips): (Seq[UInt], Seq[UInt]) = Seq.tabulate(4)({ eew =>
-    val out_sign = VecInit.tabulate(dLenB >> eew)(i =>    add_out(((i+1)<<eew)-1)(7)).asUInt
-    val vs2_sign = VecInit.tabulate(dLenB >> eew)(i => rvs2_bytes(((i+1)<<eew)-1)(7)).asUInt
-    val vs1_sign = VecInit.tabulate(dLenB >> eew)(i => rvs1_bytes(((i+1)<<eew)-1)(7)).asUInt
-    val input_xor  = vs2_sign ^ vs1_sign
-    val may_clip   = Mux(ctrl_sub, input_xor, ~input_xor) // add clips when signs match, sub clips when signs mismatch
-    val clip       = (vs2_sign ^ out_sign) & may_clip     // clips if the output sign doesn't match the input sign
-    val clip_neg   = Cat(1.U, 0.U(((8 << eew)-1).W))
-    val clip_pos   = ~clip_neg
-    val clip_value = VecInit(vs2_sign.asBools.map(sign => Mux(sign, clip_neg, clip_pos))).asUInt
-    (FillInterleaved((1 << eew), clip), clip_value)
-  }).unzip
-  val sat_signed_mask = VecInit(sat_signed_masks)(vd_eew)
-  val sat_signed_clip = VecInit(sat_signed_clips)(vd_eew).asTypeOf(Vec(dLenB, UInt(8.W)))
-  val sat_mask = Mux(sat_signed, sat_signed_mask, sat_unsigned_mask)
-  val sat_clip = Mux(sat_signed, sat_signed_clip, sat_unsigned_clip)
-  val sat_out = VecInit(add_out.zipWithIndex.map { case (o,i) => Mux(sat_mask(i), sat_clip(i), o) })
-
   val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
   val merge_out  = VecInit((0 until dLenB).map { i => Mux(merge_mask(i), rvs1_bytes(i), rvs2_bytes(i)) }).asUInt
 
@@ -358,6 +372,16 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     Fill(2, VecInit(shift_out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq).asUInt)
   })(rvs1_eew)
 
+  val sat_arr = Module(new SaturatedSumArray(dLenB))
+  sat_arr.io.sum      := add_out
+  sat_arr.io.carry    := add_carry
+  sat_arr.io.in1_sign := rvs1_bytes.map(_(7))
+  sat_arr.io.in2_sign := rvs2_bytes.map(_(7))
+  sat_arr.io.sub      := ctrl_sub
+  sat_arr.io.eew      := vd_eew
+  sat_arr.io.signed   := io.pipe(0).bits.funct6(0)
+  val sat_out = sat_arr.io.out.asUInt
+
   val xunary0_eew_mul = io.pipe(0).bits.vd_eew - rvs2_eew
   val xunary0_in = (1 until 4).map { m =>
     val w = dLen >> m
@@ -386,7 +410,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (ctrl_shift          , Mux(ctrl_narrow_vs1, shift_narrowing_out, shift_out.asUInt)),
     (ctrl_minmax         , minmax_out),
     (ctrl_merge          , merge_out),
-    (ctrl_sat            , sat_out.asUInt)
+    (ctrl_sat            , sat_out)
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 
@@ -402,7 +426,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
   io.write.bits.data := Fill(2, out)
 
-  io.set_vxsat := io.pipe(0).valid && ctrl_sat && sat_mask.orR
+  io.set_vxsat := io.pipe(0).valid && ctrl_sat && sat_arr.io.set_vxsat
 
   when (io.pipe(0).bits.wvd_widen2) {
     io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(0).bits.wmask))
