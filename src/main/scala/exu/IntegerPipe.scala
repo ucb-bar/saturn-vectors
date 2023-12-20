@@ -217,6 +217,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (OPMFunct6.asubu  , Seq(Y,X,N,N,N,X,N,X,N,X,Y)),
     (OPIFunct6.ssrl   , Seq(X,X,N,N,Y,N,N,X,X,X,N)),
     (OPIFunct6.ssra   , Seq(X,X,N,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nclip  , Seq(X,N,Y,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nclipu , Seq(X,N,Y,N,Y,N,N,X,X,X,N)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
@@ -349,7 +351,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   shift_arr.io.shl       := ctrl_shift_left
   shift_arr.io.sra       := io.pipe(0).bits.funct6(0)
   shift_arr.io.rm        := io.pipe(0).bits.vxrm
-  shift_arr.io.scaling   := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl)
+  shift_arr.io.scaling   := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl, OPIFunct6.nclip, OPIFunct6.nclipu)
 
   val shift_out = shift_arr.io.out
   val shift_narrowing_out = VecInit.tabulate(3)({eew =>
