@@ -21,8 +21,8 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   val ctrl_widen = rs1(3)
   val ctrl_narrow = rs1(4)
   val ctrl_signed = rs1(0)
-  val ctrl_out = rs1(2)
-  val ctrl_truncating = rs1(1) // truncate or round towards odd
+  val ctrl_out = !rs1(2) && rs1(1)
+  val ctrl_truncating = rs1(2) && rs1(1)// truncate or round towards odd
   val ctrl_round_to_odd = rs1(1) // truncate or round towards odd
 
   val rvs2_data = io.pipe(0).bits.rvs2_data
@@ -42,10 +42,9 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
     // FP to Int
     val fptoint_modules = Seq.fill(num_chunks)(Module(new hardfloat.RecFNToIN(fType.exp, fType.sig, fType.ieeeWidth)))
     val gen_fptoint = rvs2_chunks.zip(fptoint_modules).map { case(rvs2, conv) =>
-      val rvs2_rec = fType.recode(Mux(ctrl_truncating, Cat(rvs2(fType.ieeeWidth-1,fType.sig), 0.U(fType.sig.W)), rvs2))
       conv.io.signedOut := ctrl_signed
-      conv.io.roundingMode := io.pipe(0).bits.frm
-      conv.io.in := rvs2_rec
+      conv.io.roundingMode := Mux(ctrl_truncating, 1.U, io.pipe(0).bits.frm)
+      conv.io.in := fType.recode(Mux(ctrl_truncating, rvs2(fType.ieeeWidth-1, fType.sig-2) << (fType.sig - 2), rvs2))
       conv.io
     } 
     val fptoint_results = gen_fptoint.map { case(conv) =>
@@ -62,11 +61,9 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
       conv.io
     }
     val inttofp_results = gen_inttofp.map { case(conv) =>
-      conv.out
+      fType.ieee(conv.out)
     }
 
-    //single_width_out(eew-2) := Fill(eew + 1, Mux(ctrl_out, gen_inttofp.out.asUInt, gen_fptoint.out.asUInt)) 
-    //single_width_out(eew-2) := Mux(ctrl_out, gen_inttofp.out.asUInt, gen_fptoint.out.asUInt) 
     single_width_out(eew-2) := Mux(ctrl_out, inttofp_results.asUInt, fptoint_results.asUInt) 
   }
 
