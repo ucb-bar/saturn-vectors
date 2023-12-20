@@ -43,23 +43,21 @@ class AdderArray(dLenB: Int) extends Module {
     val lo = Mux(io.sub, ~l(0), l(0)) +& r(0) +& io.sub
     val hi = lo(1) + Mux(io.sub, ~l(1), l(1)) +& r(1)
     val sum = Cat(hi(0), lo(0))
-    RoundingIncrement(io.rm, sum(1,0)) +& lo(1)
+    RoundingIncrement(io.rm, sum) +& lo(1)
   }
 
-  val carries = Wire(Vec(dLenB+1, Bool()))
+  val carries = Wire(Vec(dLenB+1, UInt(2.W)))
   carries(0) := io.sub
-  io.carry := carries.drop(1)
+  io.carry := VecInit(carries.drop(1).map(_(0)))
 
   for (i <- 0 until dLenB) {
-    val sum = (Mux(io.sub, ~in1(i), in1(i)) +&
-      in2(i) +&
-      Mux(use_carry(i), carries(i), io.sub) +& Mux(io.avg,
-        Mux(!use_carry(i), round_incrs(i), 0.U(1.W)),
-        (io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i)))
+    val carry = Mux(use_carry(i), carries(i), Mux(io.avg, round_incrs(i), io.sub))
+    val sum = (Mux(io.sub, ~in1(i), in1(i)) +& in2(i) +& carry +&
+      ((io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i)))
     )
 
     io.out(i) := sum(7,0)
-    carries(i+1) := sum(8)
+    carries(i+1) := sum(9,8)
   }
 }
 
