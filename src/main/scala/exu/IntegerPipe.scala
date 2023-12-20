@@ -12,6 +12,7 @@ class AdderArray(dLenB: Int) extends Module {
   val io = IO(new Bundle {
     val in1 = Input(Vec(dLenB, UInt(8.W)))
     val in2 = Input(Vec(dLenB, UInt(8.W)))
+    val incr = Input(Vec(dLenB, Bool()))
     val mask_carry = Input(UInt(dLenB.W))
 
     val signed    = Input(Bool())
@@ -51,7 +52,7 @@ class AdderArray(dLenB: Int) extends Module {
   io.carry := VecInit(carries.drop(1).map(_(0)))
 
   for (i <- 0 until dLenB) {
-    val carry = Mux(use_carry(i), carries(i), Mux(io.avg, round_incrs(i), io.sub))
+    val carry = Mux(use_carry(i), carries(i), io.incr(i) +& Mux(io.avg, round_incrs(i), io.sub))
     val sum = (Mux(io.sub, ~in1(i), in1(i)) +& in2(i) +& carry +&
       (io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i))
     )
@@ -109,11 +110,16 @@ class ShiftArray(dLenB: Int) extends Module {
     val shamt     = Input(Vec(dLenB, UInt(8.W)))
     val shl       = Input(Bool())
     val sra       = Input(Bool())
+    val scaling   = Input(Bool())
+    val rm        = Input(UInt(2.W))
 
     val out = Output(Vec(dLenB, UInt(8.W)))
   })
 
   val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
+  val shifted_right = Wire(Vec(dLenB, UInt(8.W)))
+  val shifted_left  = Wire(Vec(dLenB, UInt(8.W)))
+  val rounding_incrs = Wire(Vec(dLenB, Bool()))
 
   for (i <- 0 until dLenB) {
     val shamt = VecInit.tabulate(4)({ eew => io.shamt((i / (1 << eew)) << eew) })(io.shamt_eew) & shamt_mask
@@ -132,11 +138,28 @@ class ShiftArray(dLenB: Int) extends Module {
       shift_left_in,
       shift_right_in)
 
-    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt).asUInt(7,0)
-    io.out(i) := Mux(io.shl,
-      Reverse(shifted),
-      shifted)
+    val full_shifted = (Cat(shift_hi, shift_in, false.B).asSInt >> shamt).asUInt
+    val shifted = full_shifted(8,1)
+    shifted_right(i) := shifted
+    shifted_left(i)  := Reverse(shifted)
+
+    rounding_incrs(i) := RoundingIncrement(io.rm, shifted(0), full_shifted(0),
+      Some(shift_right_in & (((1.U << shamt) - 1.U) >> 1)(63,0)))
   }
+
+  val scaling_array = Module(new AdderArray(dLenB))
+  scaling_array.io.in1    := shifted_right
+  scaling_array.io.in2.foreach(_ := 0.U)
+  scaling_array.io.incr   := rounding_incrs
+  scaling_array.io.signed := DontCare
+  scaling_array.io.eew    := io.in_eew
+  scaling_array.io.avg    := false.B
+  scaling_array.io.rm     := DontCare
+  scaling_array.io.sub    := false.B
+  scaling_array.io.cmask  := false.B
+  scaling_array.io.mask_carry := DontCare
+
+  io.out := Mux(io.shl, shifted_left, Mux(io.scaling, scaling_array.io.out, shifted_right))
 }
 
 class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true)(p) {
@@ -192,6 +215,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (OPMFunct6.aaddu  , Seq(N,X,N,N,N,X,N,X,N,X,Y)),
     (OPMFunct6.asub   , Seq(Y,X,N,N,N,X,N,X,N,X,Y)),
     (OPMFunct6.asubu  , Seq(Y,X,N,N,N,X,N,X,N,X,Y)),
+    (OPIFunct6.ssrl   , Seq(X,X,N,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.ssra   , Seq(X,X,N,N,Y,N,N,X,X,X,N)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
@@ -274,6 +299,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val adder_arr = Module(new AdderArray(dLenB))
   adder_arr.io.in1 := Mux(ctrl_narrow_vs1, add_narrow_vs1, in1_bytes)
   adder_arr.io.in2 := in2_bytes
+  adder_arr.io.incr.foreach(_ := false.B)
   adder_arr.io.avg := ctrl_avg
   adder_arr.io.eew := rvs2_eew
   adder_arr.io.rm  := io.pipe(0).bits.vxrm
@@ -322,6 +348,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   shift_arr.io.shamt     := Mux(ctrl_narrow_vs1, add_narrow_vs1, rvs1_bytes)
   shift_arr.io.shl       := ctrl_shift_left
   shift_arr.io.sra       := io.pipe(0).bits.funct6(0)
+  shift_arr.io.rm        := io.pipe(0).bits.vxrm
+  shift_arr.io.scaling   := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl)
 
   val shift_out = shift_arr.io.out
   val shift_narrowing_out = VecInit.tabulate(3)({eew =>
