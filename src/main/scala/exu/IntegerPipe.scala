@@ -53,7 +53,7 @@ class AdderArray(dLenB: Int) extends Module {
   for (i <- 0 until dLenB) {
     val carry = Mux(use_carry(i), carries(i), Mux(io.avg, round_incrs(i), io.sub))
     val sum = (Mux(io.sub, ~in1(i), in1(i)) +& in2(i) +& carry +&
-      ((io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i)))
+      (io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i))
     )
 
     io.out(i) := sum(7,0)
