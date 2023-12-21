@@ -3,9 +3,6 @@ package vector.backend
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
-import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
 import vector.common._
 
 class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
@@ -20,10 +17,10 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val next_eidx = eidx +& 1.U
   val last = next_eidx === inst.vconfig.vl
 
-  val active = io.dis.inst.vmu && ((!io.dis.inst.vm && io.dis.inst.mop =/= mopUnit) || io.dis.inst.mop(0))
-  io.dis.ready := !active || !valid || (last && io.iss.fire)
+  def accepts(inst: VectorIssueInst) = inst.vmu && ((!inst.vm && inst.mop =/= mopUnit) || inst.mop(0))
+  io.dis.ready := !accepts(io.dis.inst) || !valid || (last && io.iss.fire)
 
-  when (io.dis.fire && active) {
+  when (io.dis.fire && accepts(io.dis.inst)) {
     valid := true.B
     inst  := io.dis.inst
     eidx  := io.dis.inst.vstart

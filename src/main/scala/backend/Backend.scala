@@ -3,9 +3,8 @@ package vector.backend
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
+import freechips.rocketchip.tile.{CoreModule}
 import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
 import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, IterativeIntegerDivider}
 import vector.common._
@@ -80,10 +79,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.vat_tail := vat_tail
 
-  val vls = Module(new LoadSequencer)
-  val vss = Module(new StoreSequencer)
-  val vxs = Module(new ExecuteSequencer)
+  val vls  = Module(new LoadSequencer)
+  val vss  = Module(new StoreSequencer)
+  val vxs  = Module(new ExecuteSequencer)
   val vims = Module(new IndexMaskSequencer)
+
   val seqs = Seq(vls, vss, vxs, vims)
 
   val vxu = Module(new ExecutionUnit(Seq(

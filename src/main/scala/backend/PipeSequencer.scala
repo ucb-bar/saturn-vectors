@@ -3,9 +3,7 @@ package vector.common
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
-import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
+import freechips.rocketchip.tile.{CoreModule}
 import vector.common._
 
 abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -36,6 +34,8 @@ abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) wit
     val iss = Decoupled(new VectorMicroOp)
     val sub_dlen = Input(UInt(log2Ceil(dLenB).W))
   })
+  def accepts(inst: VectorIssueInst): Bool
+
   def min(a: UInt, b: UInt) = Mux(a > b, b, a)
   def get_group_mask(log2mul: UInt, max: Int) = Mux1H((0 until max).map { i =>
     (i.U === log2mul, ~(((1 << i) - 1).U(5.W)))

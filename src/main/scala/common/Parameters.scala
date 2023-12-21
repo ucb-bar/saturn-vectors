@@ -8,13 +8,22 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 case class VectorParams(
+  // In-order dispatch Queue
   vdqEntries: Int = 4,
 
+  // Load store instruction queues (in VLSU)
   vliqEntries: Int = 4,
   vsiqEntries: Int = 4,
 
+  // Load store in-flight queues (in VLSU)
   vlifqEntries: Int = 4,
   vsifqEntries: Int = 4,
+
+  // Load/store/execute/maskindex issue queues
+  vlissqEntries: Int = 1,
+  vsissqEntries: Int = 1,
+  vxissqEntries: Int = 1,
+  vmissqEntries: Int = 1,
 
   dLen: Int = 64,
   vatSz: Int = 3,

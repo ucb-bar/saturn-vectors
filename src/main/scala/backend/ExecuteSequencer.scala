@@ -39,10 +39,10 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, incr_eew, io.sub_dlen)
   val last      = next_eidx === inst.vconfig.vl
 
-  val active    = !io.dis.inst.vmu
-  io.dis.ready := !active || !valid || (last && io.iss.fire)
+  def accepts(inst: VectorIssueInst) = !inst.vmu
+  io.dis.ready := !accepts(io.dis.inst) || !valid || (last && io.iss.fire)
 
-  when (io.dis.fire && active) {
+  when (io.dis.fire && accepts(io.dis.inst)) {
     valid := true.B
     inst := io.dis.inst
     eidx := io.dis.inst.vstart

@@ -3,9 +3,7 @@ package vector.backend
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
-import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
+import freechips.rocketchip.tile.{CoreModule}
 import vector.common._
 
 class RegisterReadXbar(n: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {

@@ -1,11 +1,9 @@
-package vector.common
+package vector.backend
 
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
-import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
+import vector.common._
 
 class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val valid = RegInit(false.B)
@@ -19,10 +17,10 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U)
   val last      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
-  val active = io.dis.inst.vmu && !io.dis.inst.opcode(5)
-  io.dis.ready := !active || !valid || (last && io.iss.fire)
+  def accepts(inst: VectorIssueInst) = inst.vmu && !inst.opcode(5)
+  io.dis.ready := !accepts(io.dis.inst) || !valid || (last && io.iss.fire)
 
-  when (io.dis.fire && active) {
+  when (io.dis.fire && accepts(io.dis.inst)) {
     valid := true.B
     inst  := io.dis.inst
     eidx  := io.dis.inst.vstart
