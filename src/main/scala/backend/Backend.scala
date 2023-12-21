@@ -93,33 +93,41 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   )))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
-  seqs.foreach { s =>
-    s.io.dis.fire := vdq.io.deq.fire
-    s.io.dis.inst := vdq.io.deq.bits
-    s.io.rvs1 := DontCare
-    s.io.rvs2 := DontCare
-    s.io.rvd := DontCare
-    s.io.rvm := DontCare
-    s.io.sub_dlen := 0.U
-  }
 
-  val hazards = vxu.io.hazards
+  val pipe_hazards = vxu.io.hazards
 
   for ((seq, i) <- seqs.zipWithIndex) {
+    val vat = seq.io.vat
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)
+    seq.io.dis.valid := vdq.io.deq.valid && otherSeqs.map(_.io.dis.ready).andR
+    seq.io.dis.bits := vdq.io.deq.bits
+    seq.io.rvs1 := DontCare
+    seq.io.rvs2 := DontCare
+    seq.io.rvd := DontCare
+    seq.io.rvm := DontCare
+    seq.io.sub_dlen := 0.U
+
     val older_wintents = otherSeqs.map { s =>
-      Mux(vatOlder(s.io.hazard.bits.vat, seq.io.hazard.bits.vat) && s.io.hazard.valid,
-        s.io.hazard.bits.wintent, 0.U)
-    }.reduce(_|_)
-    val older_rintents = (otherSeqs.map { s =>
-      Mux(vatOlder(s.io.hazard.bits.vat, seq.io.hazard.bits.vat) && s.io.hazard.valid,
-        s.io.hazard.bits.rintent, 0.U)
-    }).reduce(_|_)
-    val older_writes = hazards.map(h =>
-      Mux(vatOlder(h.bits.vat, seq.io.hazard.bits.vat) && h.valid,
+      val seq_hazard = Mux(vatOlder(s.io.seq_hazard.bits.vat, vat) && s.io.seq_hazard.valid,
+        s.io.seq_hazard.bits.wintent, 0.U)
+      val iss_hazards = s.io.iss_hazards.map(h => FillInterleaved(egsPerVReg,
+        Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.wintent, 0.U)))
+      iss_hazards :+ seq_hazard
+    }.flatten.reduce(_|_)
+
+    val older_rintents = otherSeqs.map { s =>
+      val seq_hazard = Mux(vatOlder(s.io.seq_hazard.bits.vat, vat) && s.io.seq_hazard.valid,
+        s.io.seq_hazard.bits.rintent, 0.U)
+      val iss_hazards = s.io.iss_hazards.map(h => FillInterleaved(egsPerVReg,
+        Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.rintent, 0.U)))
+      iss_hazards :+ seq_hazard
+    }.flatten.reduce(_|_)
+
+    val older_pipe_writes = pipe_hazards.map(h =>
+      Mux(vatOlder(h.bits.vat, vat) && h.valid,
         h.bits.eg_oh, 0.U)).reduce(_|_)
 
-    seq.io.older_writes := older_writes | older_wintents
+    seq.io.older_writes := older_pipe_writes | older_wintents
     seq.io.older_reads := older_rintents
   }
 
@@ -236,9 +244,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   // Signalling to frontend
-  val seq_inflight_wv0 = (seqs.map(_.io.hazard).map { h =>
+  val seq_inflight_wv0 = (seqs.map(_.io.seq_hazard).map { h =>
     h.valid && ((h.bits.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
-  } ++ hazards.map { h =>
+  } ++ seqs.map(_.io.iss_hazards).flatten.map { h =>
+    h.valid && h.bits.wintent(0)
+  } ++ pipe_hazards.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>

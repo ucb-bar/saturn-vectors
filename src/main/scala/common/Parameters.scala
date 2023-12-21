@@ -23,7 +23,7 @@ case class VectorParams(
   vlissqEntries: Int = 1,
   vsissqEntries: Int = 1,
   vxissqEntries: Int = 1,
-  vmissqEntries: Int = 1,
+  vimissqEntries: Int = 1,
 
   dLen: Int = 64,
   vatSz: Int = 3,

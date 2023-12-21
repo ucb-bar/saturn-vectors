@@ -6,6 +6,24 @@ import org.chipsalliance.cde.config._
 import vector.common._
 
 class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
+  def issQEntries = vParams.vlissqEntries
+  val issq = Module(new DCEQueue(new VectorIssueInst, issQEntries, pipe=true))
+
+  def accepts(inst: VectorIssueInst) = inst.vmu && !inst.opcode(5)
+  io.dis.ready := !accepts(io.dis.bits) || issq.io.enq.ready
+  issq.io.enq.valid := io.dis.valid && accepts(io.dis.bits)
+  issq.io.enq.bits := io.dis.bits
+
+  for (i <- 0 until issQEntries) {
+    val inst = issq.io.peek(i).bits
+    io.iss_hazards(i).valid    := issq.io.peek(i).valid
+    io.iss_hazards(i).bits.vat := inst.vat
+    io.iss_hazards(i).bits.rintent := Mux(!inst.vm, 1.U, 0.U)
+    val nf_log2 = VecInit.tabulate(8)({nf => log2Ceil(nf+1).U})(inst.nf)
+    io.iss_hazards(i).bits.wintent := get_arch_mask(inst.rd, inst.pos_lmul +& nf_log2, 5)
+  }
+
+
   val valid = RegInit(false.B)
   val inst  = Reg(new VectorIssueInst)
   val eidx  = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -17,32 +35,32 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U)
   val last      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
-  def accepts(inst: VectorIssueInst) = inst.vmu && !inst.opcode(5)
-  io.dis.ready := !accepts(io.dis.inst) || !valid || (last && io.iss.fire)
+  issq.io.deq.ready := !valid || (last && io.iss.fire)
 
-  when (io.dis.fire && accepts(io.dis.inst)) {
+  when (issq.io.deq.fire) {
+    val iss_inst = issq.io.deq.bits
     valid := true.B
-    inst  := io.dis.inst
-    eidx  := io.dis.inst.vstart
+    inst  := iss_inst
+    eidx  := iss_inst.vstart
     sidx  := 0.U
 
     val wvd_arch_mask = Wire(Vec(32, Bool()))
     for (i <- 0 until 32) {
-      val group = i.U >> io.dis.inst.pos_lmul
-      val rd_group = io.dis.inst.rd >> io.dis.inst.pos_lmul
-      wvd_arch_mask(i) := group >= rd_group && group <= (rd_group + io.dis.inst.nf)
+      val group = i.U >> iss_inst.pos_lmul
+      val rd_group = iss_inst.rd >> iss_inst.pos_lmul
+      wvd_arch_mask(i) := group >= rd_group && group <= (rd_group + iss_inst.nf)
     }
     wvd_mask := FillInterleaved(egsPerVReg, wvd_arch_mask.asUInt)
-    rvm_mask := Mux(!io.dis.inst.vm, ~(0.U(egsPerVReg.W)), 0.U)
+    rvm_mask := Mux(!iss_inst.vm, ~(0.U(egsPerVReg.W)), 0.U)
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
 
   io.vat := inst.vat
-  io.hazard.valid := valid
-  io.hazard.bits.rintent := rvm_mask
-  io.hazard.bits.wintent := wvd_mask
-  io.hazard.bits.vat     := inst.vat
+  io.seq_hazard.valid := valid
+  io.seq_hazard.bits.rintent := rvm_mask
+  io.seq_hazard.bits.wintent := wvd_mask
+  io.seq_hazard.bits.vat     := inst.vat
 
   val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)

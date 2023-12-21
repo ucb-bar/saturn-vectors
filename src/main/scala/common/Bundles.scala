@@ -153,3 +153,10 @@ class SequencerHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val rintent = UInt(egsTotal.W)
   val wintent = UInt(egsTotal.W)
 }
+
+
+class InstructionHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val vat = UInt(vParams.vatSz.W)
+  val rintent = UInt(32.W)
+  val wintent = UInt(32.W)
+}
