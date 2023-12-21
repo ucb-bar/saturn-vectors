@@ -34,15 +34,16 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     valid := false.B
   }
 
-  io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := rvs2_mask | rvm_mask
-  io.seq_hazards.wintent := false.B
-  io.seq_hazards.vat := inst.vat
+  io.vat := inst.vat
+  io.hazard.valid := valid
+  io.hazard.bits.rintent := rvs2_mask | rvm_mask
+  io.hazard.bits.wintent := false.B
+  io.hazard.bits.vat := inst.vat
 
   val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits), 0.U)
   val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)
 
-  val raw_hazard = ((vm_read_oh | vs2_read_oh) & io.seq_hazards.writes) =/= 0.U
+  val raw_hazard = ((vm_read_oh | vs2_read_oh) & io.older_writes) =/= 0.U
   val data_hazard = raw_hazard
 
   io.rvs2.req.valid := valid && renv2

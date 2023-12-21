@@ -14,15 +14,10 @@ abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) wit
       val inst = Input(new VectorIssueInst)
     }
 
-    val seq_hazards = new Bundle {
-      val valid = Output(Bool())
-      val rintent = Output(UInt(egsTotal.W))
-      val wintent = Output(UInt(egsTotal.W))
-      val vat = Output(UInt(vParams.vatSz.W))
-
-      val writes = Input(UInt(egsTotal.W))
-      val reads = Input(UInt(egsTotal.W))
-    }
+    val hazard = Output(Valid(new SequencerHazard))
+    val vat = Output(UInt(vParams.vatSz.W))
+    val older_writes = Input(UInt(egsTotal.W))
+    val older_reads  = Input(UInt(egsTotal.W))
 
     val busy = Output(Bool())
 

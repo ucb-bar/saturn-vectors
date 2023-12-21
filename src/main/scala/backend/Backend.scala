@@ -108,19 +108,19 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   for ((seq, i) <- seqs.zipWithIndex) {
     val otherSeqs = seqs.zipWithIndex.filter(_._2 != i).map(_._1)
     val older_wintents = otherSeqs.map { s =>
-      Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat) && s.io.seq_hazards.valid,
-        s.io.seq_hazards.wintent, 0.U)
+      Mux(vatOlder(s.io.hazard.bits.vat, seq.io.hazard.bits.vat) && s.io.hazard.valid,
+        s.io.hazard.bits.wintent, 0.U)
     }.reduce(_|_)
     val older_rintents = (otherSeqs.map { s =>
-      Mux(vatOlder(s.io.seq_hazards.vat, seq.io.seq_hazards.vat) && s.io.seq_hazards.valid,
-        s.io.seq_hazards.rintent, 0.U)
+      Mux(vatOlder(s.io.hazard.bits.vat, seq.io.hazard.bits.vat) && s.io.hazard.valid,
+        s.io.hazard.bits.rintent, 0.U)
     }).reduce(_|_)
     val older_writes = hazards.map(h =>
-      Mux(vatOlder(h.bits.vat, seq.io.seq_hazards.vat) && h.valid,
+      Mux(vatOlder(h.bits.vat, seq.io.hazard.bits.vat) && h.valid,
         h.bits.eg_oh, 0.U)).reduce(_|_)
 
-    seq.io.seq_hazards.writes := older_writes | older_wintents
-    seq.io.seq_hazards.reads := older_rintents
+    seq.io.older_writes := older_writes | older_wintents
+    seq.io.older_reads := older_rintents
   }
 
   val vrf = Seq.fill(2) { Module(new RegisterFileBank(4, 1, egsTotal/2)) }
@@ -236,8 +236,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   // Signalling to frontend
-  val seq_inflight_wv0 = (seqs.map(_.io.seq_hazards).map { h =>
-    h.valid && ((h.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
+  val seq_inflight_wv0 = (seqs.map(_.io.hazard).map { h =>
+    h.valid && ((h.bits.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ hazards.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR

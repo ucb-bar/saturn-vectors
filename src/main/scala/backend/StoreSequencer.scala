@@ -42,15 +42,16 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     valid := false.B
   }
 
-  io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := rvd_mask | rvm_mask
-  io.seq_hazards.wintent := 0.U
-  io.seq_hazards.vat := inst.vat
+  io.vat := inst.vat
+  io.hazard.valid := valid
+  io.hazard.bits.rintent := rvd_mask | rvm_mask
+  io.hazard.bits.wintent := 0.U
+  io.hazard.bits.vat := inst.vat
 
   val vd_read_oh = UIntToOH(io.rvd.req.bits)
   val vm_read_oh = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)
 
-  val raw_hazard = ((vm_read_oh | vd_read_oh) & io.seq_hazards.writes) =/= 0.U
+  val raw_hazard = ((vm_read_oh | vd_read_oh) & io.older_writes) =/= 0.U
   val data_hazard = raw_hazard
 
   io.rvd.req.valid := valid

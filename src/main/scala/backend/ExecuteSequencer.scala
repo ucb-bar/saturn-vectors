@@ -113,10 +113,12 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     valid := false.B
   }
 
-  io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := rvs1_mask | rvs2_mask | rvd_mask | rvm_mask
-  io.seq_hazards.wintent := wvd_mask
-  io.seq_hazards.vat := inst.vat
+
+  io.vat := inst.vat
+  io.hazard.valid := valid
+  io.hazard.bits.rintent := rvs1_mask | rvs2_mask | rvd_mask | rvm_mask
+  io.hazard.bits.wintent := wvd_mask
+  io.hazard.bits.vat := inst.vat
 
   val vs1_read_oh = Mux(renv1, UIntToOH(io.rvs1.req.bits), 0.U)
   val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits), 0.U)
@@ -124,9 +126,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits ), 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
-  val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh | vm_read_oh) & io.seq_hazards.writes) =/= 0.U
-  val waw_hazard = (vd_write_oh & io.seq_hazards.writes) =/= 0.U
-  val war_hazard = (vd_write_oh & io.seq_hazards.reads) =/= 0.U
+  val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh | vm_read_oh) & io.older_writes) =/= 0.U
+  val waw_hazard = (vd_write_oh & io.older_writes) =/= 0.U
+  val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
 

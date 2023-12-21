@@ -147,3 +147,9 @@ class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorP
   val widen2 = Bool()
   def eg_oh = Mux(widen2, FillInterleaved(2, UIntToOH(eg >> 1) ), UIntToOH(eg))
 }
+
+class SequencerHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val vat = UInt(vParams.vatSz.W)
+  val rintent = UInt(egsTotal.W)
+  val wintent = UInt(egsTotal.W)
+}
