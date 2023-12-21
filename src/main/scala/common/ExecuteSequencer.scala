@@ -75,7 +75,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
         (OPMFunct6.wmaccu , Seq(Y,N,N,N)),
         (OPMFunct6.wmacc  , Seq(Y,N,N,N)),
         (OPMFunct6.wmaccsu, Seq(Y,N,N,N)),
-        (OPMFunct6.wmaccus, Seq(Y,N,N,N))
+        (OPMFunct6.wmaccus, Seq(Y,N,N,N)),
+        (OPIFunct6.nclip  , Seq(N,Y,N,N)),
+        (OPIFunct6.nclipu , Seq(N,Y,N,N)),
       )
     )
 

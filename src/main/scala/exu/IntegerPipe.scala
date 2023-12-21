@@ -103,17 +103,20 @@ class CompareArray(dLenB: Int) extends Module {
 }
 
 class ShiftArray(dLenB: Int) extends Module {
+  val dLen = dLenB * 8
   val io = IO(new Bundle {
     val in_eew    = Input(UInt(2.W))
     val in        = Input(Vec(dLenB, UInt(8.W)))
     val shamt_eew = Input(UInt(2.W))
     val shamt     = Input(Vec(dLenB, UInt(8.W)))
     val shl       = Input(Bool())
-    val sra       = Input(Bool())
+    val signed    = Input(Bool())
     val scaling   = Input(Bool())
     val rm        = Input(UInt(2.W))
+    val narrowing = Input(Bool())
 
     val out = Output(Vec(dLenB, UInt(8.W)))
+    val set_vxsat = Output(Bool())
   })
 
   val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
@@ -122,14 +125,14 @@ class ShiftArray(dLenB: Int) extends Module {
   val rounding_incrs = Wire(Vec(dLenB, Bool()))
 
   for (i <- 0 until dLenB) {
-    val shamt = VecInit.tabulate(4)({ eew => io.shamt((i / (1 << eew)) << eew) })(io.shamt_eew) & shamt_mask
+    val shamt = VecInit.tabulate(4)({ eew => io.shamt((i / (1 << eew)) << eew) })(io.in_eew) & shamt_mask
     val shift_left_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
       ((1 << (1 + (i % (1 << eew)))) - 1).U(8.W)
     })(io.in_eew))
     val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
       (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
     })(io.in_eew))
-    val shift_hi = !io.shl & io.sra & VecInit.tabulate(4)({eew =>
+    val shift_hi = !io.shl & io.signed & VecInit.tabulate(4)({eew =>
       io.in(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
     })(io.in_eew)
     val shift_left_in = Reverse(VecInit(io.in.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
@@ -150,7 +153,7 @@ class ShiftArray(dLenB: Int) extends Module {
   val scaling_array = Module(new AdderArray(dLenB))
   scaling_array.io.in1    := shifted_right
   scaling_array.io.in2.foreach(_ := 0.U)
-  scaling_array.io.incr   := rounding_incrs
+  scaling_array.io.incr   := Mux(io.scaling, rounding_incrs, VecInit.fill(dLenB)(false.B))
   scaling_array.io.signed := DontCare
   scaling_array.io.eew    := io.in_eew
   scaling_array.io.avg    := false.B
@@ -159,7 +162,34 @@ class ShiftArray(dLenB: Int) extends Module {
   scaling_array.io.cmask  := false.B
   scaling_array.io.mask_carry := DontCare
 
-  io.out := Mux(io.shl, shifted_left, Mux(io.scaling, scaling_array.io.out, shifted_right))
+  val narrow_out_elems = VecInit.tabulate(3)({eew =>
+    VecInit(scaling_array.io.out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq)
+  })(io.shamt_eew)
+  val narrow_out_his: Seq[Seq[Seq[UInt]]] = Seq.tabulate(3)({eew =>
+    scaling_array.io.out.grouped(2 << eew).map(_.drop(1 << eew)).toSeq
+  })
+  val narrow_out_carries = Seq.tabulate(3)({eew =>
+    scaling_array.io.carry.grouped(2 << eew).map(_.last).toSeq
+  })
+  val narrow_unsigned_mask = VecInit.tabulate(3)({ eew =>
+    FillInterleaved(1 << eew, VecInit.tabulate(dLenB >> (eew + 1))(i =>
+      Cat(narrow_out_carries(eew)(i), VecInit(narrow_out_his(eew)(i)).asUInt) =/= 0.U && !io.signed && io.scaling
+    ).asUInt)
+  })(io.shamt_eew)
+  val narrow_unsigned_clip = (~(0.U((dLen >> 1).W))).asTypeOf(Vec(dLenB >> 1, UInt(8.W)))
+
+  val narrow_out_clipped = narrow_out_elems
+    .zip(narrow_unsigned_mask.asBools)
+    .zip(narrow_unsigned_clip).map ({ case ((o,s),c) => Mux(s, c, o) })
+  val narrow_out = Fill(2, narrow_out_clipped.asUInt).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  io.out := Mux(io.narrowing,
+    narrow_out,
+    Mux(io.scaling,
+      scaling_array.io.out,
+      Mux(io.shl, shifted_left, shifted_right))
+  )
+  io.set_vxsat := io.narrowing && io.scaling && narrow_unsigned_mask =/= 0.U
 }
 
 class SaturatedSumArray(dLenB: Int) extends Module {
@@ -363,14 +393,12 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   shift_arr.io.shamt_eew := rvs1_eew
   shift_arr.io.shamt     := Mux(ctrl_narrow_vs1, add_narrow_vs1, rvs1_bytes)
   shift_arr.io.shl       := ctrl_shift_left
-  shift_arr.io.sra       := io.pipe(0).bits.funct6(0)
+  shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
   shift_arr.io.rm        := io.pipe(0).bits.vxrm
   shift_arr.io.scaling   := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl, OPIFunct6.nclip, OPIFunct6.nclipu)
+  shift_arr.io.narrowing := ctrl_narrow_vs1
 
-  val shift_out = shift_arr.io.out
-  val shift_narrowing_out = VecInit.tabulate(3)({eew =>
-    Fill(2, VecInit(shift_out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq).asUInt)
-  })(rvs1_eew)
+  val shift_out = shift_arr.io.out.asUInt
 
   val sat_arr = Module(new SaturatedSumArray(dLenB))
   sat_arr.io.sum      := add_out
@@ -407,7 +435,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (ctrl_xunary0        , xunary0_out),
     (ctrl_bw             , bw_out),
     (ctrl_mask_write     , mask_out),
-    (ctrl_shift          , Mux(ctrl_narrow_vs1, shift_narrowing_out, shift_out.asUInt)),
+    (ctrl_shift          , shift_out),
     (ctrl_minmax         , minmax_out),
     (ctrl_merge          , merge_out),
     (ctrl_sat            , sat_out)
@@ -426,7 +454,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
   io.write.bits.data := Fill(2, out)
 
-  io.set_vxsat := io.pipe(0).valid && ctrl_sat && sat_arr.io.set_vxsat
+  io.set_vxsat := io.pipe(0).valid && ((ctrl_sat && sat_arr.io.set_vxsat) || (ctrl_shift && shift_arr.io.set_vxsat))
 
   when (io.pipe(0).bits.wvd_widen2) {
     io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(0).bits.wmask))
