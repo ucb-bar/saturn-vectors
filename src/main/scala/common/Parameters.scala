@@ -7,6 +7,12 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
+object VectorParams {
+  def minParams = VectorParams()
+  def refParams = VectorParams(vlissqEntries = 3, vsissqEntries = 3, vxissqEntries = 3, vatSz = 5, doubleBufferSegments = true)
+
+}
+
 case class VectorParams(
   // In-order dispatch Queue
   vdqEntries: Int = 4,
@@ -28,7 +34,7 @@ case class VectorParams(
   dLen: Int = 64,
   vatSz: Int = 3,
 
-  doubleBufferSegments: Boolean = true
+  doubleBufferSegments: Boolean = false
 )
 
 case object VectorParamsKey extends Field[VectorParams]
