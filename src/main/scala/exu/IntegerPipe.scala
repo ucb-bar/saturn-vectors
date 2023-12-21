@@ -107,7 +107,6 @@ class ShiftArray(dLenB: Int) extends Module {
   val io = IO(new Bundle {
     val in_eew    = Input(UInt(2.W))
     val in        = Input(Vec(dLenB, UInt(8.W)))
-    val shamt_eew = Input(UInt(2.W))
     val shamt     = Input(Vec(dLenB, UInt(8.W)))
     val shl       = Input(Bool())
     val signed    = Input(Bool())
@@ -162,25 +161,44 @@ class ShiftArray(dLenB: Int) extends Module {
   scaling_array.io.cmask  := false.B
   scaling_array.io.mask_carry := DontCare
 
-  val narrow_out_elems = VecInit.tabulate(3)({eew =>
-    VecInit(scaling_array.io.out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq)
-  })(io.shamt_eew)
-  val narrow_out_his: Seq[Seq[Seq[UInt]]] = Seq.tabulate(3)({eew =>
-    scaling_array.io.out.grouped(2 << eew).map(_.drop(1 << eew)).toSeq
+  val narrow_out_elems: Seq[Seq[UInt]] = Seq.tabulate(3)({eew =>
+    scaling_array.io.out.grouped(2 << eew).map(e => VecInit(e.take(1 << eew)).asUInt).toSeq
+  })
+  val narrow_out_his: Seq[Seq[UInt]] = Seq.tabulate(3)({eew =>
+    scaling_array.io.out.grouped(2 << eew).map(e => VecInit(e.drop(1 << eew)).asUInt).toSeq
   })
   val narrow_out_carries = Seq.tabulate(3)({eew =>
     scaling_array.io.carry.grouped(2 << eew).map(_.last).toSeq
   })
+
   val narrow_unsigned_mask = VecInit.tabulate(3)({ eew =>
     FillInterleaved(1 << eew, VecInit.tabulate(dLenB >> (eew + 1))(i =>
-      Cat(narrow_out_carries(eew)(i), VecInit(narrow_out_his(eew)(i)).asUInt) =/= 0.U && !io.signed && io.scaling
+      Cat(narrow_out_carries(eew)(i), narrow_out_his(eew)(i)) =/= 0.U
     ).asUInt)
-  })(io.shamt_eew)
+  })(io.in_eew - 1.U)
   val narrow_unsigned_clip = (~(0.U((dLen >> 1).W))).asTypeOf(Vec(dLenB >> 1, UInt(8.W)))
 
-  val narrow_out_clipped = narrow_out_elems
-    .zip(narrow_unsigned_mask.asBools)
-    .zip(narrow_unsigned_clip).map ({ case ((o,s),c) => Mux(s, c, o) })
+  val (narrow_signed_masks, narrow_signed_clips): (Seq[UInt], Seq[UInt]) = Seq.tabulate(3)({ eew =>
+    val signs = narrow_out_his(eew).map(_((8 << eew)-1))
+    val his   = narrow_out_his(eew).zip(narrow_out_elems(eew)).map({ case (h,e) => Cat(h((8 << eew)-2,0), e((8<<eew)-1)) })
+    val clip_lo   = signs.zip(his).map({ case (s,h) =>  s && h =/= ~0.U((8 << eew).W) })
+    val clip_hi   = signs.zip(his).map({ case (s,h) => !s && h =/=  0.U((8 << eew).W) })
+    val clip_neg  = Cat(1.U, 0.U(((8 << eew)-1).W))
+    val clip_pos  = ~clip_neg
+    val clip_value = VecInit(signs.map(s => Mux(s, clip_neg, clip_pos))).asUInt
+    val clip = clip_lo.zip(clip_hi).map(t => t._1 || t._2)
+    (FillInterleaved((1 << eew), clip), clip_value)
+  }).unzip
+  val narrow_signed_mask = VecInit(narrow_signed_masks)(io.in_eew - 1.U)
+  val narrow_signed_clip = VecInit(narrow_signed_clips)(io.in_eew - 1.U).asTypeOf(Vec(dLenB >> 1, UInt(8.W)))
+
+  val narrow_mask = Mux(io.signed, narrow_signed_mask, narrow_unsigned_mask)
+  val narrow_clip = Mux(io.signed, narrow_signed_clip, narrow_unsigned_clip)
+
+  val narrow_out_clipped = VecInit(narrow_out_elems.map(e => VecInit(e).asUInt))(io.in_eew - 1.U)
+    .asTypeOf(Vec(dLenB >> 1, UInt(8.W)))
+    .zip(narrow_mask.asBools)
+    .zip(narrow_clip).map ({ case ((o,s),c) => Mux(s && io.scaling, c, o) })
   val narrow_out = Fill(2, narrow_out_clipped.asUInt).asTypeOf(Vec(dLenB, UInt(8.W)))
 
   io.out := Mux(io.narrowing,
@@ -189,7 +207,7 @@ class ShiftArray(dLenB: Int) extends Module {
       scaling_array.io.out,
       Mux(io.shl, shifted_left, shifted_right))
   )
-  io.set_vxsat := io.narrowing && io.scaling && narrow_unsigned_mask =/= 0.U
+  io.set_vxsat := io.narrowing && io.scaling && narrow_mask =/= 0.U
 }
 
 class SaturatedSumArray(dLenB: Int) extends Module {
@@ -390,7 +408,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val shift_arr = Module(new ShiftArray(dLenB))
   shift_arr.io.in_eew := rvs2_eew
   shift_arr.io.in     := rvs2_bytes
-  shift_arr.io.shamt_eew := rvs1_eew
   shift_arr.io.shamt     := Mux(ctrl_narrow_vs1, add_narrow_vs1, rvs1_bytes)
   shift_arr.io.shl       := ctrl_shift_left
   shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
