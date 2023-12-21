@@ -195,17 +195,16 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
 
     val output_exponent_val = (((3.U * ((1 << (fType.exp - 1)) - 1).U) - normalized_exponent) >> 1)
     if (eew == 3) {
-      output_exponent_d := output_exponent_val(10,0)
+      output_exponent_d := output_exponent_val
     } else {
       output_exponent_s := output_exponent_val
     }
     output_significand_index(eew-2) := Cat(normalized_exponent(0), normalized_significand(fType.sig - 1, fType.sig - 7))
-
     output_sign(eew-2) := rvs2_bits(fType.ieeeWidth - 1)
   }
 
   val truthTable = TruthTable(vfrsqrt7_table, default_bits) 
-  val significand_bits = chisel3.util.experimental.decode.decoder(Mux(io.eew === 3.U, output_significand_index(1), output_significand_index(0)), truthTable)
+  val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux(io.eew === 3.U, output_significand_index(1), output_significand_index(0)), truthTable)
 
   val s_out = Wire(UInt(32.W))
   val d_out = Wire(UInt(64.W))
@@ -218,11 +217,18 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     io.out := Mux(sel, FType.D.ieeeQNaN, Fill(2, FType.S.ieeeQNaN))
   } .elsewhen (is_pos_inf(sel)) {
     io.out := 0.U
+  } .elsewhen (is_pos_zero(sel)) {
+    io.out := Mux(sel, "h7FF0000000000000".U, "h7F8000007F800000".U)
+  } .elsewhen (is_neg_zero(sel)) {
+    io.out := Mux(sel, "hFFF0000000000000".U, "hFF800000FF800000".U)
   } .otherwise {
     io.out := Mux(sel, d_out, Fill(2, s_out))
   }
 
-  io.exc := 0.U
+  val NV = is_negative(sel) || is_sNaN(sel)
+  val DZ = is_pos_zero(sel) || is_neg_zero(sel)
+
+  io.exc := Cat(NV, Cat(DZ, "b000".U))
 }
 
 
@@ -320,6 +326,6 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last) 
   last := io.write.fire()
 
-  io.exc.valid := divSqrt_valid
-  io.exc.bits := divSqrt.io.exceptionFlags
+  io.exc.valid := divSqrt_valid || (vfrsqrt7_inst && io.write.fire())
+  io.exc.bits := (divSqrt.io.exceptionFlags & Fill(5, divSqrt_valid)) | (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst))
 }
