@@ -1,4 +1,4 @@
-package vector.common
+package vector.backend
 
 import chisel3._
 import chisel3.util._
@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
 import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, IterativeIntegerDivider}
-
+import vector.common._
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {

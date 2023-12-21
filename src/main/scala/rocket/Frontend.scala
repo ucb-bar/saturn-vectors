@@ -8,6 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 import vector.common._
+import vector.backend.{VectorBackend}
 import vector.mem.{ScalarMemOrderCheckIO}
 
 class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {

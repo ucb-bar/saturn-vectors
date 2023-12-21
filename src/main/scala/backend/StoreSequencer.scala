@@ -1,4 +1,4 @@
-package vector.common
+package vector.backend
 
 import chisel3._
 import chisel3.util._
@@ -6,6 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+import vector.common._
 
 class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val valid    = RegInit(false.B)
