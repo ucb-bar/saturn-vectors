@@ -245,7 +245,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   }
   .otherwise {
     s_out_exponent := output_exponent_s
-    s_out_significand := significand_bits
+    s_out_significand := Cat(significand_bits, 0.U(16.W))
   }
 
   when (is_subnormal_output(1)) {
@@ -267,7 +267,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   }
   .otherwise {
     d_out_exponent := output_exponent_d
-    d_out_significand := significand_bits
+    d_out_significand := Cat(significand_bits, 0.U(45.W))
   }
 
   s_out := Cat(output_sign(0), Cat(s_out_exponent, s_out_significand))
@@ -570,7 +570,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
   }
 
-  val divSqrt_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
+  val divSqrt_valid = (op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 0.U) &&  (divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt)
 
   val narrow = Module(new hardfloat.RecFNToRecFN(11, 53, 8, 24))
   narrow.io.roundingMode := op.frm
