@@ -78,7 +78,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   issq.io.enq.bits.renvd       := io.dis.bits.opmf6.isOneOf(
     OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
     OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) ||
-    (io.dis.inst.funct3.isOneOf(OPFVV, OPFVF) && io.dis.inst.opff6.isOneOf(
+    (io.dis.bits.funct3.isOneOf(OPFVV, OPFVF) && io.dis.bits.opff6.isOneOf(
     OPFFunct6.vfmacc, OPFFunct6.vfnmacc, OPFFunct6.vfmsac, OPFFunct6.vfnmsac,
     OPFFunct6.vfmadd, OPFFunct6.vfnmadd, OPFFunct6.vfmsub, OPFFunct6.vfnmsub,
     OPFFunct6.vfwmacc, OPFFunct6.vfwnmacc, OPFFunct6.vfwmsac, OPFFunct6.vfwnmsac))

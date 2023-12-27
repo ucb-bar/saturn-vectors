@@ -153,9 +153,9 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) wi
   }
 
   io.write.valid := io.pipe(depth-1).valid
-  io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
-  io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(depth-1).bits.wmask))
-  io.write.bits.data := Fill(2, fma_pipes.map(pipe => pipe.out).asUInt)
+  io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
+  io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
+  io.write.bits.data := fma_pipes.map(pipe => pipe.out).asUInt
 
   io.exc.valid := io.write.valid
   io.exc.bits := fma_pipes.map(pipe => pipe.exc).reduce(_ | _) 
