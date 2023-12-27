@@ -12,9 +12,13 @@ class AdderArray(dLenB: Int) extends Module {
   val io = IO(new Bundle {
     val in1 = Input(Vec(dLenB, UInt(8.W)))
     val in2 = Input(Vec(dLenB, UInt(8.W)))
-    val use_carry  = Input(UInt(dLenB.W))
+    val incr = Input(Vec(dLenB, Bool()))
     val mask_carry = Input(UInt(dLenB.W))
 
+    val signed    = Input(Bool())
+    val eew       = Input(UInt(2.W))
+    val avg       = Input(Bool())
+    val rm        = Input(UInt(2.W))
     val sub       = Input(Bool())
     val cmask     = Input(Bool())
 
@@ -22,19 +26,39 @@ class AdderArray(dLenB: Int) extends Module {
     val carry = Output(Vec(dLenB, Bool()))
   })
 
-  val carries = Wire(Vec(dLenB+1, Bool()))
+  val use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
+    Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
+  })(io.eew))
+
+  val avg_in1 = VecInit.tabulate(4) { eew =>
+    VecInit(io.in1.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(e => Cat(io.signed && e((8<<eew)-1), e) >> 1)).asUInt
+  }(io.eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+  val avg_in2 = VecInit.tabulate(4) { eew =>
+    VecInit(io.in2.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(e => Cat(io.signed && e((8<<eew)-1), e) >> 1)).asUInt
+  }(io.eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  val in1 = Mux(io.avg, avg_in1, io.in1)
+  val in2 = Mux(io.avg, avg_in2, io.in2)
+
+  val round_incrs = io.in1.zip(io.in2).map { case (l, r) =>
+    val lo = Mux(io.sub, ~l(0), l(0)) +& r(0) +& io.sub
+    val hi = lo(1) + Mux(io.sub, ~l(1), l(1)) +& r(1)
+    val sum = Cat(hi(0), lo(0))
+    RoundingIncrement(io.rm, sum) +& lo(1)
+  }
+
+  val carries = Wire(Vec(dLenB+1, UInt(2.W)))
   carries(0) := io.sub
-  io.carry := carries.drop(1)
+  io.carry := VecInit(carries.drop(1).map(_(0)))
 
   for (i <- 0 until dLenB) {
-    val sum = (Mux(io.sub, ~io.in1(i), io.in1(i)) +&
-      io.in2(i) +&
-      Mux(io.use_carry(i), carries(i), io.sub) +&
+    val carry = Mux(use_carry(i), carries(i), io.incr(i) +& Mux(io.avg, round_incrs(i), io.sub))
+    val sum = (Mux(io.sub, ~in1(i), in1(i)) +& in2(i) +& carry +&
       (io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i))
     )
 
     io.out(i) := sum(7,0)
-    carries(i+1) := sum(8)
+    carries(i+1) := sum(9,8)
   }
 }
 
@@ -79,28 +103,35 @@ class CompareArray(dLenB: Int) extends Module {
 }
 
 class ShiftArray(dLenB: Int) extends Module {
+  val dLen = dLenB * 8
   val io = IO(new Bundle {
     val in_eew    = Input(UInt(2.W))
     val in        = Input(Vec(dLenB, UInt(8.W)))
-    val shamt_eew = Input(UInt(2.W))
     val shamt     = Input(Vec(dLenB, UInt(8.W)))
     val shl       = Input(Bool())
-    val sra       = Input(Bool())
+    val signed    = Input(Bool())
+    val scaling   = Input(Bool())
+    val rm        = Input(UInt(2.W))
+    val narrowing = Input(Bool())
 
     val out = Output(Vec(dLenB, UInt(8.W)))
+    val set_vxsat = Output(Bool())
   })
 
   val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
+  val shifted_right = Wire(Vec(dLenB, UInt(8.W)))
+  val shifted_left  = Wire(Vec(dLenB, UInt(8.W)))
+  val rounding_incrs = Wire(Vec(dLenB, Bool()))
 
   for (i <- 0 until dLenB) {
-    val shamt = VecInit.tabulate(4)({ eew => io.shamt((i / (1 << eew)) << eew) })(io.shamt_eew) & shamt_mask
+    val shamt = VecInit.tabulate(4)({ eew => io.shamt((i / (1 << eew)) << eew) })(io.in_eew) & shamt_mask
     val shift_left_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
       ((1 << (1 + (i % (1 << eew)))) - 1).U(8.W)
     })(io.in_eew))
     val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
       (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
     })(io.in_eew))
-    val shift_hi = !io.shl & io.sra & VecInit.tabulate(4)({eew =>
+    val shift_hi = !io.shl & io.signed & VecInit.tabulate(4)({eew =>
       io.in(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
     })(io.in_eew)
     val shift_left_in = Reverse(VecInit(io.in.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
@@ -109,14 +140,118 @@ class ShiftArray(dLenB: Int) extends Module {
       shift_left_in,
       shift_right_in)
 
-    val shifted = (Cat(shift_hi, shift_in).asSInt >> shamt).asUInt(7,0)
-    io.out(i) := Mux(io.shl,
-      Reverse(shifted),
-      shifted)
+    val full_shifted = (Cat(shift_hi, shift_in, false.B).asSInt >> shamt).asUInt
+    val shifted = full_shifted(8,1)
+    shifted_right(i) := shifted
+    shifted_left(i)  := Reverse(shifted)
+
+    rounding_incrs(i) := RoundingIncrement(io.rm, shifted(0), full_shifted(0),
+      Some(shift_right_in & (((1.U << shamt) - 1.U) >> 1)(63,0)))
   }
+
+  val scaling_array = Module(new AdderArray(dLenB))
+  scaling_array.io.in1    := shifted_right
+  scaling_array.io.in2.foreach(_ := 0.U)
+  scaling_array.io.incr   := Mux(io.scaling, rounding_incrs, VecInit.fill(dLenB)(false.B))
+  scaling_array.io.signed := DontCare
+  scaling_array.io.eew    := io.in_eew
+  scaling_array.io.avg    := false.B
+  scaling_array.io.rm     := DontCare
+  scaling_array.io.sub    := false.B
+  scaling_array.io.cmask  := false.B
+  scaling_array.io.mask_carry := DontCare
+
+  val narrow_out_elems: Seq[Seq[UInt]] = Seq.tabulate(3)({eew =>
+    scaling_array.io.out.grouped(2 << eew).map(e => VecInit(e.take(1 << eew)).asUInt).toSeq
+  })
+  val narrow_out_his: Seq[Seq[UInt]] = Seq.tabulate(3)({eew =>
+    scaling_array.io.out.grouped(2 << eew).map(e => VecInit(e.drop(1 << eew)).asUInt).toSeq
+  })
+  val narrow_out_carries = Seq.tabulate(3)({eew =>
+    scaling_array.io.carry.grouped(2 << eew).map(_.last).toSeq
+  })
+
+  val narrow_unsigned_mask = VecInit.tabulate(3)({ eew =>
+    FillInterleaved(1 << eew, VecInit.tabulate(dLenB >> (eew + 1))(i =>
+      Cat(narrow_out_carries(eew)(i), narrow_out_his(eew)(i)) =/= 0.U
+    ).asUInt)
+  })(io.in_eew - 1.U)
+  val narrow_unsigned_clip = (~(0.U((dLen >> 1).W))).asTypeOf(Vec(dLenB >> 1, UInt(8.W)))
+
+  val (narrow_signed_masks, narrow_signed_clips): (Seq[UInt], Seq[UInt]) = Seq.tabulate(3)({ eew =>
+    val signs = narrow_out_his(eew).map(_((8 << eew)-1))
+    val his   = narrow_out_his(eew).zip(narrow_out_elems(eew)).map({ case (h,e) => Cat(h((8 << eew)-2,0), e((8<<eew)-1)) })
+    val clip_lo   = signs.zip(his).map({ case (s,h) =>  s && h =/= ~0.U((8 << eew).W) })
+    val clip_hi   = signs.zip(his).map({ case (s,h) => !s && h =/=  0.U((8 << eew).W) })
+    val clip_neg  = Cat(1.U, 0.U(((8 << eew)-1).W))
+    val clip_pos  = ~clip_neg
+    val clip_value = VecInit(signs.map(s => Mux(s, clip_neg, clip_pos))).asUInt
+    val clip = clip_lo.zip(clip_hi).map(t => t._1 || t._2)
+    (FillInterleaved((1 << eew), clip), clip_value)
+  }).unzip
+  val narrow_signed_mask = VecInit(narrow_signed_masks)(io.in_eew - 1.U)
+  val narrow_signed_clip = VecInit(narrow_signed_clips)(io.in_eew - 1.U).asTypeOf(Vec(dLenB >> 1, UInt(8.W)))
+
+  val narrow_mask = Mux(io.signed, narrow_signed_mask, narrow_unsigned_mask)
+  val narrow_clip = Mux(io.signed, narrow_signed_clip, narrow_unsigned_clip)
+
+  val narrow_out_clipped = VecInit(narrow_out_elems.map(e => VecInit(e).asUInt))(io.in_eew - 1.U)
+    .asTypeOf(Vec(dLenB >> 1, UInt(8.W)))
+    .zip(narrow_mask.asBools)
+    .zip(narrow_clip).map ({ case ((o,s),c) => Mux(s && io.scaling, c, o) })
+  val narrow_out = Fill(2, narrow_out_clipped.asUInt).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  io.out := Mux(io.narrowing,
+    narrow_out,
+    Mux(io.scaling,
+      scaling_array.io.out,
+      Mux(io.shl, shifted_left, shifted_right))
+  )
+  io.set_vxsat := io.narrowing && io.scaling && narrow_mask =/= 0.U
 }
 
-class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true)(p) {
+class SaturatedSumArray(dLenB: Int) extends Module {
+  val dLen = dLenB * 8
+  val io = IO(new Bundle {
+    val sum      = Input(Vec(dLenB, UInt(8.W)))
+    val carry    = Input(Vec(dLenB, Bool()))
+    val in1_sign = Input(Vec(dLenB, Bool()))
+    val in2_sign = Input(Vec(dLenB, Bool()))
+    val sub      = Input(Bool())
+    val eew      = Input(UInt(2.W))
+    val signed   = Input(Bool())
+
+    val set_vxsat = Output(Bool())
+    val out       = Output(Vec(dLenB, UInt(8.W)))
+  })
+
+  val unsigned_mask = VecInit.tabulate(4)({ eew =>
+    FillInterleaved(1 << eew, VecInit.tabulate(dLenB >> eew)(i => io.sub ^ io.carry(((i+1) << eew)-1)).asUInt)
+  })(io.eew)
+  val unsigned_clip = Mux(io.sub, 0.U(dLen.W), ~(0.U(dLen.W))).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  val (signed_masks, signed_clips): (Seq[UInt], Seq[UInt]) = Seq.tabulate(4)({ eew =>
+    val out_sign = VecInit.tabulate(dLenB >> eew)(i =>      io.sum(((i+1)<<eew)-1)(7)).asUInt
+    val vs2_sign = VecInit.tabulate(dLenB >> eew)(i => io.in2_sign(((i+1)<<eew)-1)   ).asUInt
+    val vs1_sign = VecInit.tabulate(dLenB >> eew)(i => io.in1_sign(((i+1)<<eew)-1)   ).asUInt
+    val input_xor  = vs2_sign ^ vs1_sign
+    val may_clip   = Mux(io.sub, input_xor, ~input_xor) // add clips when signs match, sub clips when signs mismatch
+    val clip       = (vs2_sign ^ out_sign) & may_clip   // clips if the output sign doesn't match the input sign
+    val clip_neg   = Cat(1.U, 0.U(((8 << eew)-1).W))
+    val clip_pos   = ~clip_neg
+    val clip_value = VecInit(vs2_sign.asBools.map(sign => Mux(sign, clip_neg, clip_pos))).asUInt
+    (FillInterleaved((1 << eew), clip), clip_value)
+  }).unzip
+  val signed_mask = VecInit(signed_masks)(io.eew)
+  val signed_clip = VecInit(signed_clips)(io.eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  val mask = Mux(io.signed, signed_mask, unsigned_mask)
+  val clip = Mux(io.signed, signed_clip, unsigned_clip)
+  io.out := io.sum.zipWithIndex.map { case (o,i) => Mux(mask(i), clip(i), o) }
+  io.set_vxsat := mask.orR
+}
+
+class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   io.iss.sub_dlen := 0.U
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
@@ -124,50 +259,58 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val vd_eew   = io.pipe(0).bits.vd_eew
 
   lazy val ctrl_table = Seq(
-    (OPIFunct6.add    , Seq(N,X,N,N,N,X,N,X,N,X)),
-    (OPIFunct6.sub    , Seq(Y,X,N,N,N,X,N,X,N,X)),
-    (OPIFunct6.rsub   , Seq(Y,X,N,N,N,X,N,X,Y,X)),
-    (OPMFunct6.waddu  , Seq(N,N,N,N,N,X,N,X,N,X)),
-    (OPMFunct6.wadd   , Seq(N,Y,N,N,N,X,N,X,N,X)),
-    (OPMFunct6.wsubu  , Seq(Y,N,N,N,N,X,N,X,N,X)),
-    (OPMFunct6.wsub   , Seq(Y,Y,N,N,N,X,N,X,N,X)),
-    (OPMFunct6.wadduw , Seq(N,N,Y,N,N,X,N,X,N,X)),
-    (OPMFunct6.waddw  , Seq(N,Y,Y,N,N,X,N,X,N,X)),
-    (OPMFunct6.wsubuw , Seq(Y,N,Y,N,N,X,N,X,N,X)),
-    (OPMFunct6.wsubw  , Seq(Y,Y,Y,N,N,X,N,X,N,X)),
-    (OPIFunct6.adc    , Seq(N,X,N,N,N,X,N,X,N,X)),
-    (OPIFunct6.madc   , Seq(N,X,N,N,N,X,Y,N,N,X)),
-    (OPIFunct6.sbc    , Seq(Y,X,N,N,N,X,N,X,N,X)),
-    (OPIFunct6.msbc   , Seq(Y,X,N,N,N,X,Y,N,N,X)),
-    (OPIFunct6.and    , Seq(X,X,X,Y,N,X,N,X,X,X)),
-    (OPIFunct6.or     , Seq(X,X,X,Y,N,X,N,X,X,X)),
-    (OPIFunct6.xor    , Seq(X,X,X,Y,N,X,N,X,X,X)),
-    (OPMFunct6.xunary0, Seq(X,X,X,N,N,X,N,X,X,X)),
-    (OPIFunct6.sll    , Seq(X,X,N,N,Y,Y,N,X,X,X)),
-    (OPIFunct6.sra    , Seq(X,X,N,N,Y,N,N,X,X,X)),
-    (OPIFunct6.srl    , Seq(X,N,N,N,Y,N,N,X,X,X)),
-    (OPIFunct6.nsra   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
-    (OPIFunct6.nsrl   , Seq(X,N,Y,N,Y,N,N,X,X,X)),
-    (OPIFunct6.mseq   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
-    (OPIFunct6.msne   , Seq(X,X,X,N,N,X,Y,Y,X,N)),
-    (OPIFunct6.msltu  , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-    (OPIFunct6.mslt   , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-    (OPIFunct6.msleu  , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-    (OPIFunct6.msle   , Seq(X,X,X,N,N,X,Y,Y,N,Y)),
-    (OPIFunct6.msgtu  , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
-    (OPIFunct6.msgt   , Seq(X,X,X,N,N,X,Y,Y,Y,Y)),
-    (OPIFunct6.minu   , Seq(X,X,X,N,N,X,N,X,N,Y)),
-    (OPIFunct6.min    , Seq(X,X,X,N,N,X,N,X,N,Y)),
-    (OPIFunct6.maxu   , Seq(X,X,X,N,N,X,N,X,Y,Y)),
-    (OPIFunct6.max    , Seq(X,X,X,N,N,X,N,X,Y,Y)),
-    (OPIFunct6.merge  , Seq(X,X,X,N,N,X,N,X,N,X)),
-    (OPIFunct6.saddu  , Seq(N,X,N,N,N,X,N,X,N,X)),
-    (OPIFunct6.sadd   , Seq(N,X,N,N,N,X,N,X,N,X)),
-    (OPIFunct6.ssubu  , Seq(Y,X,N,N,N,X,N,X,N,X)),
-    (OPIFunct6.ssub   , Seq(Y,X,N,N,N,X,N,X,N,X)),
+    (OPIFunct6.add    , Seq(N,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.sub    , Seq(Y,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.rsub   , Seq(Y,X,N,N,X,N,X,Y,X,N)),
+    (OPMFunct6.waddu  , Seq(N,N,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wadd   , Seq(N,Y,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsubu  , Seq(Y,N,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsub   , Seq(Y,Y,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wadduw , Seq(N,N,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.waddw  , Seq(N,Y,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsubuw , Seq(Y,N,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsubw  , Seq(Y,Y,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.adc    , Seq(N,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.madc   , Seq(N,X,N,N,X,Y,N,N,X,N)),
+    (OPIFunct6.sbc    , Seq(Y,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.msbc   , Seq(Y,X,N,N,X,Y,N,N,X,N)),
+    (OPIFunct6.and    , Seq(X,X,Y,N,X,N,X,X,X,N)),
+    (OPIFunct6.or     , Seq(X,X,Y,N,X,N,X,X,X,N)),
+    (OPIFunct6.xor    , Seq(X,X,Y,N,X,N,X,X,X,N)),
+    (OPMFunct6.xunary0, Seq(X,X,N,N,X,N,X,X,X,N)),
+    (OPIFunct6.sll    , Seq(X,X,N,Y,Y,N,X,X,X,N)),
+    (OPIFunct6.sra    , Seq(X,X,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.srl    , Seq(X,N,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nsra   , Seq(X,N,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nsrl   , Seq(X,N,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.mseq   , Seq(X,X,N,N,X,Y,Y,X,N,N)),
+    (OPIFunct6.msne   , Seq(X,X,N,N,X,Y,Y,X,N,N)),
+    (OPIFunct6.msltu  , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.mslt   , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.msleu  , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.msle   , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.msgtu  , Seq(X,X,N,N,X,Y,Y,Y,Y,N)),
+    (OPIFunct6.msgt   , Seq(X,X,N,N,X,Y,Y,Y,Y,N)),
+    (OPIFunct6.minu   , Seq(X,X,N,N,X,N,X,N,Y,N)),
+    (OPIFunct6.min    , Seq(X,X,N,N,X,N,X,N,Y,N)),
+    (OPIFunct6.maxu   , Seq(X,X,N,N,X,N,X,Y,Y,N)),
+    (OPIFunct6.max    , Seq(X,X,N,N,X,N,X,Y,Y,N)),
+    (OPIFunct6.merge  , Seq(X,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.saddu  , Seq(N,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.sadd   , Seq(N,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.ssubu  , Seq(Y,X,N,N,X,N,X,N,X,N)),
+    (OPIFunct6.ssub   , Seq(Y,X,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.aadd   , Seq(N,X,N,N,X,N,X,N,X,Y)),
+    (OPMFunct6.aaddu  , Seq(N,X,N,N,X,N,X,N,X,Y)),
+    (OPMFunct6.asub   , Seq(Y,X,N,N,X,N,X,N,X,Y)),
+    (OPMFunct6.asubu  , Seq(Y,X,N,N,X,N,X,N,X,Y)),
+    (OPIFunct6.ssrl   , Seq(X,X,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.ssra   , Seq(X,X,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nclip  , Seq(X,N,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nclipu , Seq(X,N,N,Y,N,N,X,X,X,N)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  val ctrl_sub :: ctrl_add_sext :: ctrl_narrow_vs1 :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: Nil = VecDecode.applyBools(
+  val ctrl_sub :: ctrl_add_sext :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(10)(X), ctrl_table)
   val ctrl_cmask = (
@@ -200,45 +343,31 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   val in1_bytes = Mux(ctrl_rev12, rvs2_bytes, rvs1_bytes)
   val in2_bytes = Mux(ctrl_rev12, rvs1_bytes, rvs2_bytes)
 
-  val add_use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
-    Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
-  })(rvs2_eew))
+  def narrow2_expand(bits: Seq[UInt], eew: UInt, upper: Bool, sext: Bool): Vec[UInt] = {
+    val narrow_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
+    for (eew <- 0 until 3) {
+      val in_vec = bits.grouped(1 << eew).map(g => VecInit(g).asUInt).toSeq
+      for (i <- 0 until dLenB >> (eew + 1)) {
+        val lo = Mux(upper, in_vec(i + (dLenB >> (eew + 1))), in_vec(i))
+        val hi = Fill(16 << eew, lo((8 << eew)-1) && sext)
+        narrow_eew(eew)(i) := Cat(hi, lo)
+      }
+    }
+    VecInit(narrow_eew.map(_.asUInt))(eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+  }
+
+  val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew,
+    Mux(ctrl_shift, (io.pipe(0).bits.eidx >> (dLenOffBits.U - rvs2_eew))(0), io.pipe(0).bits.wvd_eg(0)),
+    ctrl_add_sext)
+  val narrow_vs2 = narrow2_expand(rvs2_bytes, rvs2_eew,
+    io.pipe(0).bits.wvd_eg(0),
+    ctrl_add_sext)
+
   val add_mask_carry = VecInit.tabulate(4)({ eew =>
     VecInit((0 until dLenB >> eew).map { i => io.pipe(0).bits.rmask(i) | 0.U((1 << eew).W) }).asUInt
   })(rvs2_eew)
   val add_carry = Wire(Vec(dLenB, UInt(1.W)))
   val add_out = Wire(Vec(dLenB, UInt(8.W)))
-  val add_wide_out_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> eew, UInt((16 << eew).W))) }
-  val add_wide_out = VecInit(add_wide_out_eew.map(_.asUInt))(rvs2_eew)
-  val add_narrow_vs1_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
-  val add_narrow_vs1 = VecInit(add_narrow_vs1_eew.map(_.asUInt))(rvs1_eew).asTypeOf(Vec(dLenB, UInt(8.W)))
-
-  val sat_hi_bits = (0 until 4).map { eew => Mux(sat_signed,
-    VecInit.tabulate(dLenB >> eew)(i => add_out((i << eew))(7)).asUInt,
-    VecInit.tabulate(dLenB >> eew)(i => add_carry(((i+1) << eew)-1)).asUInt
-  )}
-  val sat_unsigned_mask = VecInit.tabulate(4)({ eew =>
-    FillInterleaved(1 << eew, VecInit.tabulate(dLenB >> eew)(i => ctrl_sub ^ add_carry(((i+1) << eew)-1)).asUInt)
-  })(vd_eew)
-  val sat_unsigned_clip = Mux(sat_addu, ~(0.U(dLen.W)), 0.U(dLen.W)).asTypeOf(Vec(dLenB, UInt(8.W)))
-
-  val (sat_signed_masks, sat_signed_clips): (Seq[UInt], Seq[UInt]) = Seq.tabulate(4)({ eew =>
-    val out_sign = VecInit.tabulate(dLenB >> eew)(i =>    add_out(((i+1)<<eew)-1)(7)).asUInt
-    val vs2_sign = VecInit.tabulate(dLenB >> eew)(i => rvs2_bytes(((i+1)<<eew)-1)(7)).asUInt
-    val vs1_sign = VecInit.tabulate(dLenB >> eew)(i => rvs1_bytes(((i+1)<<eew)-1)(7)).asUInt
-    val input_xor  = vs2_sign ^ vs1_sign
-    val may_clip   = Mux(ctrl_sub, input_xor, ~input_xor) // add clips when signs match, sub clips when signs mismatch
-    val clip       = (vs2_sign ^ out_sign) & may_clip     // clips if the output sign doesn't match the input sign
-    val clip_neg   = Cat(1.U, 0.U(((8 << eew)-1).W))
-    val clip_pos   = ~clip_neg
-    val clip_value = VecInit(vs2_sign.asBools.map(sign => Mux(sign, clip_neg, clip_pos))).asUInt
-    (FillInterleaved((1 << eew), clip), clip_value)
-  }).unzip
-  val sat_signed_mask = VecInit(sat_signed_masks)(vd_eew)
-  val sat_signed_clip = VecInit(sat_signed_clips)(vd_eew).asTypeOf(Vec(dLenB, UInt(8.W)))
-  val sat_mask = Mux(sat_signed, sat_signed_mask, sat_unsigned_mask)
-  val sat_clip = Mux(sat_signed, sat_signed_clip, sat_unsigned_clip)
-  val sat_out = VecInit(add_out.zipWithIndex.map { case (o,i) => Mux(sat_mask(i), sat_clip(i), o) })
 
   val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
   val merge_out  = VecInit((0 until dLenB).map { i => Mux(merge_mask(i), rvs1_bytes(i), rvs2_bytes(i)) }).asUInt
@@ -248,12 +377,16 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   })(rvs1_eew)
 
   val adder_arr = Module(new AdderArray(dLenB))
-  adder_arr.io.in1 := Mux(ctrl_narrow_vs1, add_narrow_vs1, in1_bytes)
-  adder_arr.io.in2 := in2_bytes
-  adder_arr.io.use_carry  := add_use_carry
+  adder_arr.io.in1 := Mux(rvs1_eew < vd_eew, narrow_vs1, in1_bytes)
+  adder_arr.io.in2 := Mux(rvs2_eew < vd_eew, narrow_vs2, in2_bytes)
+  adder_arr.io.incr.foreach(_ := false.B)
+  adder_arr.io.avg := ctrl_avg
+  adder_arr.io.eew := vd_eew
+  adder_arr.io.rm  := io.pipe(0).bits.vxrm
   adder_arr.io.mask_carry := add_mask_carry
   adder_arr.io.sub        := ctrl_sub
   adder_arr.io.cmask      := ctrl_cmask
+  adder_arr.io.signed     := io.pipe(0).bits.funct6(0)
   add_out   := adder_arr.io.out
   add_carry := adder_arr.io.carry
 
@@ -263,43 +396,34 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   cmp_arr.io.eew := rvs1_eew
   cmp_arr.io.signed := io.pipe(0).bits.funct6(0)
   cmp_arr.io.less   := cmp_less
-  cmp_arr.io.sle    := io.pipe(0).bits.funct6(1,0) === 2.U
+  cmp_arr.io.sle    := io.pipe(0).bits.funct6(2,1) === 2.U
   cmp_arr.io.inv    := io.pipe(0).bits.funct6(0)
   val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(cmp_arr.io.minmax.asBools).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
 
   val mask_out = Fill(8, Mux(ctrl_cmp, cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl_sub)))
 
-  for (eew <- 0 until 3) {
-    val in_vec = rvs1_bytes.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
-    for (i <- 0 until dLenB >> (eew + 1)) {
-      val hi_sel = Mux(ctrl_shift, (io.pipe(0).bits.eidx >> (dLenOffBits.U - rvs2_eew))(0), io.pipe(0).bits.wvd_eg(0))
-      val lo = Mux(hi_sel, in_vec(i + (dLenB >> (eew + 1))), in_vec(i))
-      val hi = Fill(16 << eew, lo((8 << eew)-1) && ctrl_add_sext)
-      add_narrow_vs1_eew(eew)(i) := Cat(hi, lo)
-    }
-
-    val out_vec = add_out.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
-    for (i <- 0 until dLenB >> eew) {
-      val carry = add_carry(((i+1) << eew)-1)
-      val hi1 = (ctrl_add_sext && rvs1_bytes(((i + 1) << eew) - 1)(7)) ^ ctrl_sub
-      val hi2 = ctrl_add_sext && rvs2_bytes(((i + 1) << eew) - 1)(7)
-      val hi = Mux(hi1 && hi2, ~(1.U((8 << eew).W)), Fill(8 << eew, hi1 ^ hi2))
-      add_wide_out_eew(eew)(i) := Cat(hi + carry, out_vec(i))
-    }
-  }
-
+  val shift_narrowing = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.nclip, OPIFunct6.nclipu, OPIFunct6.nsra, OPIFunct6.nsrl)
   val shift_arr = Module(new ShiftArray(dLenB))
   shift_arr.io.in_eew := rvs2_eew
   shift_arr.io.in     := rvs2_bytes
-  shift_arr.io.shamt_eew := rvs1_eew
-  shift_arr.io.shamt     := Mux(ctrl_narrow_vs1, add_narrow_vs1, rvs1_bytes)
+  shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes)
   shift_arr.io.shl       := ctrl_shift_left
-  shift_arr.io.sra       := io.pipe(0).bits.funct6(0)
+  shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
+  shift_arr.io.rm        := io.pipe(0).bits.vxrm
+  shift_arr.io.scaling   := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl, OPIFunct6.nclip, OPIFunct6.nclipu)
+  shift_arr.io.narrowing := shift_narrowing
 
-  val shift_out = shift_arr.io.out
-  val shift_narrowing_out = VecInit.tabulate(3)({eew =>
-    Fill(2, VecInit(shift_out.grouped(2 << eew).map(_.take(1 << eew)).flatten.toSeq).asUInt)
-  })(rvs1_eew)
+  val shift_out = shift_arr.io.out.asUInt
+
+  val sat_arr = Module(new SaturatedSumArray(dLenB))
+  sat_arr.io.sum      := add_out
+  sat_arr.io.carry    := add_carry
+  sat_arr.io.in1_sign := rvs1_bytes.map(_(7))
+  sat_arr.io.in2_sign := rvs2_bytes.map(_(7))
+  sat_arr.io.sub      := ctrl_sub
+  sat_arr.io.eew      := vd_eew
+  sat_arr.io.signed   := io.pipe(0).bits.funct6(0)
+  val sat_out = sat_arr.io.out.asUInt
 
   val xunary0_eew_mul = io.pipe(0).bits.vd_eew - rvs2_eew
   val xunary0_in = (1 until 4).map { m =>
@@ -326,10 +450,10 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
     (ctrl_xunary0        , xunary0_out),
     (ctrl_bw             , bw_out),
     (ctrl_mask_write     , mask_out),
-    (ctrl_shift          , Mux(ctrl_narrow_vs1, shift_narrowing_out, shift_out.asUInt)),
+    (ctrl_shift          , shift_out),
     (ctrl_minmax         , minmax_out),
     (ctrl_merge          , merge_out),
-    (ctrl_sat            , sat_out.asUInt)
+    (ctrl_sat            , sat_out)
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 
@@ -341,16 +465,11 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, tru
   })(rvs1_eew) << mask_write_offset)(dLen-1,0)
 
   io.write.valid     := io.pipe(0).valid
-  io.write.bits.eg   := io.pipe(0).bits.wvd_eg >> 1
-  io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
-  io.write.bits.data := Fill(2, out)
+  io.write.bits.eg   := io.pipe(0).bits.wvd_eg
+  io.write.bits.mask := Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
+  io.write.bits.data := out
 
-  io.set_vxsat := io.pipe(0).valid && ctrl_sat && sat_mask.orR
   io.exc.bits := 0.U
   io.exc.valid := false.B
-
-  when (io.pipe(0).bits.wvd_widen2) {
-    io.write.bits.mask := FillInterleaved(8, FillInterleaved(2, io.pipe(0).bits.wmask))
-    io.write.bits.data := add_wide_out
-  }
+  io.set_vxsat := io.pipe(0).valid && ((ctrl_sat && sat_arr.io.set_vxsat) || (ctrl_shift && shift_arr.io.set_vxsat))
 }

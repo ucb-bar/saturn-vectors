@@ -7,19 +7,34 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
+object VectorParams {
+  def minParams = VectorParams()
+  def refParams = VectorParams(vlissqEntries = 3, vsissqEntries = 3, vxissqEntries = 3, vatSz = 5, doubleBufferSegments = true)
+
+}
+
 case class VectorParams(
+  // In-order dispatch Queue
   vdqEntries: Int = 4,
 
+  // Load store instruction queues (in VLSU)
   vliqEntries: Int = 4,
   vsiqEntries: Int = 4,
 
+  // Load store in-flight queues (in VLSU)
   vlifqEntries: Int = 4,
   vsifqEntries: Int = 4,
+
+  // Load/store/execute/maskindex issue queues
+  vlissqEntries: Int = 1,
+  vsissqEntries: Int = 1,
+  vxissqEntries: Int = 1,
+  vimissqEntries: Int = 1,
 
   dLen: Int = 64,
   vatSz: Int = 3,
 
-  doubleBufferSegments: Boolean = true
+  doubleBufferSegments: Boolean = false
 )
 
 case object VectorParamsKey extends Field[VectorParams]

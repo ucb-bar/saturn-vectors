@@ -1,13 +1,28 @@
-package vector.common
+package vector.backend
 
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
-import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
+import vector.common._
 
 class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
+  def issQEntries = vParams.vsissqEntries
+  val issq = Module(new DCEQueue(new VectorIssueInst, issQEntries, pipe=true))
+
+  def accepts(inst: VectorIssueInst) = inst.vmu && inst.opcode(5)
+  io.dis.ready := !accepts(io.dis.bits) || issq.io.enq.ready
+  issq.io.enq.valid := io.dis.valid && accepts(io.dis.bits)
+  issq.io.enq.bits := io.dis.bits
+
+  for (i <- 0 until issQEntries) {
+    val inst = issq.io.peek(i).bits
+    io.iss_hazards(i).valid    := issq.io.peek(i).valid
+    io.iss_hazards(i).bits.vat := inst.vat
+    val nf_log2 = VecInit.tabulate(8)({nf => log2Ceil(nf+1).U})(inst.nf)
+    io.iss_hazards(i).bits.rintent := get_arch_mask(inst.rd, inst.pos_lmul +& nf_log2, 5) | Mux(!inst.vm, 1.U, 0.U)
+    io.iss_hazards(i).bits.wintent := 0.U
+  }
+
   val valid    = RegInit(false.B)
   val inst     = Reg(new VectorIssueInst)
   val eidx     = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -20,39 +35,40 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, sub_dlen)
   val last      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
-  val active = io.dis.inst.vmu && io.dis.inst.opcode(5)
-  io.dis.ready := !active || !valid || (last && io.iss.fire)
+  issq.io.deq.ready := !valid || (last && io.iss.fire)
 
-  when (io.dis.fire && active) {
+  when (issq.io.deq.fire) {
+    val iss_inst = issq.io.deq.bits
     valid := true.B
-    inst  := io.dis.inst
-    eidx  := io.dis.inst.vstart
+    inst  := iss_inst
+    eidx  := iss_inst.vstart
     sidx  := 0.U
 
     val rvd_arch_mask = Wire(Vec(32, Bool()))
     for (i <- 0 until 32) {
-      val group = i.U >> io.dis.inst.pos_lmul
-      val rd_group = io.dis.inst.rd >> io.dis.inst.pos_lmul
-      rvd_arch_mask(i) := group >= rd_group && group <= (rd_group + io.dis.inst.nf)
+      val group = i.U >> iss_inst.pos_lmul
+      val rd_group = iss_inst.rd >> iss_inst.pos_lmul
+      rvd_arch_mask(i) := group >= rd_group && group <= (rd_group + iss_inst.nf)
     }
     rvd_mask := FillInterleaved(egsPerVReg, rvd_arch_mask.asUInt)
-    rvm_mask := Mux(!io.dis.inst.vm, ~(0.U(egsPerVReg.W)), 0.U)
-    sub_dlen := Mux(io.dis.inst.seg_nf =/= 0.U && (dLenOffBits.U > (3.U +& io.dis.inst.mem_elem_size)),
-      dLenOffBits.U - 3.U - io.dis.inst.mem_elem_size,
+    rvm_mask := Mux(!iss_inst.vm, ~(0.U(egsPerVReg.W)), 0.U)
+    sub_dlen := Mux(iss_inst.seg_nf =/= 0.U && (dLenOffBits.U > (3.U +& iss_inst.mem_elem_size)),
+      dLenOffBits.U - 3.U - iss_inst.mem_elem_size,
       0.U)
   } .elsewhen (last && io.iss.fire) {
     valid := false.B
   }
 
-  io.seq_hazards.valid := valid
-  io.seq_hazards.rintent := rvd_mask | rvm_mask
-  io.seq_hazards.wintent := 0.U
-  io.seq_hazards.vat := inst.vat
+  io.vat := inst.vat
+  io.seq_hazard.valid := valid
+  io.seq_hazard.bits.rintent := rvd_mask | rvm_mask
+  io.seq_hazard.bits.wintent := 0.U
+  io.seq_hazard.bits.vat := inst.vat
 
   val vd_read_oh = UIntToOH(io.rvd.req.bits)
   val vm_read_oh = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)
 
-  val raw_hazard = ((vm_read_oh | vd_read_oh) & io.seq_hazards.writes) =/= 0.U
+  val raw_hazard = ((vm_read_oh | vd_read_oh) & io.older_writes) =/= 0.U
   val data_hazard = raw_hazard
 
   io.rvd.req.valid := valid
@@ -71,7 +87,6 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.vd_eew    := DontCare
   io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_eg    := DontCare
-  io.iss.bits.wvd_widen2 := false.B
   io.iss.bits.rs1        := inst.rs1
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare

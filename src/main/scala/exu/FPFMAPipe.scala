@@ -65,7 +65,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
 }
 
 
-class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p) with HasFPUParameters {
+class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with HasFPUParameters {
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
