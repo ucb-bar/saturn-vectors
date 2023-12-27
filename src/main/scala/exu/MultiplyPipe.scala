@@ -8,9 +8,9 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth, false)(p) {
+class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
 
-  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
+  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.vd_eew
   io.set_vxsat := false.B
 
   val aluFn = new ALUFN

@@ -120,7 +120,6 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val wmask   = UInt(dLenB.W)
 
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
-  val wvd_widen2 = Bool()
 
   val funct3 = UInt(3.W)
   def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)
@@ -144,8 +143,7 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
 class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val vat = UInt(vParams.vatSz.W)
   val eg = UInt(log2Ceil(egsTotal).W)
-  val widen2 = Bool()
-  def eg_oh = Mux(widen2, FillInterleaved(2, UIntToOH(eg >> 1) ), UIntToOH(eg))
+  def eg_oh = UIntToOH(eg)
 }
 
 class SequencerHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

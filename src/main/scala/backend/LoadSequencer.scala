@@ -84,7 +84,6 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.vd_eew    := inst.mem_elem_size
   io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.pos_lmul), eidx, inst.mem_elem_size)
-  io.iss.bits.wvd_widen2 := false.B
   io.iss.bits.rs1        := inst.rs1
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare

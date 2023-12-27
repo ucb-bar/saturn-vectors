@@ -40,7 +40,6 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   io.hazard.valid       := valid
   io.hazard.bits.vat    := op.vat
   io.hazard.bits.eg     := op.wvd_eg
-  io.hazard.bits.widen2 := false.B
 
   val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, div.io.resp.bits.data((8<<eew)-1,0)) })(op.rvs1_eew)
   div.io.resp.ready  := io.write.ready

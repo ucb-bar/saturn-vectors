@@ -50,14 +50,14 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
   io.set_vxsat := fus.map(_.io.set_vxsat).orR
 
   if (pipe_fus.size > 0) {
-    val iss_wbank = Mux(io.iss.bits.wvd_widen2, 3.U, UIntToOH(io.iss.bits.wvd_eg(0)))
+    val iss_wbank = UIntToOH(io.iss.bits.wvd_eg(0))
     val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
 
     val pipe_valids    = Seq.fill(pipe_depth)(RegInit(false.B))
     val pipe_sels      = Seq.fill(pipe_depth)(Reg(UInt(pipe_fus.size.W)))
     val pipe_bits      = Seq.fill(pipe_depth)(Reg(new VectorMicroOp))
     val pipe_latencies = Seq.fill(pipe_depth)(Reg(UInt(log2Ceil(pipe_depth).W)))
-    val pipe_wbanks    = pipe_bits.map { b => Mux(b.wvd_widen2, 3.U, UIntToOH(b.wvd_eg(0))) }
+    val pipe_wbanks    = pipe_bits.map { b => UIntToOH(b.wvd_eg(0)) }
 
 
     pipe_write_hazard := (0 until pipe_depth).map { i =>
@@ -90,19 +90,10 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     val pipe_narrow_writes = pipe_fus.map { pipe => 
       val writes = Wire(Vec(2, Valid(new VectorWrite(dLen))))
       for (b <- 0 until 2) {
-        if (pipe.wideWrite) {
-          val mask = pipe.io.write.bits.mask.asTypeOf(Vec(2, UInt(dLen.W)))(b)
-          val data = pipe.io.write.bits.data.asTypeOf(Vec(2, UInt(dLen.W)))(b)
-          writes(b).valid      := pipe.io.write.valid && mask =/= 0.U
-          writes(b).bits.eg    := pipe.io.write.bits.eg
-          writes(b).bits.data  := data
-          writes(b).bits.mask  := mask
-        } else {
-          writes(b).valid      := pipe.io.write.valid && pipe.io.write.bits.eg(0) === b.U
-          writes(b).bits.eg    := pipe.io.write.bits.eg >> 1
-          writes(b).bits.data  := pipe.io.write.bits.data
-          writes(b).bits.mask  := pipe.io.write.bits.mask
-        }
+        writes(b).valid      := pipe.io.write.valid && pipe.io.write.bits.eg(0) === b.U
+        writes(b).bits.eg    := pipe.io.write.bits.eg >> 1
+        writes(b).bits.data  := pipe.io.write.bits.data
+        writes(b).bits.mask  := pipe.io.write.bits.mask
       }
       writes
     }
@@ -124,7 +115,6 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
       io.hazards(i).valid       := pipe_valids(i)
       io.hazards(i).bits.vat    := pipe_bits(i).vat
       io.hazards(i).bits.eg     := pipe_bits(i).wvd_eg
-      io.hazards(i).bits.widen2 := pipe_bits(i).wvd_widen2
     }
   }
 

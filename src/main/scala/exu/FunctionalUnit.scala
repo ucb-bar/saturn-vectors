@@ -18,8 +18,8 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
   val set_vxsat = Output(Bool())
 }
 
-class PipelinedFunctionalUnitIO(depth: Int, wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnitIO {
-  val write = Valid(new VectorWrite(if (wideWrite) (dLen << 1) else dLen))
+class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends FunctionalUnitIO {
+  val write = Valid(new VectorWrite(dLen))
   val pipe = Input(Vec(depth, Valid(new VectorMicroOp)))
 }
 
@@ -50,8 +50,8 @@ abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) wi
   }
 }
 
-abstract class PipelinedFunctionalUnit(val depth: Int, val wideWrite: Boolean)(implicit p: Parameters) extends FunctionalUnit()(p) {
-  val io = IO(new PipelinedFunctionalUnitIO(depth, wideWrite))
+abstract class PipelinedFunctionalUnit(val depth: Int)(implicit p: Parameters) extends FunctionalUnit()(p) {
+  val io = IO(new PipelinedFunctionalUnitIO(depth))
 
   require (depth > 0)
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
