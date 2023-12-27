@@ -3,27 +3,20 @@ package vector.common
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.rocket._
-import freechips.rocketchip.util._
-import freechips.rocketchip.tile._
+import freechips.rocketchip.tile.{CoreModule}
+import vector.common._
 
 abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  def issQEntries: Int
   val io = IO(new Bundle {
-    val dis = new Bundle {
-      val fire = Input(Bool())
-      val ready = Output(Bool())
-      val inst = Input(new VectorIssueInst)
-    }
+    val dis = Flipped(Decoupled(new VectorIssueInst))
 
-    val seq_hazards = new Bundle {
-      val valid = Output(Bool())
-      val rintent = Output(UInt(egsTotal.W))
-      val wintent = Output(UInt(egsTotal.W))
-      val vat = Output(UInt(vParams.vatSz.W))
+    val iss_hazards = Output(Vec(issQEntries, Valid(new InstructionHazard)))
+    val seq_hazard = Output(Valid(new SequencerHazard))
 
-      val writes = Input(UInt(egsTotal.W))
-      val reads = Input(UInt(egsTotal.W))
-    }
+    val vat = Output(UInt(vParams.vatSz.W))
+    val older_writes = Input(UInt(egsTotal.W))
+    val older_reads  = Input(UInt(egsTotal.W))
 
     val busy = Output(Bool())
 
@@ -35,11 +28,13 @@ abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) wit
     val iss = Decoupled(new VectorMicroOp)
     val sub_dlen = Input(UInt(log2Ceil(dLenB).W))
   })
+  def accepts(inst: VectorIssueInst): Bool
+
   def min(a: UInt, b: UInt) = Mux(a > b, b, a)
-  def get_group_mask(log2mul: UInt, max: Int) = Mux1H((0 until max).map { i =>
-    (i.U === log2mul, ~(((1 << i) - 1).U(5.W)))
-  })
-  def get_arch_mask(reg: UInt, mask: UInt) = VecInit.tabulate(32) { i => (i.U & mask) === (reg & mask) }.asUInt
+  def get_arch_mask(reg: UInt, pos_lmul: UInt, max_lmul: Int) = VecInit.tabulate(max_lmul+1)({ lmul =>
+    FillInterleaved(1 << lmul, UIntToOH(reg >> lmul)((32>>lmul)-1,0))
+  })(pos_lmul)
+
   def get_head_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask << (eidx << eew)(dLenOffBits-1,0)
   def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask >> (0.U(dLenOffBits.W) - (eidx << eew)(dLenOffBits-1,0))
   def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {

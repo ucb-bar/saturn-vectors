@@ -65,7 +65,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
 }
 
 
-class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)(p) with HasFPUParameters {
+class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with HasFPUParameters {
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
@@ -112,10 +112,10 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)
     val vs2_bits = Mux(ctrl_widen_vd && !ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
 
     fma_pipe.io.mask := Cat((io.pipe(0).bits.rvs1_eew === 2.U) && io.pipe(0).bits.wmask((i*8)+4), io.pipe(0).bits.wmask(i*8))
-    fma_pipe.io.fma := ctrl_fma && ctrl_add
+    fma_pipe.io.fma := ctrl_mul && ctrl_add
 
     // FMA
-    when (ctrl_fma && ctrl_add) {
+    when (ctrl_mul && ctrl_add) {
       fma_pipe.io.b := rs1_bits
       when (ctrl_swap23) {
         fma_pipe.io.a := vec_rvd(i)
@@ -126,7 +126,7 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)
       }
     }
     // Multiply
-    .elsewhen (ctrl_fma) {
+    .elsewhen (ctrl_mul) {
       fma_pipe.io.a := vs2_bits
       fma_pipe.io.b := rs1_bits
       fma_pipe.io.c := 0.U
@@ -153,9 +153,9 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)
   }
 
   io.write.valid := io.pipe(depth-1).valid
-  io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg >> 1
-  io.write.bits.mask := Fill(2, FillInterleaved(8, io.pipe(depth-1).bits.wmask))
-  io.write.bits.data := Fill(2, fma_pipes.map(pipe => pipe.out).asUInt)
+  io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
+  io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
+  io.write.bits.data := fma_pipes.map(pipe => pipe.out).asUInt
 
   io.exc.valid := io.write.valid
   io.exc.bits := fma_pipes.map(pipe => pipe.exc).reduce(_ | _) 
