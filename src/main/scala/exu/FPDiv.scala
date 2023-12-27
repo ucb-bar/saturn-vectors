@@ -570,7 +570,8 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
   }
 
-  val divSqrt_valid = (op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 0.U) &&  (divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt)
+  //val divSqrt_valid = (op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 0.U) &&  (divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt)
+  val divSqrt_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
 
   val narrow = Module(new hardfloat.RecFNToRecFN(11, 53, 8, 24))
   narrow.io.roundingMode := op.frm
