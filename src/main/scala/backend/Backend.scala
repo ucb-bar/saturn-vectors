@@ -159,13 +159,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     arb.io.in
   }
 
-  writes(0)(0).valid := vxu.io.writes(0).valid
-  writes(0)(0).bits  := vxu.io.writes(0).bits
-  when (vxu.io.writes(0).valid) { assert(writes(0)(0).ready) }
-
-  writes(1)(0).valid := vxu.io.writes(1).valid
-  writes(1)(0).bits  := vxu.io.writes(1).bits
-  when (vxu.io.writes(1).valid) { assert(writes(1)(0).ready) }
+  for (b <- 0 until 2) {
+    writes(b)(0).valid := vxu.io.write.valid && vxu.io.write.bits.eg(0) === b.U
+    writes(b)(0).bits.data  := vxu.io.write.bits.data
+    writes(b)(0).bits.mask  := vxu.io.write.bits.mask
+    writes(b)(0).bits.eg    := vxu.io.write.bits.eg >> 1
+    when (vxu.io.write.valid) { assert(writes(b)(0).ready) }
+  }
 
   load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(0)), writes.map(_(1).ready))
   for (b <- 0 until 2) {
@@ -236,8 +236,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.last, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  for (v <- vxu.io.vat_release)
-    clearVat(v.valid                              , v.bits)
+  clearVat(vxu.io.vat_release.valid               , vxu.io.vat_release.bits)
 
   vxu.io.iss <> vxs.io.iss
   vxs.io.sub_dlen := vxu.io.iss_sub_dlen
