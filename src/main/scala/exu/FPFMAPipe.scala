@@ -92,7 +92,7 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)
     (OPFFunct6.vfwnmsac,  Seq(Y,Y,N,N,Y,N,Y)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = f3.isOneOf(OPFVV, OPFVF)
-  val ctrl_add :: ctrl_fma :: ctrl_swap23 :: ctrl_fmaCmd0 :: ctrl_fmaCmd1 :: ctrl_widen_vs2 :: ctrl_widen_vd :: Nil = VecDecode.applyBools(
+  val ctrl_add :: ctrl_mul :: ctrl_swap23 :: ctrl_fmaCmd0 :: ctrl_fmaCmd1 :: ctrl_widen_vs2 :: ctrl_widen_vd :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(7)(X), ctrl_table
   )
@@ -112,10 +112,10 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)
     val vs2_bits = Mux(ctrl_widen_vd && !ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
 
     fma_pipe.io.mask := Cat((io.pipe(0).bits.rvs1_eew === 2.U) && io.pipe(0).bits.wmask((i*8)+4), io.pipe(0).bits.wmask(i*8))
-    fma_pipe.io.fma := ctrl_fma && ctrl_add
+    fma_pipe.io.fma := ctrl_mul && ctrl_add
 
     // FMA
-    when (ctrl_fma && ctrl_add) {
+    when (ctrl_mul && ctrl_add) {
       fma_pipe.io.b := rs1_bits
       when (ctrl_swap23) {
         fma_pipe.io.a := vec_rvd(i)
@@ -126,7 +126,7 @@ class FPFMAPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3, true)
       }
     }
     // Multiply
-    .elsewhen (ctrl_fma) {
+    .elsewhen (ctrl_mul) {
       fma_pipe.io.a := vs2_bits
       fma_pipe.io.b := rs1_bits
       fma_pipe.io.c := 0.U
