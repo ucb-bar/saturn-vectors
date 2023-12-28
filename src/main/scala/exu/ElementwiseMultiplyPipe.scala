@@ -12,6 +12,8 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
 
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.vd_eew
   io.set_vxsat := false.B
+  io.set_fflags.valid := false.B
+  io.set_fflags.bits := DontCare
 
   val aluFn = new ALUFN
   lazy val ctrl_table = Seq(

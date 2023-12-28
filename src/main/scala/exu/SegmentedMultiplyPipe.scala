@@ -12,6 +12,8 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   // TODO: SMUL currently operates at 1 element/cycle
   io.iss.sub_dlen := Mux(io.iss.op.opif6 === OPIFunct6.smul, log2Ceil(dLenB).U - io.iss.op.vd_eew, 0.U)
   io.set_vxsat := false.B
+  io.set_fflags.valid := false.B
+  io.set_fflags.bits := DontCare
 
   lazy val ctrl_table = Seq(
     (OPMFunct6.mul    , Seq(N,X,X,N,N,X)),

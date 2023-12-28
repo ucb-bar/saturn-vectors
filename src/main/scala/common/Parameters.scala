@@ -35,6 +35,8 @@ case class VectorParams(
   vatSz: Int = 3,
 
   useSegmentedIMul: Boolean = false,
+  useScalarFPUFMAPipe: Boolean = false,
+  fmaPipeDepth: Int = 3,
 
   doubleBufferSegments: Boolean = false
 )

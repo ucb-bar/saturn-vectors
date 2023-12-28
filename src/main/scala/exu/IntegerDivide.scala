@@ -23,6 +23,8 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
 
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
   io.set_vxsat := false.B
+  io.set_fflags.valid := false.B
+  io.set_fflags.bits := DontCare
 
   div.io.req.valid := io.iss.valid && io.iss.ready
 

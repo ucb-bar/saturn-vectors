@@ -50,6 +50,15 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     (OPMFunct6.wmaccus, Seq(Y,N,N)),
     (OPIFunct6.nclip  , Seq(N,Y,N)),
     (OPIFunct6.nclipu , Seq(N,Y,N)),
+    (OPFFunct6.fwadd  , Seq(Y,N,N)),
+    (OPFFunct6.fwsub  , Seq(Y,N,N)),
+    (OPFFunct6.fwaddw , Seq(Y,Y,N)),
+    (OPFFunct6.fwsubw , Seq(Y,Y,N)),
+    (OPFFunct6.fwmul  , Seq(Y,N,N)),
+    (OPFFunct6.fwmacc , Seq(Y,N,N)),
+    (OPFFunct6.fwnmacc, Seq(Y,N,N)),
+    (OPFFunct6.fwmsac , Seq(Y,N,N)),
+    (OPFFunct6.fwnmsac, Seq(Y,N,N)),
   )
 
   def issQEntries = vParams.vxissqEntries
@@ -68,7 +77,10 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   issq.io.enq.bits.renv2       := !(io.dis.bits.opif6 === OPIFunct6.merge && io.dis.bits.vm)
   issq.io.enq.bits.renvd       := io.dis.bits.opmf6.isOneOf(
     OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
-    OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus)
+    OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) || io.dis.bits.opff6.isOneOf(
+    OPFFunct6.fmacc, OPFFunct6.fnmacc, OPFFunct6.fmsac, OPFFunct6.fnmsac,
+    OPFFunct6.fmadd, OPFFunct6.fnmadd, OPFFunct6.fmsub, OPFFunct6.fnmsub,
+    OPFFunct6.fwmacc, OPFFunct6.fwnmacc, OPFFunct6.fwmsac, OPFFunct6.fwnmsac)
   issq.io.enq.bits.renvm       := !io.dis.bits.vm || io.dis.bits.opif6 === OPIFunct6.merge
 
   for (i <- 0 until issQEntries) {
@@ -173,7 +185,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
 
   io.iss.bits.wvd   := true.B
   io.iss.bits.rvs1_data := io.rvs1.resp
-  when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX) && !inst.vmu) {
+  when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
     val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(59, inst.imm5(4)), inst.imm5), inst.rs1_data)
     io.iss.bits.rvs1_data := dLenSplat(rs1_data, vs1_eew)
   }
@@ -191,7 +203,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.last      := last
   io.iss.bits.vat       := inst.vat
   io.iss.bits.vm        := inst.vm
-  io.iss.bits.vxrm      := inst.vxrm
+  io.iss.bits.rm        := inst.rm
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)

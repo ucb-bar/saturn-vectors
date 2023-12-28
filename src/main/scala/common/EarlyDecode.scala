@@ -42,7 +42,8 @@ class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p)
     io.read_rs2 := mop === mopStrided
   } .elsewhen (v_arith) {
     io.legal := true.B
-    io.read_rs1 := funct3.isOneOf(4.U, 6.U)
-    io.read_frs1 := funct3 === 5.U
+    io.read_rs1 := funct3.isOneOf(OPIVX, OPMVX)
+    io.read_frs1 := funct3 === OPFVF
+    io.fp := funct3 === OPFVF
   }
 }

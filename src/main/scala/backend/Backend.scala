@@ -23,6 +23,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val mask_access = new VectorMaskAccessIO
 
     val set_vxsat = Output(Bool())
+    val set_fflags = Output(Valid(UInt(5.W)))
   })
 
   require(vLen >= 64)
@@ -89,7 +90,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vxu = Module(new ExecutionUnit(Seq(
     () => new IntegerPipe,
     () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
-    () => new IterativeIntegerDivider
+    () => new IterativeIntegerDivider,
+    () => new FMAPipe(vParams.fmaPipeDepth)
   )))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
@@ -258,4 +260,5 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
   io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
   io.set_vxsat := vxu.io.set_vxsat
+  io.set_fflags := vxu.io.set_fflags
 }

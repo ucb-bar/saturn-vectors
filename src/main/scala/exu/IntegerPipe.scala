@@ -470,4 +470,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.write.bits.data := out
 
   io.set_vxsat := io.pipe(0).valid && ((ctrl_sat && sat_arr.io.set_vxsat) || (ctrl_shift && shift_arr.io.set_vxsat))
+  io.set_fflags.valid := false.B
+  io.set_fflags.bits := DontCare
 }

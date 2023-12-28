@@ -26,6 +26,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     val busy = Output(Bool())
 
     val set_vxsat = Output(Bool())
+    val set_fflags = Output(Valid(UInt(5.W)))
   })
 
   fus.map(_.io.iss).foreach { iss =>
@@ -48,6 +49,9 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
   io.write.bits := DontCare
   io.busy := false.B
   io.set_vxsat := fus.map(_.io.set_vxsat).orR
+  io.set_fflags.valid := fus.map(_.io.set_fflags.valid).orR
+  io.set_fflags.bits := fus.map(f => Mux(f.io.set_fflags.valid, f.io.set_fflags.bits, 0.U)).reduce(_|_)
+
 
   if (pipe_fus.size > 0) {
     val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))

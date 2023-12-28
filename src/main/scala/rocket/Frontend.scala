@@ -28,6 +28,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   trap_check.io.vm_busy  := vu.io.vm_busy
   io.core.backend_busy   := vu.io.backend_busy
   io.core.set_vxsat      := vu.io.set_vxsat
+  io.core.set_fflags     := vu.io.set_fflags
 
   val hella_simple = Module(new SimpleHellaCacheIF)
   val hella_arb = Module(new HellaCacheArbiter(2))
@@ -140,7 +141,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_core_inst = Wire(new VectorIssueInst)
   x_core_inst.bits := io.core.ex.inst
   x_core_inst.vconfig := io.core.ex.vconfig
-  x_core_inst.vxrm := DontCare // set at wb
+  x_core_inst.rm := DontCare // set at wb
   when (x_core_inst.mop === mopUnit && x_core_inst.vmu) {
     when (x_core_inst.umop === lumopMask) {
       x_core_inst.vconfig.vl := (io.core.ex.vconfig.vl >> 3) + Mux(io.core.ex.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
@@ -247,7 +248,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   // W stage
   val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, io.core.killm), false.B)
   val w_replay = RegEnable(m_replay, m_valid)
-  val w_inst = RegEnable(m_inst, m_valid)
+  val w_inst = Reg(new VectorIssueInst)
   val w_baseaddr = RegEnable(m_baseaddr, m_valid)
   val w_addr = RegEnable(m_addr, m_valid)
   val w_stride = RegEnable(m_stride, m_valid)
@@ -274,6 +275,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val w_xcpt = w_xcpts.map(_._1).orR && w_eidx >= w_inst.vstart && !w_masked && w_tlb_req_valid
   val w_cause = PriorityMux(w_xcpts)
 
+  when (m_valid) {
+    w_inst := m_inst
+    w_inst.rs1_data := Mux(m_inst.isOpf, io.core.mem.frs1, m_inst.rs1_data)
+  }
+
   io.core.wb.retire := false.B
   io.core.wb.pc := w_pc
   io.core.wb.xcpt := false.B
@@ -282,7 +288,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.core.wb.tval := w_addr
   io.core.set_vstart.valid := false.B
   io.core.set_vstart.bits := DontCare
-  io.core.set_vxsat := DontCare
+  io.core.set_vxsat := DontCare // set outside
+  io.core.set_fflags := DontCare // set outside
   io.core.set_vconfig.valid := false.B
   io.core.set_vconfig.bits := w_inst.vconfig
   io.core.set_vconfig.bits.vl := w_eidx
@@ -290,7 +297,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
   io.issue.valid := false.B
   io.issue.bits := w_inst
-  io.issue.bits.vxrm := io.core.wb.vxrm
+  io.issue.bits.rm := Mux(w_inst.isOpf, io.core.wb.frm, io.core.wb.vxrm)
   io.issue.bits.phys := false.B
   when (w_inst.vmu) {
     val phys = w_inst.seg_nf === 0.U && w_inst.mop.isOneOf(mopUnit, mopStrided)
