@@ -77,7 +77,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: Nil = VecDecode.applyBools(
     io.dis.bits.funct3, io.dis.bits.funct6, Seq.fill(3)(false.B), decode_table)
   issq.io.enq.bits.wide_vd     := dis_wide_vd || (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.vfunary0 && io.dis.bits.rs1(3))
-  issq.io.enq.bits.wide_vs2    := dis_wide_vs2
+  issq.io.enq.bits.wide_vs2    := dis_wide_vs2 || (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.vfunary0 && io.dis.bits.rs1(4))
   issq.io.enq.bits.writes_mask := dis_writes_mask
   issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
   issq.io.enq.bits.renv2       := !((io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge) && io.dis.bits.vm)
