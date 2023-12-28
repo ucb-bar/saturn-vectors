@@ -91,7 +91,7 @@ class FMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUni
     (OPFFunct6.fwnmsac,  Seq(Y,Y,N,N,Y,N,Y)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  val ctrl_add :: ctrl_fma :: ctrl_swap23 :: ctrl_fmaCmd0 :: ctrl_fmaCmd1 :: ctrl_widen_vs2 :: ctrl_widen_vd :: Nil = VecDecode.applyBools(
+  val ctrl_add :: ctrl_mul :: ctrl_swap23 :: ctrl_fmaCmd0 :: ctrl_fmaCmd1 :: ctrl_widen_vs2 :: ctrl_widen_vd :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(7)(X), ctrl_table
   )

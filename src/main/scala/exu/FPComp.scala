@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true)(p) with HasFPUParameters {
+class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
@@ -154,9 +154,9 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1, true
   })(rvs1_eew) << mask_write_offset)(dLen-1,0)
 
   io.write.valid := io.pipe(0).valid
-  io.write.bits.eg := io.pipe(0).bits.wvd_eg >> 1
-  io.write.bits.mask := Fill(2, Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
-  io.write.bits.data := Fill(2, out)
+  io.write.bits.eg := io.pipe(0).bits.wvd_eg
+  io.write.bits.mask := Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
+  io.write.bits.data := out
 
   io.exc.valid := false.B
   io.exc.bits := 0.U
