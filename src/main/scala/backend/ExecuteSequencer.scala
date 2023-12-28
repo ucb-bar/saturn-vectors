@@ -100,7 +100,11 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     ~inst.rs1(2,1) + 1.U, 0.U)
   val vs3_eew  = inst.vconfig.vtype.vsew + inst.wide_vd
   val vd_eew   = inst.vconfig.vtype.vsew + inst.wide_vd
-  val incr_eew = inst.vconfig.vtype.vsew + (inst.wide_vs2 || inst.wide_vd)
+  val incr_eew = Seq(
+    Mux(inst.renv1, vs1_eew, 0.U),
+    Mux(inst.renv2, vs2_eew, 0.U),
+    Mux(inst.renvd, vs3_eew, 0.U),
+    vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
 
   val use_wmask = !inst.vm && !inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge)
 

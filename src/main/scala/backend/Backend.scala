@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{CoreModule}
 import freechips.rocketchip.util._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu.{ExecutionUnit, IntegerPipe, ElementwiseMultiplyPipe, IterativeIntegerDivider}
+import vector.exu._
 import vector.common._
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -88,7 +88,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vxu = Module(new ExecutionUnit(Seq(
     () => new IntegerPipe,
-    () => new ElementwiseMultiplyPipe(3),
+    () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
     () => new IterativeIntegerDivider
   )))
 
