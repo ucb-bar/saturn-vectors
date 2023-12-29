@@ -35,12 +35,12 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(
-      (OPFFunct6.vfadd,   Seq(N,N,N,N,N,N,N,N,N,N,N,Y)),
-      (OPFFunct6.vfsub,   Seq(N,N,N,N,N,N,N,Y,N,N,N,Y)),
-      (OPFFunct6.vfmacc,  Seq(N,N,N,N,N,N,Y,N,N,N,N,Y)),
-      (OPFFunct6.vfnmacc, Seq(N,N,N,N,N,N,Y,Y,Y,N,N,Y)),
-      (OPFFunct6.vfmsac,  Seq(N,N,N,N,N,N,Y,Y,N,N,N,Y)),
-      (OPFFunct6.vfnmsac, Seq(N,N,N,N,N,N,Y,N,Y,N,N,Y)),
+      (OPFFunct6.fadd,   Seq(N,N,N,N,N,N,N,N,N,N,N,Y)),
+      (OPFFunct6.fsub,   Seq(N,N,N,N,N,N,N,Y,N,N,N,Y)),
+      (OPFFunct6.fmacc,  Seq(N,N,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fnmacc, Seq(N,N,N,N,N,N,Y,Y,Y,N,N,Y)),
+      (OPFFunct6.fmsac,  Seq(N,N,N,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.fnmsac, Seq(N,N,N,N,N,N,Y,N,Y,N,N,Y)),
   )
   
   val wen :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: fmaCmd0 :: fmaCmd1 :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
@@ -52,7 +52,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
-  io.hazard.bits.widen2 := false.B
 
   val eidx = io.iss.op.eidx
   val in_eew = io.iss.op.rvs2_eew
