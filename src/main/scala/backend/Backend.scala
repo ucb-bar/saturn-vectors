@@ -3,7 +3,7 @@ package vector.backend
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.tile.{CoreModule}
+import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
 import vector.exu._

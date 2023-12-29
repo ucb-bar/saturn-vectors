@@ -89,11 +89,11 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val rvd_extract = extract(io.iss.op.rvd_data, false.B, out_eew, eidx)(63, 0) 
 
   val s_rvs2 = FType.S.recode(rvs2_extract(31,0))
-  val s_rvs1 = Mux(scalar_rs1, FType.S.recode(io.iss.op.frs1_data(31,0)), FType.S.recode(rvs1_extract(31,0)))
+  val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
   val s_rvd = FType.S.recode(rvd_extract(31,0))
 
   val d_rvs2 = FType.D.recode(rvs2_extract)
-  val d_rvs1 = Mux(scalar_rs1, FType.S.recode(io.iss.op.frs1_data), FType.D.recode(rvs1_extract))
+  val d_rvs1 = FType.D.recode(rvs1_extract)
   val d_rvd = FType.D.recode(rvd_extract)
 
   val rvs2_elem = Mux(is_double, d_rvs2, s_rvs2)
@@ -117,4 +117,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.write.bits.data := Mux(is_double, FType.D.ieee(io.fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io.fp_resp.bits.data, 0.U, Some(FType.S))))) 
 
   last := io.write.fire()
+
+  io.set_fflags := DontCare
 }
