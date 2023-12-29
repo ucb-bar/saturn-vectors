@@ -147,7 +147,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   val narrow_fptofp_modules = Seq.fill(num_narrow_units)(Module(new hardfloat.RecFNToRecFN(FType.D.exp, FType.D.sig, FType.S.exp, FType.S.sig)))
   val narrow_gen_fptofp = narrow_fptofp_modules.zipWithIndex.map{ case(conv, idx) => 
     conv.io.in := FType.D.recode(extract(rvs2_data, false.B, 3.U, io.pipe(0).bits.eidx + idx.U)(63,0))
-    conv.io.roundingMode := io.pipe(0).bits.frm
+    conv.io.roundingMode := Mux(ctrl_round_to_odd, "b110".U, io.pipe(0).bits.frm)
     conv.io.detectTininess := hardfloat.consts.tininess_afterRounding
     conv.io
   }
