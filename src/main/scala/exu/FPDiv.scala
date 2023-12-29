@@ -291,8 +291,10 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
 
   val NV = is_negative(sel) || is_sNaN(sel)
   val DZ = is_pos_zero(sel) || is_neg_zero(sel)
+  val OF = is_subnormal(sel) && more_than_1_leading_sign_zero(sel)
+  val NX = is_subnormal(sel) && more_than_1_leading_sign_zero(sel)
 
-  io.exc := Cat(NV, Cat(DZ, "b000".U))
+  io.exc := Seq(NV, DZ, OF, false.B, NX).asUInt
 }
 
 
@@ -467,9 +469,7 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     is_qNaN(eew - 2) := rvs2_classify(9)
 
     val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-2, 0), fType.sig)
-
     val is_pos_normal = rvs2_classify(6)
-
     val normalized_exponent = Wire(UInt(fType.exp.W))
     val normalized_significand = Wire(UInt((fType.sig - 1).W))
     normalized_exponent := Mux(is_pos_normal, 
@@ -612,10 +612,8 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.write.valid := ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) && valid) || out_toWrite || divSqrt_out_valid 
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
-  io.write.bits.data := Mux(vfclass_inst, 
-                            Mux(op.rvs2_eew === 3.U, gen_vfclass(1), gen_vfclass(0)),
-                            Mux(vfrsqrt7_inst, recSqrt7.io.out, 
-                            Mux(vfrec7_inst, rec7.io.out, divSqrt_write)))
+  io.write.bits.data := Mux1H(Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, out_toWrite || divSqrt_out_valid),
+                              Seq(Mux(op.rvs2_eew === 3.U, gen_vfclass(1), gen_vfclass(0)), recSqrt7.io.out, rec7.io.out, divSqrt_write))
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last) 
   last := io.write.fire()
 
