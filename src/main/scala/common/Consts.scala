@@ -66,7 +66,10 @@ object OPFFunct6 extends ChiselEnum {
   val fadd, fredusum, fsub, fredosum, fmin, fredmin, fmax, fredmax, fsgnj, fsgnjn, fsgnjx = Value
   val _, _, _ = Value
   val fslide1up, fslide1down = Value
-  val _, _, _, _, _, _, _ = Value
+  val wfunary0 = Value
+  val _ = Value
+  val funary0, funary1 = Value
+  val _, _, _ = Value
   val fmerge, vmfeq, fmfle = Value
   val _ = Value
   val vmflt, vmfne, vmfgt = Value

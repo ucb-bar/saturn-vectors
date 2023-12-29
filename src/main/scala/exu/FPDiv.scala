@@ -525,9 +525,9 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)
 
   lazy val ctrl_table = Seq(
-    (OPFFunct6.vfdiv     ,   Seq(Y,N)),
-    (OPFFunct6.vfrdiv    ,   Seq(Y,Y)),
-    (OPFFunct6.vfunary1  ,   Seq(N,N)),
+    (OPFFunct6.fdiv     ,   Seq(Y,N)),
+    (OPFFunct6.frdiv    ,   Seq(Y,Y)),
+    (OPFFunct6.funary1  ,   Seq(N,N)),
   )
   val ctrl_isDiv :: ctrl_swap12 :: Nil = VecDecode.applyBools(
     io.iss.op.funct3, io.iss.op.funct6,
@@ -544,13 +544,12 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
   divSqrt.io.roundingMode := io.iss.op.frm
 
-  divSqrt.io.inValid := io.iss.valid && io.iss.ready
+  divSqrt.io.inValid := (io.iss.valid && io.iss.ready) && (ctrl_isDiv || (io.iss.op.opff6 === OPFFunct6.funary1 && io.iss.op.rs1 === 0.U))
   divSqrt.io.sqrtOp := !ctrl_isDiv
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
-  io.hazard.bits.widen2 := false.B
 
   when (io.iss.op.rvs1_eew === 3.U) {
     divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
@@ -570,8 +569,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
   }
 
-  //val divSqrt_valid = (op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 0.U) &&  (divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt)
-  val divSqrt_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
+  val divSqrt_out_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
 
   val narrow = Module(new hardfloat.RecFNToRecFN(11, 53, 8, 24))
   narrow.io.roundingMode := op.frm
@@ -580,7 +578,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val divSqrt_out = Mux(op.vd_eew === 3.U, FType.D.ieee(divSqrt.io.out), Fill(2, FType.S.ieee(narrow.io.out)))
 
-  val out_buffer = RegEnable(divSqrt_out, divSqrt_valid)
+  val out_buffer = RegEnable(divSqrt_out, divSqrt_out_valid)
   val out_toWrite = RegInit(false.B)
   val divSqrt_write = Mux(out_toWrite, out_buffer, divSqrt_out)
 
@@ -603,15 +601,15 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   // Capture result in case of write port backpressure
   when (io.write.fire()) {
     out_toWrite := false.B
-  } .elsewhen (divSqrt_valid) {
+  } .elsewhen (divSqrt_out_valid) {
     out_toWrite := true.B
   }
 
-  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 16.U
-  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 4.U
-  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.vfunary1) && op.rs1 === 5.U
+  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
+  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
+  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
 
-  io.write.valid := ((vfclass_inst || vfrsqrt7_inst) && valid) || out_toWrite || divSqrt_valid 
+  io.write.valid := ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) && valid) || out_toWrite || divSqrt_out_valid 
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Mux(vfclass_inst, 
@@ -621,6 +619,6 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last) 
   last := io.write.fire()
 
-  io.exc.valid := divSqrt_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())
-  io.exc.bits := (divSqrt.io.exceptionFlags & Fill(5, divSqrt_valid)) | (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst)) | (rec7.io.exc & Fill(5, vfrec7_inst))
+  io.set_fflags.valid := divSqrt_out_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())
+  io.set_fflags.bits := (divSqrt.io.exceptionFlags & Fill(5, divSqrt_out_valid)) | (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst)) | (rec7.io.exc & Fill(5, vfrec7_inst))
 }

@@ -73,7 +73,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   issq.io.enq.bits.wide_vd     := dis_wide_vd
   issq.io.enq.bits.wide_vs2    := dis_wide_vs2
   issq.io.enq.bits.writes_mask := dis_writes_mask
-  issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV) && !(io.dis.bits.funct3.isOneOf(OPFVV) && (io.dis.bits.opff6 === OPFFunct6.vfunary1))
+  issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV) && !(io.dis.bits.funct3.isOneOf(OPFVV) && (io.dis.bits.opff6 === OPFFunct6.funary1))
   issq.io.enq.bits.renv2       := !(io.dis.bits.opif6 === OPIFunct6.merge && io.dis.bits.vm)
   issq.io.enq.bits.renvd       := io.dis.bits.opmf6.isOneOf(
     OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
