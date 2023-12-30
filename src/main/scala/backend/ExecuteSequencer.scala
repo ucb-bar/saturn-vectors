@@ -76,8 +76,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := io.dis.bits
   val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: Nil = VecDecode.applyBools(
     io.dis.bits.funct3, io.dis.bits.funct6, Seq.fill(3)(false.B), decode_table)
-  issq.io.enq.bits.wide_vd     := dis_wide_vd || (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.vfunary0 && io.dis.bits.rs1(3))
-  issq.io.enq.bits.wide_vs2    := dis_wide_vs2 || (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.vfunary0 && io.dis.bits.rs1(4))
+  issq.io.enq.bits.wide_vd     := dis_wide_vd || (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.funary0 && io.dis.bits.rs1(3))
+  issq.io.enq.bits.wide_vs2    := dis_wide_vs2 || (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.funary0 && io.dis.bits.rs1(4))
   issq.io.enq.bits.writes_mask := dis_writes_mask
   issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV) && !(io.dis.bits.funct3.isOneOf(OPFVV) && (io.dis.bits.opff6 === OPFFunct6.funary1))
   issq.io.enq.bits.renv2       := !((io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge) && io.dis.bits.vm)
@@ -85,9 +85,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
     OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) ||
     (io.dis.bits.funct3.isOneOf(OPFVV, OPFVF) && io.dis.bits.opff6.isOneOf(
-    OPFFunct6.vfmacc, OPFFunct6.vfnmacc, OPFFunct6.vfmsac, OPFFunct6.vfnmsac,
-    OPFFunct6.vfmadd, OPFFunct6.vfnmadd, OPFFunct6.vfmsub, OPFFunct6.vfnmsub,
-    OPFFunct6.vfwmacc, OPFFunct6.vfwnmacc, OPFFunct6.vfwmsac, OPFFunct6.vfwnmsac))
+    OPFFunct6.fmacc, OPFFunct6.fnmacc, OPFFunct6.fmsac, OPFFunct6.fnmsac,
+    OPFFunct6.fmadd, OPFFunct6.fnmadd, OPFFunct6.fmsub, OPFFunct6.fnmsub,
+    OPFFunct6.fwmacc, OPFFunct6.fwnmacc, OPFFunct6.fwmsac, OPFFunct6.fwnmsac))
   issq.io.enq.bits.renvm       := !io.dis.bits.vm || io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge
 
   for (i <- 0 until issQEntries) {

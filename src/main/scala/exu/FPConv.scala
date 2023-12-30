@@ -22,8 +22,8 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   val ctrl_narrow = rs1(4)
   val ctrl_signed = rs1(0)
   val ctrl_out = !rs1(2) && rs1(1)
-  val ctrl_truncating = rs1(2) && rs1(1)// truncate or round towards odd
-  val ctrl_round_to_odd = rs1(1) // truncate or round towards odd
+  val ctrl_truncating = rs1(2) && rs1(1)
+  val ctrl_round_to_odd = rs1(0)
 
   val rvs2_data = io.pipe(0).bits.rvs2_data
 
