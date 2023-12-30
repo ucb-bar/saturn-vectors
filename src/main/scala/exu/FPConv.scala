@@ -13,7 +13,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   io.set_vxsat := false.B
 
   lazy val opcodes = Seq(
-    OPFFunct6.vfunary0
+    OPFFunct6.funary0
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes)
 
@@ -176,6 +176,5 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     io.write.bits.data := single_out_final
   }
 
-  io.exc.valid := false.B
-  io.exc.bits := 0.U
+  io.set_fflags := DontCare
 }
