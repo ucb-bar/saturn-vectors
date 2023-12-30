@@ -89,34 +89,17 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
 
   //// FP to Int
   //// 00X
-  //val wide_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.S.exp, FType.S.sig, FType.D.ieeeWidth)))
-  //val narrow_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.D.exp, FType.D.sig, FType.S.ieeeWidth)))
-  //val gen_fptoint = wide_fptoint_modules.zip(narrow_fptoint_modules).zipWithIndex.map { case((wide, narrow), idx) =>
-  //  val wide_extracted_rvs2_bits = extract(rvs2_data, false.B, 2.U, io.pipe(0).bits.eidx + idx.U)(31,0)
-  //  wide.io.signedOut := ctrl_signed
-  //  wide.io.roundingMode := io.pipe(0).bits.frm
-  //  wide.io.in := FType.S.recode(Mux(ctrl_truncating, wide_extracted_rvs2_bits(FType.S.ieeeWidth-1, FType.S.sig-2) << (FType.S.sig - 2), wide_extracted_rvs2_bits))
-
-  //  val narrow_extracted_rvs2_bits = extract(rvs2_data, false.B, 3.U, io.pipe(0).bits.eidx + idx.U)(63,0)
-  //  narrow.io.signedOut := ctrl_signed
-  //  narrow.io.roundingMode := io.pipe(0).bits.frm
-  //  narrow.io.in := FType.D.recode(Mux(ctrl_truncating, narrow_extracted_rvs2_bits(FType.D.ieeeWidth-1, FType.D.sig-2) << (FType.D.sig - 2), narrow_extracted_rvs2_bits))
-
-  //  (wide.io, narrow.io)
-  //}
-  //val fptoint_results = gen_fptoint.map { case(wide, narrow) => Mux(ctrl_widen, FType.D.ieee(wide.out), Fill(2, FType.S.ieee(narrow.out))) }
-
-  val fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.S.exp, FType.S.sig, FType.D.ieeeWidth)))
-  val gen_fptoint = fptoint_modules.zipWithIndex.map { case(conv, idx) =>
+  val wide_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.S.exp, FType.S.sig, FType.D.ieeeWidth)))
+  val narrow_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.D.exp, FType.D.sig, FType.S.ieeeWidth)))
+  val wide_gen_fptoint = wide_fptoint_modules.zipWithIndex.map { case(conv, idx) =>
     val extracted_rvs2_bits = extract(rvs2_data, false.B, 2.U, io.pipe(0).bits.eidx + idx.U)(31,0)
     conv.io.signedOut := ctrl_signed
     conv.io.roundingMode := io.pipe(0).bits.frm
     conv.io.in := FType.S.recode(Mux(ctrl_truncating, extracted_rvs2_bits(FType.S.ieeeWidth-1, FType.S.sig-2) << (FType.S.sig - 2), extracted_rvs2_bits))
     conv.io
   }
-  val fptoint_results = gen_fptoint.map { conv => conv.out }
+  val wide_fptoint_results = wide_gen_fptoint.map { conv => conv.out }
   
-  val narrow_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.D.exp, FType.D.sig, FType.S.ieeeWidth)))
   val narrow_gen_fptoint = narrow_fptoint_modules.zipWithIndex.map { case(conv, idx) =>
     val extracted_rvs2_bits = extract(rvs2_data, false.B, 3.U, io.pipe(0).bits.eidx + idx.U)(63,0)
     conv.io.signedOut := ctrl_signed
@@ -148,8 +131,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   } .elsewhen (!rs1(1) && rs1(2)) {
     multi_width_out := fptofp_results.asUInt 
   } .otherwise {
-    //multi_width_out := fptoint_results.asUInt
-    multi_width_out := Mux(ctrl_widen, fptoint_results.asUInt, Fill(2, narrow_fptoint_results.asUInt))
+    multi_width_out := Mux(ctrl_widen, wide_fptoint_results.asUInt, Fill(2, narrow_fptoint_results.asUInt))
   }
 
   val single_out_final = Wire(UInt(dLen.W))

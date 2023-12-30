@@ -13,18 +13,18 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(
-    (OPFFunct6.fmin    ,   Seq(Y,Y, N,N,N,N, N,X,X)),
-    (OPFFunct6.fmax    ,   Seq(Y,N, N,N,N,N, N,X,X)),
-    (OPFFunct6.fsgnj   ,   Seq(N,X, N,N,N,N, Y,N,N)), 
-    (OPFFunct6.fsgnjn  ,   Seq(N,X, N,N,N,N, Y,Y,N)), 
-    (OPFFunct6.fsgnjx  ,   Seq(N,X, N,N,N,N, Y,N,Y)), 
+    (OPFFunct6.fmin     ,   Seq(Y,Y, N,N,N,N, N,X,X)),
+    (OPFFunct6.fmax     ,   Seq(Y,N, N,N,N,N, N,X,X)),
+    (OPFFunct6.fsgnj    ,   Seq(N,X, N,N,N,N, Y,N,N)), 
+    (OPFFunct6.fsgnjn   ,   Seq(N,X, N,N,N,N, Y,Y,N)), 
+    (OPFFunct6.fsgnjx   ,   Seq(N,X, N,N,N,N, Y,N,Y)), 
     (OPFFunct6.vmfeq    ,   Seq(N,X, Y,Y,N,N, N,X,X)),
     (OPFFunct6.vmfne    ,   Seq(N,X, Y,N,Y,N, N,X,X)),
     (OPFFunct6.vmflt    ,   Seq(N,X, Y,N,N,Y, N,X,X)),
     (OPFFunct6.vmfle    ,   Seq(N,X, Y,Y,N,Y, N,X,X)),
     (OPFFunct6.vmfgt    ,   Seq(N,X, Y,N,N,N, N,X,X)),
     (OPFFunct6.vmfge    ,   Seq(N,X, Y,Y,N,N, N,X,X)),
-    (OPFFunct6.fmerge  ,   Seq(N,X, N,X,X,X, N,X,X)),
+    (OPFFunct6.fmerge   ,   Seq(N,X, N,X,X,X, N,X,X)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
 
@@ -127,7 +127,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   // FP Merge Instruction
   val rvs2_elems = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB/4, UInt(32.W)))
   val frs1_elems = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB/4, UInt(32.W)))
-  //val frs1_elems = dLenSplat(Mux(rvs2_eew === 3.U, frs1_data, Fill(2, frs1_data(31,0))), 3.U).asTypeOf(Vec(dLenB/4, UInt(32.W)))
   val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
   val merge_out = VecInit((0 until (dLenB / 4)).map {i => Mux(merge_mask(i), frs1_elems(i), rvs2_elems(i))}).asUInt
 
