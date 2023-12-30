@@ -70,7 +70,7 @@ object OPFFunct6 extends ChiselEnum {
   val _ = Value
   val funary0, funary1 = Value
   val _, _, _ = Value
-  val fmerge, vmfeq, fmfle = Value
+  val fmerge, vmfeq, vmfle = Value
   val _ = Value
   val vmflt, vmfne, vmfgt = Value
   val _ = Value
