@@ -33,8 +33,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     Seq.fill(9)(X), ctrl_table
   ) 
   
-  val is_opfvf = io.pipe(0).bits.funct3.isOneOf(OPFVF)
-
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val rvd_eew  = io.pipe(0).bits.rvd_eew
@@ -46,6 +44,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   val fTypes = Seq(FType.S, FType.D)
   val minmax_results = Wire(Vec(2, UInt(dLen.W)))       // results for vfmin/vfmax
   val comp_results = Wire(Vec(2, UInt((dLen / 32).W)))  // results for comparisons
+  val exceptions = Wire(Vec(2, UInt(5.W)))
 
   for (eew <- 2 until 4) {
     val fType = fTypes(eew-2)
@@ -101,7 +100,10 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
       comparison_out
     } 
     comp_results(eew-2) := Fill(eew + 1, comparisons.asUInt)
+
+    exceptions(eew - 2) := gen_compares.map {case(comp, rvs2, rvs2_nan, rvs1, rvs1_nan) => comp.exceptionFlags}.reduce(_ | _)
   }
+
 
   val rvs1_vals = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB / 8, UInt(64.W)))
   val rvs2_vals = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB / 8, UInt(64.W)))
@@ -154,5 +156,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   io.write.bits.mask := Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
   io.write.bits.data := out
 
-  io.set_fflags := DontCare
+  io.set_fflags.valid := io.write.valid
+  io.set_fflags.bits := Mux(rvd_eew === 3.U, exceptions(1), exceptions(0))
 }
