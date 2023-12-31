@@ -80,70 +80,22 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     val wideProds = mul_out.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))
     val smul = wideProds.map { wideElem => 
       val rounding_incr = RoundingIncrement(io.pipe(0).bits.vxrm, wideElem((8 << sew)-1, 0)) 
-      println(s"SMULDEBUG: wideElem: $wideElem")
-      println(s"SMULDEBUG: rounding_incr: $rounding_incr")
       (wideElem >> ((8 << sew) - 1)) + Cat(0.U(1.W), rounding_incr).asSInt  
     }
-    println("SMULDEBUG: SMUL DEBUG")
-    println(s"SMULDEBUG: sew: $sew")
-    println(s"SMULDEBUG: wideProds: $wideProds")
-    println(s"SMULDEBUG: smul: $smul")
     
     val clip_neg = (-1 << ((8 << sew)-1)).S 
     val clip_pos = ((1 << ((8 << sew)-1)) - 1).S
     val clip_hi = smul.map{ _ > clip_pos }
     val clip_lo = smul.map{ _ < clip_neg }    
-    println(s"SMULDEBUG: clip_neg: $clip_neg")
-    println(s"SMULDEBUG: clip_pos: $clip_pos")
-    println(s"SMULDEBUG: clip_hi: $clip_hi")
-    println(s"SMULDEBUG: clip_lo: $clip_lo")
     
     smul_clipped_sew(sew) := smul.zipWithIndex.map { case (sm, i) => 
-      println(s"SMULDEBUG: i: $i")
-      println(s"SMULDEBUG: sm: $sm")
-      val tmp = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
-      val tmp2 = tmp((8 << sew)-1, 0)
-      println(s"SMULDEBUG: tmp: $tmp")
-      println(s"SMULDEBUG: tmp: $tmp2")
-      tmp2
+      val smul_long = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
+      smul_long((8 << sew)-1, 0)
     }.asUInt
     smul_sat_sew(sew) := clip_hi.orR || clip_lo.orR
-    println(s"SMULDEBUG: smul_clipped_sew: ${smul_clipped_sew(sew)}")
   }
   val smul_clipped = smul_clipped_sew(out_eew)
   val smul_sat = smul_sat_sew(out_eew)
-
-  /////////////////////////////////////////////
-  // REPLACE BELOW, handle SMUL > 1 elem/cycle
-  /////////////////////////////////////////////
-  val smul_prod_old = VecInit.tabulate(4)({sew =>
-    if (sew == 3 && dLenB == 8) { mul_out } else {
-      mul_out.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))(io.pipe(0).bits.eidx(log2Ceil(dLenB)-1-sew,0))
-    }
-  })(out_eew).asSInt
-  val rounding_incr_old = VecInit.tabulate(4)({ sew => RoundingIncrement(io.pipe(0).bits.vxrm, smul_prod_old((8 << sew)-1,0)) })(out_eew)
-  val smul_old = VecInit.tabulate(4)({ sew => smul_prod_old >> ((8 << sew) - 1) })(out_eew) + Cat(0.U(1.W), rounding_incr_old).asSInt
-  val smul_clip_neg_old = VecInit.tabulate(4)({ sew => (-1 << ((8 << sew)-1)).S })(out_eew)
-  val smul_clip_pos_old = VecInit.tabulate(4)({ sew => ((1 << ((8 << sew)-1)) - 1).S })(out_eew)
-  val smul_clip_hi_old = smul_old > smul_clip_pos_old
-  val smul_clip_lo_old = smul_old < smul_clip_neg_old
-  val smul_clipped_old = Mux(smul_clip_hi_old, smul_clip_pos_old, 0.S) | Mux(smul_clip_lo_old, smul_clip_neg_old, 0.S) | Mux(!smul_clip_hi_old && !smul_clip_lo_old, smul_old, 0.S)
-  val smul_sat_old = smul_clip_hi_old || smul_clip_lo_old
-  val smul_splat_old = VecInit.tabulate(4)({ sew => Fill(dLenB >> sew, smul_clipped_old((8<<sew)-1,0)) })(out_eew)
-  println("OLD SMULDEBUG: OLD SMUL DEBUG")
-  println(s"OLD SMULDEBUG: smul_prod_old: $smul_prod_old")
-  println(s"OLD SMULDEBUG: smul_old: $smul_old")
-  println(s"OLD SMULDEBUG: clip_neg_old: $smul_clip_neg_old")
-  println(s"OLD SMULDEBUG: clip_pos_old: $smul_clip_pos_old")
-  println(s"OLD SMULDEBUG: clip_hi_old: $smul_clip_hi_old")
-  println(s"OLD SMULDEBUG: clip_lo_old: $smul_clip_lo_old")
-  println(s"OLD SMULDEBUG: smul_clipped_old: $smul_clipped_old")
-  println(s"OLD SMULDEBUG: smul_sat_old: $smul_sat_old")
-  println(s"OLD SMULDEBUG: smul_splat_old: $smul_splat_old")
-  
-  /////////////////////////////////////////////
-  // REPLACE ABOVE, handle SMUL > 1 elem/cycle
-  /////////////////////////////////////////////
 
   val adder_arr = Module(new AdderArray(dLenB))
   adder_arr.io.in1 := Mux(ctrl_wmul, wide, lo).asTypeOf(Vec(dLenB, UInt(8.W)))
