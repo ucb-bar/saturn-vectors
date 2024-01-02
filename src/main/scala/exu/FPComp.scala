@@ -18,12 +18,12 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     (OPFFunct6.fsgnj    ,   Seq(N,X, N,N,N,N, Y,N,N)), 
     (OPFFunct6.fsgnjn   ,   Seq(N,X, N,N,N,N, Y,Y,N)), 
     (OPFFunct6.fsgnjx   ,   Seq(N,X, N,N,N,N, Y,N,Y)), 
-    (OPFFunct6.vmfeq    ,   Seq(N,X, Y,Y,N,N, N,X,X)),
-    (OPFFunct6.vmfne    ,   Seq(N,X, Y,N,Y,N, N,X,X)),
-    (OPFFunct6.vmflt    ,   Seq(N,X, Y,N,N,Y, N,X,X)),
-    (OPFFunct6.vmfle    ,   Seq(N,X, Y,Y,N,Y, N,X,X)),
-    (OPFFunct6.vmfgt    ,   Seq(N,X, Y,N,N,N, N,X,X)),
-    (OPFFunct6.vmfge    ,   Seq(N,X, Y,Y,N,N, N,X,X)),
+    (OPFFunct6.mfeq     ,   Seq(N,X, Y,Y,N,N, N,X,X)),
+    (OPFFunct6.mfne     ,   Seq(N,X, Y,N,Y,N, N,X,X)),
+    (OPFFunct6.mflt     ,   Seq(N,X, Y,N,N,Y, N,X,X)),
+    (OPFFunct6.mfle     ,   Seq(N,X, Y,Y,N,Y, N,X,X)),
+    (OPFFunct6.mfgt     ,   Seq(N,X, Y,N,N,N, N,X,X)),
+    (OPFFunct6.mfge     ,   Seq(N,X, Y,Y,N,N, N,X,X)),
     (OPFFunct6.fmerge   ,   Seq(N,X, N,X,X,X, N,X,X)),
   )
   override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
