@@ -32,7 +32,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val rvm_mask = Reg(UInt(egsPerVReg.W))
 
   val renvm     = !inst.vm
-  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U)
+  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U, false.B)
   val last      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
   issq.io.deq.ready := !valid || (last && io.iss.fire)
@@ -71,7 +71,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
   io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits := getEgId(0.U, eidx >> 3, 0.U)
+  io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready)
   io.iss.bits.wvd       := true.B
@@ -83,11 +83,12 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rvd_eew   := DontCare
   io.iss.bits.vd_eew    := inst.mem_elem_size
   io.iss.bits.eidx      := eidx
-  io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.pos_lmul), eidx, inst.mem_elem_size)
+  io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.pos_lmul), eidx, inst.mem_elem_size, false.B)
   io.iss.bits.rs1        := inst.rs1
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare
   io.iss.bits.last       := last
+  io.iss.bits.vl_low     := inst.vconfig.vl
   io.iss.bits.vat        := inst.vat
   io.iss.bits.vm         := inst.vm
   io.iss.bits.rm         := DontCare
@@ -99,10 +100,10 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rmask := DontCare
 
   when (io.iss.fire && !last) {
-    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size)) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B)) {
       wvd_mask := wvd_mask & ~vd_write_oh
     }
-    when (next_mask_is_new_eg(eidx, next_eidx)) {
+    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
       rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits)
     }
     when (sidx === inst.seg_nf) {

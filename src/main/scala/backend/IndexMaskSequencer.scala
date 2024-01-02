@@ -61,9 +61,9 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val data_hazard = raw_hazard
 
   io.rvs2.req.valid := valid && renv2
-  io.rvs2.req.bits := getEgId(inst.rs2, eidx, inst.mem_idx_size)
+  io.rvs2.req.bits := getEgId(inst.rs2, eidx, inst.mem_idx_size, false.B)
   io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits := getEgId(0.U, eidx >> 3, 0.U)
+  io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && (!renv2 || io.rvs2.req.ready)
   io.iss.bits.wvd := false.B
@@ -80,6 +80,7 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare
   io.iss.bits.last       := last
+  io.iss.bits.vl_low     := inst.vconfig.vl
   io.iss.bits.vat        := inst.vat
   io.iss.bits.vm         := inst.vm
   io.iss.bits.rm         := DontCare
@@ -90,10 +91,10 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rmask      := vm_mask
 
   when (io.iss.fire && !last) {
-    when (next_is_new_eg(eidx, next_eidx, inst.mem_idx_size)) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_idx_size, false.B)) {
       rvs2_mask := rvs2_mask & ~vs2_read_oh
     }
-    when (next_mask_is_new_eg(eidx, next_eidx)) {
+    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
       rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits)
     }
     eidx := next_eidx

@@ -201,7 +201,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   reads(0)(2).req.valid := io.index_access.valid
   io.index_access.ready := reads(0)(2).req.ready
-  reads(0)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew)
+  reads(0)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
   io.index_access.idx   := reads(0)(2).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
   reads(0)(0) <> vxs.io.rvs1
@@ -219,7 +219,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(3)(2) <> vxs.io.rvm
   reads(3)(3) <> vims.io.rvm
   reads(3)(4).req.valid := io.mask_access.valid
-  reads(3)(4).req.bits  := getEgId(0.U, io.mask_access.eidx >> 3, 0.U)
+  reads(3)(4).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
   io.mask_access.ready  := reads(3)(4).req.ready
   io.mask_access.mask   := reads(3)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 

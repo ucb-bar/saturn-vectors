@@ -106,6 +106,7 @@ class MaskedByte extends Bundle {
 class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val wvd = Bool()
   val eidx = UInt(log2Ceil(maxVLMax).W)
+  val vl_low = UInt(log2Ceil(dLen).W)
 
   val rvs1_data = UInt(dLen.W)
   val rvs2_data = UInt(dLen.W)

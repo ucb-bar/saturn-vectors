@@ -53,13 +53,13 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
 
-  def getEgId(vreg: UInt, eidx: UInt, eew: UInt): UInt = {
+  def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)
-    val off = eidx >> (log2Ceil(dLenB).U - eew)
-    base + off
+    val off = eidx >> Mux(bitwise, log2Ceil(dLen).U, (log2Ceil(dLenB).U - eew))
+    base +& off
   }
   def getByteId(vreg: UInt, eidx: UInt, eew: UInt): UInt = {
-    Cat(getEgId(vreg, eidx, eew), (eidx << eew)(log2Ceil(dLenB)-1,0))
+    Cat(getEgId(vreg, eidx, eew, false.B), (eidx << eew)(log2Ceil(dLenB)-1,0))
   }
 
   def eewByteMask(eew: UInt) = (0 until (1+log2Ceil(eLen/8))).map { e =>
