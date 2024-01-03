@@ -27,6 +27,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
+    val scalar_write = Decoupled(new ScalarWrite)
   })
 
   fus.map(_.io.iss).foreach { iss =>
@@ -108,6 +109,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     }
   }
 
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
   if (iter_fus.size > 0) {
     val iter_write_arb = Module(new Arbiter(new VectorWrite(dLen), iter_fus.size))
     iter_write_arb.io.in.zip(iter_fus.map(_.io.write)).foreach { case (l,r) => l <> r }
@@ -125,5 +128,9 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     for (i <- 0 until iter_fus.size) {
       io.hazards(i+pipe_depth) := iter_fus(i).io.hazard
     }
+
+    val scalar_write_arb = Module(new Arbiter(new ScalarWrite, iter_fus.size))
+    scalar_write_arb.io.in.zip(iter_fus.map(_.io.scalar_write)).foreach { case (l, r) => l <> r }
+    io.scalar_write <> scalar_write_arb.io.out
   }
 }

@@ -15,6 +15,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
     val sub_dlen = Output(UInt(log2Ceil(dLenB).W))
     val ready = Output(Bool())
   }
+
   val set_vxsat = Output(Bool())
   val set_fflags = Output(Valid(UInt(5.W)))
 }
@@ -26,6 +27,7 @@ class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends Func
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {
   val write = Decoupled(new VectorWrite(dLen))
+  val scalar_write = Decoupled(new ScalarWrite)
   val vat = Output(Valid(UInt(vParams.vatSz.W)))
   val hazard = Output(Valid(new PipeHazard))
 

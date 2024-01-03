@@ -77,6 +77,12 @@ class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p
   val mask = UInt(writeBits.W)
 }
 
+class ScalarWrite extends Bundle {
+  val data = UInt(64.W)
+  val fp = Bool()
+  val rd = UInt(5.W)
+}
+
 class VectorReadIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val req = Decoupled(UInt(log2Ceil(egsTotal).W))
   val resp = Input(UInt(dLen.W))

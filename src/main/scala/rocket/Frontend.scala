@@ -29,6 +29,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   io.core.backend_busy   := vu.io.backend_busy
   io.core.set_vxsat      := vu.io.set_vxsat
   io.core.set_fflags     := vu.io.set_fflags
+  io.core.resp           <> vu.io.scalar_resp
 
   val hella_simple = Module(new SimpleHellaCacheIF)
   val hella_arb = Module(new HellaCacheArbiter(2))
@@ -294,6 +295,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.core.set_vconfig.bits := w_inst.vconfig
   io.core.set_vconfig.bits.vl := w_eidx
   io.core.backend_busy := DontCare
+  io.core.resp := DontCare // set outside
 
   io.issue.valid := false.B
   io.issue.bits := w_inst

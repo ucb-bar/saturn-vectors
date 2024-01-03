@@ -52,5 +52,8 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
 
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
 
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
+
   last := io.write.fire()
 }

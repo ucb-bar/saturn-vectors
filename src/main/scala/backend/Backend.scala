@@ -22,6 +22,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val index_access = new VectorIndexAccessIO
     val mask_access = new VectorMaskAccessIO
 
+    val scalar_resp = Decoupled(new ScalarWrite)
+
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
   })
@@ -265,4 +267,5 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
   io.set_vxsat := vxu.io.set_vxsat
   io.set_fflags := vxu.io.set_fflags
+  io.scalar_resp <> vxu.io.scalar_write
 }
