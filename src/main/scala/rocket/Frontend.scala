@@ -277,7 +277,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
   when (m_valid) {
     w_inst := m_inst
-    w_inst.rs1_data := Mux(m_inst.isOpf, io.core.mem.frs1, m_inst.rs1_data)
+    w_inst.rs1_data := Mux(m_inst.isOpf && !m_inst.vmu, io.core.mem.frs1, m_inst.rs1_data)
   }
 
   io.core.wb.retire := false.B
