@@ -319,6 +319,9 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   when (w_valid && !w_replay) {
     when (w_inst.vstart >= w_vl) {
       io.core.wb.retire := true.B
+      io.core.set_vstart.valid := true.B
+      io.core.set_vstart.bits := 0.U
+      io.issue.valid := true.B
     } .elsewhen (!io.issue.ready) {
       io.core.wb.replay := true.B
     } .elsewhen (w_inst.vmu && (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
