@@ -514,12 +514,12 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
   val NV = is_negative(sel) || is_sNaN(sel)
   val DZ = is_pos_zero(sel) || is_neg_zero(sel)
 
-  io.exc := Cat(NV, Cat(DZ, "b000".U))
+  io.exc := Cat(NV, Cat(DZ, 0.U(3.W)))
 }
 
 
 class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
-  io.iss.sub_dlen := log2Ceil(dLenB).U - op.rvs2_eew
+  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs2_eew
   io.set_vxsat := false.B
 
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)
@@ -530,10 +530,11 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     (OPFFunct6.funary1  ,   Seq(N,N)),
   )
   val ctrl_isDiv :: ctrl_swap12 :: Nil = VecDecode.applyBools(
-    op.funct3, op.funct6,
+    io.iss.op.funct3, io.iss.op.funct6,
     Seq.fill(2)(X), ctrl_table
   )
   def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+
   val divSqrt_ready = (ctrl_isDiv && divSqrt.io.inReady_div) || (!ctrl_isDiv && divSqrt.io.inReady_sqrt)
 
   val rvs2_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
@@ -543,7 +544,10 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
   divSqrt.io.roundingMode := op.frm
 
-  divSqrt.io.inValid := valid && (ctrl_isDiv || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
+  val iss_fire_pipe = Reg(Bool())
+  iss_fire_pipe := io.iss.valid && io.iss.ready
+
+  divSqrt.io.inValid := iss_fire_pipe && (ctrl_isDiv || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
   divSqrt.io.sqrtOp := !ctrl_isDiv
 
   io.hazard.valid := valid
