@@ -181,7 +181,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   def samePage(base: UInt, size: UInt) = (base + size - 1.U)(pgIdxBits) === base(pgIdxBits)
   val x_single_page = samePage(x_baseaddr, x_unit_bound)
   val x_replay_seg_single_page = samePage(x_indexaddr, ((x_inst.nf +& 1.U) << x_mem_size))
-  val x_iterative = (!x_single_page || (x_inst.vmu && x_inst.mop =/= mopUnit))
+  val x_iterative = x_inst.vmu && (!x_single_page || (x_inst.mop =/= mopUnit))
   val x_masked = !io.mask_access.mask && !x_inst.vm
   val x_tlb_valid = Mux(x_replay,
     x_eidx < x_vl && x_eidx >= x_inst.vstart && !x_masked,
