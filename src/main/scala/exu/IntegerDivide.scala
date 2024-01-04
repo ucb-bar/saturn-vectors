@@ -19,7 +19,7 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
 
   lazy val div = Module(new MulDiv(MulDivParams(mulUnroll = 0), 64, 1))
 
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes) && div.io.req.ready
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes) && div.io.req.ready
 
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
   io.set_vxsat := false.B
@@ -49,6 +49,11 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   io.write.bits.eg   := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := wdata
+
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
+
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
 
   last := io.write.fire()
 }

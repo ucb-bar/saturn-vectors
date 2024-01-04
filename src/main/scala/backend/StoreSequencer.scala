@@ -30,12 +30,13 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val rvd_mask = Reg(UInt(egsTotal.W))
   val rvm_mask = Reg(UInt(egsPerVReg.W))
   val sub_dlen = Reg(UInt(2.W))
+  val head     = Reg(Bool())
 
   val renvm     = !inst.vm && inst.mop === mopUnit
-  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, sub_dlen)
-  val last      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
+  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, sub_dlen, false.B)
+  val tail      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
-  issq.io.deq.ready := !valid || (last && io.iss.fire)
+  issq.io.deq.ready := !valid || (tail && io.iss.fire)
 
   when (issq.io.deq.fire) {
     val iss_inst = issq.io.deq.bits
@@ -55,8 +56,10 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     sub_dlen := Mux(iss_inst.seg_nf =/= 0.U && (dLenOffBits.U > (3.U +& iss_inst.mem_elem_size)),
       dLenOffBits.U - 3.U - iss_inst.mem_elem_size,
       0.U)
-  } .elsewhen (last && io.iss.fire) {
-    valid := false.B
+    head := true.B
+  } .elsewhen (io.iss.fire) {
+    valid := !tail
+    head := false.B
   }
 
   io.vat := inst.vat
@@ -72,12 +75,11 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val data_hazard = raw_hazard
 
   io.rvd.req.valid := valid
-  io.rvd.req.bits := getEgId(inst.rd + (sidx << inst.pos_lmul), eidx, inst.mem_elem_size)
+  io.rvd.req.bits := getEgId(inst.rd + (sidx << inst.pos_lmul), eidx, inst.mem_elem_size, false.B)
   io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits := getEgId(0.U, eidx >> 3, 0.U)
+  io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && io.rvd.req.ready
-  io.iss.bits.wvd := false.B
   io.iss.bits.rvs1_data := DontCare
   io.iss.bits.rvs2_data := DontCare
   io.iss.bits.rvd_data  := io.rvd.resp
@@ -88,9 +90,12 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.eidx      := eidx
   io.iss.bits.wvd_eg    := DontCare
   io.iss.bits.rs1        := inst.rs1
+  io.iss.bits.rd         := inst.rd
   io.iss.bits.funct3     := DontCare
   io.iss.bits.funct6     := DontCare
-  io.iss.bits.last       := last
+  io.iss.bits.tail       := tail
+  io.iss.bits.head       := head
+  io.iss.bits.vl         := inst.vconfig.vl
   io.iss.bits.vat        := inst.vat
   io.iss.bits.vm         := inst.vm
   io.iss.bits.rm         := DontCare
@@ -100,12 +105,13 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val vm_mask   = Mux(!renvm, ~(0.U(dLenB.W)), get_vm_mask(io.rvm.resp, eidx, inst.mem_elem_size))
   io.iss.bits.wmask := head_mask & tail_mask & vm_mask
   io.iss.bits.rmask := vm_mask
+  io.iss.bits.rvm_data := io.rvm.resp
 
-  when (io.iss.fire && !last) {
-    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size)) {
+  when (io.iss.fire && !tail) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B)) {
       rvd_mask := rvd_mask & ~UIntToOH(io.rvd.req.bits)
     }
-    when (next_mask_is_new_eg(eidx, next_eidx)) {
+    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
       rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits)
     }
     when (sidx === inst.seg_nf) {

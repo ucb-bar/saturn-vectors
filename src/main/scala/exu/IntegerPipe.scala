@@ -259,60 +259,58 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val vd_eew   = io.pipe(0).bits.vd_eew
 
   lazy val ctrl_table = Seq(
-    (OPIFunct6.add    , Seq(N,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.sub    , Seq(Y,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.rsub   , Seq(Y,X,N,N,X,N,X,Y,X,N)),
-    (OPMFunct6.waddu  , Seq(N,N,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wadd   , Seq(N,Y,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsubu  , Seq(Y,N,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsub   , Seq(Y,Y,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wadduw , Seq(N,N,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.waddw  , Seq(N,Y,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsubuw , Seq(Y,N,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsubw  , Seq(Y,Y,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.adc    , Seq(N,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.madc   , Seq(N,X,N,N,X,Y,N,N,X,N)),
-    (OPIFunct6.sbc    , Seq(Y,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.msbc   , Seq(Y,X,N,N,X,Y,N,N,X,N)),
-    (OPIFunct6.and    , Seq(X,X,Y,N,X,N,X,X,X,N)),
-    (OPIFunct6.or     , Seq(X,X,Y,N,X,N,X,X,X,N)),
-    (OPIFunct6.xor    , Seq(X,X,Y,N,X,N,X,X,X,N)),
-    (OPMFunct6.xunary0, Seq(X,X,N,N,X,N,X,X,X,N)),
-    (OPIFunct6.sll    , Seq(X,X,N,Y,Y,N,X,X,X,N)),
-    (OPIFunct6.sra    , Seq(X,X,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.srl    , Seq(X,N,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nsra   , Seq(X,N,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nsrl   , Seq(X,N,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.mseq   , Seq(X,X,N,N,X,Y,Y,X,N,N)),
-    (OPIFunct6.msne   , Seq(X,X,N,N,X,Y,Y,X,N,N)),
-    (OPIFunct6.msltu  , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.mslt   , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.msleu  , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.msle   , Seq(X,X,N,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.msgtu  , Seq(X,X,N,N,X,Y,Y,Y,Y,N)),
-    (OPIFunct6.msgt   , Seq(X,X,N,N,X,Y,Y,Y,Y,N)),
-    (OPIFunct6.minu   , Seq(X,X,N,N,X,N,X,N,Y,N)),
-    (OPIFunct6.min    , Seq(X,X,N,N,X,N,X,N,Y,N)),
-    (OPIFunct6.maxu   , Seq(X,X,N,N,X,N,X,Y,Y,N)),
-    (OPIFunct6.max    , Seq(X,X,N,N,X,N,X,Y,Y,N)),
-    (OPIFunct6.merge  , Seq(X,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.saddu  , Seq(N,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.sadd   , Seq(N,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.ssubu  , Seq(Y,X,N,N,X,N,X,N,X,N)),
-    (OPIFunct6.ssub   , Seq(Y,X,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.aadd   , Seq(N,X,N,N,X,N,X,N,X,Y)),
-    (OPMFunct6.aaddu  , Seq(N,X,N,N,X,N,X,N,X,Y)),
-    (OPMFunct6.asub   , Seq(Y,X,N,N,X,N,X,N,X,Y)),
-    (OPMFunct6.asubu  , Seq(Y,X,N,N,X,N,X,N,X,Y)),
-    (OPIFunct6.ssrl   , Seq(X,X,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.ssra   , Seq(X,X,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nclip  , Seq(X,N,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nclipu , Seq(X,N,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.add    , Seq(N,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.sub    , Seq(Y,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.rsub   , Seq(Y,X,N,X,N,X,Y,X,N)),
+    (OPMFunct6.waddu  , Seq(N,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wadd   , Seq(N,Y,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsubu  , Seq(Y,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsub   , Seq(Y,Y,N,X,N,X,N,X,N)),
+    (OPMFunct6.wadduw , Seq(N,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.waddw  , Seq(N,Y,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsubuw , Seq(Y,N,N,X,N,X,N,X,N)),
+    (OPMFunct6.wsubw  , Seq(Y,Y,N,X,N,X,N,X,N)),
+    (OPIFunct6.adc    , Seq(N,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.madc   , Seq(N,X,N,X,Y,N,N,X,N)),
+    (OPIFunct6.sbc    , Seq(Y,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.msbc   , Seq(Y,X,N,X,Y,N,N,X,N)),
+    (OPMFunct6.xunary0, Seq(X,X,N,X,N,X,X,X,N)),
+    (OPIFunct6.sll    , Seq(X,X,Y,Y,N,X,X,X,N)),
+    (OPIFunct6.sra    , Seq(X,X,Y,N,N,X,X,X,N)),
+    (OPIFunct6.srl    , Seq(X,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nsra   , Seq(X,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nsrl   , Seq(X,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.mseq   , Seq(X,X,N,X,Y,Y,X,N,N)),
+    (OPIFunct6.msne   , Seq(X,X,N,X,Y,Y,X,N,N)),
+    (OPIFunct6.msltu  , Seq(X,X,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.mslt   , Seq(X,X,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.msleu  , Seq(X,X,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.msle   , Seq(X,X,N,X,Y,Y,N,Y,N)),
+    (OPIFunct6.msgtu  , Seq(X,X,N,X,Y,Y,Y,Y,N)),
+    (OPIFunct6.msgt   , Seq(X,X,N,X,Y,Y,Y,Y,N)),
+    (OPIFunct6.minu   , Seq(X,X,N,X,N,X,N,Y,N)),
+    (OPIFunct6.min    , Seq(X,X,N,X,N,X,N,Y,N)),
+    (OPIFunct6.maxu   , Seq(X,X,N,X,N,X,Y,Y,N)),
+    (OPIFunct6.max    , Seq(X,X,N,X,N,X,Y,Y,N)),
+    (OPIFunct6.merge  , Seq(X,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.saddu  , Seq(N,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.sadd   , Seq(N,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.ssubu  , Seq(Y,X,N,X,N,X,N,X,N)),
+    (OPIFunct6.ssub   , Seq(Y,X,N,X,N,X,N,X,N)),
+    (OPMFunct6.aadd   , Seq(N,X,N,X,N,X,N,X,Y)),
+    (OPMFunct6.aaddu  , Seq(N,X,N,X,N,X,N,X,Y)),
+    (OPMFunct6.asub   , Seq(Y,X,N,X,N,X,N,X,Y)),
+    (OPMFunct6.asubu  , Seq(Y,X,N,X,N,X,N,X,Y)),
+    (OPIFunct6.ssrl   , Seq(X,X,Y,N,N,X,X,X,N)),
+    (OPIFunct6.ssra   , Seq(X,X,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nclip  , Seq(X,N,Y,N,N,X,X,X,N)),
+    (OPIFunct6.nclipu , Seq(X,N,Y,N,N,X,X,X,N)),
   )
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  val ctrl_sub :: ctrl_add_sext :: ctrl_bw :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
+  val ctrl_sub :: ctrl_add_sext :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(10)(X), ctrl_table)
+    Seq.fill(9)(X), ctrl_table)
   val ctrl_cmask = (
     io.pipe(0).bits.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.sbc) ||
     ((io.pipe(0).bits.opif6.isOneOf(OPIFunct6.madc, OPIFunct6.msbc)) && !io.pipe(0).bits.vm)
@@ -323,15 +321,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val ctrl_minmax = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.minu, OPIFunct6.min, OPIFunct6.maxu, OPIFunct6.max)
   val ctrl_merge = io.pipe(0).bits.opif6 === OPIFunct6.merge
   val ctrl_sat = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.saddu, OPIFunct6.sadd, OPIFunct6.ssubu, OPIFunct6.ssub)
-
-  val bw_and = io.pipe(0).bits.funct6(1,0) === 1.U
-  val bw_or  = io.pipe(0).bits.funct6(1,0) === 2.U
-  val bw_xor = io.pipe(0).bits.funct6(1,0) === 3.U
-  val bw_out = Mux1H(Seq(
-    (bw_and, (io.pipe(0).bits.rvs1_data & io.pipe(0).bits.rvs2_data)),
-    (bw_or , (io.pipe(0).bits.rvs1_data | io.pipe(0).bits.rvs2_data)),
-    (bw_xor, (io.pipe(0).bits.rvs1_data ^ io.pipe(0).bits.rvs2_data))
-  ))
 
   val sat_signed = io.pipe(0).bits.funct6(0)
   val sat_addu   = io.pipe(0).bits.funct6(1,0) === 0.U
@@ -448,7 +437,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
 
   val outs = Seq(
     (ctrl_xunary0        , xunary0_out),
-    (ctrl_bw             , bw_out),
     (ctrl_mask_write     , mask_out),
     (ctrl_shift          , shift_out),
     (ctrl_minmax         , minmax_out),

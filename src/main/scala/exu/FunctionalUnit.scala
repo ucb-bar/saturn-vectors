@@ -15,6 +15,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
     val sub_dlen = Output(UInt(log2Ceil(dLenB).W))
     val ready = Output(Bool())
   }
+
   val set_vxsat = Output(Bool())
   val set_fflags = Output(Valid(UInt(5.W)))
 }
@@ -26,6 +27,7 @@ class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends Func
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {
   val write = Decoupled(new VectorWrite(dLen))
+  val scalar_write = Decoupled(new ScalarWrite)
   val vat = Output(Valid(UInt(vParams.vatSz.W)))
   val hazard = Output(Valid(new PipeHazard))
 
@@ -34,8 +36,6 @@ class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO
 
 abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io: FunctionalUnitIO
-
-  def accepts(f3: UInt, f6: UInt): Bool
 
   def extract(in: UInt, sext: Bool, in_eew: UInt, eidx: UInt): SInt = {
     val bytes = in.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -55,7 +55,6 @@ abstract class PipelinedFunctionalUnit(val depth: Int)(implicit p: Parameters) e
   val io = IO(new PipelinedFunctionalUnitIO(depth))
 
   require (depth > 0)
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 }
 abstract class IterativeFunctionalUnit(implicit p: Parameters) extends FunctionalUnit()(p) {
   val io = IO(new IterativeFunctionalUnitIO)
@@ -64,8 +63,7 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   val op = Reg(new VectorMicroOp)
   val last = Wire(Bool())
 
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
-  io.vat.valid := valid && op.last
+  io.vat.valid := valid && op.tail
   io.vat.bits  := op.vat
   io.busy := valid
 

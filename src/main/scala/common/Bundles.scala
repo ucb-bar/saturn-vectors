@@ -77,6 +77,12 @@ class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p
   val mask = UInt(writeBits.W)
 }
 
+class ScalarWrite extends Bundle {
+  val data = UInt(64.W)
+  val fp = Bool()
+  val rd = UInt(5.W)
+}
+
 class VectorReadIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val req = Decoupled(UInt(log2Ceil(egsTotal).W))
   val resp = Input(UInt(dLen.W))
@@ -104,12 +110,13 @@ class MaskedByte extends Bundle {
 }
 
 class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val wvd = Bool()
   val eidx = UInt(log2Ceil(maxVLMax).W)
+  val vl = UInt((1+log2Ceil(maxVLMax)).W)
 
   val rvs1_data = UInt(dLen.W)
   val rvs2_data = UInt(dLen.W)
   val rvd_data  = UInt(dLen.W)
+  val rvm_data  = UInt(dLen.W)
 
   val rvs1_eew = UInt(2.W)
   val rvs2_eew = UInt(2.W)
@@ -118,6 +125,7 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
 
   val rmask   = UInt(dLenB.W)
   val wmask   = UInt(dLenB.W)
+
 
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
 
@@ -132,9 +140,11 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
 
   val funct6 = UInt(6.W)
   val rs1 = UInt(5.W)
+  val rd = UInt(5.W)
   val vm = Bool()
 
-  val last = Bool()
+  val head = Bool()
+  val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
 
   val rm = UInt(3.W)

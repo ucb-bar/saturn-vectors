@@ -29,6 +29,7 @@ class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasV
   io.core.backend_busy   := vu.io.backend_busy
   io.core.set_vxsat      := vu.io.set_vxsat
   io.core.set_fflags     := vu.io.set_fflags
+  io.core.resp           <> vu.io.scalar_resp
 
   val hella_simple = Module(new SimpleHellaCacheIF)
   val hella_arb = Module(new HellaCacheArbiter(2))
@@ -277,15 +278,17 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
   when (m_valid) {
     w_inst := m_inst
-    w_inst.rs1_data := Mux(m_inst.isOpf, io.core.mem.frs1, m_inst.rs1_data)
+    w_inst.rs1_data := Mux(m_inst.isOpf && !m_inst.vmu, io.core.mem.frs1, m_inst.rs1_data)
   }
 
   io.core.wb.retire := false.B
+  io.core.wb.inst := w_inst.bits
   io.core.wb.pc := w_pc
   io.core.wb.xcpt := false.B
   io.core.wb.cause := DontCare
   io.core.wb.replay := false.B
   io.core.wb.tval := w_addr
+  io.core.wb.rob_should_wb := w_inst.funct3 === OPMVX && w_inst.opmf6 === OPMFunct6.wrxunary0
   io.core.set_vstart.valid := false.B
   io.core.set_vstart.bits := DontCare
   io.core.set_vxsat := DontCare // set outside
@@ -294,6 +297,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.core.set_vconfig.bits := w_inst.vconfig
   io.core.set_vconfig.bits.vl := w_eidx
   io.core.backend_busy := DontCare
+  io.core.resp := DontCare // set outside
 
   io.issue.valid := false.B
   io.issue.bits := w_inst
@@ -317,10 +321,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   }
 
   when (w_valid && !w_replay) {
-    when (w_inst.vstart >= w_vl) {
-      io.core.wb.retire := true.B
-    } .elsewhen (!io.issue.ready) {
+    when (!io.issue.ready) {
       io.core.wb.replay := true.B
+    } .elsewhen (w_inst.vstart >= w_vl) {
+      io.core.wb.retire := true.B
+      io.issue.valid := true.B
     } .elsewhen (w_inst.vmu && (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
       x_set_replay := true.B
     } .elsewhen (w_tlb_resp.miss) {

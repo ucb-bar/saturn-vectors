@@ -25,6 +25,7 @@ class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p)
   val mew = io.inst(28)
   val nf = io.inst(31,29)
   val funct3 = io.inst(14,12)
+  val funct6 = io.inst(31,26)
 
   val v_load = opcode === opcLoad
   val v_store = opcode === opcStore
@@ -44,6 +45,7 @@ class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p)
     io.legal := true.B
     io.read_rs1 := funct3.isOneOf(OPIVX, OPMVX)
     io.read_frs1 := funct3 === OPFVF
+    io.write_rd := funct3 === OPMVV && funct6 === 16.U
     io.fp := funct3 === OPFVF
   }
 }

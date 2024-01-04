@@ -21,12 +21,13 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     val iss = Flipped(Decoupled(new VectorMicroOp))
 
     val write = Valid(new VectorWrite(dLen))
-    val vat_release = Valid(UInt(vParams.vatSz.W))
+    val vat_release = Vec(2, Valid(UInt(vParams.vatSz.W)))
     val hazards = Vec(nHazards, Valid(new PipeHazard))
     val busy = Output(Bool())
 
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
+    val scalar_write = Decoupled(new ScalarWrite)
   })
 
   fus.map(_.io.iss).foreach { iss =>
@@ -42,8 +43,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
   val pipe_write = WireInit(false.B)
 
-  io.vat_release.valid := false.B
-  io.vat_release.bits := DontCare
+  io.vat_release.foreach(_.valid := false.B)
+  io.vat_release.foreach(_.bits := DontCare)
 
   io.write.valid := false.B
   io.write.bits := DontCare
@@ -91,13 +92,13 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
     val write_sel = pipe_valids.zip(pipe_latencies).map { case (v,l) => v && l === 0.U }
     val fu_sel = Mux1H(write_sel, pipe_sels)
-    val vat_release = Mux1H(write_sel, pipe_bits.map(_.last))
+    val vat_release = Mux1H(write_sel, pipe_bits.map(_.tail))
     pipe_write := write_sel.orR
     when (write_sel.orR) {
       io.write.valid := true.B
       io.write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
-      io.vat_release.valid := vat_release
-      io.vat_release.bits := Mux1H(write_sel, pipe_bits.map(_.vat))
+      io.vat_release(0).valid := vat_release
+      io.vat_release(0).bits := Mux1H(write_sel, pipe_bits.map(_.vat))
     }
 
     when (pipe_valids.orR) { io.busy := true.B }
@@ -108,6 +109,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     }
   }
 
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
   if (iter_fus.size > 0) {
     val iter_write_arb = Module(new Arbiter(new VectorWrite(dLen), iter_fus.size))
     iter_write_arb.io.in.zip(iter_fus.map(_.io.write)).foreach { case (l,r) => l <> r }
@@ -118,12 +121,18 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
       io.write.bits.eg   := iter_write_arb.io.out.bits.eg
       io.write.bits.mask := iter_write_arb.io.out.bits.mask
       io.write.bits.data := iter_write_arb.io.out.bits.data
-      io.vat_release.valid := iter_write_arb.io.out.fire() && Mux1H(iter_write_arb.io.in.map(_.ready), iter_fus.map(_.io.vat.valid))
-      io.vat_release.bits  := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat.bits))
+      io.vat_release(0).valid := iter_write_arb.io.out.fire() && Mux1H(iter_write_arb.io.in.map(_.ready), iter_fus.map(_.io.vat.valid))
+      io.vat_release(0).bits  := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat.bits))
     }
     when (iter_fus.map(_.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {
       io.hazards(i+pipe_depth) := iter_fus(i).io.hazard
     }
+
+    val scalar_write_arb = Module(new Arbiter(new ScalarWrite, iter_fus.size))
+    scalar_write_arb.io.in.zip(iter_fus.map(_.io.scalar_write)).foreach { case (l, r) => l <> r }
+    io.scalar_write <> scalar_write_arb.io.out
+    io.vat_release(1).valid := scalar_write_arb.io.out.fire && Mux1H(scalar_write_arb.io.in.map(_.ready), iter_fus.map(_.io.vat.valid))
+    io.vat_release(1).bits := Mux1H(scalar_write_arb.io.in.map(_.fire), iter_fus.map(_.io.vat.bits))
   }
 }
