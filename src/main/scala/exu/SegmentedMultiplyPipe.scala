@@ -9,8 +9,9 @@ import freechips.rocketchip.tile._
 import vector.common._
 
 class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
-  // TODO: SMUL currently operates at 1 element/cycle
-  io.iss.sub_dlen := Mux(io.iss.op.opif6 === OPIFunct6.smul, log2Ceil(dLenB).U - io.iss.op.vd_eew, 0.U)
+
+  io.iss.sub_dlen := {if (vParams.useVectorSMul) 0.U else Mux(io.iss.op.opif6 === OPIFunct6.smul, log2Ceil(dLenB).U - io.iss.op.vd_eew, 0.U)}
+    
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
@@ -71,31 +72,21 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   })(in_eew)
   val half_sel = (io.pipe(0).bits.eidx >> (dLenOffBits.U - out_eew))(0)
   val wide = Mux(half_sel, mul_out >> dLen, mul_out)(dLen-1,0)
-  ////////////////////////////////////
-  // TODO, handle SMUL > 1 elem/cycle
-  ////////////////////////////////////
-  val smul_sat_sew = Wire(Vec(4, Bool()))
-  val smul_clipped_sew = Wire(Vec(4, UInt(dLen.W)))
-  for (sew <- 0 until 4) {
-    val wideProds = mul_out.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))
-    val smul = wideProds.map { wideElem => 
-      val rounding_incr = RoundingIncrement(io.pipe(0).bits.vxrm, wideElem((8 << sew)-1, 0)) 
-      (wideElem >> ((8 << sew) - 1)) + Cat(0.U(1.W), rounding_incr).asSInt  
-    }
-    
-    val clip_neg = (-1 << ((8 << sew)-1)).S 
-    val clip_pos = ((1 << ((8 << sew)-1)) - 1).S
-    val clip_hi = smul.map{ _ > clip_pos }
-    val clip_lo = smul.map{ _ < clip_neg }    
-    
-    smul_clipped_sew(sew) := smul.zipWithIndex.map { case (sm, i) => 
-      val smul_long = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
-      smul_long((8 << sew)-1, 0)
-    }.asUInt
-    smul_sat_sew(sew) := clip_hi.orR || clip_lo.orR
+  
+  val (smul_clipped, smul_sat) = if (vParams.useVectorSMul) {
+    val smul_arr = Module(new VectorSMul)
+    smul_arr.io.mul_in := mul_out
+    smul_arr.io.eew := out_eew
+    smul_arr.io.vxrm := io.pipe(0).bits.vxrm
+    (smul_arr.io.clipped, smul_arr.io.sat)
+  } else {
+    val smul_arr = Module(new ElementwiseSMul)
+    smul_arr.io.mul_in := mul_out
+    smul_arr.io.eew := out_eew
+    smul_arr.io.vxrm := io.pipe(0).bits.vxrm
+    smul_arr.io.eidx := io.pipe(0).bits.eidx
+    (smul_arr.io.clipped, smul_arr.io.sat)
   }
-  val smul_clipped = smul_clipped_sew(out_eew)
-  val smul_sat = smul_sat_sew(out_eew)
 
   val adder_arr = Module(new AdderArray(dLenB))
   adder_arr.io.in1 := Mux(ctrl_wmul, wide, lo).asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -124,9 +115,8 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
 
 }
 
-class SegmentedMultiplyBlock extends Module {
-  val xLen = 64
-  val xBytes = xLen / 8
+class SegmentedMultiplyBlock(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+
   val io = IO(new Bundle {
     val in1_signed = Input(Bool())
     val in2_signed = Input(Bool())
@@ -203,4 +193,65 @@ class SegmentedMultiplyBlock extends Module {
     }).asUInt
   }
   io.out_data := Mux1H(UIntToOH(io.eew), sum_pprods_s)
+}
+
+
+class VectorSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  val io = IO(new Bundle {
+    val eew = Input(UInt(2.W))
+    val vxrm = Input(UInt(2.W))
+    val mul_in = Input(UInt((2*dLen).W))
+
+    val clipped = Output(UInt((dLen).W))
+    val sat = Output(Bool())
+  })
+  val smul_sat_sew = Wire(Vec(4, Bool()))
+  val smul_clipped_sew = Wire(Vec(4, UInt(dLen.W)))
+  for (sew <- 0 until 4) {
+    val wideProds = io.mul_in.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))
+    val smul = wideProds.map { wideElem => 
+      val rounding_incr = RoundingIncrement(io.vxrm, wideElem((8 << sew)-1, 0)) 
+      (wideElem >> ((8 << sew) - 1)) + Cat(0.U(1.W), rounding_incr).asSInt  
+    }
+    val clip_neg = (-1 << ((8 << sew)-1)).S 
+    val clip_pos = ((1 << ((8 << sew)-1)) - 1).S
+    val clip_hi = smul.map{ _ > clip_pos }
+    val clip_lo = smul.map{ _ < clip_neg }    
+    
+    smul_clipped_sew(sew) := smul.zipWithIndex.map { case (sm, i) => 
+      val smul_long = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
+      smul_long((8 << sew)-1, 0)
+    }.asUInt
+    smul_sat_sew(sew) := clip_hi.orR || clip_lo.orR
+  }
+  io.clipped := smul_clipped_sew(io.eew)
+  io.sat := smul_sat_sew(io.eew)
+}
+
+
+class ElementwiseSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  val io = IO(new Bundle {
+    val eew = Input(UInt(2.W))
+    val vxrm = Input(UInt(2.W))
+    val eidx =  Input(UInt(log2Ceil(maxVLMax).W))
+    val mul_in = Input(UInt((2*dLen).W))
+
+    val clipped = Output(UInt((dLen).W))
+    val sat = Output(Bool())
+  })
+  val smul_prod = VecInit.tabulate(4)({sew =>
+    if (sew == 3 && dLenB == 8) { io.mul_in } else {
+      io.mul_in.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))(io.eidx(log2Ceil(dLenB)-1-sew,0))
+    }
+  })(io.eew).asSInt
+  val rounding_incr = VecInit.tabulate(4)({ sew => RoundingIncrement(io.vxrm, smul_prod((8 << sew)-1,0)) })(io.eew)
+  val smul = VecInit.tabulate(4)({ sew => smul_prod >> ((8 << sew) - 1) })(io.eew) + Cat(0.U(1.W), rounding_incr).asSInt
+  val clip_neg = VecInit.tabulate(4)({ sew => (-1 << ((8 << sew)-1)).S })(io.eew)
+  val clip_pos = VecInit.tabulate(4)({ sew => ((1 << ((8 << sew)-1)) - 1).S })(io.eew)
+  val clip_hi = smul > clip_pos
+  val clip_lo = smul < clip_neg
+  val clipped = Mux(clip_hi, clip_pos, 0.S) | Mux(clip_lo, clip_neg, 0.S) | Mux(!clip_hi && !clip_lo, smul, 0.S)
+
+  io.sat := clip_hi || clip_lo
+  io.clipped := VecInit.tabulate(4)({ sew => Fill(dLenB >> sew, clipped((8<<sew)-1,0)) })(io.eew)
 }
