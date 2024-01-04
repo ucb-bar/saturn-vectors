@@ -282,11 +282,13 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   }
 
   io.core.wb.retire := false.B
+  io.core.wb.inst := w_inst.bits
   io.core.wb.pc := w_pc
   io.core.wb.xcpt := false.B
   io.core.wb.cause := DontCare
   io.core.wb.replay := false.B
   io.core.wb.tval := w_addr
+  io.core.wb.rob_should_wb := w_inst.funct3 === OPMVX && w_inst.opmf6 === OPMFunct6.wrxunary0
   io.core.set_vstart.valid := false.B
   io.core.set_vstart.bits := DontCare
   io.core.set_vxsat := DontCare // set outside
@@ -319,10 +321,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   }
 
   when (w_valid && !w_replay) {
-    when (w_inst.vstart >= w_vl) {
-      io.core.wb.retire := true.B
-    } .elsewhen (!io.issue.ready) {
+    when (!io.issue.ready) {
       io.core.wb.replay := true.B
+    } .elsewhen (w_inst.vstart >= w_vl) {
+      io.core.wb.retire := true.B
+      io.issue.valid := true.B
     } .elsewhen (w_inst.vmu && (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
       x_set_replay := true.B
     } .elsewhen (w_tlb_resp.miss) {

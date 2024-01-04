@@ -19,6 +19,7 @@ class ExecuteIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
   val renv2 = Bool()
   val renvd = Bool()
   val renvm = Bool()
+  val wvd = Bool()
 }
 
 class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
@@ -97,9 +98,16 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     issq.io.enq.bits.wide_vs2  := true.B
   }
   issq.io.enq.bits.writes_mask := dis_writes_mask
-  issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV) && !(io.dis.bits.funct3.isOneOf(OPFVV) && (io.dis.bits.opff6 === OPFFunct6.funary1))
-  issq.io.enq.bits.renv2       := !((io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge) && io.dis.bits.vm)
+  issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV) && !(io.dis.bits.funct3.isOneOf(OPFVV) && (io.dis.bits.opff6 === OPFFunct6.funary1)) && !(io.dis.bits.funct3 === OPMVV && io.dis.bits.opmf6 === OPMFunct6.wrxunary0)
+  issq.io.enq.bits.renv2       := true.B
+  when (((io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge) && io.dis.bits.vm) ||
+    (io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.funct3 === OPMVX)) {
+    issq.io.enq.bits.renv2 := false.B
+  }
   issq.io.enq.bits.reads_mask  := dis_reads_mask
+  when (io.dis.bits.funct3.isOneOf(OPMVV) && io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.rs1(4)) {
+    issq.io.enq.bits.reads_mask := true.B
+  }
   issq.io.enq.bits.renvd       := io.dis.bits.opmf6.isOneOf(
     OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
     OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) || io.dis.bits.opff6.isOneOf(
@@ -107,6 +115,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     OPFFunct6.fmadd, OPFFunct6.fnmadd, OPFFunct6.fmsub, OPFFunct6.fnmsub,
     OPFFunct6.fwmacc, OPFFunct6.fwnmacc, OPFFunct6.fwmsac, OPFFunct6.fwnmsac)
   issq.io.enq.bits.renvm       := !io.dis.bits.vm || io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge
+  issq.io.enq.bits.wvd := !(io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.funct3 === OPMVV)
 
   for (i <- 0 until issQEntries) {
     val inst = issq.io.peek(i).bits
@@ -121,11 +130,12 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
       (inst.renv2, vd_arch_mask),
       (inst.renvm, 1.U)
     ).map(t => Mux(t._1, t._2, 0.U)).reduce(_|_)
-    io.iss_hazards(i).bits.wintent := vd_arch_mask
+    io.iss_hazards(i).bits.wintent := Mux(inst.wvd, vd_arch_mask, 0.U)
   }
 
   val valid = RegInit(false.B)
   val inst  = Reg(new ExecuteIssueInst)
+  val head  = Reg(Bool())
   val wvd_mask  = Reg(UInt(egsTotal.W))
   val rvs1_mask = Reg(UInt(egsTotal.W))
   val rvs2_mask = Reg(UInt(egsTotal.W))
@@ -146,11 +156,14 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val use_wmask = !inst.vm && (!inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge) || !inst.opff6.isOneOf(OPFFunct6.fmerge))
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
-  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask)
-  val last      = next_eidx === inst.vconfig.vl
+  val eff_vl    = Mux(inst.funct3 === OPMVX && inst.opmf6 === OPMFunct6.wrxunary0,
+    1.U, // vmv.s.x
+    inst.vconfig.vl)
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask)
+  val tail      = next_eidx === eff_vl
 
 
-  issq.io.deq.ready := !valid || (last && io.iss.fire)
+  issq.io.deq.ready := !valid || (tail && io.iss.fire)
 
   when (issq.io.deq.fire) {
     val iss_inst = issq.io.deq.bits
@@ -162,15 +175,16 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_mask, 0.U, iss_inst.pos_lmul                     ), 3)
     val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_mask, 0.U, iss_inst.pos_lmul +& iss_inst.wide_vs2), 4)
 
-    wvd_mask    := FillInterleaved(egsPerVReg, vd_arch_mask)
+    wvd_mask    := Mux(iss_inst.wvd  , FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvs1_mask   := Mux(iss_inst.renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
     rvs2_mask   := Mux(iss_inst.renv2, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
     rvd_mask    := Mux(iss_inst.renvd, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvm_mask    := Mux(iss_inst.renvm, ~(0.U(egsPerVReg.W)), 0.U)
-  } .elsewhen (last && io.iss.fire) {
-    valid := false.B
+    head        := true.B
+  } .elsewhen (io.iss.fire) {
+    valid := !tail
+    head := false.B
   }
-
 
   io.vat := inst.vat
   io.seq_hazard.valid := valid
@@ -182,7 +196,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val vs2_read_oh = Mux(inst.renv2, UIntToOH(io.rvs2.req.bits), 0.U)
   val vd_read_oh  = Mux(inst.renvd, UIntToOH(io.rvd.req.bits ), 0.U)
   val vm_read_oh  = Mux(inst.renvm, UIntToOH(io.rvm.req.bits ), 0.U)
-  val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
+  val vd_write_oh = Mux(inst.wvd  , UIntToOH(io.iss.bits.wvd_eg), 0.U)
 
   val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh | vm_read_oh) & io.older_writes) =/= 0.U
   val waw_hazard = (vd_write_oh & io.older_writes) =/= 0.U
@@ -208,7 +222,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     !(inst.renvm && !io.rvm.req.ready)
   )
 
-  io.iss.bits.wvd   := true.B
   io.iss.bits.rvs1_data := io.rvs1.resp
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
     val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(59, inst.imm5(4)), inst.imm5), inst.rs1_data)
@@ -221,12 +234,14 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rvd_eew   := vs3_eew
   io.iss.bits.vd_eew    := vd_eew
   io.iss.bits.eidx      := eidx
-  io.iss.bits.vl_low    := inst.vconfig.vl
+  io.iss.bits.vl        := inst.vconfig.vl
   io.iss.bits.wvd_eg    := getEgId(inst.rd, eidx, vd_eew, inst.writes_mask)
   io.iss.bits.rs1       := inst.rs1
+  io.iss.bits.rd        := inst.rd
   io.iss.bits.funct3    := inst.funct3
   io.iss.bits.funct6    := inst.funct6
-  io.iss.bits.last      := last
+  io.iss.bits.tail      := tail
+  io.iss.bits.head      := head
   io.iss.bits.vat       := inst.vat
   io.iss.bits.vm        := inst.vm
   io.iss.bits.rm        := inst.rm
@@ -242,8 +257,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   })(vd_eew), ~(0.U(dLenB.W)))
   io.iss.bits.wmask := head_mask & tail_mask & vm_mask
   io.iss.bits.rmask := Mux(inst.vm, ~(0.U(dLenB.W)), vm_resp)
+  io.iss.bits.rvm_data := io.rvm.resp
 
-  when (io.iss.fire && !last) {
+  when (io.iss.fire && !tail) {
     when (next_is_new_eg(eidx, next_eidx, vd_eew, inst.writes_mask)) {
       val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
       wvd_mask  := wvd_mask  & ~wvd_clr_mask

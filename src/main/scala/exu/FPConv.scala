@@ -15,7 +15,8 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   lazy val opcodes = Seq(
     OPFFunct6.funary0
   )
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes)
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes)
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 
   val rs1 = io.pipe(0).bits.rs1
   val ctrl_widen = rs1(3)

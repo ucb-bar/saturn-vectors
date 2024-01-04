@@ -34,11 +34,12 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     (OPIFunct6.smul   , Seq(N,Y,Y,N,N,N))
   )
 
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
 
   val ctrl_hi :: ctrl_sign1 :: ctrl_sign2 :: ctrl_swapvdvs2 :: ctrl_madd :: ctrl_sub :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(6)(X), ctrl_table)
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 
   val in_eew = io.pipe(0).bits.rvs1_eew
   val out_eew = io.pipe(0).bits.vd_eew

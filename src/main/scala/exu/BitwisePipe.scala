@@ -24,7 +24,8 @@ class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     (OPMFunct6.mnor     , Seq(N,Y,N,Y,N)),
     (OPMFunct6.mxnor    , Seq(N,N,Y,Y,N)),
   )
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
   val ctrl_and :: ctrl_or :: ctrl_xor :: ctrl_invout :: ctrl_inv1 :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, Seq.fill(5)(X), ctrl_table)
 
@@ -40,7 +41,7 @@ class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg
   io.write.bits.mask := Mux(io.pipe(0).bits.isOpm,
-    ~(0.U(dLen.W)) >> Mux(io.pipe(0).bits.last, (0.U(log2Ceil(dLen).W) - io.pipe(0).bits.vl_low), 0.U),
+    ~(0.U(dLen.W)) >> Mux(io.pipe(0).bits.tail, (0.U(log2Ceil(dLen).W) - io.pipe(0).bits.vl(log2Ceil(dLen)-1,0)), 0.U),
     FillInterleaved(8, io.pipe(0).bits.wmask))
   io.write.bits.data := out
 

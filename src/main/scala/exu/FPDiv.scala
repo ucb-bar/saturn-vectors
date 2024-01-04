@@ -19,7 +19,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
     val exc = Output(UInt(5.W))
   })
 
-  val default_bits = BitPat("b0000000") 
+  val default_bits = BitPat("b0000000")
   val vfrec7_table = Seq(
     (BitPat("b0000000") , BitPat(127.U(7.W))),
     (BitPat("b0000001") , BitPat(125.U(7.W))),
@@ -148,7 +148,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
     (BitPat("b1111101") , BitPat(1.U(7.W))),
     (BitPat("b1111110") , BitPat(1.U(7.W))),
     (BitPat("b1111111") , BitPat(0.U(7.W))),
-  ) 
+  )
 
   def count_leading_zeros(in: UInt, width: Int): UInt = {
     width.U - PriorityEncoder(Reverse(in))
@@ -170,7 +170,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
 
   val is_subnormal_output = Wire(Vec(2, Bool()))
 
-  val output_exponent_s = Wire(UInt(8.W)) 
+  val output_exponent_s = Wire(UInt(8.W))
   val output_exponent_d = Wire(UInt(11.W))
 
   for (eew <- 2 until 4) {
@@ -193,10 +193,10 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
 
     val normalized_exponent = Wire(UInt(fType.exp.W))
     val normalized_significand = Wire(UInt((fType.sig - 1).W))
-    normalized_exponent := Mux(is_normal, 
+    normalized_exponent := Mux(is_normal,
                                rvs2_bits(fType.ieeeWidth-2, fType.ieeeWidth-2-fType.exp+1),
                                (0.U - num_leading_significand_zeros))
-    normalized_significand := Mux(is_normal, 
+    normalized_significand := Mux(is_normal,
                                   rvs2_bits(fType.sig-2, 0),
                                   rvs2_bits(fType.sig-2, 0) << (1.U - normalized_exponent))
 
@@ -206,13 +206,13 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
     } else {
       output_exponent_s := output_exponent_val
     }
-    
+
     is_subnormal_output(eew - 2) := output_exponent_val === 0.U || output_exponent_val.asSInt === -1.S
     output_significand_index(eew-2) := normalized_significand(fType.sig - 2, fType.sig - 8)
     output_sign(eew-2) := rvs2_bits(fType.ieeeWidth - 1)
   }
 
-  val truthTable = TruthTable(vfrec7_table, default_bits) 
+  val truthTable = TruthTable(vfrec7_table, default_bits)
   val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux(io.eew === 3.U, output_significand_index(1), output_significand_index(0)), truthTable)
 
   val s_out = Wire(UInt(32.W))
@@ -232,7 +232,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
     } .otherwise {
       s_out_significand := Cat(Cat(1.U, significand_bits), 0.U(15.W)) >> 1
     }
-  } 
+  }
   // Special case where the input is a very small subnormal and the output depends on the rounding mode
   .elsewhen (is_subnormal(0) && more_than_1_leading_sign_zero(0)) {
     when ((output_sign(0).asBool && (io.frm === 3.U || io.frm === 1.U)) || (!output_sign(0) && (io.frm === 2.U || io.frm === 1.U))) {
@@ -255,7 +255,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
     } .otherwise {
       d_out_significand := Cat(Cat(1.U, significand_bits), 0.U(44.W)) >> 1
     }
-  } 
+  }
   .elsewhen (is_subnormal(1) && more_than_1_leading_sign_zero(1)) {
     when ((output_sign(1).asBool && (io.frm === 3.U || io.frm === 1.U)) || (!output_sign(1) && (io.frm === 2.U || io.frm === 1.U))) {
       d_out_exponent := "b11111111110".U
@@ -306,7 +306,7 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     val exc = Output(UInt(5.W))
   })
 
-  val default_bits = BitPat("b0000000") 
+  val default_bits = BitPat("b0000000")
   val vfrsqrt7_table = Seq(
     (BitPat("b0000000") , BitPat(52.U(7.W))),
     (BitPat("b0000001") , BitPat(51.U(7.W))),
@@ -435,7 +435,7 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     (BitPat("b1111101") , BitPat(55.U(7.W))),
     (BitPat("b1111110") , BitPat(54.U(7.W))),
     (BitPat("b1111111") , BitPat(53.U(7.W))),
-  ) 
+  )
 
   def count_leading_zeros(in: UInt, width: Int): UInt = {
     width.U - PriorityEncoder(Reverse(in))
@@ -452,15 +452,15 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
   val output_sign = Wire(Vec(2, UInt(1.W)))
   val output_significand_index = Wire(Vec(2, UInt(7.W)))
 
-  val output_exponent_s = Wire(UInt(8.W)) 
+  val output_exponent_s = Wire(UInt(8.W))
   val output_exponent_d = Wire(UInt(11.W))
 
   for (eew <- 2 until 4) {
     val fType = fTypes(eew - 2)
-    val rvs2_rec = fType.recode(rvs2_bits(fType.ieeeWidth-1, 0)) 
+    val rvs2_rec = fType.recode(rvs2_bits(fType.ieeeWidth-1, 0))
 
     val rvs2_classify = fType.classify(rvs2_rec)
-   
+
     is_negative(eew - 2) := rvs2_classify(2,0).orR
     is_pos_zero(eew - 2) := rvs2_classify(4)
     is_neg_zero(eew - 2) := rvs2_classify(3)
@@ -472,10 +472,10 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     val is_pos_normal = rvs2_classify(6)
     val normalized_exponent = Wire(UInt(fType.exp.W))
     val normalized_significand = Wire(UInt((fType.sig - 1).W))
-    normalized_exponent := Mux(is_pos_normal, 
+    normalized_exponent := Mux(is_pos_normal,
                                rvs2_bits(fType.ieeeWidth-2, fType.ieeeWidth-2-fType.exp+1),
                                (0.U - num_leading_significand_zeros))
-    normalized_significand := Mux(is_pos_normal, 
+    normalized_significand := Mux(is_pos_normal,
                                   rvs2_bits(fType.sig-2, 0),
                                   rvs2_bits(fType.sig-2, 0) << (1.U - normalized_exponent))
 
@@ -489,7 +489,7 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     output_sign(eew-2) := rvs2_bits(fType.ieeeWidth - 1)
   }
 
-  val truthTable = TruthTable(vfrsqrt7_table, default_bits) 
+  val truthTable = TruthTable(vfrsqrt7_table, default_bits)
   val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux(io.eew === 3.U, output_significand_index(1), output_significand_index(0)), truthTable)
 
   val s_out = Wire(UInt(32.W))
@@ -532,9 +532,8 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   val ctrl_isDiv :: ctrl_swap12 :: Nil = VecDecode.applyBools(
     io.iss.op.funct3, io.iss.op.funct6,
     Seq.fill(2)(X), ctrl_table
-  ) 
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-
+  )
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   val divSqrt_ready = (ctrl_isDiv && divSqrt.io.inReady_div) || (!ctrl_isDiv && divSqrt.io.inReady_sqrt)
 
   val rvs2_bits = extract(io.iss.op.rvs2_data, false.B, io.iss.op.rvs2_eew, io.iss.op.eidx)(63,0)
@@ -565,7 +564,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
       upconvert
     }
 
-    divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, widen(1).io.out, widen(0).io.out) 
+    divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, widen(1).io.out, widen(0).io.out)
     divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
   }
 
@@ -609,12 +608,12 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
 
-  io.write.valid := ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) && valid) || out_toWrite || divSqrt_out_valid 
+  io.write.valid := ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) && valid) || out_toWrite || divSqrt_out_valid
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Mux1H(Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, out_toWrite || divSqrt_out_valid),
                               Seq(Mux(op.rvs2_eew === 3.U, gen_vfclass(1), gen_vfclass(0)), recSqrt7.io.out, rec7.io.out, divSqrt_write))
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last) 
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last)
   last := io.write.fire()
 
   io.set_fflags.valid := divSqrt_out_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())

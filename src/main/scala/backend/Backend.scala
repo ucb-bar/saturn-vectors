@@ -58,10 +58,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready)
   vmu.io.enq.valid := vat_available && io.issue.valid   && vdq.io.enq.ready && issue_inst.bits(6,0).isOneOf(opcLoad, opcStore)
 
+  val scalar_resp_arb = Module(new Arbiter(new ScalarWrite, 2))
+  io.scalar_resp <> Queue(scalar_resp_arb.io.out)
+  scalar_resp_arb.io.in(1).valid := false.B
+  scalar_resp_arb.io.in(1).bits.fp := false.B
+  scalar_resp_arb.io.in(1).bits.rd := io.issue.bits.rd
+  scalar_resp_arb.io.in(1).bits.data := 0.U
+
   when (io.issue.bits.vconfig.vl <= io.issue.bits.vstart) {
     io.issue.ready := true.B
     vdq.io.enq.valid := false.B
     vmu.io.enq.valid := false.B
+    when (io.issue.bits.funct3 === OPMVV && io.issue.bits.opmf6 === OPMFunct6.wrxunary0) {
+      io.issue.ready := scalar_resp_arb.io.in(1).ready
+      scalar_resp_arb.io.in(1).valid := io.issue.valid
+      scalar_resp_arb.io.in(1).bits.data := Mux(io.issue.bits.rs1(0),
+        ~(0.U(xLen.W)), // vfirst
+        0.U // vpopc
+      )
+    }
   }
 
   vdq.io.enq.bits := issue_inst
@@ -97,7 +112,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => new FMAPipe(vParams.fmaPipeDepth),
     () => new VFDivSqrt,
     () => new FPCompPipe,
-    () => new FPConvPipe
+    () => new FPConvPipe,
+    () => new ScalarMoveUnit
   )))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
@@ -242,9 +258,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vat_valids(tag) := false.B
   }
 
-  clearVat(vls.io.iss.fire && vls.io.iss.bits.last, vls.io.iss.bits.vat)
+  clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  clearVat(vxu.io.vat_release.valid               , vxu.io.vat_release.bits)
+  clearVat(vxu.io.vat_release(0).valid            , vxu.io.vat_release(0).bits)
+  clearVat(vxu.io.vat_release(1).valid            , vxu.io.vat_release(1).bits)
 
   vxu.io.iss <> vxs.io.iss
   vxs.io.sub_dlen := vxu.io.iss_sub_dlen
@@ -267,5 +284,5 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
   io.set_vxsat := vxu.io.set_vxsat
   io.set_fflags := vxu.io.set_fflags
-  io.scalar_resp <> vxu.io.scalar_write
+  scalar_resp_arb.io.in(0) <> vxu.io.scalar_write
 }

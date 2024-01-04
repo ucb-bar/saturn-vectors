@@ -26,7 +26,8 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     (OPFFunct6.mfge     ,   Seq(N,X, Y,Y,N,N, N,X,X)),
     (OPFFunct6.fmerge   ,   Seq(N,X, N,X,X,X, N,X,X)),
   )
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 
   val ctrl_cmp :: ctrl_min :: ctrl_mask_write :: ctrl_eq :: ctrl_ne :: ctrl_cmp_less :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,

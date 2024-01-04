@@ -306,7 +306,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     (OPIFunct6.nclip  , Seq(X,N,Y,N,N,X,X,X,N)),
     (OPIFunct6.nclipu , Seq(X,N,Y,N,N,X,X,X,N)),
   )
-  override def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
   val ctrl_sub :: ctrl_add_sext :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
     Seq.fill(9)(X), ctrl_table)
