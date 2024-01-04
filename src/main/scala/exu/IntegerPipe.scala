@@ -62,12 +62,8 @@ class AdderArray(dLenB: Int) extends Module {
   //}
 
   // New use of wider adders
-  //
-
   val in1_dummy_bits = Wire(UInt(8.W))
   val in2_dummy_bits = Wire(UInt(8.W))
-  //val in1_dummy_bits = Wire(Vec(8, UInt(1.W)))
-  //val in2_dummy_bits = Wire(Vec(8, UInt(1.W)))
 
   when (io.eew === 0.U) {
     in1_dummy_bits := Fill(8, io.sub)
@@ -77,56 +73,31 @@ class AdderArray(dLenB: Int) extends Module {
     in2_dummy_bits := Fill(4, Cat(0.U, io.sub))
   } .elsewhen (io.eew === 2.U) {
     in1_dummy_bits := Fill(2, Cat("b111".U, io.sub))
-    in2_dummy_bits := Fill(2, Cat("b000".U, io.sub))
+    in2_dummy_bits := Fill(2, Cat(0.U(3.W), io.sub))
   } .otherwise {
     in1_dummy_bits := Cat("b1111111".U, io.sub)
     in2_dummy_bits := Cat("b0000000".U, io.sub)
   }
 
-  // Make use of wider adders
   for (i <- 0 until (dLenB >> 3)) {
-    // slice the input vec into chunks of 8B
-    // zip with the dummy bits
-    // should be 64 + 8 == 72 bits wide
-    //val in1_constructed = io.in1(i*8, (i*8)+7).zip(in1_dummy_bits).map{ case(in1, dummy) => Cat(dummy, in1) }.reduce(_ ## _)
-    //val in1_constructed = in1_dummy_bits(7) ## io.in1((i*8)+7) ##
-    //                      in1_dummy_bits(6) ## io.in1((i*8)+6) ##
-    //                      in1_dummy_bits(5) ## io.in1((i*8)+5) ##
-    //                      in1_dummy_bits(4) ## io.in1((i*8)+4) ##
-    //                      in1_dummy_bits(3) ## io.in1((i*8)+3) ##
-    //                      in1_dummy_bits(2) ## io.in1((i*8)+2) ##
-    //                      in1_dummy_bits(1) ## io.in1((i*8)+1) ##
-    //                      in1_dummy_bits(0) ## io.in1((i*8)+0)
-    val in1_constructed = io.in1((i*8)+7) ## in1_dummy_bits(7) ##
-                          io.in1((i*8)+6) ## in1_dummy_bits(6) ##
-                          io.in1((i*8)+5) ## in1_dummy_bits(5) ##
-                          io.in1((i*8)+4) ## in1_dummy_bits(4) ##
-                          io.in1((i*8)+3) ## in1_dummy_bits(3) ##
-                          io.in1((i*8)+2) ## in1_dummy_bits(2) ##
-                          io.in1((i*8)+1) ## in1_dummy_bits(1) ##
-                          io.in1((i*8)+0) ## in1_dummy_bits(0)
+    val in1_constructed = (io.in1((i*8)+7) ^ Fill(8, io.sub)) ## in1_dummy_bits(7) ##
+                          (io.in1((i*8)+6) ^ Fill(8, io.sub)) ## in1_dummy_bits(6) ##
+                          (io.in1((i*8)+5) ^ Fill(8, io.sub)) ## in1_dummy_bits(5) ##
+                          (io.in1((i*8)+4) ^ Fill(8, io.sub)) ## in1_dummy_bits(4) ##
+                          (io.in1((i*8)+3) ^ Fill(8, io.sub)) ## in1_dummy_bits(3) ##
+                          (io.in1((i*8)+2) ^ Fill(8, io.sub)) ## in1_dummy_bits(2) ##
+                          (io.in1((i*8)+1) ^ Fill(8, io.sub)) ## in1_dummy_bits(1) ##
+                          (io.in1((i*8)+0) ^ Fill(8, io.sub)) ## in1_dummy_bits(0)
 
-    // slice the input vec into chunks of 8B
-    // flip the bits using xor if it's a subtract operation
-    // zip with the dummy bits
-    // should be 64 + 8 == 72 bits wide
-    //val in2_constructed = io.in2(i*8, (i*8)+7).map(_ ^ Fill(8, io.sub)).zip(in2_dummy_bits)
-    //val in2_constructed = in2_dummy_bits(7) ## io.in2((i*8)+7) ^ Fill(8, io.sub) ##
-    //                      in2_dummy_bits(6) ## io.in2((i*8)+6) ^ Fill(8, io.sub) ##
-    //                      in2_dummy_bits(5) ## io.in2((i*8)+5) ^ Fill(8, io.sub) ##
-    //                      in2_dummy_bits(4) ## io.in2((i*8)+4) ^ Fill(8, io.sub) ##
-    //                      in2_dummy_bits(3) ## io.in2((i*8)+3) ^ Fill(8, io.sub) ##
-    //                      in2_dummy_bits(2) ## io.in2((i*8)+2) ^ Fill(8, io.sub) ##
-    //                      in2_dummy_bits(1) ## io.in2((i*8)+1) ^ Fill(8, io.sub) ##
-    //                      in2_dummy_bits(0) ## io.in2((i*8)+0) ^ Fill(8, io.sub)
-    val in2_constructed = (io.in2((i*8)+7) ^ Fill(8, io.sub)) ## in2_dummy_bits(7) ##
-                          (io.in2((i*8)+6) ^ Fill(8, io.sub)) ## in2_dummy_bits(6) ##
-                          (io.in2((i*8)+5) ^ Fill(8, io.sub)) ## in2_dummy_bits(5) ##
-                          (io.in2((i*8)+4) ^ Fill(8, io.sub)) ## in2_dummy_bits(4) ##
-                          (io.in2((i*8)+3) ^ Fill(8, io.sub)) ## in2_dummy_bits(3) ##
-                          (io.in2((i*8)+2) ^ Fill(8, io.sub)) ## in2_dummy_bits(2) ##
-                          (io.in2((i*8)+1) ^ Fill(8, io.sub)) ## in2_dummy_bits(1) ##
-                          (io.in2((i*8)+0) ^ Fill(8, io.sub)) ## in2_dummy_bits(0)
+
+    val in2_constructed = io.in2((i*8)+7) ## in2_dummy_bits(7) ##
+                          io.in2((i*8)+6) ## in2_dummy_bits(6) ##
+                          io.in2((i*8)+5) ## in2_dummy_bits(5) ##
+                          io.in2((i*8)+4) ## in2_dummy_bits(4) ##
+                          io.in2((i*8)+3) ## in2_dummy_bits(3) ##
+                          io.in2((i*8)+2) ## in2_dummy_bits(2) ##
+                          io.in2((i*8)+1) ## in2_dummy_bits(1) ##
+                          io.in2((i*8)+0) ## in2_dummy_bits(0)
 
     val sum = in1_constructed +& in2_constructed
 
