@@ -288,7 +288,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.core.wb.cause := DontCare
   io.core.wb.replay := false.B
   io.core.wb.tval := w_addr
-  io.core.wb.rob_should_wb := w_inst.funct3 === OPMVX && w_inst.opmf6 === OPMFunct6.wrxunary0
+  io.core.wb.rob_should_wb := w_inst.funct3 === OPMVV && w_inst.opmf6 === OPMFunct6.wrxunary0
   io.core.set_vstart.valid := false.B
   io.core.set_vstart.bits := DontCare
   io.core.set_vxsat := DontCare // set outside
