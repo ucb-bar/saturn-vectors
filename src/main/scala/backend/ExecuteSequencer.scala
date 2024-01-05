@@ -153,7 +153,10 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     Mux(inst.renvd, vs3_eew, 0.U),
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
 
-  val use_wmask = !inst.vm && (!inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge) || !inst.opff6.isOneOf(OPFFunct6.fmerge))
+  val use_wmask = !inst.vm && !(
+    inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge) ||
+    inst.opff6.isOneOf(OPFFunct6.fmerge)
+  )
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val eff_vl    = Mux(inst.funct3 === OPMVX && inst.opmf6 === OPMFunct6.wrxunary0,
