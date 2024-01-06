@@ -52,31 +52,41 @@ class AdderArray(dLenB: Int) extends Module {
 
   for (i <- 0 until (dLenB >> 3)) {
 
-    when (io.eew === 0.U) {
-      in1_dummy_bits(i) := io.in1.zip(io.in2).zip(io.mask_carry((i*8)+7,i*8).asBools).map{ case((i1, i2), mask_bit) => Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))}.asUInt 
-      in2_dummy_bits(i) := io.in1.zip(io.in2).zip(io.mask_carry((i*8)+7,i*8).asBools).map{ case((i1, i2), mask_bit) => Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))}.asUInt 
-    } .elsewhen (io.eew === 1.U) {
-      in1_dummy_bits(i) := io.in1.zip(io.in2).zip(io.mask_carry((i*8)+7,i*8).asBools).zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
-        if (j % 2 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))
-        else true.B
-      }.asUInt
-      in2_dummy_bits(i) := io.in1.zip(io.in2).zip(io.mask_carry((i*8)+7,i*8).asBools).zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
-        if (j % 2 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))) 
-        else false.B
-      }.asUInt
-    } .elsewhen (io.eew === 2.U) {
-      in1_dummy_bits(i) := io.in1.zip(io.in2).zip(io.mask_carry((i*8)+7,i*8).asBools).zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
-        if (j % 4 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))) 
-        else true.B
-      }.asUInt
-      in2_dummy_bits(i) := io.in1.zip(io.in2).zip(io.mask_carry((i*8)+7,i*8).asBools).zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
-        if (j % 4 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))) 
-        else false.B
-      }.asUInt
-    } .otherwise {
-      in1_dummy_bits(i) := Cat(~(0.U(7.W)), Mux(io.avg, ((io.sub ^ io.in1(i*8)(0)) & io.in2(i*8)(0)) | (((io.sub ^ io.in1(i*8)(0)) ^ io.in2(i*8)(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ io.mask_carry(i*8)))))
-      in2_dummy_bits(i) := Cat(0.U(7.W)   , Mux(io.avg, ((io.sub ^ io.in1(i*8)(0)) & io.in2(i*8)(0)) | (((io.sub ^ io.in1(i*8)(0)) ^ io.in2(i*8)(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ io.mask_carry(i*8)))))
-    }
+    in1_dummy_bits(i) := io.in1.zip(io.in2).zip(use_carry.asBools).zip(io.mask_carry((i*8)+7,i*8).asBools).map { case(((i1, i2), carry), mask_bit) => 
+      Mux(carry, 1.U(1.W), Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))) 
+    }.asUInt
+    in2_dummy_bits(i) := io.in1.zip(io.in2).zip(use_carry.asBools).zip(io.mask_carry((i*8)+7,i*8).asBools).map { case(((i1, i2), carry), mask_bit) => 
+      Mux(carry, 0.U(1.W), Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))))
+    }.asUInt
+
+    //val dummy_gen = io.in1.zip(io.in2).zip(io.mask_carry((i*8)+7,i*8).asBools)
+
+    //when (io.eew === 0.U) {
+    //  val dummy_gen_8 = dummy_gen.map{ case((i1, i2), mask_bit) => Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))}.asUInt
+    //  in1_dummy_bits(i) := dummy_gen_8 
+    //  in2_dummy_bits(i) := dummy_gen_8
+    //} .elsewhen (io.eew === 1.U) {
+    //  in1_dummy_bits(i) := dummy_gen.zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
+    //    if (j % 2 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))
+    //    else true.B
+    //  }.asUInt
+    //  in2_dummy_bits(i) := dummy_gen.zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
+    //    if (j % 2 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))) 
+    //    else false.B
+    //  }.asUInt
+    //} .elsewhen (io.eew === 2.U) {
+    //  in1_dummy_bits(i) := dummy_gen.zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
+    //    if (j % 4 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))) 
+    //    else true.B
+    //  }.asUInt
+    //  in2_dummy_bits(i) := dummy_gen.zipWithIndex.map{ case(((i1, i2), mask_bit), j) => 
+    //    if (j % 4 == 0) Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))) 
+    //    else false.B
+    //  }.asUInt
+    //} .otherwise {
+    //  in1_dummy_bits(i) := Cat(~(0.U(7.W)), Mux(io.avg, ((io.sub ^ io.in1(i*8)(0)) & io.in2(i*8)(0)) | (((io.sub ^ io.in1(i*8)(0)) ^ io.in2(i*8)(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ io.mask_carry(i*8)))))
+    //  in2_dummy_bits(i) := Cat(0.U(7.W)   , Mux(io.avg, ((io.sub ^ io.in1(i*8)(0)) & io.in2(i*8)(0)) | (((io.sub ^ io.in1(i*8)(0)) ^ io.in2(i*8)(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ io.mask_carry(i*8)))))
+    //}
 
     val in1_constructed = (in1((i*8)+7) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(7) ##
                           (in1((i*8)+6) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(6) ##
