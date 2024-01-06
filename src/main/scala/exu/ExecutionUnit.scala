@@ -21,6 +21,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     val iss = Flipped(Decoupled(new VectorMicroOp))
 
     val write = Valid(new VectorWrite(dLen))
+    val acc_write = Valid(new VectorWrite(dLen))
     val vat_release = Vec(2, Valid(UInt(vParams.vatSz.W)))
     val hazards = Vec(nHazards, Valid(new PipeHazard))
     val busy = Output(Bool())
@@ -48,6 +49,8 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
   io.write.valid := false.B
   io.write.bits := DontCare
+  io.acc_write.valid := false.B
+  io.acc_write.bits := DontCare
   io.busy := false.B
   io.set_vxsat := fus.map(_.io.set_vxsat).orR
   io.set_fflags.valid := fus.map(_.io.set_fflags.valid).orR
@@ -95,8 +98,12 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     val vat_release = Mux1H(write_sel, pipe_bits.map(_.tail))
     pipe_write := write_sel.orR
     when (write_sel.orR) {
-      io.write.valid := true.B
+      val acc = Mux1H(write_sel, pipe_bits.map(_.acc))
+      val tail = Mux1H(write_sel, pipe_bits.map(_.tail))
+      io.write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
       io.write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+      io.acc_write.valid := acc && !tail
+      io.acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
       io.vat_release(0).valid := vat_release
       io.vat_release(0).bits := Mux1H(write_sel, pipe_bits.map(_.vat))
     }

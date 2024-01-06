@@ -88,6 +88,7 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.vat        := inst.vat
   io.iss.bits.vm         := inst.vm
   io.iss.bits.rm         := DontCare
+  io.iss.bits.acc        := false.B
 
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
   val vm_mask = Mux(!renvm, ~(0.U(dLenB.W)), get_vm_mask(io.rvm.resp, eidx, inst.mem_elem_size))

@@ -130,6 +130,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.rvd := DontCare
     seq.io.rvm := DontCare
     seq.io.sub_dlen := 0.U
+    seq.io.acc.valid := false.B
+    seq.io.acc.bits := DontCare
 
     val older_wintents = otherSeqs.map { s =>
       val seq_hazard = Mux(vatOlder(s.io.seq_hazard.bits.vat, vat) && s.io.seq_hazard.valid,
@@ -265,6 +267,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vxu.io.iss <> vxs.io.iss
   vxs.io.sub_dlen := vxu.io.iss_sub_dlen
+  vxs.io.acc := vxu.io.acc_write
 
 
   // Signalling to frontend

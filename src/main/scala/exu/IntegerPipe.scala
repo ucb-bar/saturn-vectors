@@ -305,6 +305,11 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     (OPIFunct6.ssra   , Seq(X,X,Y,N,N,X,X,X,N)),
     (OPIFunct6.nclip  , Seq(X,N,Y,N,N,X,X,X,N)),
     (OPIFunct6.nclipu , Seq(X,N,Y,N,N,X,X,X,N)),
+    (OPMFunct6.redsum , Seq(N,X,N,X,N,X,N,X,N)),
+    (OPMFunct6.redminu, Seq(X,X,N,X,N,X,N,Y,N)),
+    (OPMFunct6.redmin , Seq(X,X,N,X,N,X,N,Y,N)),
+    (OPMFunct6.redmaxu, Seq(X,X,N,X,N,X,Y,Y,N)),
+    (OPMFunct6.redmax , Seq(X,X,N,X,N,X,Y,Y,N))
   )
   def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
@@ -318,7 +323,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
 
   val ctrl_rsub = io.pipe(0).bits.opif6 === OPIFunct6.rsub
   val ctrl_xunary0 = io.pipe(0).bits.opmf6 === OPMFunct6.xunary0
-  val ctrl_minmax = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.minu, OPIFunct6.min, OPIFunct6.maxu, OPIFunct6.max)
+  val ctrl_minmax = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.minu, OPIFunct6.min, OPIFunct6.maxu, OPIFunct6.max) || io.pipe(0).bits.opmf6.isOneOf(OPMFunct6.redmin, OPMFunct6.redminu, OPMFunct6.redmax, OPMFunct6.redmaxu)
   val ctrl_merge = io.pipe(0).bits.opif6 === OPIFunct6.merge
   val ctrl_sat = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.saddu, OPIFunct6.sadd, OPIFunct6.ssubu, OPIFunct6.ssub)
 

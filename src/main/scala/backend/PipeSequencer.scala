@@ -27,6 +27,8 @@ abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) wit
 
     val iss = Decoupled(new VectorMicroOp)
     val sub_dlen = Input(UInt(log2Ceil(dLenB).W))
+
+    val acc = Input(Valid(new VectorWrite(dLen)))
   })
   def accepts(inst: VectorIssueInst): Bool
 

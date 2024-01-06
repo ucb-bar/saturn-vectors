@@ -126,7 +126,6 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val rmask   = UInt(dLenB.W)
   val wmask   = UInt(dLenB.W)
 
-
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
 
   val funct3 = UInt(3.W)
@@ -146,6 +145,7 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val head = Bool()
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
+  val acc = Bool()
 
   val rm = UInt(3.W)
   def vxrm = rm(1,0)

@@ -74,4 +74,9 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
     v := in
     Mux1H(UIntToOH(eew), (0 until 4).map { i => Fill(dLenB >> i, v((8<<i)-1,0)) })
   }
+
+  def maxPosUInt(sew: Int) = Cat(0.U, ~(0.U(((8 << sew)-1).W)))
+  def minNegUInt(sew: Int) = Cat(1.U,   0.U(((8 << sew)-1).W))
+  def maxPosSInt(sew: Int) = ((1 << ((8 << sew)-1))-1).S
+  def minNegSInt(sew: Int) = (-1 << ((8 << sew)-1)).S
 }
