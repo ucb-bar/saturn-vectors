@@ -26,9 +26,11 @@ class AdderArray(dLenB: Int) extends Module {
     val carry = Output(Vec(dLenB, Bool()))
   })
 
-  val use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
+  val use_carry = VecInit.tabulate(4)({ eew =>
     Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
-  })(io.eew))
+  })(io.eew)
+  val carry_clear = Mux(io.avg, use_carry.asBools.map(Cat(~(0.U(8.W)), _)).asUInt, ~(0.U(72.W)))
+  val carry_restore = Mux(io.avg, use_carry.asBools.map(Cat(0.U(8.W), _)).asUInt, 0.U(72.W))
 
   val avg_in1 = VecInit.tabulate(4) { eew =>
     VecInit(io.in1.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(e => Cat(io.signed && e((8<<eew)-1), e) >> 1)).asUInt
@@ -43,13 +45,7 @@ class AdderArray(dLenB: Int) extends Module {
   val round_incrs = io.in1.zip(io.in2).zipWithIndex.map{ case((l, r), i) =>
     val sum = r(1,0) +& ((l(1,0) ^ Fill(2, io.sub)) +& io.sub)
     Cat(0.U(7.W), Cat(Mux(io.avg, RoundingIncrement(io.rm, sum(1), sum(0), None) & !use_carry(i), 0.U), 0.U(1.W)))
-  }
-
-  val carry_template = VecInit.tabulate(4)({ eew =>
-    Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
-  })(io.eew)
-  val carry_template_clear = carry_template.asBools.map{ carry => Cat("b11111111".U, carry) }
-  val carry_template_restore = carry_template.asBools.map{ carry => Cat(0.U(8.W), carry) }
+  }.asUInt
 
   val in1_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
   val in2_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
@@ -101,28 +97,14 @@ class AdderArray(dLenB: Int) extends Module {
                           in2((i*8)+1) ## in2_dummy_bits(i)(1) ##
                           in2(i*8) ## in2_dummy_bits(i)(0)
 
-    val round_incr_constructed = round_incrs.asUInt
-    val incr_constructed = io.incr.zip(use_carry.asBools).map{ case(incr, masking) => Cat(0.U(7.W), Cat(Mux(!masking, incr, 0.U(1.W)), 0.U(1.W))) }
+    val incr_constructed = io.incr.zip(use_carry.asBools).map{ case(incr, masking) => Cat(0.U(7.W), Cat(Mux(!masking, incr, 0.U(1.W)), 0.U(1.W))) }.asUInt
 
-    val sum = (((in1_constructed +& in2_constructed) & Mux(io.avg, Cat(0.U(1.W), carry_template_clear.asUInt), ~(0.U(73.W)))) | Mux(io.avg, carry_template_restore.asUInt, 0.U(73.W))) +& round_incr_constructed +& incr_constructed.asUInt
-
-    io.out((i*8)+0)   := sum(8,1)
-    io.out((i*8)+1)   := sum(17,10)
-    io.out((i*8)+2)   := sum(26,19)
-    io.out((i*8)+3)   := sum(35,28)
-    io.out((i*8)+4)   := sum(44,37)
-    io.out((i*8)+5)   := sum(53,46)
-    io.out((i*8)+6)   := sum(62,55)
-    io.out((i*8)+7)   := sum(71,64)
+    val sum = (((in1_constructed +& in2_constructed) & carry_clear) | carry_restore) +& round_incrs +& incr_constructed
     
-    io.carry((i*8))   := sum(9)
-    io.carry((i*8)+1) := sum(18)
-    io.carry((i*8)+2) := sum(27)
-    io.carry((i*8)+3) := sum(36)
-    io.carry((i*8)+4) := sum(45)
-    io.carry((i*8)+5) := sum(54)
-    io.carry((i*8)+6) := sum(63)
-    io.carry((i*8)+7) := sum(72)
+    for (j <- 0 until 8) {
+      io.out((i*8) + j) := sum(((j+1)*9)-1, (j*9) + 1)
+      io.carry((i*8) + j) := sum((j+1)*9)
+    }
   }
 }
 
