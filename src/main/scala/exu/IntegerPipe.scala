@@ -40,7 +40,6 @@ class AdderArray(dLenB: Int) extends Module {
   val in1 = Mux(io.avg, avg_in1, io.in1)
   val in2 = Mux(io.avg, avg_in2, io.in2)
 
-  // Generate them all (for eew == 8) and then we can mask them
   val round_incrs = io.in1.zip(io.in2).zipWithIndex.map{ case((l, r), i) =>
     val sum = r(1,0) +& ((l(1,0) ^ Fill(2, io.sub)) +& io.sub)
     Cat(0.U(7.W), Cat(Mux(io.avg, RoundingIncrement(io.rm, sum(1), sum(0), None) & !use_carry(i), 0.U), 0.U(1.W)))
@@ -52,7 +51,6 @@ class AdderArray(dLenB: Int) extends Module {
   val carry_template_clear = carry_template.asBools.map{ carry => Cat("b11111111".U, carry) }
   val carry_template_restore = carry_template.asBools.map{ carry => Cat(0.U(8.W), carry) }
 
-  // New use of wider adders
   val in1_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
   val in2_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
 
@@ -104,8 +102,9 @@ class AdderArray(dLenB: Int) extends Module {
                           in2(i*8) ## in2_dummy_bits(i)(0)
 
     val round_incr_constructed = round_incrs.asUInt
+    val incr_constructed = io.incr.zip(use_carry.asBools).map{ case(incr, masking) => Cat(0.U(7.W), Cat(Mux(!masking, incr, 0.U(1.W)), 0.U(1.W))) }
 
-    val sum = (((in1_constructed +& in2_constructed) & Mux(io.avg, Cat(0.U(1.W), carry_template_clear.asUInt), ~(0.U(73.W)))) | carry_template_restore.asUInt) +& round_incr_constructed
+    val sum = (((in1_constructed +& in2_constructed) & Mux(io.avg, Cat(0.U(1.W), carry_template_clear.asUInt), ~(0.U(73.W)))) | Mux(io.avg, carry_template_restore.asUInt, 0.U(73.W))) +& round_incr_constructed +& incr_constructed.asUInt
 
     io.out((i*8)+0)   := sum(8,1)
     io.out((i*8)+1)   := sum(17,10)
@@ -213,7 +212,7 @@ class ShiftArray(dLenB: Int) extends Module {
     rounding_incrs(i) := RoundingIncrement(io.rm, shifted(0), full_shifted(0),
       Some(shift_right_in & (((1.U << shamt) - 1.U) >> 1)(63,0)))
   }
-
+  
   val scaling_array = Module(new AdderArray(dLenB))
   scaling_array.io.in1    := shifted_right
   scaling_array.io.in2.foreach(_ := 0.U)
