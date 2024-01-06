@@ -79,4 +79,14 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
   def minNegUInt(sew: Int) = Cat(1.U,   0.U(((8 << sew)-1).W))
   def maxPosSInt(sew: Int) = ((1 << ((8 << sew)-1))-1).S
   def minNegSInt(sew: Int) = (-1 << ((8 << sew)-1)).S
+  def maxPosFPUInt(sew: Int) = {
+    val expBits = Seq(4, 5, 8, 11)(sew)
+    val fracBits = (8 << sew) - expBits - 1
+    Cat(0.U, ~(0.U(expBits.W)), 0.U(fracBits.W))
+  }
+  def minNegFPUInt(sew: Int) = {
+    val expBits = Seq(4, 5, 8, 11)(sew)
+    val fracBits = (8 << sew) - expBits - 1
+    Cat(1.U, ~(0.U(expBits.W)), 0.U(fracBits.W))
+  }
 }

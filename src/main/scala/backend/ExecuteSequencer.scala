@@ -25,60 +25,62 @@ class ExecuteIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
 
 class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val decode_table = Seq(
-    (OPMFunct6.waddu   , Seq(Y,N,N,N)),
-    (OPMFunct6.wadd    , Seq(Y,N,N,N)),
-    (OPMFunct6.wsubu   , Seq(Y,N,N,N)),
-    (OPMFunct6.wsub    , Seq(Y,N,N,N)),
-    (OPMFunct6.wadduw  , Seq(Y,Y,N,N)),
-    (OPMFunct6.waddw   , Seq(Y,Y,N,N)),
-    (OPMFunct6.wsubuw  , Seq(Y,Y,N,N)),
-    (OPMFunct6.wsubw   , Seq(Y,Y,N,N)),
-    (OPIFunct6.nsra    , Seq(N,Y,N,N)),
-    (OPIFunct6.nsrl    , Seq(N,Y,N,N)),
-    (OPIFunct6.madc    , Seq(N,N,Y,N)),
-    (OPIFunct6.msbc    , Seq(N,N,Y,N)),
-    (OPIFunct6.mseq    , Seq(N,N,Y,N)),
-    (OPIFunct6.msne    , Seq(N,N,Y,N)),
-    (OPIFunct6.msltu   , Seq(N,N,Y,N)),
-    (OPIFunct6.mslt    , Seq(N,N,Y,N)),
-    (OPIFunct6.msleu   , Seq(N,N,Y,N)),
-    (OPIFunct6.msle    , Seq(N,N,Y,N)),
-    (OPIFunct6.msgtu   , Seq(N,N,Y,N)),
-    (OPIFunct6.msgt    , Seq(N,N,Y,N)),
-    (OPMFunct6.wmul    , Seq(Y,N,N,N)),
-    (OPMFunct6.wmulu   , Seq(Y,N,N,N)),
-    (OPMFunct6.wmulsu  , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccu  , Seq(Y,N,N,N)),
-    (OPMFunct6.wmacc   , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccsu , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccus , Seq(Y,N,N,N)),
-    (OPIFunct6.nclip   , Seq(N,Y,N,N)),
-    (OPIFunct6.nclipu  , Seq(N,Y,N,N)),
-    (OPFFunct6.fwadd   , Seq(Y,N,N,N)),
-    (OPFFunct6.fwsub   , Seq(Y,N,N,N)),
-    (OPFFunct6.fwaddw  , Seq(Y,Y,N,N)),
-    (OPFFunct6.fwsubw  , Seq(Y,Y,N,N)),
-    (OPFFunct6.fwmul   , Seq(Y,N,N,N)),
-    (OPFFunct6.fwmacc  , Seq(Y,N,N,N)),
-    (OPFFunct6.fwnmacc , Seq(Y,N,N,N)),
-    (OPFFunct6.fwmsac  , Seq(Y,N,N,N)),
-    (OPFFunct6.fwnmsac , Seq(Y,N,N,N)),
-    (OPFFunct6.mfeq    , Seq(N,N,Y,N)),
-    (OPFFunct6.mfne    , Seq(N,N,Y,N)),
-    (OPFFunct6.mflt    , Seq(N,N,Y,N)),
-    (OPFFunct6.mfle    , Seq(N,N,Y,N)),
-    (OPFFunct6.mfgt    , Seq(N,N,Y,N)),
-    (OPFFunct6.mfge    , Seq(N,N,Y,N)),
-    (OPMFunct6.mandnot , Seq(N,N,Y,Y)),
-    (OPMFunct6.mand    , Seq(N,N,Y,Y)),
-    (OPMFunct6.mor     , Seq(N,N,Y,Y)),
-    (OPMFunct6.mxor    , Seq(N,N,Y,Y)),
-    (OPMFunct6.mornot  , Seq(N,N,Y,Y)),
-    (OPMFunct6.mnand   , Seq(N,N,Y,Y)),
-    (OPMFunct6.mnor    , Seq(N,N,Y,Y)),
-    (OPMFunct6.mxnor   , Seq(N,N,Y,Y)),
-    (OPIFunct6.wredsum , Seq(Y,N,N,N)),
-    (OPIFunct6.wredsumu, Seq(Y,N,N,N)),
+    (OPMFunct6.waddu    , Seq(Y,N,N,N)),
+    (OPMFunct6.wadd     , Seq(Y,N,N,N)),
+    (OPMFunct6.wsubu    , Seq(Y,N,N,N)),
+    (OPMFunct6.wsub     , Seq(Y,N,N,N)),
+    (OPMFunct6.wadduw   , Seq(Y,Y,N,N)),
+    (OPMFunct6.waddw    , Seq(Y,Y,N,N)),
+    (OPMFunct6.wsubuw   , Seq(Y,Y,N,N)),
+    (OPMFunct6.wsubw    , Seq(Y,Y,N,N)),
+    (OPIFunct6.nsra     , Seq(N,Y,N,N)),
+    (OPIFunct6.nsrl     , Seq(N,Y,N,N)),
+    (OPIFunct6.madc     , Seq(N,N,Y,N)),
+    (OPIFunct6.msbc     , Seq(N,N,Y,N)),
+    (OPIFunct6.mseq     , Seq(N,N,Y,N)),
+    (OPIFunct6.msne     , Seq(N,N,Y,N)),
+    (OPIFunct6.msltu    , Seq(N,N,Y,N)),
+    (OPIFunct6.mslt     , Seq(N,N,Y,N)),
+    (OPIFunct6.msleu    , Seq(N,N,Y,N)),
+    (OPIFunct6.msle     , Seq(N,N,Y,N)),
+    (OPIFunct6.msgtu    , Seq(N,N,Y,N)),
+    (OPIFunct6.msgt     , Seq(N,N,Y,N)),
+    (OPMFunct6.wmul     , Seq(Y,N,N,N)),
+    (OPMFunct6.wmulu    , Seq(Y,N,N,N)),
+    (OPMFunct6.wmulsu   , Seq(Y,N,N,N)),
+    (OPMFunct6.wmaccu   , Seq(Y,N,N,N)),
+    (OPMFunct6.wmacc    , Seq(Y,N,N,N)),
+    (OPMFunct6.wmaccsu  , Seq(Y,N,N,N)),
+    (OPMFunct6.wmaccus  , Seq(Y,N,N,N)),
+    (OPIFunct6.nclip    , Seq(N,Y,N,N)),
+    (OPIFunct6.nclipu   , Seq(N,Y,N,N)),
+    (OPFFunct6.fwadd    , Seq(Y,N,N,N)),
+    (OPFFunct6.fwsub    , Seq(Y,N,N,N)),
+    (OPFFunct6.fwaddw   , Seq(Y,Y,N,N)),
+    (OPFFunct6.fwsubw   , Seq(Y,Y,N,N)),
+    (OPFFunct6.fwmul    , Seq(Y,N,N,N)),
+    (OPFFunct6.fwmacc   , Seq(Y,N,N,N)),
+    (OPFFunct6.fwnmacc  , Seq(Y,N,N,N)),
+    (OPFFunct6.fwmsac   , Seq(Y,N,N,N)),
+    (OPFFunct6.fwnmsac  , Seq(Y,N,N,N)),
+    (OPFFunct6.mfeq     , Seq(N,N,Y,N)),
+    (OPFFunct6.mfne     , Seq(N,N,Y,N)),
+    (OPFFunct6.mflt     , Seq(N,N,Y,N)),
+    (OPFFunct6.mfle     , Seq(N,N,Y,N)),
+    (OPFFunct6.mfgt     , Seq(N,N,Y,N)),
+    (OPFFunct6.mfge     , Seq(N,N,Y,N)),
+    (OPMFunct6.mandnot  , Seq(N,N,Y,Y)),
+    (OPMFunct6.mand     , Seq(N,N,Y,Y)),
+    (OPMFunct6.mor      , Seq(N,N,Y,Y)),
+    (OPMFunct6.mxor     , Seq(N,N,Y,Y)),
+    (OPMFunct6.mornot   , Seq(N,N,Y,Y)),
+    (OPMFunct6.mnand    , Seq(N,N,Y,Y)),
+    (OPMFunct6.mnor     , Seq(N,N,Y,Y)),
+    (OPMFunct6.mxnor    , Seq(N,N,Y,Y)),
+    (OPIFunct6.wredsum  , Seq(Y,N,N,N)),
+    (OPIFunct6.wredsumu , Seq(Y,N,N,N)),
+    (OPFFunct6.fwredosum, Seq(Y,N,N,N)),
+    (OPFFunct6.fwredusum, Seq(Y,N,N,N)),
   )
 
   def issQEntries = vParams.vxissqEntries
@@ -92,7 +94,11 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: dis_reads_mask :: Nil = VecDecode.applyBools(
     io.dis.bits.funct3, io.dis.bits.funct6, Seq.fill(4)(false.B), decode_table)
 
-  issq.io.enq.bits.reduction   := (io.dis.bits.isOpm && io.dis.bits.funct6 <= OPMFunct6.redmax.asUInt) || io.dis.bits.opif6.isOneOf(OPIFunct6.wredsum, OPIFunct6.wredsumu)
+  issq.io.enq.bits.reduction   := (
+    (io.dis.bits.isOpm && io.dis.bits.funct6 <= OPMFunct6.redmax.asUInt) ||
+    io.dis.bits.opif6.isOneOf(OPIFunct6.wredsum, OPIFunct6.wredsumu) ||
+    io.dis.bits.opff6.isOneOf(OPFFunct6.fredusum, OPFFunct6.fredosum, OPFFunct6.fwredusum, OPFFunct6.fwredosum, OPFFunct6.fredmax, OPFFunct6.fredmin)
+  )
   issq.io.enq.bits.wide_vd     := dis_wide_vd
   when (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.funary0 && io.dis.bits.rs1(3)) {
    issq.io.enq.bits.wide_vd    := true.B
@@ -148,7 +154,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
 
   val acc       = Reg(Vec(dLenB, UInt(8.W)))
   val acc_ready = Reg(Bool())
-  val acc_head  = Reg(Bool())
   val acc_tail  = Reg(Bool())
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
 
@@ -162,10 +167,10 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     Mux(inst.renv2, vs2_eew, 0.U),
     Mux(inst.renvd, vs3_eew, 0.U),
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
-  val acc_copy = vd_eew === 3.U && (dLenB == 8).B
+  val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
-  val renv1    = Mux(inst.reduction, acc_head, inst.renv1)
-  val renv2    = Mux(inst.reduction, !acc_head && !acc_tail, inst.renv2)
+  val renv1    = Mux(inst.reduction, head, inst.renv1)
+  val renv2    = Mux(inst.reduction, !head && !acc_tail, inst.renv2)
   val renvd    = inst.renvd
   val renvm    = inst.renvm
   val renacc   = inst.reduction
@@ -201,7 +206,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     rvd_mask    := Mux(iss_inst.renvd, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvm_mask    := Mux(iss_inst.renvm, ~(0.U(egsPerVReg.W)), 0.U)
     head        := true.B
-    acc_head    := true.B
     acc_tail    := false.B
     acc_tail_id := 0.U
     acc_ready   := true.B
@@ -233,25 +237,36 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
   val acc_init_table = Seq(
-    (OPMFunct6.redsum  , Seq(Y,N,N,N)),
-    (OPIFunct6.wredsumu, Seq(Y,N,N,N)),
-    (OPIFunct6.wredsum , Seq(Y,N,N,N)),
-    (OPMFunct6.redand  , Seq(N,Y,N,N)),
-    (OPMFunct6.redor   , Seq(Y,N,N,N)),
-    (OPMFunct6.redxor  , Seq(Y,N,N,N)),
-    (OPMFunct6.redminu , Seq(N,Y,N,N)),
-    (OPMFunct6.redmin  , Seq(N,N,Y,N)),
-    (OPMFunct6.redmaxu , Seq(Y,N,N,N)),
-    (OPMFunct6.redmax  , Seq(N,N,N,Y))
+    (OPMFunct6.redsum   , Seq(Y,N,N,N)),
+    (OPIFunct6.wredsumu , Seq(Y,N,N,N)),
+    (OPIFunct6.wredsum  , Seq(Y,N,N,N)),
+    (OPMFunct6.redand   , Seq(N,Y,N,N)),
+    (OPMFunct6.redor    , Seq(Y,N,N,N)),
+    (OPMFunct6.redxor   , Seq(Y,N,N,N)),
+    (OPMFunct6.redminu  , Seq(N,Y,N,N)),
+    (OPMFunct6.redmin   , Seq(N,N,Y,N)),
+    (OPMFunct6.redmaxu  , Seq(Y,N,N,N)),
+    (OPMFunct6.redmax   , Seq(N,N,N,Y)),
+    (OPFFunct6.fredmax  , Seq(N,N,N,N)),
+    (OPFFunct6.fredmin  , Seq(N,N,N,N)),
+    (OPFFunct6.fredusum , Seq(Y,N,N,N)),
+    (OPFFunct6.fredosum , Seq(Y,N,N,N)),
+    (OPFFunct6.fwredusum, Seq(Y,N,N,N)),
+    (OPFFunct6.fwredosum, Seq(Y,N,N,N)),
+
   )
   val acc_init_zeros :: acc_init_ones :: acc_init_pos :: acc_init_neg :: Nil = VecDecode.applyBools(
     inst.funct3, inst.funct6, Seq.fill(4)(X), acc_init_table)
+  val acc_init_fp_pos = inst.opff6 === OPFFunct6.fredmin
+  val acc_init_fp_neg = inst.opff6 === OPFFunct6.fredmax
 
   val acc_init = Mux1H(Seq(
-    (acc_init_zeros,   0.U(dLen.W)),
-    (acc_init_ones , ~(0.U(dLen.W))),
-    (acc_init_pos  , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosUInt(sew))})(vd_eew)),
-    (acc_init_neg  , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegUInt(sew))})(vd_eew))
+    (acc_init_zeros ,   0.U(dLen.W)),
+    (acc_init_ones  , ~(0.U(dLen.W))),
+    (acc_init_pos   , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosUInt(sew))})(vd_eew)),
+    (acc_init_neg   , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegUInt(sew))})(vd_eew)),
+    (acc_init_fp_pos, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosFPUInt(sew))})(vd_eew)),
+    (acc_init_fp_neg, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)),
   ))
 
   io.rvs1.req.bits := getEgId(inst.rs1, eidx, vs1_eew, inst.reads_mask)
@@ -272,7 +287,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     !(renvm && !io.rvm.req.ready) &&
     !(renacc && !acc_ready && !io.acc.valid)
   )
-  io.iss.valid := iss_valid && !(inst.reduction && acc_head)
+  io.iss.valid := iss_valid && !(inst.reduction && head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
   io.iss.bits.rvs2_data := io.rvs2.resp
@@ -295,32 +310,6 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.vm        := inst.vm
   io.iss.bits.rm        := inst.rm
 
-
-  when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
-    val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(59, inst.imm5(4)), inst.imm5), inst.rs1_data)
-    io.iss.bits.rvs1_data := dLenSplat(rs1_data, vs1_eew)
-  }
-  when (inst.reduction) {
-    val bypass_mask = Mux(io.acc.valid, io.acc.bits.mask, 0.U)
-    val acc_bypass = (bypass_mask & io.acc.bits.data) | (~bypass_mask & acc.asUInt)
-    when (acc_tail) {
-      val folded = VecInit.tabulate(log2Ceil(dLenB))(i => {
-        val start = dLen >> (1 + i)
-        acc_bypass(2*start-1,start)
-      })(acc_tail_id)
-      io.iss.bits.rvs1_data := Mux(acc_copy, acc_init, folded)
-      io.iss.bits.rvs2_data := acc_bypass
-      io.iss.bits.rvs2_eew  := vd_eew
-    } .otherwise {
-      io.iss.bits.rvs1_data := acc_bypass
-    }
-    when (inst.wide_vd) {
-      io.iss.bits.rvs1_eew := vd_eew
-    }
-  }
-
-
-
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
@@ -337,10 +326,46 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   io.iss.bits.rmask := Mux(inst.vm, ~(0.U(dLenB.W)), vm_resp)
   io.iss.bits.rvm_data := io.rvm.resp
 
-  when (iss_valid && inst.reduction && acc_head) {
+
+  when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
+    val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(59, inst.imm5(4)), inst.imm5), inst.rs1_data)
+    io.iss.bits.rvs1_data := dLenSplat(rs1_data, vs1_eew)
+  }
+  when (inst.reduction) {
+    val bypass_mask = Mux(io.acc.valid, io.acc.bits.mask, 0.U)
+    val acc_bypass = (bypass_mask & io.acc.bits.data) | (~bypass_mask & acc.asUInt)
+    when (inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum) && !acc_tail) {
+      io.iss.bits.rvs2_data := VecInit.tabulate(4)({sew =>
+        if (sew == 3 && dLenOffBits == 3) { io.rvs2.resp } else {
+          io.rvs2.resp.asTypeOf(Vec(dLenB >> sew, UInt((8 << sew).W)))(eidx(dLenOffBits-sew-1,0))
+        }
+      })(vd_eew)
+      val mask_bit = Mux(use_wmask, (io.rvm.resp >> eidx(log2Ceil(dLen)-1,0))(0), true.B)
+      io.iss.bits.wmask := VecInit.tabulate(4)({sew => Fill(1 << sew, mask_bit)})(vd_eew)
+    }
+    when (acc_tail) {
+      val folded = VecInit.tabulate(log2Ceil(dLenB))(i => {
+        val start = dLen >> (1 + i)
+        acc_bypass(2*start-1,start)
+      })(acc_tail_id)
+      io.iss.bits.rvs1_data := Mux(acc_copy, acc_init, folded)
+      io.iss.bits.rvs1_eew := vd_eew
+      io.iss.bits.rvs2_data := acc_bypass
+      io.iss.bits.rvs2_eew  := vd_eew
+    } .elsewhen (head) {
+      io.iss.bits.rvs1_eew := vs1_eew
+      io.iss.bits.rvs2_data := acc_init
+    } .otherwise {
+      io.iss.bits.rvs1_data := acc_bypass
+      io.iss.bits.rvs1_eew := vd_eew
+    }
+  }
+
+
+  when (iss_valid && inst.reduction && head) {
     val v0_mask = eewBitMask(vd_eew)
     acc := ((acc_init & ~v0_mask.pad(dLen)) | (io.rvs1.resp & v0_mask)).asTypeOf(Vec(dLenB, UInt(8.W)))
-    acc_head := false.B
+    head := false.B
   }
 
   when (io.iss.fire && !tail) {
@@ -348,7 +373,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
       val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }
-    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask)) {
+    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask) && !(inst.reduction && head)) {
       rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.req.bits)
     }
     when (next_is_new_eg(eidx, next_eidx, vs1_eew, inst.reads_mask)) {

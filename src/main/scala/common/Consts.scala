@@ -79,7 +79,7 @@ object OPFFunct6 extends ChiselEnum {
   val fmul = Value
   val _, _ = Value
   val frsub = Value
-  val fmadd, fnmadd, fmsub, fnmsub, fmacc, fnmacc, fmsac, fnmsac, fwadd, vwfredusum, fwsub, fwredosum = Value
+  val fmadd, fnmadd, fmsub, fnmsub, fmacc, fnmacc, fmsac, fnmsac, fwadd, fwredusum, fwsub, fwredosum = Value
   val fwaddw, _, fwsubw, _, fwmul, _, _, _, fwmacc, fwnmacc, fwmsac, fwnmsac = Value
   val illegal = Value(0x40.U)
 }
