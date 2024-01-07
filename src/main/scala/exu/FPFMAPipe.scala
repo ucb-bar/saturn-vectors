@@ -47,7 +47,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   }
 
   val dfma = Module(new MulAddRecFNPipe(depth-1, 11, 53))
-  dfma.io.validin := io.valid && (io.out_eew === 3.U) && io.mask(0)
+  dfma.io.validin := io.valid && io.mask(0)
   dfma.io.op := io.op
   dfma.io.roundingMode := io.frm
   dfma.io.detectTininess := hardfloat.consts.tininess_afterRounding
