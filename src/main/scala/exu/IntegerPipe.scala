@@ -29,8 +29,8 @@ class AdderArray(dLenB: Int) extends Module {
   val use_carry = VecInit.tabulate(4)({ eew =>
     Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
   })(io.eew)
-  val carry_clear = Mux(io.avg, use_carry.asBools.map(Cat(~(0.U(8.W)), _)).asUInt, ~(0.U(72.W)))
-  val carry_restore = Mux(io.avg, use_carry.asBools.map(Cat(0.U(8.W), _)).asUInt, 0.U(72.W))
+  val carry_clear = Mux(io.avg, use_carry.asBools.map(Cat(~(0.U(8.W)), _)).asUInt, ~(0.U(73.W)))
+  val carry_restore = Mux(io.avg, use_carry.asBools.map(Cat(0.U(8.W), _)).asUInt, 0.U(73.W))
 
   val avg_in1 = VecInit.tabulate(4) { eew =>
     VecInit(io.in1.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(e => Cat(io.signed && e((8<<eew)-1), e) >> 1)).asUInt
@@ -59,24 +59,8 @@ class AdderArray(dLenB: Int) extends Module {
       Mux(carry, 0.U(1.W), Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))))
     }.asUInt
 
-    val in1_constructed = (in1((i*8)+7) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(7) ##
-                          (in1((i*8)+6) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(6) ##
-                          (in1((i*8)+5) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(5) ##
-                          (in1((i*8)+4) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(4) ##
-                          (in1((i*8)+3) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(3) ##
-                          (in1((i*8)+2) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(2) ##
-                          (in1((i*8)+1) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(1) ##
-                          (in1(i*8) ^ Fill(8, io.sub)) ## in1_dummy_bits(i)(0)
-
-
-    val in2_constructed = in2((i*8)+7) ## in2_dummy_bits(i)(7) ##
-                          in2((i*8)+6) ## in2_dummy_bits(i)(6) ##
-                          in2((i*8)+5) ## in2_dummy_bits(i)(5) ##
-                          in2((i*8)+4) ## in2_dummy_bits(i)(4) ##
-                          in2((i*8)+3) ## in2_dummy_bits(i)(3) ##
-                          in2((i*8)+2) ## in2_dummy_bits(i)(2) ##
-                          in2((i*8)+1) ## in2_dummy_bits(i)(1) ##
-                          in2(i*8) ## in2_dummy_bits(i)(0)
+    val in1_constructed = in1.zip(in1_dummy_bits(i).asBools).map{ case(i1, dummy_bit) => (i1 ^ Fill(8, io.sub)) ## dummy_bit }.asUInt
+    val in2_constructed = in2.zip(in2_dummy_bits(i).asBools).map{ case(i2, dummy_bit) => i2 ## dummy_bit }.asUInt
 
     val incr_constructed = io.incr.zip(use_carry.asBools).map{ case(incr, masking) => Cat(0.U(7.W), Cat(Mux(!masking, incr, 0.U(1.W)), 0.U(1.W))) }.asUInt
 
