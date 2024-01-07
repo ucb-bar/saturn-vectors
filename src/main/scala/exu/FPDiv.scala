@@ -514,7 +514,7 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
   val NV = is_negative(sel) || is_sNaN(sel)
   val DZ = is_pos_zero(sel) || is_neg_zero(sel)
 
-  io.exc := Cat(NV, Cat(DZ, "b000".U))
+  io.exc := Cat(NV, Cat(DZ, 0.U(3.W)))
 }
 
 
@@ -534,23 +534,27 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     Seq.fill(2)(X), ctrl_table
   )
   def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+
   val divSqrt_ready = (ctrl_isDiv && divSqrt.io.inReady_div) || (!ctrl_isDiv && divSqrt.io.inReady_sqrt)
 
-  val rvs2_bits = extract(io.iss.op.rvs2_data, false.B, io.iss.op.rvs2_eew, io.iss.op.eidx)(63,0)
-  val rvs1_bits = extract(io.iss.op.rvs1_data, false.B, io.iss.op.rvs1_eew, io.iss.op.eidx)(63,0)
+  val rvs2_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
+  val rvs1_bits = extract(op.rvs1_data, false.B, op.rvs1_eew, op.eidx)(63,0)
   val rvs2_op_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
 
   divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
-  divSqrt.io.roundingMode := io.iss.op.frm
+  divSqrt.io.roundingMode := op.frm
 
-  divSqrt.io.inValid := (io.iss.valid && io.iss.ready) && (ctrl_isDiv || (io.iss.op.opff6 === OPFFunct6.funary1 && io.iss.op.rs1 === 0.U))
+  val iss_fire_pipe = Reg(Bool())
+  iss_fire_pipe := io.iss.valid && io.iss.ready
+
+  divSqrt.io.inValid := iss_fire_pipe && (ctrl_isDiv || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
   divSqrt.io.sqrtOp := !ctrl_isDiv
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
 
-  when (io.iss.op.rvs1_eew === 3.U) {
+  when (op.rvs1_eew === 3.U) {
     divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
     divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
   } .otherwise {
@@ -559,7 +563,7 @@ class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     val widen = Seq(FType.S.recode(narrow_rvs2_bits), FType.S.recode(narrow_rvs1_bits)).zip(
       Seq.fill(2)(Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53)))).map { case(input, upconvert) =>
       upconvert.io.in := input
-      upconvert.io.roundingMode := io.iss.op.frm
+      upconvert.io.roundingMode := op.frm
       upconvert.io.detectTininess := hardfloat.consts.tininess_afterRounding
       upconvert
     }

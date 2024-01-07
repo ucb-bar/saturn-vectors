@@ -26,9 +26,11 @@ class AdderArray(dLenB: Int) extends Module {
     val carry = Output(Vec(dLenB, Bool()))
   })
 
-  val use_carry = Cat(0.U(1.W), VecInit.tabulate(4)({ eew =>
+  val use_carry = VecInit.tabulate(4)({ eew =>
     Fill(dLenB >> eew, ~(1.U((1 << eew).W)))
-  })(io.eew))
+  })(io.eew)
+  val carry_clear = Mux(io.avg, use_carry.asBools.map(Cat(~(0.U(8.W)), _)).asUInt, ~(0.U(73.W)))
+  val carry_restore = Mux(io.avg, use_carry.asBools.map(Cat(0.U(8.W), _)).asUInt, 0.U(73.W))
 
   val avg_in1 = VecInit.tabulate(4) { eew =>
     VecInit(io.in1.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(e => Cat(io.signed && e((8<<eew)-1), e) >> 1)).asUInt
@@ -40,25 +42,34 @@ class AdderArray(dLenB: Int) extends Module {
   val in1 = Mux(io.avg, avg_in1, io.in1)
   val in2 = Mux(io.avg, avg_in2, io.in2)
 
-  val round_incrs = io.in1.zip(io.in2).map { case (l, r) =>
-    val lo = Mux(io.sub, ~l(0), l(0)) +& r(0) +& io.sub
-    val hi = lo(1) + Mux(io.sub, ~l(1), l(1)) +& r(1)
-    val sum = Cat(hi(0), lo(0))
-    RoundingIncrement(io.rm, sum) +& lo(1)
-  }
+  val round_incrs = io.in1.zip(io.in2).zipWithIndex.map{ case((l, r), i) =>
+    val sum = r(1,0) +& ((l(1,0) ^ Fill(2, io.sub)) +& io.sub)
+    Cat(0.U(7.W), Cat(Mux(io.avg, RoundingIncrement(io.rm, sum(1), sum(0), None) & !use_carry(i), 0.U), 0.U(1.W)))
+  }.asUInt
 
-  val carries = Wire(Vec(dLenB+1, UInt(2.W)))
-  carries(0) := io.sub
-  io.carry := VecInit(carries.drop(1).map(_(0)))
+  val in1_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
+  val in2_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
 
-  for (i <- 0 until dLenB) {
-    val carry = Mux(use_carry(i), carries(i), io.incr(i) +& Mux(io.avg, round_incrs(i), io.sub))
-    val sum = (Mux(io.sub, ~in1(i), in1(i)) +& in2(i) +& carry +&
-      (io.cmask & !io.sub & io.mask_carry(i)) - (io.cmask & io.sub & io.mask_carry(i))
-    )
+  for (i <- 0 until (dLenB >> 3)) {
 
-    io.out(i) := sum(7,0)
-    carries(i+1) := sum(9,8)
+    in1_dummy_bits(i) := io.in1.zip(io.in2).zip(use_carry.asBools).zip(io.mask_carry((i*8)+7,i*8).asBools).map { case(((i1, i2), carry), mask_bit) => 
+      Mux(carry, 1.U(1.W), Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))) 
+    }.asUInt
+    in2_dummy_bits(i) := io.in1.zip(io.in2).zip(use_carry.asBools).zip(io.mask_carry((i*8)+7,i*8).asBools).map { case(((i1, i2), carry), mask_bit) => 
+      Mux(carry, 0.U(1.W), Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))))
+    }.asUInt
+
+    val in1_constructed = in1.zip(in1_dummy_bits(i).asBools).map{ case(i1, dummy_bit) => (i1 ^ Fill(8, io.sub)) ## dummy_bit }.asUInt
+    val in2_constructed = in2.zip(in2_dummy_bits(i).asBools).map{ case(i2, dummy_bit) => i2 ## dummy_bit }.asUInt
+
+    val incr_constructed = io.incr.zip(use_carry.asBools).map{ case(incr, masking) => Cat(0.U(7.W), Cat(Mux(!masking, incr, 0.U(1.W)), 0.U(1.W))) }.asUInt
+
+    val sum = (((in1_constructed +& in2_constructed) & carry_clear) | carry_restore) +& round_incrs +& incr_constructed
+    
+    for (j <- 0 until 8) {
+      io.out((i*8) + j) := sum(((j+1)*9)-1, (j*9) + 1)
+      io.carry((i*8) + j) := sum((j+1)*9)
+    }
   }
 }
 
@@ -148,7 +159,7 @@ class ShiftArray(dLenB: Int) extends Module {
     rounding_incrs(i) := RoundingIncrement(io.rm, shifted(0), full_shifted(0),
       Some(shift_right_in & (((1.U << shamt) - 1.U) >> 1)(63,0)))
   }
-
+  
   val scaling_array = Module(new AdderArray(dLenB))
   scaling_array.io.in1    := shifted_right
   scaling_array.io.in2.foreach(_ := 0.U)
