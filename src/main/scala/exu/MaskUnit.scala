@@ -54,7 +54,20 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val eew_mask = eewBitMask(op.rvs2_eew).pad(64)
   val elem = (op.rvs2_data & eew_mask) | (Fill(64, sign && op.isOpm) & ~eew_mask)
 
-  when (io.iss.valid && io.iss.ready) {
+  val iota_dlenb = VecInit.tabulate(4)({sew =>
+    val grouped = Mux(op.rs1(0), ~(0.U(dLen.W)), elems).asTypeOf(Vec(8 << sew, UInt((dLenB >> sew).W)))
+    grouped(op.eidx(log2Ceil(dLen)-1,log2Ceil(dLenB) - sew))
+  })(op.rvd_eew)
+  val iota_sums = (0 until dLenB).map { i =>
+    (PopCount(iota_dlenb & ((1<<i)-1).U) +& scalar_wb_data)(log2Ceil(maxVLMax),0)
+  }
+  val iota_out = VecInit.tabulate(4)({sew =>
+    val out = Wire(Vec(dLenB >> sew, UInt((8<<sew).W)))
+    out := iota_sums.take(dLenB >> sew)
+    out.asUInt
+  })(op.vd_eew)
+
+  when (io.iss.valid && io.iss.ready && io.iss.op.head) {
     scalar_wb_data := 0.U
     found_first := false.B
   }
@@ -65,7 +78,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
     when (first_here) { found_first := true.B }
     when (wxunary0) {
       when (op.rs1 === 16.U) { // popc
-        scalar_wb_data := (scalar_wb_data + popc)(log2Ceil(dLen),0)
+        scalar_wb_data := (scalar_wb_data + popc)(log2Ceil(maxVLMax),0)
       } .elsewhen (op.rs1 === 17.U) { // first
         when (first_here) {
           scalar_wb_data := op.eidx + ff
@@ -78,6 +91,11 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
     }
     when (wfunary0) { // fmv
       scalar_wb_data := elem
+    }
+    when (munary0) {
+      val mask = VecInit.tabulate(4)({sew => ~(0.U((dLenB >> sew).W))})(op.vd_eew)
+      val incr = PopCount(iota_dlenb & mask)
+      scalar_wb_data := (scalar_wb_data + incr)(log2Ceil(maxVLMax),0)
     }
     when (op.tail) {
       scalar_wb_busy := wxunary0 || wfunary0
@@ -93,8 +111,16 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
 
   io.write.valid     := io.pipe(0).valid && (rxunary0 || rfunary0 || munary0)
   io.write.bits.eg   := op.wvd_eg
-  io.write.bits.mask := Mux(rxunary0 || rfunary0, eewBitMask(op.vd_eew), op.full_tail_mask & op.rvm_data)
-  io.write.bits.data := Mux(rxunary0 || rfunary0, op.rvs1_data(63,0), set)
+  io.write.bits.mask := Mux1H(Seq(
+    (rxunary0 || rfunary0 , eewBitMask(op.vd_eew)),
+    (munary0 && op.rs1(4) , FillInterleaved(8, op.wmask)),
+    (munary0 && !op.rs1(4), op.full_tail_mask & op.rvm_data)
+  ))
+  io.write.bits.data := Mux1H(Seq(
+    (rxunary0 || rfunary0 , op.rvs1_data(63,0)),
+    (munary0 && op.rs1(4) , iota_out),
+    (munary0 && !op.rs1(4), set)
+  ))
 
   when (io.scalar_write.fire) { scalar_wb_busy := false.B }
 }

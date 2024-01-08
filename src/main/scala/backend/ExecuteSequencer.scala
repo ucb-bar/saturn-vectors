@@ -81,7 +81,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     (OPIFunct6.wredsumu , Seq(Y,N,N,N)),
     (OPFFunct6.fwredosum, Seq(Y,N,N,N)),
     (OPFFunct6.fwredusum, Seq(Y,N,N,N)),
-    (OPMFunct6.munary0  , Seq(N,N,Y,Y))
+    (OPMFunct6.munary0  , Seq(N,N,N,Y))
   )
 
   def issQEntries = vParams.vxissqEntries
@@ -109,6 +109,9 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     issq.io.enq.bits.wide_vs2  := true.B
   }
   issq.io.enq.bits.writes_mask := dis_writes_mask
+  when (io.dis.bits.funct3 === OPMVV && io.dis.bits.opmf6.isOneOf(OPMFunct6.munary0) && !io.dis.bits.rs1(4)) {
+    issq.io.enq.bits.writes_mask := true.B
+  }
   issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
   when ((io.dis.bits.funct3 === OPFVV && (io.dis.bits.opff6 === OPFFunct6.funary1)) ||
         (io.dis.bits.funct3 === OPMVV && (io.dis.bits.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)))
@@ -191,7 +194,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val eff_vl    = Mux((inst.funct3 === OPMVX && inst.opmf6 === OPMFunct6.wrxunary0) || (inst.funct3 === OPFVF && inst.opff6 === OPFFunct6.wrfunary0),
     1.U, // vmv.s.x
     inst.vconfig.vl)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask)
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask && inst.writes_mask)
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 
@@ -201,7 +204,8 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     val iss_inst = issq.io.deq.bits
     valid := true.B
     inst := issq.io.deq.bits
-    eidx := iss_inst.vstart
+    assert(iss_inst.vstart === 0.U)
+    eidx := 0.U
 
     val vd_arch_mask  = get_arch_mask(iss_inst.rd , iss_inst.pos_lmul +& iss_inst.wide_vd                                , 4)
     val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_mask, 0.U, iss_inst.pos_lmul                     ), 3)
