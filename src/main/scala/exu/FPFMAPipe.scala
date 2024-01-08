@@ -89,6 +89,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
     (OPFFunct6.fwsub,    Seq(Y,N,N,Y,N)),
     (OPFFunct6.fwaddw,   Seq(Y,N,N,N,N)),
     (OPFFunct6.fwsubw,   Seq(Y,N,N,Y,N)),
+    (OPFFunct6.fwmul,    Seq(N,Y,N,N,N)),
     (OPFFunct6.fwmacc,   Seq(Y,Y,N,N,N)),
     (OPFFunct6.fwnmacc,  Seq(Y,Y,N,Y,Y)),
     (OPFFunct6.fwmsac,   Seq(Y,Y,N,Y,N)),
