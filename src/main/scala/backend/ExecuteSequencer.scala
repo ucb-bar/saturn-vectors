@@ -325,7 +325,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
   val full_tail_mask = Mux(tail,
-    ~(0.U(dLen.W)) >> (0.U(log2Ceil(dLen).W) - (eff_vl << vd_eew)(log2Ceil(dLen)-1,0)),
+    ~(0.U(dLen.W)) >> (0.U(log2Ceil(dLen).W) - eff_vl(log2Ceil(dLen)-1,0)),
     ~(0.U(dLen.W))
   )
   val vm_off    = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
