@@ -13,26 +13,26 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(
-    (OPFFunct6.fmin     ,   Seq(Y,Y, N,N,N,N, N,X,X)),
-    (OPFFunct6.fmax     ,   Seq(Y,N, N,N,N,N, N,X,X)),
-    (OPFFunct6.fsgnj    ,   Seq(N,X, N,N,N,N, Y,N,N)),
-    (OPFFunct6.fsgnjn   ,   Seq(N,X, N,N,N,N, Y,Y,N)),
-    (OPFFunct6.fsgnjx   ,   Seq(N,X, N,N,N,N, Y,N,Y)),
-    (OPFFunct6.mfeq     ,   Seq(N,X, Y,Y,N,N, N,X,X)),
-    (OPFFunct6.mfne     ,   Seq(N,X, Y,N,Y,N, N,X,X)),
-    (OPFFunct6.mflt     ,   Seq(N,X, Y,N,N,Y, N,X,X)),
-    (OPFFunct6.mfle     ,   Seq(N,X, Y,Y,N,Y, N,X,X)),
-    (OPFFunct6.mfgt     ,   Seq(N,X, Y,N,N,N, N,X,X)),
-    (OPFFunct6.mfge     ,   Seq(N,X, Y,Y,N,N, N,X,X)),
-    (OPFFunct6.fredmin  ,   Seq(Y,Y, N,N,N,N, N,X,X)),
-    (OPFFunct6.fredmax  ,   Seq(Y,N, N,N,N,N, N,X,X)),
+    (OPFFunct6.fmin     ,   Seq(Y,Y, N,X,X,X,X, N,X,X)),
+    (OPFFunct6.fmax     ,   Seq(Y,N, N,X,X,X,X, N,X,X)),
+    (OPFFunct6.fsgnj    ,   Seq(N,X, N,X,X,X,X, Y,N,N)),
+    (OPFFunct6.fsgnjn   ,   Seq(N,X, N,X,X,X,X, Y,Y,N)),
+    (OPFFunct6.fsgnjx   ,   Seq(N,X, N,X,X,X,X, Y,N,Y)),
+    (OPFFunct6.mfeq     ,   Seq(N,X, Y,Y,N,N,N, N,X,X)),
+    (OPFFunct6.mfne     ,   Seq(N,X, Y,N,Y,N,N, N,X,X)),
+    (OPFFunct6.mflt     ,   Seq(N,X, Y,N,N,Y,N, N,X,X)),
+    (OPFFunct6.mfle     ,   Seq(N,X, Y,Y,N,Y,N, N,X,X)),
+    (OPFFunct6.mfgt     ,   Seq(N,X, Y,N,N,N,Y, N,X,X)),
+    (OPFFunct6.mfge     ,   Seq(N,X, Y,Y,N,N,Y, N,X,X)),
+    (OPFFunct6.fredmin  ,   Seq(Y,Y, N,X,X,X,X, N,X,X)),
+    (OPFFunct6.fredmax  ,   Seq(Y,N, N,X,X,X,X, N,X,X)),
   )
   def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 
-  val ctrl_cmp :: ctrl_min :: ctrl_mask_write :: ctrl_eq :: ctrl_ne :: ctrl_cmp_less :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
+  val ctrl_cmp :: ctrl_min :: ctrl_mask_write :: ctrl_eq :: ctrl_ne :: ctrl_lt :: ctrl_gt :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(9)(X), ctrl_table
+    Seq.fill(10)(X), ctrl_table
   )
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
@@ -43,7 +43,8 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
 
   val fTypes = Seq(FType.S, FType.D)
   val minmax_results = Wire(Vec(2, UInt(dLen.W)))       // results for vfmin/vfmax
-  val comp_results = Wire(Vec(2, UInt((dLen / 32).W)))  // results for comparisons
+  val comp_results_eew = Seq.tabulate(4)({sew => WireInit(0.U((dLenB >> sew).W))})
+  val comp_results = (0 until 4).map({sew => Mux(rvd_eew === sew.U, Fill(1 << sew, comp_results_eew(sew)), 0.U(dLenB.W))}).reduce(_|_)
   val exceptions = Wire(Vec(2, UInt(5.W)))
 
   for (eew <- 2 until 4) {
@@ -90,16 +91,12 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
         }
       } .elsewhen (rvs2_nan || rvs1_nan) {
         comparison_out := 0.U
-      } .elsewhen (ctrl_eq) {
-        comparison_out := comp.eq || (comp.lt && ctrl_cmp_less) || (!comp.gt && !ctrl_cmp_less)
-      } .elsewhen (ctrl_cmp_less) {
-        comparison_out := comp.lt
       } .otherwise {
-        comparison_out := comp.gt
+        comparison_out := (comp.eq || !ctrl_eq) && (comp.lt || !ctrl_lt) && (comp.gt || !ctrl_gt)
       }
       comparison_out
     }
-    comp_results(eew-2) := Fill(eew + 1, comparisons.asUInt)
+    comp_results_eew(eew) := comparisons.asUInt
 
     exceptions(eew - 2) := gen_compares.map {case(comp, rvs2, rvs2_nan, rvs1, rvs1_nan) => comp.exceptionFlags}.reduce(_ | _)
   }
@@ -130,7 +127,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   when (ctrl_cmp) {
     out := Mux(rvs1_eew === 3.U, minmax_results(1), minmax_results(0))
   } .elsewhen (ctrl_mask_write) {
-    out := Fill(64, Mux(rvs1_eew === 3.U, comp_results(1), comp_results(0)))
+    out := Fill(8, comp_results)
   } .otherwise {
     out := sgnj.asUInt
   }
