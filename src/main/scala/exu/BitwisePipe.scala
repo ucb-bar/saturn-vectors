@@ -44,11 +44,13 @@ class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg
   io.write.bits.mask := Mux(io.pipe(0).bits.isOpm && !io.pipe(0).bits.acc,
-    ~(0.U(dLen.W)) >> Mux(io.pipe(0).bits.tail, (0.U(log2Ceil(dLen).W) - io.pipe(0).bits.vl(log2Ceil(dLen)-1,0)), 0.U),
+    io.pipe(0).bits.full_tail_mask,
     FillInterleaved(8, io.pipe(0).bits.wmask))
   io.write.bits.data := out
 
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
 }

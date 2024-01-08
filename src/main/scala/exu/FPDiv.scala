@@ -518,7 +518,7 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
 }
 
 
-class VFDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
+class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs2_eew
   io.set_vxsat := false.B
 

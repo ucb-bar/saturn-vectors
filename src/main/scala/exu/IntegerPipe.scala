@@ -322,7 +322,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     (OPMFunct6.redminu , Seq(X,X,N,X,N,X,N,Y,N)),
     (OPMFunct6.redmin  , Seq(X,X,N,X,N,X,N,Y,N)),
     (OPMFunct6.redmaxu , Seq(X,X,N,X,N,X,Y,Y,N)),
-    (OPMFunct6.redmax  , Seq(X,X,N,X,N,X,Y,Y,N))
+    (OPMFunct6.redmax  , Seq(X,X,N,X,N,X,Y,Y,N)),
+    (OPFFunct6.fmerge  , Seq(X,X,N,X,N,X,N,X,N)),
   )
   def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
@@ -337,7 +338,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val ctrl_rsub = io.pipe(0).bits.opif6 === OPIFunct6.rsub
   val ctrl_xunary0 = io.pipe(0).bits.opmf6 === OPMFunct6.xunary0
   val ctrl_minmax = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.minu, OPIFunct6.min, OPIFunct6.maxu, OPIFunct6.max) || io.pipe(0).bits.opmf6.isOneOf(OPMFunct6.redmin, OPMFunct6.redminu, OPMFunct6.redmax, OPMFunct6.redmaxu)
-  val ctrl_merge = io.pipe(0).bits.opif6 === OPIFunct6.merge
+  val ctrl_merge = io.pipe(0).bits.opif6 === OPIFunct6.merge || io.pipe(0).bits.opff6 === OPFFunct6.fmerge
   val ctrl_sat = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.saddu, OPIFunct6.sadd, OPIFunct6.ssubu, OPIFunct6.ssub)
 
   val sat_signed = io.pipe(0).bits.funct6(0)
@@ -478,4 +479,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.set_vxsat := io.pipe(0).valid && ((ctrl_sat && sat_arr.io.set_vxsat) || (ctrl_shift && shift_arr.io.set_vxsat))
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
+
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
 }

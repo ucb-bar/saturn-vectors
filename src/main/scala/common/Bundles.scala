@@ -80,6 +80,7 @@ class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p
 class ScalarWrite extends Bundle {
   val data = UInt(64.W)
   val fp = Bool()
+  val size = UInt(2.W)
   val rd = UInt(5.W)
 }
 
@@ -125,6 +126,8 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
 
   val rmask   = UInt(dLenB.W)
   val wmask   = UInt(dLenB.W)
+
+  val full_tail_mask = UInt(dLen.W)
 
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
 

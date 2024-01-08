@@ -81,6 +81,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     (OPIFunct6.wredsumu , Seq(Y,N,N,N)),
     (OPFFunct6.fwredosum, Seq(Y,N,N,N)),
     (OPFFunct6.fwredusum, Seq(Y,N,N,N)),
+    (OPMFunct6.munary0  , Seq(N,N,Y,Y))
   )
 
   def issQEntries = vParams.vxissqEntries
@@ -108,10 +109,16 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
     issq.io.enq.bits.wide_vs2  := true.B
   }
   issq.io.enq.bits.writes_mask := dis_writes_mask
-  issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV) && !(io.dis.bits.funct3.isOneOf(OPFVV) && (io.dis.bits.opff6 === OPFFunct6.funary1)) && !(io.dis.bits.funct3 === OPMVV && io.dis.bits.opmf6 === OPMFunct6.wrxunary0)
-  issq.io.enq.bits.renv2       := true.B
+  issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
+  when ((io.dis.bits.funct3 === OPFVV && (io.dis.bits.opff6 === OPFFunct6.funary1)) ||
+        (io.dis.bits.funct3 === OPMVV && (io.dis.bits.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)))
+  ) {
+    issq.io.enq.bits.renv1       := false.B
+  }
+  issq.io.enq.bits.renv2 := true.B
   when (((io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge) && io.dis.bits.vm) ||
-    (io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.funct3 === OPMVX)) {
+    (io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.funct3 === OPMVX) ||
+    (io.dis.bits.opff6 === OPFFunct6.wrfunary0 && io.dis.bits.funct3 === OPFVF)) {
     issq.io.enq.bits.renv2 := false.B
   }
   issq.io.enq.bits.reads_mask  := dis_reads_mask
@@ -181,7 +188,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   )
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
-  val eff_vl    = Mux(inst.funct3 === OPMVX && inst.opmf6 === OPMFunct6.wrxunary0,
+  val eff_vl    = Mux((inst.funct3 === OPMVX && inst.opmf6 === OPMFunct6.wrxunary0) || (inst.funct3 === OPFVF && inst.opff6 === OPFFunct6.wrfunary0),
     1.U, // vmv.s.x
     inst.vconfig.vl)
   val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask)
@@ -313,19 +320,27 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
+  val full_tail_mask = Mux(tail,
+    ~(0.U(dLen.W)) >> (0.U(log2Ceil(dLen).W) - (eff_vl << vd_eew)(log2Ceil(dLen)-1,0)),
+    ~(0.U(dLen.W))
+  )
   val vm_off    = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
   val vm_eidx   = (eidx & ~(vm_off >> vd_eew))(log2Ceil(dLen)-1,0)
   val vm_resp   = (io.rvm.resp >> vm_eidx)
-  val vm_mask   = Mux(use_wmask, VecInit.tabulate(4)({ sew =>
-    FillInterleaved(1 << sew, vm_resp)
-  })(vd_eew), ~(0.U(dLenB.W)))
+  val vm_mask   = Mux(use_wmask,
+    VecInit.tabulate(4)({ sew => FillInterleaved(1 << sew, vm_resp) })(vd_eew),
+    ~(0.U(dLenB.W))
+  )
+  val acc_mask  = Mux(acc_last,
+    eewByteMask(vd_eew),
+    VecInit.tabulate(log2Ceil(dLenB))(i => ~(0.U((dLen>>i).W)))(acc_tail_id))
   io.iss.bits.wmask := Mux(inst.reduction && acc_tail,
-    Mux(acc_last, eewByteMask(vd_eew), VecInit.tabulate(log2Ceil(dLenB))(i => ~(0.U((dLen>>i).W)))(acc_tail_id)),
+    acc_mask,
     head_mask & tail_mask & vm_mask)
 
   io.iss.bits.rmask := Mux(inst.vm, ~(0.U(dLenB.W)), vm_resp)
-  io.iss.bits.rvm_data := io.rvm.resp
-
+  io.iss.bits.rvm_data := Mux(inst.vm, ~(0.U(dLen.W)), io.rvm.resp)
+  io.iss.bits.full_tail_mask := full_tail_mask
 
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
     val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(59, inst.imm5(4)), inst.imm5), inst.rs1_data)

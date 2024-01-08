@@ -24,7 +24,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     (OPFFunct6.mfle     ,   Seq(N,X, Y,Y,N,Y, N,X,X)),
     (OPFFunct6.mfgt     ,   Seq(N,X, Y,N,N,N, N,X,X)),
     (OPFFunct6.mfge     ,   Seq(N,X, Y,Y,N,N, N,X,X)),
-    (OPFFunct6.fmerge   ,   Seq(N,X, N,X,X,X, N,X,X)),
     (OPFFunct6.fredmin  ,   Seq(Y,Y, N,N,N,N, N,X,X)),
     (OPFFunct6.fredmax  ,   Seq(Y,N, N,N,N,N, N,X,X)),
   )
@@ -41,8 +40,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   val rvd_eew  = io.pipe(0).bits.rvd_eew
   val rvs2_data = io.pipe(0).bits.rvs2_data
   val rvs1_data = io.pipe(0).bits.rvs1_data
-
-  val ctrl_merge = io.pipe(0).bits.opff6 === OPFFunct6.fmerge
 
   val fTypes = Seq(FType.S, FType.D)
   val minmax_results = Wire(Vec(2, UInt(dLen.W)))       // results for vfmin/vfmax
@@ -129,16 +126,8 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     Cat(d_bit,Cat(rvs2(62,32),Cat(Mux(io.pipe(0).bits.rvd_eew === 3.U, rvs2(31), s_bit), rvs2(30,0))))
   }
 
-  // FP Merge Instruction
-  val rvs2_elems = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB/4, UInt(32.W)))
-  val frs1_elems = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB/4, UInt(32.W)))
-  val merge_mask = VecInit.tabulate(4)({eew => FillInterleaved(1 << eew, io.pipe(0).bits.rmask((dLenB >> eew)-1,0))})(rvs2_eew)
-  val merge_out = VecInit((0 until (dLenB / 4)).map {i => Mux(merge_mask(i), frs1_elems(i), rvs2_elems(i))}).asUInt
-
   val out = Wire(UInt(dLen.W))
-  when (ctrl_merge) {
-    out := merge_out
-  } .elsewhen (ctrl_cmp) {
+  when (ctrl_cmp) {
     out := Mux(rvs1_eew === 3.U, minmax_results(1), minmax_results(0))
   } .elsewhen (ctrl_mask_write) {
     out := Fill(64, Mux(rvs1_eew === 3.U, comp_results(1), comp_results(0)))
@@ -161,4 +150,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
 
   io.set_fflags.valid := io.write.valid
   io.set_fflags.bits := Mux(rvd_eew === 3.U, exceptions(1), exceptions(0))
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
 }

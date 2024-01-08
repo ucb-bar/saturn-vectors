@@ -64,8 +64,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   scalar_resp_arb.io.in(1).bits.fp := false.B
   scalar_resp_arb.io.in(1).bits.rd := io.issue.bits.rd
   scalar_resp_arb.io.in(1).bits.data := 0.U
+  scalar_resp_arb.io.in(1).bits.size := 3.U
 
-  when (io.issue.bits.vconfig.vl <= io.issue.bits.vstart) {
+  when ((io.issue.bits.funct3 === OPMVV && io.issue.bits.opmf6 === OPMFunct6.wrxunary0 && io.issue.bits.rs1 === 0.U) ||
+        (io.issue.bits.funct3 === OPFVV && io.issue.bits.opff6 === OPFFunct6.wrfunary0 && io.issue.bits.rs1 === 0.U)) {
+    issue_inst.vconfig.vl := 1.U
+    issue_inst.vstart := 0.U
+  }
+
+
+  when (issue_inst.vconfig.vl <= issue_inst.vstart) {
     io.issue.ready := true.B
     vdq.io.enq.valid := false.B
     vmu.io.enq.valid := false.B
@@ -109,11 +117,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => new BitwisePipe,
     () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
     () => new IterativeIntegerDivider,
-    () => new FMAPipe(vParams.fmaPipeDepth),
-    () => new VFDivSqrt,
+    () => new MaskUnit,
+    () => new FPFMAPipe(vParams.fmaPipeDepth),
+    () => new FPDivSqrt,
     () => new FPCompPipe,
     () => new FPConvPipe,
-    () => new ScalarMoveUnit
   )))
 
   vdq.io.deq.ready := seqs.map(_.io.dis.ready).andR
@@ -262,8 +270,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  clearVat(vxu.io.vat_release(0).valid            , vxu.io.vat_release(0).bits)
-  clearVat(vxu.io.vat_release(1).valid            , vxu.io.vat_release(1).bits)
+  clearVat(vxu.io.vat_release.valid               , vxu.io.vat_release.bits)
 
   vxu.io.iss <> vxs.io.iss
   vxs.io.sub_dlen := vxu.io.iss_sub_dlen

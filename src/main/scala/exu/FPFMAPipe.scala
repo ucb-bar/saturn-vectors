@@ -65,7 +65,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
 }
 
 
-class FMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
+class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
   io.iss.sub_dlen := Mux(io.iss.op.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum),
     dLenOffBits.U - io.iss.op.vd_eew,
     0.U)
@@ -187,4 +187,7 @@ class FMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUni
 
   io.set_fflags.valid := io.write.valid
   io.set_fflags.bits := fma_pipes.map(pipe => pipe.exc).reduce(_ | _)
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
+
 }

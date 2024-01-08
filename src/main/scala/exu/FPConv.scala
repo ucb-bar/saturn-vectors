@@ -144,4 +144,6 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   io.write.bits.data := Mux(!ctrl_widen && !ctrl_narrow, single_out_final, multi_width_out)
 
   io.set_fflags := DontCare
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
 }
