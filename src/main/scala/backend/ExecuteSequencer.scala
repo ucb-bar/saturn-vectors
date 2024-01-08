@@ -194,7 +194,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
   val eff_vl    = Mux((inst.funct3 === OPMVX && inst.opmf6 === OPMFunct6.wrxunary0) || (inst.funct3 === OPFVF && inst.opff6 === OPFFunct6.wrfunary0),
     1.U, // vmv.s.x
     inst.vconfig.vl)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask && inst.writes_mask)
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask && (inst.writes_mask || !inst.wvd))
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 
