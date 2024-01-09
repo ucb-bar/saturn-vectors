@@ -92,7 +92,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
       } .elsewhen (rvs2_nan || rvs1_nan) {
         comparison_out := 0.U
       } .otherwise {
-        comparison_out := (comp.eq || !ctrl_eq) && (comp.lt || !ctrl_lt) && (comp.gt || !ctrl_gt)
+        comparison_out := (comp.eq && ctrl_eq) || (comp.lt && ctrl_lt) || (comp.gt && ctrl_gt)
       }
       comparison_out
     }
