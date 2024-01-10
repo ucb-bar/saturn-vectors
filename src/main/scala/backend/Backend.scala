@@ -107,6 +107,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.vat_tail := vat_tail
 
+  val vxu = Module(new ExecutionUnit(Seq(
+    () => new IntegerPipe,
+    () => new BitwisePipe,
+    () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(4)) else (new ElementwiseMultiplyPipe(4)),
+    () => new IterativeIntegerDivider,
+    () => new MaskUnit,
+    () => new PermutationUnit,
+    () => new FPFMAPipe(vParams.fmaPipeDepth),
+    () => new FPDivSqrt,
+    () => new FPCompPipe,
+    () => new FPConvPipe,
+  )))
 
   val int_unit = Module(new IntegerPipe)
   val bw_unit = Module(new BitwisePipe)
