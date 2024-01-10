@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
+class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) with HasFPUParameters {
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
@@ -17,6 +17,8 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   )
   def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes)
   io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
+
+  //val pipe_control = Pipe(io.iss.valid && io.iss.ready, io.iss.bits, 1)
 
   val rs1 = io.pipe(0).bits.rs1
   val ctrl_widen = rs1(3)
@@ -138,10 +140,16 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   val single_out_final = Wire(UInt(dLen.W))
   single_out_final := Mux(io.pipe(0).bits.rvs2_eew === 3.U, single_width_out(1), single_width_out(0))
 
-  io.write.valid := io.pipe(0).valid
-  io.write.bits.eg := io.pipe(0).bits.wvd_eg
-  io.write.bits.mask := FillInterleaved(8, io.pipe(0).bits.wmask)
-  io.write.bits.data := Mux(!ctrl_widen && !ctrl_narrow, single_out_final, multi_width_out)
+  val pipe_out = Pipe(io.pipe(0).valid, Mux(!ctrl_widen && !ctrl_narrow, single_out_final, multi_width_out), 1).bits
+
+  io.write.valid := io.pipe(depth-1).valid
+  //io.write.valid := io.pipe(0).valid
+  io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
+  //io.write.bits.eg := io.pipe(0).bits.wvd_eg
+  io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
+  //io.write.bits.mask := FillInterleaved(8, io.pipe(0).bits.wmask)
+  io.write.bits.data := pipe_out
+  //io.write.bits.data := Mux(!ctrl_widen && !ctrl_narrow, single_out_final, multi_width_out)
 
   io.set_fflags := DontCare
   io.scalar_write.valid := false.B
