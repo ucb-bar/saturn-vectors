@@ -110,7 +110,7 @@ class MaskedByte extends Bundle {
   val mask = Bool()
 }
 
-class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
 
@@ -153,6 +153,25 @@ class VectorMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val rm = UInt(3.W)
   def vxrm = rm(1,0)
   def frm = rm
+}
+
+class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val stdata = UInt(dLen.W)
+  val stmask = UInt(dLenB.W)
+}
+
+class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val wvd_eg = UInt(log2Ceil(egsTotal).W)
+  val wmask = UInt(dLenB.W)
+  val tail = Bool()
+  val vat = UInt(vParams.vatSz.W)
+}
+
+class IndexMaskMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val rvs2_data = UInt(dLen.W)
+  val eidx = UInt(log2Ceil(maxVLMax).W)
+  val rvs2_eew = UInt(2.W)
+  val rvm_data = UInt(dLen.W)
 }
 
 class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

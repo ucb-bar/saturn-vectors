@@ -11,7 +11,7 @@ import vector.common._
 abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val iss = new Bundle {
     val valid = Input(Bool())
-    val op = Input(new VectorMicroOp)
+    val op = Input(new ExecuteMicroOp)
     val sub_dlen = Output(UInt(log2Ceil(dLenB).W))
     val ready = Output(Bool())
   }
@@ -23,7 +23,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
 
 class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends FunctionalUnitIO {
   val write = Valid(new VectorWrite(dLen))
-  val pipe = Input(Vec(depth, Valid(new VectorMicroOp)))
+  val pipe = Input(Vec(depth, Valid(new ExecuteMicroOp)))
 }
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {
@@ -60,7 +60,7 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   val io = IO(new IterativeFunctionalUnitIO)
 
   val valid = RegInit(false.B)
-  val op = Reg(new VectorMicroOp)
+  val op = Reg(new ExecuteMicroOp)
   val last = Wire(Bool())
 
   io.vat.valid := valid && op.tail

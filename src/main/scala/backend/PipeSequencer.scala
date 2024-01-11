@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{CoreModule}
 import vector.common._
 
-abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   def issQEntries: Int
   val io = IO(new Bundle {
     val dis = Flipped(Decoupled(new VectorIssueInst))
@@ -25,7 +25,7 @@ abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) wit
     val rvd  = new VectorReadIO
     val rvm  = new VectorReadIO
 
-    val iss = Decoupled(new VectorMicroOp)
+    val iss = Decoupled(issType)
     val sub_dlen = Input(UInt(log2Ceil(dLenB).W))
 
     val acc = Input(Valid(new VectorWrite(dLen)))
@@ -56,6 +56,7 @@ abstract class PipeSequencer(implicit p: Parameters) extends CoreModule()(p) wit
     val offset = Mux(masked, log2Ceil(dLen).U, dLenOffBits.U - eew)
     (next_eidx >> offset) =/= (eidx >> offset)
   }
+
 
   io.rvs1.req.valid := false.B
   io.rvs1.req.bits := DontCare

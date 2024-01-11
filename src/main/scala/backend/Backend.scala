@@ -239,8 +239,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   reads(2)(1) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
-  vmu.io.sdata.bits.data := vss.io.iss.bits.rvd_data
-  vmu.io.sdata.bits.mask := vss.io.iss.bits.rmask
+  vmu.io.sdata.bits.data := vss.io.iss.bits.stdata
+  vmu.io.sdata.bits.mask := vss.io.iss.bits.stmask
   vss.io.iss.ready     := vmu.io.sdata.ready
 
   reads(3)(0) <> vls.io.rvm
@@ -259,8 +259,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   maskindex_q.io.enq.valid := vims.io.iss.valid
   val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
   maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.rvs2_eew)
-  maskindex_q.io.enq.bits.mask  := reads(3)(3).resp >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
-  vims.io.iss.ready      := maskindex_q.io.enq.ready
+  maskindex_q.io.enq.bits.mask  := vims.io.iss.bits.rvm_data >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
+  vims.io.iss.ready             := maskindex_q.io.enq.ready
 
   // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {

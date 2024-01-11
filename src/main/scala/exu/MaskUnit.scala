@@ -16,7 +16,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val scalar_wb_size = Reg(UInt(2.W))
   val found_first = Reg(Bool())
 
-  def accepts(op: VectorMicroOp): Bool = (op.opff6.isOneOf(OPFFunct6.wrfunary0) || op.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)) && !scalar_wb_busy
+  def accepts(op: ExecuteMicroOp): Bool = (op.opff6.isOneOf(OPFFunct6.wrfunary0) || op.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)) && !scalar_wb_busy
 
   io.iss.ready := accepts(io.iss.op) && !scalar_wb_busy
 

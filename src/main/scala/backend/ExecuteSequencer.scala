@@ -23,7 +23,7 @@ class ExecuteIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
   val wvd = Bool()
 }
 
-class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer()(p) {
+class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new ExecuteMicroOp)(p) {
   val decode_table = Seq(
     (OPMFunct6.waddu    , Seq(Y,N,N,N)),
     (OPMFunct6.wadd     , Seq(Y,N,N,N)),

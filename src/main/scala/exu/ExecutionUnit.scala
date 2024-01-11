@@ -18,7 +18,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
   val io = IO(new Bundle {
     val iss_sub_dlen = Output(UInt(log2Ceil(dLenB).W))
-    val iss = Flipped(Decoupled(new VectorMicroOp))
+    val iss = Flipped(Decoupled(new ExecuteMicroOp))
 
     val write = Valid(new VectorWrite(dLen))
     val acc_write = Valid(new VectorWrite(dLen))
@@ -66,7 +66,7 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
     val pipe_valids    = Seq.fill(pipe_depth)(RegInit(false.B))
     val pipe_sels      = Seq.fill(pipe_depth)(Reg(UInt(pipe_fus.size.W)))
-    val pipe_bits      = Seq.fill(pipe_depth)(Reg(new VectorMicroOp))
+    val pipe_bits      = Seq.fill(pipe_depth)(Reg(new ExecuteMicroOp))
     val pipe_latencies = Seq.fill(pipe_depth)(Reg(UInt(log2Ceil(pipe_depth).W)))
 
 
