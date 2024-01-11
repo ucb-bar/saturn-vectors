@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.tile.{CoreModule}
+import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
 import vector.exu._
@@ -117,7 +117,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => new IterativeIntegerDivider,
     () => new MaskUnit,
     () => new PermutationUnit,
-    () => new FPFMAPipe(vParams.fmaPipeDepth),
+    () => if (vParams.useScalarFPUFMAPipe) (new ElementwiseFPU) else (new FPFMAPipe(vParams.fmaPipeDepth)),
     () => new FPDivSqrt,
     () => new FPCompPipe,
     () => new FPConvPipe,

@@ -632,4 +632,8 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
+
+  io.fp_req.valid := DontCare
+  io.fp_req.bits := DontCare
+  io.fp_resp.ready := DontCare
 }

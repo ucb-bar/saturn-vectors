@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 object VectorParams {
-  def minParams = VectorParams()
+  def minParams = VectorParams(useScalarFPUFMAPipe = true)
   def refParams = VectorParams(vlissqEntries = 3, vsissqEntries = 3, vxissqEntries = 3, vatSz = 5, useSegmentedIMul = true, doubleBufferSegments = true)
 
 }
@@ -35,7 +35,8 @@ case class VectorParams(
   vatSz: Int = 3,
 
   useSegmentedIMul: Boolean = false,
-  useScalarFPUFMAPipe: Boolean = false,
+  useScalarFPUFMAPipe: Boolean = true,
+  //useScalarFPUFMAPipe: Boolean = false,
   fmaPipeDepth: Int = 3,
 
   doubleBufferSegments: Boolean = false

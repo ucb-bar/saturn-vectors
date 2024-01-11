@@ -46,6 +46,11 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
     io.fp_req.bits := DontCare
   }
 
+  fus.map(_.io.iss).foreach { iss =>
+    iss.op := io.iss.bits
+    iss.valid := io.iss.valid
+  }
+
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
   iss.ready := readies.orR && !pipe_write_hazard
@@ -150,5 +155,20 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
     for (i <- 0 until iter_fus.size) {
       hazards(i+pipe_depth) := iter_fus(i).io.hazard
     }
+
+    iter_fus.foreach{ iter_fu =>
+      iter_fu.io.fp_req.ready := DontCare
+      iter_fu.io.fp_resp.valid := DontCare
+      iter_fu.io.fp_resp.bits := DontCare
+    }
+  }
+  
+  if (vParams.useScalarFPUFMAPipe) {
+    io.fp_req <> elementwise_fpu(0).io.fp_req
+    elementwise_fpu(0).io.fp_resp <> io.fp_resp
+  } else {
+    io.fp_req.valid := DontCare
+    io.fp_req.bits := DontCare
+    io.fp_resp.ready := DontCare
   }
 }

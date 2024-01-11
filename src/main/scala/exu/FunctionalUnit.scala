@@ -33,6 +33,9 @@ class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO
   val hazard = Output(Valid(new PipeHazard))
 
   val busy = Output(Bool())
+
+  val fp_req = Decoupled(new FPInput()) 
+  val fp_resp = Flipped(Decoupled(new FPResult()))
 }
 
 abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {

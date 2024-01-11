@@ -54,4 +54,8 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   io.scalar_write.bits := DontCare
 
   last := io.write.fire()
+
+  io.fp_req.valid := DontCare
+  io.fp_req.bits := DontCare
+  io.fp_resp.ready := DontCare
 }
