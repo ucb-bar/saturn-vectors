@@ -28,6 +28,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
+
+    val fp_req = Decoupled(new FPInput())
+    val fp_resp = Flipped(Decoupled(new FPResult()))
   })
 
   require(vLen >= 64)
@@ -154,6 +157,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   )
   val issqs = issGroups.map(_._1)
   val seqs = issGroups.map(_._2)
+
+  io.fp_req <> vxu.io.fp_req
+  vxu.io.fp_resp <> io.fp_resp
 
   vlissq.io.enq.bits.reduction := false.B
   vlissq.io.enq.bits.wide_vd := false.B

@@ -12,6 +12,7 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
   val supported_insns = fus.map(_.supported_insns).flatten
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
+  val elementwise_fpu: Seq[ElementwiseFPU]   = fus.collect { case e: ElementwiseFPU => e  }
 
   val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
   val nHazards = pipe_depth + iter_fus.size
@@ -32,6 +33,17 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
   fus.foreach { fu =>
     fu.io.iss.op := iss.bits
     fu.io.iss.valid := iss.valid
+  }
+
+  val fp_req = Wire(Decoupled(new FPInput()))
+  val fp_resp = Wire(Flipped(Decoupled(new FPResult)))
+
+  if (vParams.useScalarFPUFMAPipe) {
+    fp_req <> elementwise_fpu.io.fp_req
+    elementwise_fpu.io.fp_resp <> io.fp_resp
+  } else {
+    io.fp_req.valid := DontCare
+    io.fp_req.bits := DontCare
   }
 
   val pipe_write_hazard = WireInit(false.B)
