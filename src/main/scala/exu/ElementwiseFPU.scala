@@ -8,39 +8,22 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-//class ElementwiseFPUIO(implicit p: Parameters) extends IterativeFunctionalUnitIO {
-//  val fp_req = Decoupled(new FPInput()) 
-//  val fp_resp = Flipped(Decoupled(new FPResult()))
-//}
-
 class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
-  //val io = IO(new ElementwiseFPUIO)
-
-  //val valid = RegInit(false.B)
-  //val op = Reg(new VectorMicroOp)
-  //val last = Wire(Bool())
-
-  //io.vat.valid := valid && op.last
-  //io.vat.bits  := op.vat
-  //io.busy := valid
-
-  when (io.iss.valid && io.iss.ready) {
-    valid := true.B
-    op := io.iss.op
-  } .elsewhen (last) {
-    valid := false.B
-  }
 
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvd_eew
   io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(
-      (OPFFunct6.fadd,   Seq(N,N,N,N,N,N,N,N,N,N,N,Y)),
-      (OPFFunct6.fsub,   Seq(N,N,N,N,N,N,N,Y,N,N,N,Y)),
+      (OPFFunct6.fadd,   Seq(N,N,Y,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fsub,   Seq(N,N,Y,N,N,N,Y,Y,N,N,N,Y)),
       (OPFFunct6.fmacc,  Seq(N,N,N,N,N,N,Y,N,N,N,N,Y)),
       (OPFFunct6.fnmacc, Seq(N,N,N,N,N,N,Y,Y,Y,N,N,Y)),
       (OPFFunct6.fmsac,  Seq(N,N,N,N,N,N,Y,Y,N,N,N,Y)),
       (OPFFunct6.fnmsac, Seq(N,N,N,N,N,N,Y,N,Y,N,N,Y)),
+      (OPFFunct6.fmadd,  Seq(N,N,Y,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fnmadd, Seq(N,N,Y,N,N,N,Y,Y,Y,N,N,Y)),
+      (OPFFunct6.fmsub,  Seq(N,N,Y,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.fnmsub, Seq(N,N,Y,N,N,N,Y,N,Y,N,N,Y)),
   )
   
   val wen :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: fmaCmd0 :: fmaCmd1 :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
