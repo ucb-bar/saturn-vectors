@@ -6,26 +6,10 @@ import org.chipsalliance.cde.config._
 import vector.common._
 
 class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMicroOp)(p) {
-  def issQEntries = vParams.vlissqEntries
-  val issq = Module(new DCEQueue(new VectorIssueInst, issQEntries, pipe=true))
-
   def accepts(inst: VectorIssueInst) = inst.vmu && !inst.opcode(5)
-  io.dis.ready := !accepts(io.dis.bits) || issq.io.enq.ready
-  issq.io.enq.valid := io.dis.valid && accepts(io.dis.bits)
-  issq.io.enq.bits := io.dis.bits
-
-  for (i <- 0 until issQEntries) {
-    val inst = issq.io.peek(i).bits
-    io.iss_hazards(i).valid    := issq.io.peek(i).valid
-    io.iss_hazards(i).bits.vat := inst.vat
-    io.iss_hazards(i).bits.rintent := Mux(!inst.vm, 1.U, 0.U)
-    val nf_log2 = VecInit.tabulate(8)({nf => log2Ceil(nf+1).U})(inst.nf)
-    io.iss_hazards(i).bits.wintent := get_arch_mask(inst.rd, inst.pos_lmul +& nf_log2, 5)
-  }
-
 
   val valid = RegInit(false.B)
-  val inst  = Reg(new VectorIssueInst)
+  val inst  = Reg(new BackendIssueInst)
   val eidx  = Reg(UInt(log2Ceil(maxVLMax).W))
   val sidx  = Reg(UInt(3.W))
   val wvd_mask = Reg(UInt(egsTotal.W))
@@ -36,10 +20,10 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U, false.B)
   val tail      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
-  issq.io.deq.ready := !valid || (tail && io.iss.fire)
+  io.dis.ready := !valid || (tail && io.iss.fire)
 
-  when (issq.io.deq.fire) {
-    val iss_inst = issq.io.deq.bits
+  when (io.dis.fire) {
+    val iss_inst = io.dis.bits
     valid := true.B
     inst  := iss_inst
     eidx  := iss_inst.vstart

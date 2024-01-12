@@ -9,152 +9,11 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class ExecuteIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
-  val reduction = Bool()    // only writes vd[0]
-  val wide_vd = Bool()      // vd reads/writes at 2xSEW
-  val wide_vs2 = Bool()     // vs2 reads at 2xSEW
-  val writes_mask = Bool()  // writes dest as a mask
-  val reads_mask = Bool()   // vs1/vs2 read as mask
-
-  val renv1 = Bool()
-  val renv2 = Bool()
-  val renvd = Bool()
-  val renvm = Bool()
-  val wvd = Bool()
-}
-
 class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new ExecuteMicroOp)(p) {
-  val decode_table = Seq(
-    (OPMFunct6.waddu    , Seq(Y,N,N,N)),
-    (OPMFunct6.wadd     , Seq(Y,N,N,N)),
-    (OPMFunct6.wsubu    , Seq(Y,N,N,N)),
-    (OPMFunct6.wsub     , Seq(Y,N,N,N)),
-    (OPMFunct6.wadduw   , Seq(Y,Y,N,N)),
-    (OPMFunct6.waddw    , Seq(Y,Y,N,N)),
-    (OPMFunct6.wsubuw   , Seq(Y,Y,N,N)),
-    (OPMFunct6.wsubw    , Seq(Y,Y,N,N)),
-    (OPIFunct6.nsra     , Seq(N,Y,N,N)),
-    (OPIFunct6.nsrl     , Seq(N,Y,N,N)),
-    (OPIFunct6.madc     , Seq(N,N,Y,N)),
-    (OPIFunct6.msbc     , Seq(N,N,Y,N)),
-    (OPIFunct6.mseq     , Seq(N,N,Y,N)),
-    (OPIFunct6.msne     , Seq(N,N,Y,N)),
-    (OPIFunct6.msltu    , Seq(N,N,Y,N)),
-    (OPIFunct6.mslt     , Seq(N,N,Y,N)),
-    (OPIFunct6.msleu    , Seq(N,N,Y,N)),
-    (OPIFunct6.msle     , Seq(N,N,Y,N)),
-    (OPIFunct6.msgtu    , Seq(N,N,Y,N)),
-    (OPIFunct6.msgt     , Seq(N,N,Y,N)),
-    (OPMFunct6.wmul     , Seq(Y,N,N,N)),
-    (OPMFunct6.wmulu    , Seq(Y,N,N,N)),
-    (OPMFunct6.wmulsu   , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccu   , Seq(Y,N,N,N)),
-    (OPMFunct6.wmacc    , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccsu  , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccus  , Seq(Y,N,N,N)),
-    (OPIFunct6.nclip    , Seq(N,Y,N,N)),
-    (OPIFunct6.nclipu   , Seq(N,Y,N,N)),
-    (OPFFunct6.fwadd    , Seq(Y,N,N,N)),
-    (OPFFunct6.fwsub    , Seq(Y,N,N,N)),
-    (OPFFunct6.fwaddw   , Seq(Y,Y,N,N)),
-    (OPFFunct6.fwsubw   , Seq(Y,Y,N,N)),
-    (OPFFunct6.fwmul    , Seq(Y,N,N,N)),
-    (OPFFunct6.fwmacc   , Seq(Y,N,N,N)),
-    (OPFFunct6.fwnmacc  , Seq(Y,N,N,N)),
-    (OPFFunct6.fwmsac   , Seq(Y,N,N,N)),
-    (OPFFunct6.fwnmsac  , Seq(Y,N,N,N)),
-    (OPFFunct6.mfeq     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfne     , Seq(N,N,Y,N)),
-    (OPFFunct6.mflt     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfle     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfgt     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfge     , Seq(N,N,Y,N)),
-    (OPMFunct6.mandnot  , Seq(N,N,Y,Y)),
-    (OPMFunct6.mand     , Seq(N,N,Y,Y)),
-    (OPMFunct6.mor      , Seq(N,N,Y,Y)),
-    (OPMFunct6.mxor     , Seq(N,N,Y,Y)),
-    (OPMFunct6.mornot   , Seq(N,N,Y,Y)),
-    (OPMFunct6.mnand    , Seq(N,N,Y,Y)),
-    (OPMFunct6.mnor     , Seq(N,N,Y,Y)),
-    (OPMFunct6.mxnor    , Seq(N,N,Y,Y)),
-    (OPIFunct6.wredsum  , Seq(Y,N,N,N)),
-    (OPIFunct6.wredsumu , Seq(Y,N,N,N)),
-    (OPFFunct6.fwredosum, Seq(Y,N,N,N)),
-    (OPFFunct6.fwredusum, Seq(Y,N,N,N)),
-    (OPMFunct6.munary0  , Seq(N,N,N,Y))
-  )
-
-  def issQEntries = vParams.vxissqEntries
-  val issq = Module(new DCEQueue(new ExecuteIssueInst, issQEntries, pipe=true))
-
   def accepts(inst: VectorIssueInst) = !inst.vmu
-  io.dis.ready := !accepts(io.dis.bits) || issq.io.enq.ready
-  issq.io.enq.valid := io.dis.valid && accepts(io.dis.bits)
-  issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := io.dis.bits
-
-  val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: dis_reads_mask :: Nil = VecDecode.applyBools(
-    io.dis.bits.funct3, io.dis.bits.funct6, Seq.fill(4)(false.B), decode_table)
-
-  issq.io.enq.bits.reduction   := (
-    (io.dis.bits.isOpm && io.dis.bits.funct6 <= OPMFunct6.redmax.asUInt) ||
-    io.dis.bits.opif6.isOneOf(OPIFunct6.wredsum, OPIFunct6.wredsumu) ||
-    io.dis.bits.opff6.isOneOf(OPFFunct6.fredusum, OPFFunct6.fredosum, OPFFunct6.fwredusum, OPFFunct6.fwredosum, OPFFunct6.fredmax, OPFFunct6.fredmin)
-  )
-  issq.io.enq.bits.wide_vd     := dis_wide_vd
-  when (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.funary0 && io.dis.bits.rs1(3)) {
-   issq.io.enq.bits.wide_vd    := true.B
-  }
-  issq.io.enq.bits.wide_vs2    := dis_wide_vs2
-  when (io.dis.bits.funct3.isOneOf(OPFVV) && io.dis.bits.opff6 === OPFFunct6.funary0 && io.dis.bits.rs1(4)) {
-    issq.io.enq.bits.wide_vs2  := true.B
-  }
-  issq.io.enq.bits.writes_mask := dis_writes_mask
-  when (io.dis.bits.funct3 === OPMVV && io.dis.bits.opmf6.isOneOf(OPMFunct6.munary0) && !io.dis.bits.rs1(4)) {
-    issq.io.enq.bits.writes_mask := true.B
-  }
-  issq.io.enq.bits.renv1       := io.dis.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
-  when ((io.dis.bits.funct3 === OPFVV && (io.dis.bits.opff6 === OPFFunct6.funary1)) ||
-        (io.dis.bits.funct3 === OPMVV && (io.dis.bits.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)))
-  ) {
-    issq.io.enq.bits.renv1       := false.B
-  }
-  issq.io.enq.bits.renv2 := true.B
-  when (((io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge) && io.dis.bits.vm) ||
-    (io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.funct3 === OPMVX) ||
-    (io.dis.bits.opff6 === OPFFunct6.wrfunary0 && io.dis.bits.funct3 === OPFVF)) {
-    issq.io.enq.bits.renv2 := false.B
-  }
-  issq.io.enq.bits.reads_mask  := dis_reads_mask
-  when (io.dis.bits.funct3.isOneOf(OPMVV) && io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.rs1(4)) {
-    issq.io.enq.bits.reads_mask := true.B
-  }
-  issq.io.enq.bits.renvd       := io.dis.bits.opmf6.isOneOf(
-    OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
-    OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) || io.dis.bits.opff6.isOneOf(
-    OPFFunct6.fmacc, OPFFunct6.fnmacc, OPFFunct6.fmsac, OPFFunct6.fnmsac,
-    OPFFunct6.fmadd, OPFFunct6.fnmadd, OPFFunct6.fmsub, OPFFunct6.fnmsub,
-    OPFFunct6.fwmacc, OPFFunct6.fwnmacc, OPFFunct6.fwmsac, OPFFunct6.fwnmsac)
-  issq.io.enq.bits.renvm       := !io.dis.bits.vm || io.dis.bits.opif6 === OPIFunct6.merge || io.dis.bits.opff6 === OPFFunct6.fmerge
-  issq.io.enq.bits.wvd := !(io.dis.bits.opmf6 === OPMFunct6.wrxunary0 && io.dis.bits.funct3 === OPMVV)
-
-  for (i <- 0 until issQEntries) {
-    val inst = issq.io.peek(i).bits
-    io.iss_hazards(i).valid    := issq.io.peek(i).valid
-    io.iss_hazards(i).bits.vat := inst.vat
-    val vd_arch_mask  = get_arch_mask(inst.rd , Mux(inst.reduction , 0.U, inst.pos_lmul +& inst.wide_vd ), 4)
-    val vs1_arch_mask = get_arch_mask(inst.rs1, Mux(inst.reads_mask, 0.U, inst.pos_lmul                 ), 3)
-    val vs2_arch_mask = get_arch_mask(inst.rs2, Mux(inst.reads_mask, 0.U, inst.pos_lmul +& inst.wide_vs2), 4)
-    io.iss_hazards(i).bits.rintent := Seq(
-      (inst.renv1, vs1_arch_mask),
-      (inst.renv2, vs2_arch_mask),
-      (inst.renv2, vd_arch_mask),
-      (inst.renvm, 1.U)
-    ).map(t => Mux(t._1, t._2, 0.U)).reduce(_|_)
-    io.iss_hazards(i).bits.wintent := Mux(inst.wvd, vd_arch_mask, 0.U)
-  }
 
   val valid = RegInit(false.B)
-  val inst  = Reg(new ExecuteIssueInst)
+  val inst  = Reg(new BackendIssueInst)
   val head  = Reg(Bool())
   val wvd_mask  = Reg(UInt(egsTotal.W))
   val rvs1_mask = Reg(UInt(egsTotal.W))
@@ -198,12 +57,12 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new Execute
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 
-  issq.io.deq.ready := !valid || (tail && io.iss.fire)
+  io.dis.ready := !valid || (tail && io.iss.fire)
 
-  when (issq.io.deq.fire) {
-    val iss_inst = issq.io.deq.bits
+  when (io.dis.fire) {
+    val iss_inst = io.dis.bits
     valid := true.B
-    inst := issq.io.deq.bits
+    inst := io.dis.bits
     assert(iss_inst.vstart === 0.U)
     eidx := 0.U
 

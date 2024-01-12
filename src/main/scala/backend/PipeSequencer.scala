@@ -7,11 +7,10 @@ import freechips.rocketchip.tile.{CoreModule}
 import vector.common._
 
 abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
-  def issQEntries: Int
-  val io = IO(new Bundle {
-    val dis = Flipped(Decoupled(new VectorIssueInst))
 
-    val iss_hazards = Output(Vec(issQEntries, Valid(new InstructionHazard)))
+  val io = IO(new Bundle {
+    val dis = Flipped(Decoupled(new BackendIssueInst))
+
     val seq_hazard = Output(Valid(new SequencerHazard))
 
     val vat = Output(UInt(vParams.vatSz.W))
@@ -33,10 +32,6 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
   def accepts(inst: VectorIssueInst): Bool
 
   def min(a: UInt, b: UInt) = Mux(a > b, b, a)
-  def get_arch_mask(reg: UInt, pos_lmul: UInt, max_lmul: Int) = VecInit.tabulate(max_lmul+1)({ lmul =>
-    FillInterleaved(1 << lmul, UIntToOH(reg >> lmul)((32>>lmul)-1,0))
-  })(pos_lmul)
-
   def get_head_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask << (eidx << eew)(dLenOffBits-1,0)
   def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask >> (0.U(dLenOffBits.W) - (eidx << eew)(dLenOffBits-1,0))
   def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {

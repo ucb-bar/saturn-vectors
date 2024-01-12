@@ -6,21 +6,7 @@ import org.chipsalliance.cde.config._
 import vector.common._
 
 class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(new IndexMaskMicroOp)(p) {
-  def issQEntries = vParams.vimissqEntries
-  val issq = Module(new DCEQueue(new VectorIssueInst, issQEntries, pipe=true))
-
   def accepts(inst: VectorIssueInst) = inst.vmu && ((!inst.vm && inst.mop =/= mopUnit) || inst.mop(0))
-  io.dis.ready := !accepts(io.dis.bits) || issq.io.enq.ready
-  issq.io.enq.valid := io.dis.valid && accepts(io.dis.bits)
-  issq.io.enq.bits := io.dis.bits
-
-  for (i <- 0 until issQEntries) {
-    val inst = issq.io.peek(i).bits
-    io.iss_hazards(i).valid    := issq.io.peek(i).valid
-    io.iss_hazards(i).bits.vat := inst.vat
-    io.iss_hazards(i).bits.rintent := get_arch_mask(inst.rs2, inst.pos_lmul, 3) | Mux(!inst.vm && inst.mop =/= mopUnit, 1.U, 0.U)
-    io.iss_hazards(i).bits.wintent := 0.U
-  }
 
   val valid = RegInit(false.B)
   val inst  = Reg(new VectorIssueInst)
@@ -34,10 +20,10 @@ class IndexMaskSequencer(implicit p: Parameters) extends PipeSequencer(new Index
   val next_eidx = eidx +& 1.U
   val tail = next_eidx === inst.vconfig.vl
 
-  issq.io.deq.ready := !valid || (tail && io.iss.fire)
+  io.dis.ready := !valid || (tail && io.iss.fire)
 
-  when (issq.io.deq.fire) {
-    val iss_inst = issq.io.deq.bits
+  when (io.dis.fire) {
+    val iss_inst = io.dis.bits
     valid := true.B
     inst  := iss_inst
     eidx  := iss_inst.vstart

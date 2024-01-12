@@ -71,6 +71,21 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def opff6 = Mux(isOpf, OPFFunct6(funct6), OPFFunct6.illegal)
 }
 
+class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
+  val reduction = Bool()    // only writes vd[0]
+  val wide_vd = Bool()      // vd reads/writes at 2xSEW
+  val wide_vs2 = Bool()     // vs2 reads at 2xSEW
+  val writes_mask = Bool()  // writes dest as a mask
+  val reads_mask = Bool()   // vs1/vs2 read as mask
+  val nf_log2 = UInt(2.W)
+
+  val renv1 = Bool()
+  val renv2 = Bool()
+  val renvd = Bool()
+  val renvm = Bool()
+  val wvd = Bool()
+}
+
 class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(32 * vLen / writeBits).W)
   val data = UInt(writeBits.W)

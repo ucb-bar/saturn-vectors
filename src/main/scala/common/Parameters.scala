@@ -25,11 +25,12 @@ case class VectorParams(
   vlifqEntries: Int = 4,
   vsifqEntries: Int = 4,
 
-  // Load/store/execute/maskindex issue queues
-  vlissqEntries: Int = 1,
-  vsissqEntries: Int = 1,
-  vxissqEntries: Int = 1,
-  vimissqEntries: Int = 1,
+  // Load/store/execute/permute/maskindex issue queues
+  vlissqEntries: Int = 0,
+  vsissqEntries: Int = 0,
+  vxissqEntries: Int = 0,
+  vpissqEntries: Int = 0,
+  vimissqEntries: Int = 0,
 
   dLen: Int = 64,
   vatSz: Int = 3,
@@ -89,4 +90,7 @@ trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
     val fracBits = (8 << sew) - expBits - 1
     Cat(1.U, ~(0.U(expBits.W)), 0.U(fracBits.W))
   }
+  def get_arch_mask(reg: UInt, pos_lmul: UInt, max_lmul: Int) = VecInit.tabulate(max_lmul+1)({ lmul =>
+    FillInterleaved(1 << lmul, UIntToOH(reg >> lmul)((32>>lmul)-1,0))
+  })(pos_lmul)
 }
