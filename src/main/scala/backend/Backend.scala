@@ -118,9 +118,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => new MaskUnit,
     () => new PermutationUnit,
     () => if (vParams.useScalarFPUFMAPipe) (new ElementwiseFPU) else (new FPFMAPipe(vParams.fmaPipeDepth)),
-    () => new FPDivSqrt,
-    () => new FPCompPipe,
-    () => new FPConvPipe,
+    //() => new FPDivSqrt,
+    //() => new FPCompPipe,
+    //() => new FPConvPipe,
   )))
 
   val int_unit = Module(new IntegerPipe)
