@@ -29,6 +29,9 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
   trap_check.io.core <> io.core
   trap_check.io.tlb <> io.tlb
 
+  // Use hint mechanism to switch between sending accesses through cache or DMA
+  val use_cache = RegInit(false.B)
+
   val vu = Module(new VectorBackend)
   vu.io.issue <> trap_check.io.issue
   trap_check.io.index_access <> vu.io.index_access
@@ -62,6 +65,10 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
     h.keep_clock_enabled := vu.io.backend_busy
   }
 
+  val hella_load_ready = Wire(Bool())
+  val hella_store_ready = Wire(Bool())
+  val hella_load_resp = Wire(Valid(UInt(dLen.W)))
+  val hella_store_resp = Wire(Bool())
 
   val load_tag_oh = RegInit(VecInit.fill(4)(false.B))
   val load_tag = PriorityEncoder(~(load_tag_oh.asUInt))
@@ -72,8 +79,8 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
     load_tag_oh(hella_load.resp.bits.tag) := false.B
   }
 
-  //vu.io.mem.load_req.ready       := hella_load_q.io.enq.ready && load_tag_available
-  hella_load_q.io.enq.valid       := vu.io.mem.load_req.valid && load_tag_available
+  hella_load_ready                := hella_load_q.io.enq.ready && load_tag_available
+  hella_load_q.io.enq.valid       := vu.io.mem.load_req.valid && load_tag_available && use_cache
   hella_load_q.io.enq.bits.addr   := vu.io.mem.load_req.bits.addr
   hella_load_q.io.enq.bits.size   := log2Ceil(dLenB).U
   hella_load_q.io.enq.bits.tag    := load_tag
@@ -87,6 +94,8 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
   hella_load_q.io.enq.bits.no_alloc := false.B
   hella_load_q.io.enq.bits.no_xcpt := true.B
 
+  hella_load_resp.valid := hella_load.resp.valid
+  hella_load_resp.bits  := hella_load.resp.bits.data_raw
   //vu.io.mem.load_resp.valid := hella_load.resp.valid
   //vu.io.mem.load_resp.bits  := hella_load.resp.bits.data_raw
 
@@ -100,7 +109,8 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
   }
 
   //vu.io.mem.store_req.ready  := hella_store_q.io.enq.ready && store_tag_available
-  hella_store_q.io.enq.valid       := vu.io.mem.store_req.valid && store_tag_available
+  hella_store_ready                := hella_store_q.io.enq.ready && store_tag_available
+  hella_store_q.io.enq.valid       := vu.io.mem.store_req.valid && store_tag_available && use_cache
   hella_store_q.io.enq.bits.addr   := vu.io.mem.store_req.bits.addr
   hella_store_q.io.enq.bits.tag    := store_tag
   hella_store_q.io.enq.bits.cmd    := M_PWR
@@ -115,6 +125,7 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
   hella_store_q.io.enq.bits.no_xcpt := true.B
 
   //vu.io.mem.store_ack := hella_store.resp.fire
+  hella_store_resp := hella_store.resp.fire
 
 
 
@@ -130,15 +141,24 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
   val inflight_reqs_valid = RegInit(VecInit.fill(vParams.tlMaxInflight)(false.B))
   val inflight_reqs_data = RegInit(VecInit.fill(vParams.tlMaxInflight)(0.U.asTypeOf(Valid(UInt(dLen.W))))) //Initialize each data to valid=false, data=0
 
+  val dma_store_ready = Wire(Bool())
+  val dma_load_ready = Wire(Bool())
+  val dma_load_resp = Wire(Valid(UInt(dLen.W)))
+  val dma_store_resp = Wire(Bool())
+
   // Manage available TL source IDs
   val next_id = Wire(UInt(inflightBits.W))
   val next_id_available = Wire(Bool())
   next_id := PriorityEncoder(~(inflight_reqs_valid.asUInt))
   next_id_available := inflight_reqs_valid.exists(v => ~v)
 
-  dmem_arb.io.in(0) <> vu.io.mem.store_req
-  dmem_arb.io.in(1) <> vu.io.mem.load_req
-  dmem_arb.io.out.ready := tl_out.a.ready && next_id_available
+  dmem_arb.io.in(0).bits  := vu.io.mem.store_req.bits
+  dmem_arb.io.in(0).valid := vu.io.mem.store_req.valid && !use_cache
+  dma_store_ready         := dmem_arb.io.in(0).ready
+  dmem_arb.io.in(1).bits  := vu.io.mem.load_req.bits
+  dmem_arb.io.in(1).valid := vu.io.mem.load_req.valid && !use_cache
+  dma_load_ready          := dmem_arb.io.in(1).ready
+  dmem_arb.io.out.ready   := tl_out.a.ready && next_id_available
 
   // Generate TL load and store messages
   val dmem_get = edge.Get(next_id, dmem_arb.io.out.bits.addr, log2Ceil(dLenB).U)._2
@@ -155,11 +175,11 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
   tl_out.d.ready := true.B
 
   // Store response to vector unit
-  vu.io.mem.store_ack := (tl_out.d.bits.opcode === TLMessages.AccessAck) && tl_out.d.valid
+  dma_store_resp := (tl_out.d.bits.opcode === TLMessages.AccessAck) && tl_out.d.valid
 
   // Load response to vector unit, read data from source ID at top of queue
-  vu.io.mem.load_resp.valid := inflight_reqs_data(load_resp_q.io.deq.bits).valid
-  vu.io.mem.load_resp.bits := inflight_reqs_data(load_resp_q.io.deq.bits).bits
+  dma_load_resp.valid := inflight_reqs_data(load_resp_q.io.deq.bits).valid
+  dma_load_resp.bits := inflight_reqs_data(load_resp_q.io.deq.bits).bits
 
   // Set source ID as inflight when A sends request
   when(tl_out.a.fire) {
@@ -190,6 +210,15 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
       inflight_reqs_valid(i.U) := d_load //if d message was store, then free source id
     }
   }
+
+  //Interface with vector unit
+  vu.io.mem.store_ack       := Mux(use_cache, hella_store_resp, dma_store_resp)
+  vu.io.mem.load_resp       := Mux(use_cache, hella_load_resp, dma_load_resp)
+  vu.io.mem.load_req.ready  := Mux(use_cache, 
+                                   hella_load_ready && (load_resp_q.io.count === 0.U), //don't send cache requests until resp queue has emptied
+                                   dma_load_ready && (load_tag_oh.asUInt === 0.U)) //don't send dma requests until all load tags are freed
+  vu.io.mem.store_req.ready := Mux(use_cache, hella_store_ready, dma_store_ready)
+
 
   when (store_tag_oh.orR || load_tag_oh.orR) { trap_check.io.mem_busy := true.B }
 }
@@ -243,7 +272,6 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.emul := Mux(io.core.ex.vconfig.vtype.vlmul_sign, 0.U, io.core.ex.vconfig.vtype.vlmul_mag)
   x_core_inst.vat := DontCare
   x_core_inst.phys := DontCare
-  x_core_inst.vxrm := DontCare // set at wb TODO: GIT FIX THIS
 
   def nextPage(addr: UInt) = ((addr + (1 << pgIdxBits).U) >> pgIdxBits) << pgIdxBits
 
