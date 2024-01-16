@@ -14,30 +14,45 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.set_vxsat := false.B
 
   lazy val ctrl_table = Seq(
-      (OPFFunct6.fadd,    Seq(N,Y,Y,N,N,Y,N,N,N,Y,N,N,N,N,Y)),
-      (OPFFunct6.fsub,    Seq(N,Y,Y,N,N,Y,N,N,N,Y,N,Y,N,N,Y)),
-      (OPFFunct6.frsub,   Seq(N,Y,Y,N,N,Y,N,N,N,Y,Y,N,N,N,Y)),
-      (OPFFunct6.fmul,    Seq(N,Y,Y,N,N,N,N,N,N,Y,N,N,N,N,Y)),
-      (OPFFunct6.fdiv,    Seq(N,Y,Y,N,N,N,N,N,N,N,N,N,Y,N,Y)),
-      (OPFFunct6.frdiv,   Seq(N,Y,Y,N,Y,N,N,N,N,N,N,N,Y,N,Y)),
-      (OPFFunct6.funary1, Seq(N,Y,N,N,N,N,N,N,N,N,N,N,N,Y,Y)),
-      (OPFFunct6.fmacc,   Seq(N,Y,Y,Y,N,N,N,N,N,Y,N,N,N,N,Y)),
-      (OPFFunct6.fnmacc,  Seq(N,Y,Y,Y,N,N,N,N,N,Y,Y,Y,N,N,Y)),
-      (OPFFunct6.fmsac,   Seq(N,Y,Y,Y,N,N,N,N,N,Y,Y,N,N,N,Y)),
-      (OPFFunct6.fnmsac,  Seq(N,Y,Y,Y,N,N,N,N,N,Y,N,Y,N,N,Y)),
-      (OPFFunct6.fmadd,   Seq(N,Y,Y,Y,N,Y,N,N,N,Y,N,N,N,N,Y)),
-      (OPFFunct6.fnmadd,  Seq(N,Y,Y,Y,N,Y,N,N,N,Y,Y,Y,N,N,Y)),
-      (OPFFunct6.fmsub,   Seq(N,Y,Y,Y,N,Y,N,N,N,Y,Y,N,N,N,Y)),
-      (OPFFunct6.fnmsub,  Seq(N,Y,Y,Y,N,Y,N,N,N,Y,N,Y,N,N,Y)),
-      (OPFFunct6.fmin,   Seq(Y,Y,Y,N,N,N,N,N,Y,N,X,X,N,N,Y)),
-      (OPFFunct6.fmax,   Seq(Y,Y,Y,N,N,N,N,N,Y,N,X,X,N,N,Y)),
+      (OPFFunct6.fadd,    Seq(N,Y,Y,N,N,Y,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fsub,    Seq(N,Y,Y,N,N,Y,N,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.frsub,   Seq(N,Y,Y,N,N,Y,N,N,N,N,Y,N,Y,N,N,Y)),
+      (OPFFunct6.fwadd,   Seq(N,Y,Y,N,N,Y,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fwsub,   Seq(N,Y,Y,N,N,Y,N,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.fwaddw,  Seq(N,Y,Y,N,N,Y,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fwsubw,  Seq(N,Y,Y,N,N,Y,N,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.fmul,    Seq(N,Y,Y,N,N,N,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fdiv,    Seq(N,Y,Y,N,N,N,N,N,N,N,N,N,N,Y,N,Y)),
+      (OPFFunct6.frdiv,   Seq(N,Y,Y,N,Y,N,N,N,N,N,N,N,N,Y,N,Y)),
+      (OPFFunct6.fwmul,   Seq(N,Y,Y,N,N,N,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.funary1, Seq(N,Y,N,N,N,N,N,N,N,N,N,N,N,N,Y,Y)),
+      (OPFFunct6.fmacc,   Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fnmacc,  Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,Y,Y,N,N,Y)),
+      (OPFFunct6.fmsac,   Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.fnmsac,  Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,N,Y,N,N,Y)),
+      (OPFFunct6.fmadd,   Seq(N,Y,Y,Y,N,Y,Y,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fnmadd,  Seq(N,Y,Y,Y,N,Y,Y,N,N,N,Y,Y,Y,N,N,Y)),
+      (OPFFunct6.fmsub,   Seq(N,Y,Y,Y,N,Y,Y,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.fnmsub,  Seq(N,Y,Y,Y,N,Y,Y,N,N,N,Y,N,Y,N,N,Y)),
+      (OPFFunct6.fwmacc,  Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,N,N,N,N,Y)),
+      (OPFFunct6.fwnmacc, Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,Y,Y,N,N,Y)),
+      (OPFFunct6.fwmsac,  Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,Y,N,N,N,Y)),
+      (OPFFunct6.fwnmsac, Seq(N,Y,Y,Y,N,N,N,N,N,N,Y,N,Y,N,N,Y)),
+      (OPFFunct6.fmin,    Seq(Y,Y,Y,N,N,N,N,N,N,Y,N,X,X,N,N,Y)),
+      (OPFFunct6.fmax,    Seq(Y,Y,Y,N,N,N,N,N,N,Y,N,X,X,N,N,Y)),
   )
   
-  val ctrl_cmp :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: fromint :: toint :: fastpipe :: fma :: fmaCmd0 :: fmaCmd1 :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
+  val ctrl_cmp :: ren1 :: ren2 :: ren3 :: swap12 :: swap23 :: swap13 :: fromint :: toint :: fastpipe :: fma :: fmaCmd0 :: fmaCmd1 :: div :: sqrt :: wflags :: Nil = VecDecode.applyBools(
     io.iss.op.funct3, io.iss.op.funct6,
-    Seq.fill(15)(X), ctrl_table)
+    Seq.fill(16)(X), ctrl_table)
 
   def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+
+  val vs1_eew = io.iss.op.rvs1_eew
+  val vs2_eew = io.iss.op.rvs2_eew
+  val vd_eew  = io.iss.op.vd_eew
+  val ctrl_widen_vs2 = vs2_eew =/= vd_eew
+  val ctrl_widen_vs1 = vs1_eew =/= vd_eew
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
@@ -57,7 +72,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.ren1 := ren1
   req.ren2 := ren2
   req.ren3 := ren3
-  req.swap12 := swap12
+  req.swap12 := false.B
   req.swap23 := swap23
   req.typeTagIn := 1.U
   req.typeTagOut := Mux(io.iss.op.vd_eew === 3.U, 1.U, 0.U)
@@ -91,9 +106,20 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val rvs1_elem = Mux(is_double, d_rvs1, s_rvs1)
   val rvd_elem = Mux(is_double, d_rvd, s_rvd)
 
-  req.in1 := rvs1_elem
-  req.in2 := rvs2_elem
-  req.in3 := rvd_elem
+  // widening circuitry
+  val widen_rvs1 = Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53))
+  widen_rvs1.io.in := s_rvs1
+  widen_rvs1.io.roundingMode := io.iss.op.frm
+  widen_rvs1.io.detectTininess := hardfloat.consts.tininess_afterRounding
+
+  val widen_rvs2 = Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53))
+  widen_rvs2.io.in := s_rvs2
+  widen_rvs2.io.roundingMode := io.iss.op.frm
+  widen_rvs2.io.detectTininess := hardfloat.consts.tininess_afterRounding
+
+  req.in1 := Mux(ctrl_widen_vs2, widen_rvs2.io.out, Mux(swap13, rvd_elem, Mux(swap12, rvs1_elem, rvs2_elem)))
+  req.in2 := Mux(ctrl_widen_vs1, widen_rvs1.io.out, Mux(swap12, rvs2_elem, rvs1_elem))
+  req.in3 := Mux(swap13, rvs2_elem, rvd_elem)
 
   io.fp_req.bits := req
   io.fp_req.valid := io.iss.valid && io.iss.ready 
