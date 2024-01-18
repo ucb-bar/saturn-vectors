@@ -8,8 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
-  val fus = genFUs.map(gen => Module(gen()))
+class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
   val supported_insns = fus.map(_.supported_insns).flatten
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }

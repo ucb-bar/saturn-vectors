@@ -107,18 +107,20 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.vat_tail := vat_tail
 
-  val vxu = new ExecutionUnit(Seq(
-    () => new IntegerPipe,
-    () => new BitwisePipe,
-    () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
-    () => new IterativeIntegerDivider,
-    () => new MaskUnit,
-    () => new PermutationUnit,
-    () => new FPFMAPipe(vParams.fmaPipeDepth),
-    () => new FPDivSqrt,
-    () => new FPCompPipe,
-    () => new FPConvPipe,
-  ))
+
+  val int_unit = Module(new IntegerPipe)
+  val bw_unit = Module(new BitwisePipe)
+  val mul_unit = Module(if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)))
+  val div_unit = Module(new IterativeIntegerDivider)
+  val mask_unit = Module(new MaskUnit)
+  val perm_unit = Module(new PermutationUnit)
+  val fpfma_unit = Module(new FPFMAPipe(vParams.fmaPipeDepth))
+  val fpdiv_unit = Module(new FPDivSqrt)
+  val fpcomp_unit = Module(new FPCompPipe)
+  val fpconv_unit = Module(new FPConvPipe)
+
+  val vxu = new ExecutionUnit(int_unit, bw_unit, mul_unit, div_unit, mask_unit, perm_unit,
+    fpfma_unit, fpdiv_unit, fpcomp_unit, fpconv_unit)
 
   val vlissq  = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq  = Module(new IssueQueue(vParams.vsissqEntries))
