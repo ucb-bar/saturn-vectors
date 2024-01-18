@@ -25,7 +25,8 @@ class IssueQueue(depth: Int)(implicit p: Parameters) extends CoreModule()(p) wit
     q.io.peek.zip(io.hazards).foreach { case (e,h) =>
       h.valid    := e.valid
       h.bits.vat := e.bits.vat
-      val vd_arch_mask  = get_arch_mask(e.bits.rd , Mux(e.bits.reduction , 0.U, e.bits.pos_lmul +& e.bits.wide_vd +& e.bits.nf_log2), 5)
+      val only_writes_vd0 = e.bits.scalar_to_vd0 || e.bits.reduction
+      val vd_arch_mask  = get_arch_mask(e.bits.rd , Mux(only_writes_vd0  , 0.U, e.bits.pos_lmul +& e.bits.wide_vd +& e.bits.nf_log2), 5)
       val vs1_arch_mask = get_arch_mask(e.bits.rs1, Mux(e.bits.reads_mask, 0.U, e.bits.pos_lmul                                    ), 3)
       val vs2_arch_mask = get_arch_mask(e.bits.rs2, Mux(e.bits.reads_mask, 0.U, e.bits.pos_lmul +& e.bits.wide_vs2                 ), 4)
       h.bits.rintent := Seq(

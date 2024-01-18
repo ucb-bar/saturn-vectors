@@ -7,6 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class AdderArray(dLenB: Int) extends Module {
   val io = IO(new Bundle {
@@ -263,83 +264,50 @@ class SaturatedSumArray(dLenB: Int) extends Module {
 }
 
 class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+  val supported_insns = Seq(
+    ADD.VV, ADD.VX, ADD.VI, SUB.VV, SUB.VX, RSUB.VX, RSUB.VI,
+    WADDU.VV, WADDU.VX, WADD.VV, WADD.VX, WSUBU.VV, WSUBU.VX, WSUB.VV, WSUB.VX,
+    WADDUW.VV, WADDUW.VX, WADDW.VV, WADDW.VX, WSUBUW.VV, WSUBUW.VX, WSUBW.VV, WSUBW.VX,
+    ADC.VV, ADC.VX, ADC.VI, MADC.VV, MADC.VX, MADC.VI,
+    SBC.VV, SBC.VX, MSBC.VV, MSBC.VX,
+    NEXT.VV,
+    SLL.VV, SLL.VX, SLL.VI, SRL.VV, SRL.VX, SRL.VI, SRA.VV, SRA.VX, SRA.VI,
+    NSRA.VV, NSRA.VX, NSRA.VI, NSRL.VV, NSRL.VX, NSRL.VI,
+    MSEQ.VV, MSEQ.VX, MSEQ.VI, MSNE.VV, MSNE.VX, MSNE.VI,
+    MSLTU.VV, MSLTU.VX, MSLT.VV, MSLT.VX,
+    MSLEU.VV, MSLEU.VX, MSLEU.VI, MSLE.VV, MSLE.VX, MSLE.VI,
+    MSGTU.VX, MSGTU.VI, MSGT.VX, MSGT.VI,
+    MINU.VV, MINU.VX, MIN.VV, MIN.VX,
+    MAXU.VV, MAXU.VX, MAX.VV, MAX.VX,
+    MERGE.VV, MERGE.VX, MERGE.VI,
+    SADDU.VV, SADDU.VX, SADDU.VI, SADD.VV, SADD.VX, SADD.VI,
+    SSUBU.VV, SSUBU.VX, SSUB.VV, SSUB.VX,
+    AADDU.VV, AADDU.VX, AADD.VV, AADD.VX,
+    ASUBU.VV, ASUBU.VX, ASUB.VV, ASUB.VX,
+    SSRL.VV, SSRL.VX, SSRL.VI, SSRA.VV, SSRA.VX, SSRA.VI,
+    NCLIPU.VV, NCLIPU.VX, NCLIPU.VI, NCLIP.VV, NCLIP.VX, NCLIP.VI,
+    REDSUM.VV, WREDSUM.VV, WREDSUMU.VV,
+    REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
+    FMERGE.VF
+  )
+
   io.iss.sub_dlen := 0.U
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
 
-  lazy val ctrl_table = Seq(
-    (OPIFunct6.add     , Seq(N,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.sub     , Seq(Y,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.rsub    , Seq(Y,X,N,X,N,X,Y,X,N)),
-    (OPMFunct6.waddu   , Seq(N,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wadd    , Seq(N,Y,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsubu   , Seq(Y,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsub    , Seq(Y,Y,N,X,N,X,N,X,N)),
-    (OPMFunct6.wadduw  , Seq(N,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.waddw   , Seq(N,Y,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsubuw  , Seq(Y,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.wsubw   , Seq(Y,Y,N,X,N,X,N,X,N)),
-    (OPIFunct6.adc     , Seq(N,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.madc    , Seq(N,X,N,X,Y,N,N,X,N)),
-    (OPIFunct6.sbc     , Seq(Y,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.msbc    , Seq(Y,X,N,X,Y,N,N,X,N)),
-    (OPMFunct6.xunary0 , Seq(X,X,N,X,N,X,X,X,N)),
-    (OPIFunct6.sll     , Seq(X,X,Y,Y,N,X,X,X,N)),
-    (OPIFunct6.sra     , Seq(X,X,Y,N,N,X,X,X,N)),
-    (OPIFunct6.srl     , Seq(X,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nsra    , Seq(X,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nsrl    , Seq(X,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.mseq    , Seq(X,X,N,X,Y,Y,X,N,N)),
-    (OPIFunct6.msne    , Seq(X,X,N,X,Y,Y,X,N,N)),
-    (OPIFunct6.msltu   , Seq(X,X,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.mslt    , Seq(X,X,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.msleu   , Seq(X,X,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.msle    , Seq(X,X,N,X,Y,Y,N,Y,N)),
-    (OPIFunct6.msgtu   , Seq(X,X,N,X,Y,Y,Y,Y,N)),
-    (OPIFunct6.msgt    , Seq(X,X,N,X,Y,Y,Y,Y,N)),
-    (OPIFunct6.minu    , Seq(X,X,N,X,N,X,N,Y,N)),
-    (OPIFunct6.min     , Seq(X,X,N,X,N,X,N,Y,N)),
-    (OPIFunct6.maxu    , Seq(X,X,N,X,N,X,Y,Y,N)),
-    (OPIFunct6.max     , Seq(X,X,N,X,N,X,Y,Y,N)),
-    (OPIFunct6.merge   , Seq(X,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.saddu   , Seq(N,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.sadd    , Seq(N,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.ssubu   , Seq(Y,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.ssub    , Seq(Y,X,N,X,N,X,N,X,N)),
-    (OPMFunct6.aadd    , Seq(N,X,N,X,N,X,N,X,Y)),
-    (OPMFunct6.aaddu   , Seq(N,X,N,X,N,X,N,X,Y)),
-    (OPMFunct6.asub    , Seq(Y,X,N,X,N,X,N,X,Y)),
-    (OPMFunct6.asubu   , Seq(Y,X,N,X,N,X,N,X,Y)),
-    (OPIFunct6.ssrl    , Seq(X,X,Y,N,N,X,X,X,N)),
-    (OPIFunct6.ssra    , Seq(X,X,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nclip   , Seq(X,N,Y,N,N,X,X,X,N)),
-    (OPIFunct6.nclipu  , Seq(X,N,Y,N,N,X,X,X,N)),
-    (OPMFunct6.redsum  , Seq(N,X,N,X,N,X,N,X,N)),
-    (OPIFunct6.wredsum , Seq(N,Y,N,X,N,X,N,X,N)),
-    (OPIFunct6.wredsumu, Seq(N,N,N,X,N,X,N,X,N)),
-    (OPMFunct6.redminu , Seq(X,X,N,X,N,X,N,Y,N)),
-    (OPMFunct6.redmin  , Seq(X,X,N,X,N,X,N,Y,N)),
-    (OPMFunct6.redmaxu , Seq(X,X,N,X,N,X,Y,Y,N)),
-    (OPMFunct6.redmax  , Seq(X,X,N,X,N,X,Y,Y,N)),
-    (OPFFunct6.fmerge  , Seq(X,X,N,X,N,X,N,X,N)),
-  )
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
-  val ctrl_sub :: ctrl_add_sext :: ctrl_shift :: ctrl_shift_left :: ctrl_mask_write :: ctrl_cmp :: ctrl_rev12 :: cmp_less :: ctrl_avg :: Nil = VecDecode.applyBools(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(9)(X), ctrl_table)
-  val ctrl_cmask = (
-    io.pipe(0).bits.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.sbc) ||
-    ((io.pipe(0).bits.opif6.isOneOf(OPIFunct6.madc, OPIFunct6.msbc)) && !io.pipe(0).bits.vm)
-  )
+  val ctrl = new VectorDecoder(
+    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
+    supported_insns,
+    Seq(UsesShift, UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
+      Sub, WideningSext, Averaging,
+      CarryIn, AlwaysCarryIn, ShiftsLeft, ScalingShift,
+      CmpLess, Swap12, WritesAsMask))
 
-  val ctrl_rsub = io.pipe(0).bits.opif6 === OPIFunct6.rsub
-  val ctrl_xunary0 = io.pipe(0).bits.opmf6 === OPMFunct6.xunary0
-  val ctrl_minmax = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.minu, OPIFunct6.min, OPIFunct6.maxu, OPIFunct6.max) || io.pipe(0).bits.opmf6.isOneOf(OPMFunct6.redmin, OPMFunct6.redminu, OPMFunct6.redmax, OPMFunct6.redmaxu)
-  val ctrl_merge = io.pipe(0).bits.opif6 === OPIFunct6.merge || io.pipe(0).bits.opff6 === OPFFunct6.fmerge
-  val ctrl_sat = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.saddu, OPIFunct6.sadd, OPIFunct6.ssubu, OPIFunct6.ssub)
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+
+  val carry_in = ctrl.bool(CarryIn) && (!io.pipe(0).bits.vm || ctrl.bool(AlwaysCarryIn))
 
   val sat_signed = io.pipe(0).bits.funct6(0)
   val sat_addu   = io.pipe(0).bits.funct6(1,0) === 0.U
@@ -348,8 +316,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val rvs1_bytes = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val rvs2_bytes = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  val in1_bytes = Mux(ctrl_rev12, rvs2_bytes, rvs1_bytes)
-  val in2_bytes = Mux(ctrl_rev12, rvs1_bytes, rvs2_bytes)
+  val in1_bytes = Mux(ctrl.bool(Swap12), rvs2_bytes, rvs1_bytes)
+  val in2_bytes = Mux(ctrl.bool(Swap12), rvs1_bytes, rvs2_bytes)
 
   def narrow2_expand(bits: Seq[UInt], eew: UInt, upper: Bool, sext: Bool): Vec[UInt] = {
     val narrow_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
@@ -365,11 +333,11 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   }
 
   val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew,
-    (io.pipe(0).bits.eidx >> (dLenOffBits.U - Mux(ctrl_shift, rvs2_eew, vd_eew)))(0),
-    ctrl_add_sext)
+    (io.pipe(0).bits.eidx >> (dLenOffBits.U - Mux(ctrl.bool(UsesShift), rvs2_eew, vd_eew)))(0),
+    ctrl.bool(WideningSext))
   val narrow_vs2 = narrow2_expand(rvs2_bytes, rvs2_eew,
     (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0),
-    ctrl_add_sext)
+    ctrl.bool(WideningSext))
 
   val add_mask_carry = VecInit.tabulate(4)({ eew =>
     VecInit((0 until dLenB >> eew).map { i => io.pipe(0).bits.rmask(i) | 0.U((1 << eew).W) }).asUInt
@@ -388,12 +356,12 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   adder_arr.io.in1 := Mux(rvs1_eew < vd_eew, narrow_vs1, in1_bytes)
   adder_arr.io.in2 := Mux(rvs2_eew < vd_eew, narrow_vs2, in2_bytes)
   adder_arr.io.incr.foreach(_ := false.B)
-  adder_arr.io.avg := ctrl_avg
+  adder_arr.io.avg := ctrl.bool(Averaging)
   adder_arr.io.eew := vd_eew
   adder_arr.io.rm  := io.pipe(0).bits.vxrm
   adder_arr.io.mask_carry := add_mask_carry
-  adder_arr.io.sub        := ctrl_sub
-  adder_arr.io.cmask      := ctrl_cmask
+  adder_arr.io.sub        := ctrl.bool(Sub)
+  adder_arr.io.cmask      := carry_in
   adder_arr.io.signed     := io.pipe(0).bits.funct6(0)
   add_out   := adder_arr.io.out
   add_carry := adder_arr.io.carry
@@ -403,22 +371,22 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   cmp_arr.io.in2 := in2_bytes
   cmp_arr.io.eew := rvs1_eew
   cmp_arr.io.signed := io.pipe(0).bits.funct6(0)
-  cmp_arr.io.less   := cmp_less
+  cmp_arr.io.less   := ctrl.bool(CmpLess)
   cmp_arr.io.sle    := io.pipe(0).bits.funct6(2,1) === 2.U
   cmp_arr.io.inv    := io.pipe(0).bits.funct6(0)
   val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(cmp_arr.io.minmax.asBools).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
 
-  val mask_out = Fill(8, Mux(ctrl_cmp, cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl_sub)))
+  val mask_out = Fill(8, Mux(ctrl.bool(UsesCmp), cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl.bool(Sub))))
 
   val shift_narrowing = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.nclip, OPIFunct6.nclipu, OPIFunct6.nsra, OPIFunct6.nsrl)
   val shift_arr = Module(new ShiftArray(dLenB))
   shift_arr.io.in_eew := rvs2_eew
   shift_arr.io.in     := rvs2_bytes
   shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes)
-  shift_arr.io.shl       := ctrl_shift_left
+  shift_arr.io.shl       := ctrl.bool(ShiftsLeft)
   shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
   shift_arr.io.rm        := io.pipe(0).bits.vxrm
-  shift_arr.io.scaling   := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl, OPIFunct6.nclip, OPIFunct6.nclipu)
+  shift_arr.io.scaling   := ctrl.bool(ScalingShift) //io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl, OPIFunct6.nclip, OPIFunct6.nclipu)
   shift_arr.io.narrowing := shift_narrowing
 
   val shift_out = shift_arr.io.out.asUInt
@@ -428,7 +396,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   sat_arr.io.carry    := add_carry
   sat_arr.io.in1_sign := rvs1_bytes.map(_(7))
   sat_arr.io.in2_sign := rvs2_bytes.map(_(7))
-  sat_arr.io.sub      := ctrl_sub
+  sat_arr.io.sub      := ctrl.bool(Sub)
   sat_arr.io.eew      := vd_eew
   sat_arr.io.signed   := io.pipe(0).bits.funct6(0)
   val sat_out = sat_arr.io.out.asUInt
@@ -455,12 +423,12 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   }}.flatten)
 
   val outs = Seq(
-    (ctrl_xunary0        , xunary0_out),
-    (ctrl_mask_write     , mask_out),
-    (ctrl_shift          , shift_out),
-    (ctrl_minmax         , minmax_out),
-    (ctrl_merge          , merge_out),
-    (ctrl_sat            , sat_out)
+    (ctrl.bool(UsesNarrowingSext)        , xunary0_out),
+    (ctrl.bool(WritesAsMask)             , mask_out),
+    (ctrl.bool(UsesShift)                , shift_out),
+    (ctrl.bool(UsesMinMax)               , minmax_out),
+    (ctrl.bool(UsesMerge)                , merge_out),
+    (ctrl.bool(UsesSat)                  , sat_out)
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 
@@ -473,10 +441,10 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
 
   io.write.valid     := io.pipe(0).valid
   io.write.bits.eg   := io.pipe(0).bits.wvd_eg
-  io.write.bits.mask := Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
+  io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
   io.write.bits.data := out
 
-  io.set_vxsat := io.pipe(0).valid && ((ctrl_sat && sat_arr.io.set_vxsat) || (ctrl_shift && shift_arr.io.set_vxsat))
+  io.set_vxsat := io.pipe(0).valid && ((ctrl.bool(UsesSat) && sat_arr.io.set_vxsat) || (ctrl.bool(UsesShift) && shift_arr.io.set_vxsat))
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 

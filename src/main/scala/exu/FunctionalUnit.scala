@@ -7,6 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns.{VectorInstruction}
 
 abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val iss = new Bundle {
@@ -36,6 +37,7 @@ class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO
 
 abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io: FunctionalUnitIO
+  val supported_insns: Seq[VectorInstruction]
 
   def extract(in: UInt, sext: Bool, in_eew: UInt, eidx: UInt): SInt = {
     val bytes = in.asTypeOf(Vec(dLenB, UInt(8.W)))

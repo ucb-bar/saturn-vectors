@@ -50,9 +50,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new Execute
   )
 
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
-  val eff_vl    = Mux((inst.funct3 === OPMVX && inst.opmf6 === OPMFunct6.wrxunary0) || (inst.funct3 === OPFVF && inst.opff6 === OPFFunct6.wrfunary0),
-    1.U, // vmv.s.x
-    inst.vconfig.vl)
+  val eff_vl    = Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl)
   val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask && (inst.writes_mask || !inst.wvd))
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
@@ -170,6 +168,7 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new Execute
   io.iss.bits.vl        := inst.vconfig.vl
   io.iss.bits.wvd_eg    := getEgId(inst.rd, Mux(inst.reduction, 0.U, eidx), vd_eew, inst.writes_mask)
   io.iss.bits.rs1       := inst.rs1
+  io.iss.bits.rs2       := inst.rs2
   io.iss.bits.rd        := inst.rd
   io.iss.bits.funct3    := inst.funct3
   io.iss.bits.funct6    := inst.funct6

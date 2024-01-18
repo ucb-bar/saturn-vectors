@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import chisel3.util.experimental.decode._
 import vector.common._
-
+import vector.insns._
 
 class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {
@@ -519,22 +519,26 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
 
 
 class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
+  val supported_insns = Seq(
+    FDIV.VV, FDIV.VF,
+    FRDIV.VF,
+    FSQRT_V,
+    FRSQRT7_V,
+    FREC7_V,
+    FCLASS_V
+  )
+
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs2_eew
   io.set_vxsat := false.B
 
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)
 
-  lazy val ctrl_table = Seq(
-    (OPFFunct6.fdiv     ,   Seq(Y,N)),
-    (OPFFunct6.frdiv    ,   Seq(Y,Y)),
-    (OPFFunct6.funary1  ,   Seq(N,N)),
-  )
-  val ctrl_isDiv :: ctrl_swap12 :: Nil = VecDecode.applyBools(
-    io.iss.op.funct3, io.iss.op.funct6,
-    Seq.fill(2)(X), ctrl_table
-  )
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
+  val ctrl = new VectorDecoder(
+    io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
+    supported_insns,
+    Seq(FPSwapVdV2))
 
+  val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
   val divSqrt_ready = (ctrl_isDiv && divSqrt.io.inReady_div) || (!ctrl_isDiv && divSqrt.io.inReady_sqrt)
 
   val rvs2_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
@@ -555,8 +559,8 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.hazard.bits.eg := op.wvd_eg
 
   when (op.rvs1_eew === 3.U) {
-    divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
-    divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
+    divSqrt.io.a := Mux(ctrl.bool(FPSwapVdV2) && ctrl_isDiv, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
+    divSqrt.io.b := Mux(ctrl.bool(FPSwapVdV2) || !ctrl_isDiv, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
   } .otherwise {
     val narrow_rvs2_bits = rvs2_bits(31,0)
     val narrow_rvs1_bits = rvs1_bits(31,0)
@@ -568,8 +572,8 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
       upconvert
     }
 
-    divSqrt.io.a := Mux(ctrl_swap12 && ctrl_isDiv, widen(1).io.out, widen(0).io.out)
-    divSqrt.io.b := Mux(ctrl_swap12 || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
+    divSqrt.io.a := Mux(ctrl.bool(FPSwapVdV2) && ctrl_isDiv, widen(1).io.out, widen(0).io.out)
+    divSqrt.io.b := Mux(ctrl.bool(FPSwapVdV2) || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
   }
 
   val divSqrt_out_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
@@ -617,7 +621,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Mux1H(Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, out_toWrite || divSqrt_out_valid),
                               Seq(Mux(op.rvs2_eew === 3.U, gen_vfclass(1), gen_vfclass(0)), recSqrt7.io.out, rec7.io.out, divSqrt_write))
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && divSqrt_ready && (!valid || last)
+  io.iss.ready := ctrl.matched && divSqrt_ready && (!valid || last)
   last := io.write.fire()
 
   io.set_fflags.valid := divSqrt_out_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())

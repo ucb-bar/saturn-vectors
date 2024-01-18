@@ -7,39 +7,28 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+  val supported_insns = Seq(
+    AND.VV, AND.VX, AND.VI, OR.VV, OR.VX, OR.VI, XOR.VV, XOR.VX, XOR.VI,
+    MANDNOT.VV, MAND.VV, MOR.VV, MXOR.VV, MORNOT.VV, MNAND.VV, MNOR.VV, MXNOR.VV,
+    REDAND.VV, REDOR.VV, REDXOR.VV
+  )
   io.iss.sub_dlen := 0.U
 
-  lazy val ctrl_table = Seq(
-    (OPIFunct6.and      , Seq(Y,N,N,N,N)),
-    (OPIFunct6.or       , Seq(N,Y,N,N,N)),
-    (OPIFunct6.xor      , Seq(N,N,Y,N,N)),
-    (OPMFunct6.mandnot  , Seq(Y,N,N,N,Y)),
-    (OPMFunct6.mand     , Seq(Y,N,N,N,N)),
-    (OPMFunct6.mor      , Seq(N,Y,N,N,N)),
-    (OPMFunct6.mxor     , Seq(N,N,Y,N,N)),
-    (OPMFunct6.mornot   , Seq(N,Y,N,N,Y)),
-    (OPMFunct6.mnand    , Seq(Y,N,N,Y,N)),
-    (OPMFunct6.mnor     , Seq(N,Y,N,Y,N)),
-    (OPMFunct6.mxnor    , Seq(N,N,Y,Y,N)),
-    (OPMFunct6.redand   , Seq(Y,N,N,N,N)),
-    (OPMFunct6.redor    , Seq(N,Y,N,N,N)),
-    (OPMFunct6.redxor   , Seq(N,N,Y,N,N)),
-  )
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
-  val ctrl_and :: ctrl_or :: ctrl_xor :: ctrl_invout :: ctrl_inv1 :: Nil = VecDecode.applyBools(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, Seq.fill(5)(X), ctrl_table)
+  val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns,
+    Seq(BWAnd, BWOr, BWXor, BWInvOut, BWInv1))
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
-  val in1 = Mux(ctrl_inv1, ~io.pipe(0).bits.rvs1_data, io.pipe(0).bits.rvs1_data)
+  val in1 = Mux(ctrl.bool(BWInv1), ~io.pipe(0).bits.rvs1_data, io.pipe(0).bits.rvs1_data)
   val in2 = io.pipe(0).bits.rvs2_data
   val op = Mux1H(Seq(
-    (ctrl_and, (in1 & in2)),
-    (ctrl_or , (in1 | in2)),
-    (ctrl_xor, (in1 ^ in2))
+    (ctrl.bool(BWAnd), (in1 & in2)),
+    (ctrl.bool(BWOr) , (in1 | in2)),
+    (ctrl.bool(BWXor), (in1 ^ in2))
   ))
-  val out = Mux(ctrl_invout, ~op, op)
+  val out = Mux(ctrl.bool(BWInvOut), ~op, op)
 
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg

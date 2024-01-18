@@ -10,6 +10,7 @@ import vector.common._
 
 class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val fus = genFUs.map(gen => Module(gen()))
+  val supported_insns = fus.map(_.supported_insns).flatten
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
 

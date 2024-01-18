@@ -7,19 +7,18 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctionalUnit()(p) {
-  lazy val aluFn = new ALUFN
-  lazy val opcodes = Seq(
-    OPMFunct6.divu,
-    OPMFunct6.div ,
-    OPMFunct6.remu,
-    OPMFunct6.rem ,
+  val supported_insns = Seq(
+    DIVU.VV, DIVU.VX,
+    DIV.VV, DIV.VX,
+    REMU.VV, REMU.VX,
+    REM.VV, REM.VX
   )
 
-  lazy val div = Module(new MulDiv(MulDivParams(mulUnroll = 0), 64, 1))
-
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes) && div.io.req.ready
+  val div = Module(new MulDiv(MulDivParams(mulUnroll = 0), 64, 1))
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && div.io.req.ready && (!valid || last)
 
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
   io.set_vxsat := false.B
@@ -28,6 +27,7 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
 
   div.io.req.valid := io.iss.valid && io.iss.ready
 
+  lazy val aluFn = new ALUFN
   val ctrl_fn = VecInit(Seq(aluFn.FN_DIVU, aluFn.FN_DIV, aluFn.FN_REMU, aluFn.FN_REM))(io.iss.op.funct6(1,0))
   val ctrl_signed = io.iss.op.funct6(0)
 
@@ -49,8 +49,6 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   io.write.bits.eg   := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := wdata
-
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6) && (!valid || last)
 
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare

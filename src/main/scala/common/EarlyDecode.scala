@@ -5,7 +5,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 
-class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p) with VectorConsts {
+class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p) with HasVectorConsts {
 
   io.legal := false.B
   io.fp := false.B

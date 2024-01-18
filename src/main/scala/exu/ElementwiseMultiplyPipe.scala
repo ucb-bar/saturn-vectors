@@ -7,40 +7,28 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
+  val supported_insns = Seq(
+    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
+    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
+    WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
+    WMULSU.VV, WMULSU.VX,
+    MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
+    MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
+    WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
+    WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
+    SMUL.VV, SMUL.VX)
 
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
   io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.vd_eew
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
-  val aluFn = new ALUFN
-  lazy val ctrl_table = Seq(
-    (OPMFunct6.mul    , Seq(N,X,X,N,N,X)),
-    (OPMFunct6.mulh   , Seq(Y,Y,Y,N,N,X)),
-    (OPMFunct6.mulhu  , Seq(Y,N,N,N,N,X)),
-    (OPMFunct6.mulhsu , Seq(Y,N,Y,N,N,X)),
-    (OPMFunct6.wmul   , Seq(N,Y,Y,N,N,X)),
-    (OPMFunct6.wmulu  , Seq(N,N,N,N,N,X)),
-    (OPMFunct6.wmulsu , Seq(N,N,Y,N,N,X)),
-    (OPMFunct6.macc   , Seq(X,X,X,N,Y,N)),
-    (OPMFunct6.nmsac  , Seq(X,X,X,N,Y,Y)),
-    (OPMFunct6.madd   , Seq(X,X,X,Y,Y,N)),
-    (OPMFunct6.nmsub  , Seq(X,X,X,Y,Y,Y)),
-    (OPMFunct6.wmaccu , Seq(X,N,N,N,Y,N)),
-    (OPMFunct6.wmacc  , Seq(X,Y,Y,N,Y,N)),
-    (OPMFunct6.wmaccsu, Seq(X,Y,N,N,Y,N)),
-    (OPMFunct6.wmaccus, Seq(X,N,Y,N,Y,N)),
-    (OPIFunct6.smul   , Seq(X,Y,Y,N,N,N))
-  )
-
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
-
-  val ctrl_hi :: ctrl_sign1 :: ctrl_sign2 :: ctrl_swapvdvs2 :: ctrl_madd :: ctrl_sub :: Nil = VecDecode.applyBools(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(6)(X), ctrl_table)
+  val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+    MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
 
   val ctrl_smul = io.pipe(0).bits.isOpi
 
@@ -48,14 +36,14 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val out_eew = io.pipe(0).bits.vd_eew
   val eidx = io.pipe(0).bits.eidx
 
-  val in_vs1 = extract(io.pipe(0).bits.rvs1_data, ctrl_sign1, in_eew , eidx)(64,0)
-  val in_vs2 = extract(io.pipe(0).bits.rvs2_data, ctrl_sign2, in_eew , eidx)(64,0)
-  val in_vd  = extract(io.pipe(0).bits.rvd_data , false.B   , out_eew, eidx)(64,0)
+  val in_vs1 = extract(io.pipe(0).bits.rvs1_data, ctrl.bool(MULSign1), in_eew , eidx)(64,0)
+  val in_vs2 = extract(io.pipe(0).bits.rvs2_data, ctrl.bool(MULSign2), in_eew , eidx)(64,0)
+  val in_vd  = extract(io.pipe(0).bits.rvd_data , false.B            , out_eew, eidx)(64,0)
 
-  val prod = in_vs1.asSInt * Mux(ctrl_swapvdvs2, in_vd, in_vs2).asSInt
+  val prod = in_vs1.asSInt * Mux(ctrl.bool(MULSwapVdV2), in_vd, in_vs2).asSInt
   val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(out_eew)(63,0)
   val lo = VecInit.tabulate(4)({ eew => prod((8 << eew)-1,0)})(out_eew)(63,0)
-  val madd = Mux(ctrl_sub, ~lo, lo) + ctrl_sub + Mux(ctrl_swapvdvs2, in_vs2, in_vd)
+  val madd = Mux(ctrl.bool(MULSub), ~lo, lo) + ctrl.bool(MULSub) + Mux(ctrl.bool(MULSwapVdV2), in_vs2, in_vd)
   val rounding_incr = VecInit.tabulate(4)({ eew => RoundingIncrement(io.pipe(0).bits.vxrm, prod((8 << eew)-1,0)) })(out_eew)
   val smul = VecInit.tabulate(4)({ eew => prod >> ((8 << eew) - 1) })(out_eew) + Cat(0.U(1.W), rounding_incr).asSInt
   val smul_clip_neg = VecInit.tabulate(4)({ eew => (-1 << ((8 << eew)-1)).S })(out_eew)
@@ -64,7 +52,7 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val smul_clip_lo = smul < smul_clip_neg
   val smul_clipped = Mux(smul_clip_hi, smul_clip_pos, 0.S) | Mux(smul_clip_lo, smul_clip_neg, 0.S) | Mux(!smul_clip_hi && !smul_clip_lo, smul, 0.S)
   val smul_sat = smul_clip_hi || smul_clip_lo
-  val out = Mux(ctrl_madd, madd, 0.U) | Mux(ctrl_smul, smul_clipped.asUInt, 0.U) | Mux(!ctrl_madd && !ctrl_smul, Mux(ctrl_hi, hi, lo), 0.U)
+  val out = Mux(ctrl.bool(MULAccumulate), madd, 0.U) | Mux(ctrl_smul, smul_clipped.asUInt, 0.U) | Mux(!ctrl.bool(MULAccumulate) && !ctrl_smul, Mux(ctrl.bool(MULHi), hi, lo), 0.U)
 
   val pipe_out = Pipe(io.pipe(0).valid, out(63,0), depth-1).bits
   val pipe_vxsat = Pipe(io.pipe(0).valid, smul_sat && ctrl_smul, depth-1).bits

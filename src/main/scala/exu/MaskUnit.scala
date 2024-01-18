@@ -7,8 +7,11 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+  val supported_insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID)
+
   val scalar_wb_busy = RegInit(false.B)
   val scalar_wb_data = Reg(UInt(64.W))
   val scalar_wb_rd = Reg(UInt(5.W))
@@ -18,7 +21,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
 
   def accepts(op: ExecuteMicroOp): Bool = (op.opff6.isOneOf(OPFFunct6.wrfunary0) || op.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)) && !scalar_wb_busy
 
-  io.iss.ready := accepts(io.iss.op) && !scalar_wb_busy
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2, supported_insns, Nil).matched && !scalar_wb_busy
 
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B

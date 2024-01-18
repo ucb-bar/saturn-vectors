@@ -7,16 +7,16 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
+  val supported_insns = Seq(FCVT_SINGLE, FCVT_NARROWING, FCVT_WIDENING)
+
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
-  lazy val opcodes = Seq(
-    OPFFunct6.funary0
-  )
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, opcodes)
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U,
+    supported_insns, Nil).matched
 
   val rs1 = io.pipe(0).bits.rs1
   val ctrl_widen = rs1(3)

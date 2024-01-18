@@ -7,6 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {
@@ -66,57 +67,43 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
 
 
 class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
+  val supported_insns = Seq(
+    FADD.VV, FADD.VF, FSUB.VV, FSUB.VF, FRSUB.VF,
+    FMUL.VV, FMUL.VF,
+    FMACC.VV, FMACC.VF, FNMACC.VV, FNMACC.VF,
+    FMSAC.VV, FMSAC.VF, FNMSAC.VV, FNMSAC.VF,
+    FMADD.VV, FMADD.VF, FNMADD.VV, FNMADD.VF,
+    FMSUB.VV, FMSUB.VF, FNMSUB.VV, FNMSUB.VF,
+    FWADD.VV, FWADD.VF, FWSUB.VV, FWSUB.VF,
+    FWADDW.VV, FWADDW.VF, FWSUBW.VV, FWSUBW.VF,
+    FWMUL.VV, FWMUL.VF,
+    FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
+    FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
+    FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV
+  )
+
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+
   io.iss.sub_dlen := Mux(io.iss.op.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum),
     dLenOffBits.U - io.iss.op.vd_eew,
     0.U)
 
   io.set_vxsat := false.B
 
-  lazy val ctrl_table = Seq(
-    (OPFFunct6.fadd,     Seq(Y,N,N,N,N)),
-    (OPFFunct6.fsub,     Seq(Y,N,N,Y,N)),
-    (OPFFunct6.frsub,    Seq(Y,N,N,N,Y)),
-    (OPFFunct6.fmul,     Seq(N,Y,N,N,N)),
-    (OPFFunct6.fmacc,    Seq(Y,Y,N,N,N)),
-    (OPFFunct6.fnmacc,   Seq(Y,Y,N,Y,Y)),
-    (OPFFunct6.fmsac,    Seq(Y,Y,N,Y,N)),
-    (OPFFunct6.fnmsac,   Seq(Y,Y,N,N,Y)),
-    (OPFFunct6.fmadd,    Seq(Y,Y,Y,N,N)),
-    (OPFFunct6.fnmadd,   Seq(Y,Y,Y,Y,Y)),
-    (OPFFunct6.fmsub,    Seq(Y,Y,Y,Y,N)),
-    (OPFFunct6.fnmsub,   Seq(Y,Y,Y,N,Y)),
-    (OPFFunct6.fwadd,    Seq(Y,N,N,N,N)),
-    (OPFFunct6.fwsub,    Seq(Y,N,N,Y,N)),
-    (OPFFunct6.fwaddw,   Seq(Y,N,N,N,N)),
-    (OPFFunct6.fwsubw,   Seq(Y,N,N,Y,N)),
-    (OPFFunct6.fwmul,    Seq(N,Y,N,N,N)),
-    (OPFFunct6.fwmacc,   Seq(Y,Y,N,N,N)),
-    (OPFFunct6.fwnmacc,  Seq(Y,Y,N,Y,Y)),
-    (OPFFunct6.fwmsac,   Seq(Y,Y,N,Y,N)),
-    (OPFFunct6.fwnmsac,  Seq(Y,Y,N,N,Y)),
-    (OPFFunct6.fredosum, Seq(Y,N,N,N,N)),
-    (OPFFunct6.fredusum, Seq(Y,N,N,N,N)),
-    (OPFFunct6.fwredosum,Seq(Y,N,N,N,N)),
-    (OPFFunct6.fwredusum,Seq(Y,N,N,N,N)),
-  )
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  val ctrl_add :: ctrl_mul :: ctrl_swap23 :: ctrl_fmaCmd0 :: ctrl_fmaCmd1 :: Nil = VecDecode.applyBools(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(5)(X), ctrl_table
-  )
+  val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+    FPAdd, FPMul, FPSwapVdV2, FPFMACmd))
 
   val vs1_eew = io.pipe(0).bits.rvs1_eew
   val vs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew  = io.pipe(0).bits.vd_eew
   val ctrl_widen_vs2 = vs2_eew =/= vd_eew
   val ctrl_widen_vs1 = vs1_eew =/= vd_eew
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
 
   val nTandemFMA = dLenB / 8
 
   val eidx = io.pipe(0).bits.eidx
   val one_bits = Mux(vd_eew === 3.U, "h3FF0000000000000".U, "h3F8000003F800000".U)
-  val fmaCmd = Cat(ctrl_fmaCmd1, ctrl_fmaCmd0)
+  val fmaCmd = ctrl.uint(FPFMACmd)
 
   val vec_rvs1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(nTandemFMA, UInt(64.W)))
   val vec_rvs2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(nTandemFMA, UInt(64.W)))
@@ -129,14 +116,14 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
     val vs2_bits = Mux(ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
 
     fma_pipe.io.mask := Cat((vs1_eew === 2.U) && io.pipe(0).bits.wmask((i*8)+4), io.pipe(0).bits.wmask(i*8))
-    fma_pipe.io.fma := ctrl_mul && ctrl_add
+    fma_pipe.io.fma := ctrl.bool(FPMul) && ctrl.bool(FPAdd)
     fma_pipe.io.out_eew := vd_eew
 
     // FMA
-    when (ctrl_mul && ctrl_add) {
+    when (ctrl.bool(FPMul) && ctrl.bool(FPAdd)) {
       fma_pipe.io.b     := rs1_bits
       fma_pipe.io.b_eew := vs1_eew
-      when (ctrl_swap23) {
+      when (ctrl.bool(FPSwapVdV2)) {
         fma_pipe.io.a     := vec_rvd(i)
         fma_pipe.io.a_eew := vd_eew
         fma_pipe.io.c     := vs2_bits
@@ -149,7 +136,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
       }
     }
     // Multiply
-    .elsewhen (ctrl_mul) {
+    .elsewhen (ctrl.bool(FPMul)) {
       fma_pipe.io.a     := vs2_bits
       fma_pipe.io.a_eew := vs2_eew
       fma_pipe.io.b     := rs1_bits
@@ -158,7 +145,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
       fma_pipe.io.c_eew := vs2_eew
     }
     // Add type
-    .elsewhen (ctrl_add) {
+    .elsewhen (ctrl.bool(FPAdd)) {
       fma_pipe.io.a     := vs2_bits
       fma_pipe.io.a_eew := vs2_eew
       fma_pipe.io.b     := one_bits

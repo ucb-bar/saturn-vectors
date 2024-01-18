@@ -72,11 +72,12 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 }
 
 class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
-  val reduction = Bool()    // only writes vd[0]
-  val wide_vd = Bool()      // vd reads/writes at 2xSEW
-  val wide_vs2 = Bool()     // vs2 reads at 2xSEW
-  val writes_mask = Bool()  // writes dest as a mask
-  val reads_mask = Bool()   // vs1/vs2 read as mask
+  val reduction = Bool()     // accumulates into vd[0]
+  val scalar_to_vd0 = Bool() // mv scalar to vd[0]
+  val wide_vd = Bool()       // vd reads/writes at 2xSEW
+  val wide_vs2 = Bool()      // vs2 reads at 2xSEW
+  val writes_mask = Bool()   // writes dest as a mask
+  val reads_mask = Bool()    // vs1/vs2 read as mask
   val nf_log2 = UInt(2.W)
 
   val renv1 = Bool()
@@ -157,6 +158,7 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
 
   val funct6 = UInt(6.W)
   val rs1 = UInt(5.W)
+  val rs2 = UInt(5.W)
   val rd = UInt(5.W)
   val vm = Bool()
 

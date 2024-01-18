@@ -7,34 +7,26 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
+  val supported_insns = Seq(
+    FMIN.VV, FMIN.VF, FMAX.VV, FMAX.VF,
+    FSGNJ.VV, FSGNJ.VF, FSGNJN.VV, FSGNJN.VF, FSGNJX.VV, FSGNJX.VF,
+    MFEQ.VV, MFEQ.VF, MFNE.VV, MFNE.VF,
+    MFLT.VV, MFLT.VF, MFLE.VV, MFLE.VF,
+    MFGT.VF, MFGE.VF,
+    FREDMIN.VV, FREDMAX.VV)
+
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
-  lazy val ctrl_table = Seq(
-    (OPFFunct6.fmin     ,   Seq(Y,Y, N,X,X,X,X, N,X,X)),
-    (OPFFunct6.fmax     ,   Seq(Y,N, N,X,X,X,X, N,X,X)),
-    (OPFFunct6.fsgnj    ,   Seq(N,X, N,X,X,X,X, Y,N,N)),
-    (OPFFunct6.fsgnjn   ,   Seq(N,X, N,X,X,X,X, Y,Y,N)),
-    (OPFFunct6.fsgnjx   ,   Seq(N,X, N,X,X,X,X, Y,N,Y)),
-    (OPFFunct6.mfeq     ,   Seq(N,X, Y,Y,N,N,N, N,X,X)),
-    (OPFFunct6.mfne     ,   Seq(N,X, Y,N,Y,N,N, N,X,X)),
-    (OPFFunct6.mflt     ,   Seq(N,X, Y,N,N,Y,N, N,X,X)),
-    (OPFFunct6.mfle     ,   Seq(N,X, Y,Y,N,Y,N, N,X,X)),
-    (OPFFunct6.mfgt     ,   Seq(N,X, Y,N,N,N,Y, N,X,X)),
-    (OPFFunct6.mfge     ,   Seq(N,X, Y,Y,N,N,Y, N,X,X)),
-    (OPFFunct6.fredmin  ,   Seq(Y,Y, N,X,X,X,X, N,X,X)),
-    (OPFFunct6.fredmax  ,   Seq(Y,N, N,X,X,X,X, N,X,X)),
-  )
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
+  val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
+    supported_insns, Seq(WritesAsMask, FPComp, FPCompMin, FPMEQ, FPMNE, FPMLT, FPMGT, FPSgnj))
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
-  val ctrl_cmp :: ctrl_min :: ctrl_mask_write :: ctrl_eq :: ctrl_ne :: ctrl_lt :: ctrl_gt :: ctrl_sgnj :: ctrl_sgnjn :: ctrl_sgnjx :: Nil = VecDecode.applyBools(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(10)(X), ctrl_table
-  )
-
+  val ctrl_sgnjn = io.pipe(0).bits.funct6(0) === 1.U
+  val ctrl_sgnjx = io.pipe(0).bits.funct6(1) === 2.U
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val rvd_eew  = io.pipe(0).bits.rvd_eew
@@ -75,7 +67,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
       } .elsewhen (rvs1_nan) {
         minmax_out := rvs2
       } .otherwise {
-        minmax_out := Mux((!ctrl_min && comp.gt) || (ctrl_min && comp.lt), rvs2, rvs1)
+        minmax_out := Mux((!ctrl.bool(FPCompMin) && comp.gt) || (ctrl.bool(FPCompMin) && comp.lt), rvs2, rvs1)
       }
       minmax_out
     }
@@ -83,7 +75,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
 
     val comparisons = gen_compares.map{ case(comp, rvs2, rvs2_nan, rvs1, rvs1_nan) =>
       val comparison_out = Wire(UInt(1.W))
-      when (ctrl_ne) {
+      when (ctrl.bool(FPMNE)) {
         when (rvs2_nan || rvs1_nan) {
           comparison_out := 1.U
         } .otherwise {
@@ -92,7 +84,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
       } .elsewhen (rvs2_nan || rvs1_nan) {
         comparison_out := 0.U
       } .otherwise {
-        comparison_out := (comp.eq && ctrl_eq) || (comp.lt && ctrl_lt) || (comp.gt && ctrl_gt)
+        comparison_out := (comp.eq && ctrl.bool(FPMEQ)) || (comp.lt && ctrl.bool(FPMLT)) || (comp.gt && ctrl.bool(FPMGT))
       }
       comparison_out
     }
@@ -124,9 +116,9 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   }
 
   val out = Wire(UInt(dLen.W))
-  when (ctrl_cmp) {
+  when (ctrl.bool(FPComp)) {
     out := Mux(rvs1_eew === 3.U, minmax_results(1), minmax_results(0))
-  } .elsewhen (ctrl_mask_write) {
+  } .elsewhen (ctrl.bool(WritesAsMask)) {
     out := Fill(8, comp_results)
   } .otherwise {
     out := sgnj.asUInt
@@ -142,7 +134,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
 
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg
-  io.write.bits.mask := Mux(ctrl_mask_write, mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
+  io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
   io.write.bits.data := out
 
   io.set_fflags.valid := io.write.valid

@@ -44,7 +44,7 @@ case class VectorParams(
 
 case object VectorParamsKey extends Field[VectorParams]
 
-trait HasVectorParams extends VectorConsts { this: HasCoreParameters =>
+trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   implicit val p: Parameters
   def vParams: VectorParams = p(VectorParamsKey)
   def dLen = vParams.dLen

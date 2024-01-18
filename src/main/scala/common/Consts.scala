@@ -84,7 +84,7 @@ object OPFFunct6 extends ChiselEnum {
   val illegal = Value(0x40.U)
 }
 
-trait VectorConsts {
+trait HasVectorConsts {
   def mopUnit      = 0.U(2.W)
   def mopUnordered = 1.U(2.W)
   def mopStrided   = 2.U(2.W)
@@ -104,22 +104,23 @@ trait VectorConsts {
   def opcStore  = "b0100111".U
   def opcVector = "b1010111".U
 
-  def OPIVV = 0.U
-  def OPFVV = 1.U
-  def OPMVV = 2.U
-  def OPIVI = 3.U
-  def OPIVX = 4.U
-  def OPFVF = 5.U
-  def OPMVX = 6.U
-  def OPCFG = 7.U
+  def OPIVV = 0.U(3.W)
+  def OPFVV = 1.U(3.W)
+  def OPMVV = 2.U(3.W)
+  def OPIVI = 3.U(3.W)
+  def OPIVX = 4.U(3.W)
+  def OPFVF = 5.U(3.W)
+  def OPMVX = 6.U(3.W)
+  def OPCFG = 7.U(3.W)
 
   def X = BitPat("b?")
   def N = BitPat("b0")
   def Y = BitPat("b1")
-
 }
 
-object VecDecode extends VectorConsts {
+object VectorConsts extends HasVectorConsts
+
+object VecDecode extends HasVectorConsts {
   def apply(funct3: UInt, funct6: UInt, default: Seq[BitPat], table: Seq[(EnumType, Seq[BitPat])]): Seq[UInt] = {
     def enumToUInt(e: EnumType): Seq[UInt] = e match {
       case v: OPIFunct6.Type => Seq(OPIVV, OPIVI, OPIVX).map { f3 => ((f3.litValue << 6) + v.litValue).U(9.W) }

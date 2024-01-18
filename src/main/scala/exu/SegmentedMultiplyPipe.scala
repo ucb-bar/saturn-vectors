@@ -7,39 +7,28 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
 class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
+  val supported_insns = Seq(
+    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
+    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
+    WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
+    WMULSU.VV, WMULSU.VX,
+    MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
+    MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
+    WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
+    WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
+    SMUL.VV, SMUL.VX)
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
   // TODO: SMUL currently operates at 1 element/cycle
   io.iss.sub_dlen := Mux(io.iss.op.opif6 === OPIFunct6.smul, log2Ceil(dLenB).U - io.iss.op.vd_eew, 0.U)
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
-  lazy val ctrl_table = Seq(
-    (OPMFunct6.mul    , Seq(N,X,X,N,N,X)),
-    (OPMFunct6.mulh   , Seq(Y,Y,Y,N,N,X)),
-    (OPMFunct6.mulhu  , Seq(Y,N,N,N,N,X)),
-    (OPMFunct6.mulhsu , Seq(Y,N,Y,N,N,X)),
-    (OPMFunct6.wmul   , Seq(N,Y,Y,N,N,X)),
-    (OPMFunct6.wmulu  , Seq(N,N,N,N,N,X)),
-    (OPMFunct6.wmulsu , Seq(N,N,Y,N,N,X)),
-    (OPMFunct6.macc   , Seq(N,X,X,N,Y,N)),
-    (OPMFunct6.nmsac  , Seq(N,X,X,N,Y,Y)),
-    (OPMFunct6.madd   , Seq(N,X,X,Y,Y,N)),
-    (OPMFunct6.nmsub  , Seq(N,X,X,Y,Y,Y)),
-    (OPMFunct6.wmaccu , Seq(N,N,N,N,Y,N)),
-    (OPMFunct6.wmacc  , Seq(N,Y,Y,N,Y,N)),
-    (OPMFunct6.wmaccsu, Seq(N,Y,N,N,Y,N)),
-    (OPMFunct6.wmaccus, Seq(N,N,Y,N,Y,N)),
-    (OPIFunct6.smul   , Seq(N,Y,Y,N,N,N))
-  )
-
-  def accepts(f3: UInt, f6: UInt): Bool = VecDecode(f3, f6, ctrl_table.map(_._1))
-
-  val ctrl_hi :: ctrl_sign1 :: ctrl_sign2 :: ctrl_swapvdvs2 :: ctrl_madd :: ctrl_sub :: Nil = VecDecode.applyBools(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6,
-    Seq.fill(6)(X), ctrl_table)
-  io.iss.ready := accepts(io.iss.op.funct3, io.iss.op.funct6)
+   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+    MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
 
   val in_eew = io.pipe(0).bits.rvs1_eew
   val out_eew = io.pipe(0).bits.vd_eew
@@ -52,12 +41,12 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val in_vd  = io.pipe(0).bits.rvd_data
 
   val mul_in1 = in_vs1
-  val mul_in2 = Mux(ctrl_swapvdvs2, in_vd, in_vs2)
+  val mul_in2 = Mux(ctrl.bool(MULSwapVdV2), in_vd, in_vs2)
 
   val multipliers = Seq.fill(dLenB >> 3)(Module(new SegmentedMultiplyBlock))
   for (i <- 0 until (dLenB >> 3)) {
-    multipliers(i).io.in1_signed := ctrl_sign1
-    multipliers(i).io.in2_signed := ctrl_sign2
+    multipliers(i).io.in1_signed := ctrl.bool(MULSign1)
+    multipliers(i).io.in2_signed := ctrl.bool(MULSign2)
     multipliers(i).io.eew        := io.pipe(0).bits.rvs1_eew
     multipliers(i).io.in1        := mul_in1.asTypeOf(Vec(dLenB >> 3, UInt(64.W)))(i)
     multipliers(i).io.in2        := mul_in2.asTypeOf(Vec(dLenB >> 3, UInt(64.W)))(i)
@@ -92,19 +81,19 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
 
   val adder_arr = Module(new AdderArray(dLenB))
   adder_arr.io.in1 := Mux(ctrl_wmul, wide, lo).asTypeOf(Vec(dLenB, UInt(8.W)))
-  adder_arr.io.in2 := Mux(ctrl_madd, Mux(ctrl_swapvdvs2, in_vs2, in_vd), 0.U(dLen.W)).asTypeOf(Vec(dLenB, UInt(8.W)))
+  adder_arr.io.in2 := Mux(ctrl.bool(MULAccumulate), Mux(ctrl.bool(MULSwapVdV2), in_vs2, in_vd), 0.U(dLen.W)).asTypeOf(Vec(dLenB, UInt(8.W)))
   adder_arr.io.incr := VecInit.fill(dLenB)(false.B)
   adder_arr.io.mask_carry := 0.U
   adder_arr.io.signed := DontCare
   adder_arr.io.eew := out_eew
   adder_arr.io.avg := false.B
   adder_arr.io.rm := DontCare
-  adder_arr.io.sub := ctrl_sub
+  adder_arr.io.sub := ctrl.bool(MULSub)
   adder_arr.io.cmask := false.B
 
   val add_out = adder_arr.io.out
 
-  val out = Mux(ctrl_smul, smul_splat, 0.U) | Mux(ctrl_hi, hi, 0.U) | Mux(!ctrl_smul && !ctrl_hi, add_out.asUInt, 0.U)
+  val out = Mux(ctrl_smul, smul_splat, 0.U) | Mux(ctrl.bool(MULHi), hi, 0.U) | Mux(!ctrl_smul && !ctrl.bool(MULHi), add_out.asUInt, 0.U)
   val pipe_out = Pipe(io.pipe(0).valid, out, depth-1).bits
   val pipe_vxsat = Pipe(io.pipe(0).valid, smul_sat && ctrl_smul, depth-1).bits
 

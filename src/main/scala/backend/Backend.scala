@@ -9,6 +9,7 @@ import freechips.rocketchip.util._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
 import vector.exu._
 import vector.common._
+import vector.insns._
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
@@ -106,6 +107,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.vat_tail := vat_tail
 
+  val vxu = Module(new ExecutionUnit(Seq(
+    () => new IntegerPipe,
+    () => new BitwisePipe,
+    () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
+    () => new IterativeIntegerDivider,
+    () => new MaskUnit,
+    () => new FPFMAPipe(vParams.fmaPipeDepth),
+    () => new FPDivSqrt,
+    () => new FPCompPipe,
+    () => new FPConvPipe,
+  )))
+
   val vlissq  = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq  = Module(new IssueQueue(vParams.vsissqEntries))
   val vxissq  = Module(new IssueQueue(vParams.vxissqEntries))
@@ -125,17 +138,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val issqs = issGroups.map(_._1)
   val seqs = issGroups.map(_._2)
 
-  val vxu = Module(new ExecutionUnit(Seq(
-    () => new IntegerPipe,
-    () => new BitwisePipe,
-    () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
-    () => new IterativeIntegerDivider,
-    () => new MaskUnit,
-    () => new FPFMAPipe(vParams.fmaPipeDepth),
-    () => new FPDivSqrt,
-    () => new FPCompPipe,
-    () => new FPConvPipe,
-  )))
+
   val pipe_hazards = vxu.io.hazards
 
   vlissq.io.enq.bits.reduction := false.B
@@ -149,6 +152,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vlissq.io.enq.bits.renvd := false.B
   vlissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm
   vlissq.io.enq.bits.wvd   := true.B
+  vlissq.io.enq.bits.scalar_to_vd0 := false.B
 
   vsissq.io.enq.bits.reduction := false.B
   vsissq.io.enq.bits.wide_vd := false.B
@@ -161,6 +165,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vsissq.io.enq.bits.renvd := true.B
   vsissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
   vsissq.io.enq.bits.wvd   := false.B
+  vsissq.io.enq.bits.scalar_to_vd0 := false.B
 
   vimissq.io.enq.bits.reduction := false.B
   vimissq.io.enq.bits.wide_vd := false.B
@@ -173,111 +178,22 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vimissq.io.enq.bits.renvd := true.B
   vimissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
   vimissq.io.enq.bits.wvd   := false.B
+  vimissq.io.enq.bits.scalar_to_vd0 := false.B
 
-  val decode_table = Seq(
-    (OPMFunct6.waddu    , Seq(Y,N,N,N)),
-    (OPMFunct6.wadd     , Seq(Y,N,N,N)),
-    (OPMFunct6.wsubu    , Seq(Y,N,N,N)),
-    (OPMFunct6.wsub     , Seq(Y,N,N,N)),
-    (OPMFunct6.wadduw   , Seq(Y,Y,N,N)),
-    (OPMFunct6.waddw    , Seq(Y,Y,N,N)),
-    (OPMFunct6.wsubuw   , Seq(Y,Y,N,N)),
-    (OPMFunct6.wsubw    , Seq(Y,Y,N,N)),
-    (OPIFunct6.nsra     , Seq(N,Y,N,N)),
-    (OPIFunct6.nsrl     , Seq(N,Y,N,N)),
-    (OPIFunct6.madc     , Seq(N,N,Y,N)),
-    (OPIFunct6.msbc     , Seq(N,N,Y,N)),
-    (OPIFunct6.mseq     , Seq(N,N,Y,N)),
-    (OPIFunct6.msne     , Seq(N,N,Y,N)),
-    (OPIFunct6.msltu    , Seq(N,N,Y,N)),
-    (OPIFunct6.mslt     , Seq(N,N,Y,N)),
-    (OPIFunct6.msleu    , Seq(N,N,Y,N)),
-    (OPIFunct6.msle     , Seq(N,N,Y,N)),
-    (OPIFunct6.msgtu    , Seq(N,N,Y,N)),
-    (OPIFunct6.msgt     , Seq(N,N,Y,N)),
-    (OPMFunct6.wmul     , Seq(Y,N,N,N)),
-    (OPMFunct6.wmulu    , Seq(Y,N,N,N)),
-    (OPMFunct6.wmulsu   , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccu   , Seq(Y,N,N,N)),
-    (OPMFunct6.wmacc    , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccsu  , Seq(Y,N,N,N)),
-    (OPMFunct6.wmaccus  , Seq(Y,N,N,N)),
-    (OPIFunct6.nclip    , Seq(N,Y,N,N)),
-    (OPIFunct6.nclipu   , Seq(N,Y,N,N)),
-    (OPFFunct6.fwadd    , Seq(Y,N,N,N)),
-    (OPFFunct6.fwsub    , Seq(Y,N,N,N)),
-    (OPFFunct6.fwaddw   , Seq(Y,Y,N,N)),
-    (OPFFunct6.fwsubw   , Seq(Y,Y,N,N)),
-    (OPFFunct6.fwmul    , Seq(Y,N,N,N)),
-    (OPFFunct6.fwmacc   , Seq(Y,N,N,N)),
-    (OPFFunct6.fwnmacc  , Seq(Y,N,N,N)),
-    (OPFFunct6.fwmsac   , Seq(Y,N,N,N)),
-    (OPFFunct6.fwnmsac  , Seq(Y,N,N,N)),
-    (OPFFunct6.mfeq     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfne     , Seq(N,N,Y,N)),
-    (OPFFunct6.mflt     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfle     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfgt     , Seq(N,N,Y,N)),
-    (OPFFunct6.mfge     , Seq(N,N,Y,N)),
-    (OPMFunct6.mandnot  , Seq(N,N,Y,Y)),
-    (OPMFunct6.mand     , Seq(N,N,Y,Y)),
-    (OPMFunct6.mor      , Seq(N,N,Y,Y)),
-    (OPMFunct6.mxor     , Seq(N,N,Y,Y)),
-    (OPMFunct6.mornot   , Seq(N,N,Y,Y)),
-    (OPMFunct6.mnand    , Seq(N,N,Y,Y)),
-    (OPMFunct6.mnor     , Seq(N,N,Y,Y)),
-    (OPMFunct6.mxnor    , Seq(N,N,Y,Y)),
-    (OPIFunct6.wredsum  , Seq(Y,N,N,N)),
-    (OPIFunct6.wredsumu , Seq(Y,N,N,N)),
-    (OPFFunct6.fwredosum, Seq(Y,N,N,N)),
-    (OPFFunct6.fwredusum, Seq(Y,N,N,N)),
-    (OPMFunct6.munary0  , Seq(N,N,N,Y))
-  )
-  val dis_wide_vd :: dis_wide_vs2 :: dis_writes_mask :: dis_reads_mask :: Nil = VecDecode.applyBools(
-    vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6, Seq.fill(4)(false.B), decode_table)
-
-  vxissq.io.enq.bits.reduction   := (
-    (vdq.io.deq.bits.isOpm && vdq.io.deq.bits.funct6 <= OPMFunct6.redmax.asUInt) ||
-      vdq.io.deq.bits.opif6.isOneOf(OPIFunct6.wredsum, OPIFunct6.wredsumu) ||
-      vdq.io.deq.bits.opff6.isOneOf(OPFFunct6.fredusum, OPFFunct6.fredosum, OPFFunct6.fwredusum, OPFFunct6.fwredosum, OPFFunct6.fredmax, OPFFunct6.fredmin)
-  )
-  vxissq.io.enq.bits.wide_vd     := dis_wide_vd
-  when (vdq.io.deq.bits.funct3.isOneOf(OPFVV) && vdq.io.deq.bits.opff6 === OPFFunct6.funary0 && vdq.io.deq.bits.rs1(3)) {
-    vxissq.io.enq.bits.wide_vd    := true.B
-  }
-  vxissq.io.enq.bits.wide_vs2    := dis_wide_vs2
-  when (vdq.io.deq.bits.funct3.isOneOf(OPFVV) && vdq.io.deq.bits.opff6 === OPFFunct6.funary0 && vdq.io.deq.bits.rs1(4)) {
-    vxissq.io.enq.bits.wide_vs2  := true.B
-  }
-  vxissq.io.enq.bits.writes_mask := dis_writes_mask
-  when (vdq.io.deq.bits.funct3 === OPMVV && vdq.io.deq.bits.opmf6.isOneOf(OPMFunct6.munary0) && !vdq.io.deq.bits.rs1(4)) {
-    vxissq.io.enq.bits.writes_mask := true.B
-  }
-  vxissq.io.enq.bits.renv1       := vdq.io.deq.bits.funct3.isOneOf(OPIVV, OPFVV, OPMVV)
-  when ((vdq.io.deq.bits.funct3 === OPFVV && (vdq.io.deq.bits.opff6 === OPFFunct6.funary1)) ||
-    (vdq.io.deq.bits.funct3 === OPMVV && (vdq.io.deq.bits.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)))
-  ) {
-    vxissq.io.enq.bits.renv1       := false.B
-  }
-  vxissq.io.enq.bits.renv2 := true.B
-  when (((vdq.io.deq.bits.opif6 === OPIFunct6.merge || vdq.io.deq.bits.opff6 === OPFFunct6.fmerge) && vdq.io.deq.bits.vm) ||
-    (vdq.io.deq.bits.opmf6 === OPMFunct6.wrxunary0 && vdq.io.deq.bits.funct3 === OPMVX) ||
-    (vdq.io.deq.bits.opff6 === OPFFunct6.wrfunary0 && vdq.io.deq.bits.funct3 === OPFVF)) {
-    vxissq.io.enq.bits.renv2 := false.B
-  }
-  vxissq.io.enq.bits.reads_mask  := dis_reads_mask
-  when (vdq.io.deq.bits.funct3.isOneOf(OPMVV) && vdq.io.deq.bits.opmf6 === OPMFunct6.wrxunary0 && vdq.io.deq.bits.rs1(4)) {
-    vxissq.io.enq.bits.reads_mask := true.B
-  }
+  val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6, vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, vxu.supported_insns,
+    Seq(Reduction, Wide2VD, Wide2VS2, WritesAsMask, ReadsAsMask, ReadsVS1, ReadsVS2, ReadsVD, VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0))
+  vxissq.io.enq.bits.wide_vd := xdis_ctrl.bool(Wide2VD)
+  vxissq.io.enq.bits.wide_vs2 := xdis_ctrl.bool(Wide2VS2)
+  vxissq.io.enq.bits.writes_mask := xdis_ctrl.bool(WritesAsMask)
+  vxissq.io.enq.bits.reads_mask := xdis_ctrl.bool(ReadsAsMask)
   vxissq.io.enq.bits.nf_log2 := 0.U
-  vxissq.io.enq.bits.renvd       := vdq.io.deq.bits.opmf6.isOneOf(
-    OPMFunct6.macc, OPMFunct6.nmsac, OPMFunct6.madd, OPMFunct6.nmsub,
-    OPMFunct6.wmaccu, OPMFunct6.wmacc, OPMFunct6.wmaccsu, OPMFunct6.wmaccus) || vdq.io.deq.bits.opff6.isOneOf(
-    OPFFunct6.fmacc, OPFFunct6.fnmacc, OPFFunct6.fmsac, OPFFunct6.fnmsac,
-      OPFFunct6.fmadd, OPFFunct6.fnmadd, OPFFunct6.fmsub, OPFFunct6.fnmsub,
-      OPFFunct6.fwmacc, OPFFunct6.fwnmacc, OPFFunct6.fwmsac, OPFFunct6.fwnmsac)
-  vxissq.io.enq.bits.renvm       := !vdq.io.deq.bits.vm || vdq.io.deq.bits.opif6 === OPIFunct6.merge || vdq.io.deq.bits.opff6 === OPFFunct6.fmerge
-  vxissq.io.enq.bits.wvd := !(vdq.io.deq.bits.opmf6 === OPMFunct6.wrxunary0 && vdq.io.deq.bits.funct3 === OPMVV)
+  vxissq.io.enq.bits.renv1 := xdis_ctrl.bool(ReadsVS1)
+  vxissq.io.enq.bits.renv2 := xdis_ctrl.bool(ReadsVS2)
+  vxissq.io.enq.bits.renvd := xdis_ctrl.bool(ReadsVD)
+  vxissq.io.enq.bits.renvm := (!vdq.io.deq.bits.vm && xdis_ctrl.bool(VMBitReadsVM)) || xdis_ctrl.bool(AlwaysReadsVM)
+  vxissq.io.enq.bits.wvd := !xdis_ctrl.bool(WritesScalar)
+  vxissq.io.enq.bits.scalar_to_vd0 := xdis_ctrl.bool(ScalarToVD0)
+  vxissq.io.enq.bits.reduction := xdis_ctrl.bool(Reduction)
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR
