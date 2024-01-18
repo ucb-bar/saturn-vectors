@@ -94,9 +94,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.ren3 := ren3
   req.swap12 := false.B
   req.swap23 := swap23
-  //req.typeTagIn := 1.U
   req.typeTagIn := Mux(vd_eew === 3.U, D, S)
-  //req.typeTagOut := Mux(vd_eew === 3.U, 1.U, 0.U)
   req.typeTagOut := Mux(vd_eew === 3.U, D, S)
   req.fromint := Mux(is_funary0, !rs1(2) && rs1(1), fromint)
   req.toint := Mux(is_funary0, (!rs1(2) && !rs1(1)) || (rs1(2) && rs1(1)), Mux(vfclass_inst, true.B, toint))
@@ -108,7 +106,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.vec := true.B
   
   req.rm := Mux(special_rm, Cat(rm2, Cat(rm1, rm0)), io.iss.op.frm)
-  //req.rm := Mux(ctrl_cmp, io.iss.op.opff6.isOneOf(OPFFunct6.fmax), io.iss.op.frm)
   req.fmaCmd := Cat(fmaCmd1, fmaCmd0) 
   req.typ := Mux(is_funary0, Cat(ctrl_widen || ctrl_narrow, !ctrl_signed), 0.U)
   req.fmt := 0.U
@@ -170,9 +167,9 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   when (writes_mask) {
     when (inv_cmp) {
-      final_write_bits := Fill(64, !io.fp_resp.bits.data(0))
+      final_write_bits := Fill(dLen, !io.fp_resp.bits.data(0))
     } .otherwise {
-     final_write_bits := Fill(64, io.fp_resp.bits.data(0)) 
+     final_write_bits := Fill(dLen, io.fp_resp.bits.data(0)) 
     }
   } .elsewhen (vfclass_inst) {
     final_write_bits := Mux(vd_eew === 3.U, Cat(0.U(54.W), io.fp_resp.bits.data(9,0)), Fill(2, Cat(0.U(22.W), io.fp_resp.bits.data(9,0)))) 
@@ -189,7 +186,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   //io.write.bits.mask := (1.U(dLen.W) << Mux(op.vs2_eew === 3.U, (op.eidx-1.U) % dLenB.U >> 3.U, dLenB.U >> 2.U))
   //io.write.bits.mask := Mux(writes_mask, FillInterleaved(8, op.wmask) & (1.U(dLen.W) << ((io.iss.op.eidx - 1.U) % dLen.U)), FillInterleaved(8, op.wmask))
   io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io.fp_resp.fire()),
-                              Seq(recSqrt7.io.out, rec7.io.out, Fill(dLenB >> 3, final_write_bits)))
+                              Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, final_write_bits)))
   //io.write.bits.data := Fill(dLenB >> 3, final_write_bits)
   //io.write.bits.data := Fill(dLenB >> 3, Mux(is_double, FType.D.ieee(io.fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io.fp_resp.bits.data, 0.U, Some(FType.S)))))) 
 
