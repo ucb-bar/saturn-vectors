@@ -10,7 +10,7 @@ import vector.common._
 import vector.insns._
 
 class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
-  val supported_insns = Seq(FCVT_SINGLE, FCVT_NARROWING, FCVT_WIDENING)
+  val supported_insns = Seq(FCVT_SGL, FCVT_NRW, FCVT_WID)
 
   io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B

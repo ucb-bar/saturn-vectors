@@ -301,7 +301,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
     supported_insns,
     Seq(UsesShift, UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
-      Sub, WideningSext, Averaging,
+      DoSub, WideningSext, Averaging,
       CarryIn, AlwaysCarryIn, ShiftsLeft, ScalingShift,
       CmpLess, Swap12, WritesAsMask))
 
@@ -360,7 +360,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   adder_arr.io.eew := vd_eew
   adder_arr.io.rm  := io.pipe(0).bits.vxrm
   adder_arr.io.mask_carry := add_mask_carry
-  adder_arr.io.sub        := ctrl.bool(Sub)
+  adder_arr.io.sub        := ctrl.bool(DoSub)
   adder_arr.io.cmask      := carry_in
   adder_arr.io.signed     := io.pipe(0).bits.funct6(0)
   add_out   := adder_arr.io.out
@@ -376,7 +376,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   cmp_arr.io.inv    := io.pipe(0).bits.funct6(0)
   val minmax_out = VecInit(rvs1_bytes.zip(rvs2_bytes).zip(cmp_arr.io.minmax.asBools).map { case ((v1, v2), s) => Mux(s, v2, v1) }).asUInt
 
-  val mask_out = Fill(8, Mux(ctrl.bool(UsesCmp), cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl.bool(Sub))))
+  val mask_out = Fill(8, Mux(ctrl.bool(UsesCmp), cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl.bool(DoSub))))
 
   val shift_narrowing = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.nclip, OPIFunct6.nclipu, OPIFunct6.nsra, OPIFunct6.nsrl)
   val shift_arr = Module(new ShiftArray(dLenB))
@@ -396,7 +396,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   sat_arr.io.carry    := add_carry
   sat_arr.io.in1_sign := rvs1_bytes.map(_(7))
   sat_arr.io.in2_sign := rvs2_bytes.map(_(7))
-  sat_arr.io.sub      := ctrl.bool(Sub)
+  sat_arr.io.sub      := ctrl.bool(DoSub)
   sat_arr.io.eew      := vd_eew
   sat_arr.io.signed   := io.pipe(0).bits.funct6(0)
   val sat_out = sat_arr.io.out.asUInt

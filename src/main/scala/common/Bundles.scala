@@ -189,6 +189,7 @@ class IndexMaskMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val rvs2_eew = UInt(2.W)
   val rvm_data = UInt(dLen.W)
+  val vmu = Bool()
 }
 
 class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

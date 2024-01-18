@@ -27,7 +27,7 @@ object Wide2VS2          extends NDefaultInstructionField
 object WritesAsMask      extends NDefaultInstructionField
 object ReadsAsMask       extends NDefaultInstructionField
 object WritesScalar      extends NDefaultInstructionField
-
+object UsesIndexMaskSeq  extends NDefaultInstructionField
 
 // Execute Sequencer control
 object SetsWMask         extends YDefaultInstructionField
@@ -40,7 +40,7 @@ object AccInitNeg        extends XDefaultInstructionField
 object Swap12            extends NDefaultInstructionField
 object WideningSext      extends XDefaultInstructionField
 
-object Sub               extends XDefaultInstructionField
+object DoSub             extends XDefaultInstructionField
 object Averaging         extends XDefaultInstructionField
 object CarryIn           extends XDefaultInstructionField
 object AlwaysCarryIn     extends XDefaultInstructionField

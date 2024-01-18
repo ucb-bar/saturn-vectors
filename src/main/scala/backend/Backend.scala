@@ -113,6 +113,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
     () => new IterativeIntegerDivider,
     () => new MaskUnit,
+    () => new PermutationUnit,
     () => new FPFMAPipe(vParams.fmaPipeDepth),
     () => new FPDivSqrt,
     () => new FPCompPipe,
@@ -127,7 +128,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vls  = Module(new LoadSequencer)
   val vss  = Module(new StoreSequencer)
   val vxs  = Module(new ExecuteSequencer(vxu.supported_insns))
-  val vims = Module(new IndexMaskSequencer)
+  val vims = Module(new IndexMaskSequencer(vxu.supported_insns))
 
   val issGroups = Seq(
     (vlissq, vls),
@@ -174,9 +175,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vimissq.io.enq.bits.reads_mask := false.B
   vimissq.io.enq.bits.nf_log2 := 0.U
   vimissq.io.enq.bits.renv1 := false.B
-  vimissq.io.enq.bits.renv2 := vdq.io.deq.bits.mop(0)
+  vimissq.io.enq.bits.renv2 := vdq.io.deq.bits.mop(0) || !vdq.io.deq.bits.vmu
   vimissq.io.enq.bits.renvd := true.B
-  vimissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
+  vimissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vmu
   vimissq.io.enq.bits.wvd   := false.B
   vimissq.io.enq.bits.scalar_to_vd0 := false.B
 
