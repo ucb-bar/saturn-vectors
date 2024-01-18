@@ -8,8 +8,9 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
+import vector.insns._
 
-class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new ExecuteMicroOp)(p) {
+class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new ExecuteMicroOp)(p) {
   def accepts(inst: VectorIssueInst) = !inst.vmu
 
   val valid = RegInit(false.B)
@@ -43,12 +44,10 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new Execute
   val renvd    = inst.renvd
   val renvm    = inst.renvm
   val renacc   = inst.reduction
+  val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
+    Seq(SetsWMask))
 
-  val use_wmask = !inst.vm && !(
-    inst.opif6.isOneOf(OPIFunct6.adc, OPIFunct6.madc, OPIFunct6.sbc, OPIFunct6.msbc, OPIFunct6.merge) ||
-    inst.opff6.isOneOf(OPFFunct6.fmerge)
-  )
-
+  val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val eff_vl    = Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl)
   val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask && (inst.writes_mask || !inst.wvd))
@@ -104,35 +103,17 @@ class ExecuteSequencer(implicit p: Parameters) extends PipeSequencer(new Execute
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-  val acc_init_table = Seq(
-    (OPMFunct6.redsum   , Seq(Y,N,N,N)),
-    (OPIFunct6.wredsumu , Seq(Y,N,N,N)),
-    (OPIFunct6.wredsum  , Seq(Y,N,N,N)),
-    (OPMFunct6.redand   , Seq(N,Y,N,N)),
-    (OPMFunct6.redor    , Seq(Y,N,N,N)),
-    (OPMFunct6.redxor   , Seq(Y,N,N,N)),
-    (OPMFunct6.redminu  , Seq(N,Y,N,N)),
-    (OPMFunct6.redmin   , Seq(N,N,Y,N)),
-    (OPMFunct6.redmaxu  , Seq(Y,N,N,N)),
-    (OPMFunct6.redmax   , Seq(N,N,N,Y)),
-    (OPFFunct6.fredmax  , Seq(N,N,N,N)),
-    (OPFFunct6.fredmin  , Seq(N,N,N,N)),
-    (OPFFunct6.fredusum , Seq(Y,N,N,N)),
-    (OPFFunct6.fredosum , Seq(Y,N,N,N)),
-    (OPFFunct6.fwredusum, Seq(Y,N,N,N)),
-    (OPFFunct6.fwredosum, Seq(Y,N,N,N)),
 
-  )
-  val acc_init_zeros :: acc_init_ones :: acc_init_pos :: acc_init_neg :: Nil = VecDecode.applyBools(
-    inst.funct3, inst.funct6, Seq.fill(4)(X), acc_init_table)
+  val acc_insns = supported_insns.filter(_.props.contains(Reduction.Y))
+  val acc_ctrl = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, acc_insns, Seq(AccInitZeros, AccInitOnes, AccInitPos, AccInitNeg))
   val acc_init_fp_pos = inst.opff6 === OPFFunct6.fredmin
   val acc_init_fp_neg = inst.opff6 === OPFFunct6.fredmax
 
   val acc_init = Mux1H(Seq(
-    (acc_init_zeros ,   0.U(dLen.W)),
-    (acc_init_ones  , ~(0.U(dLen.W))),
-    (acc_init_pos   , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosUInt(sew))})(vd_eew)),
-    (acc_init_neg   , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegUInt(sew))})(vd_eew)),
+    (acc_ctrl.bool(AccInitZeros) ,   0.U(dLen.W)),
+    (acc_ctrl.bool(AccInitOnes)  , ~(0.U(dLen.W))),
+    (acc_ctrl.bool(AccInitPos)   , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosUInt(sew))})(vd_eew)),
+    (acc_ctrl.bool(AccInitNeg)   , VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegUInt(sew))})(vd_eew)),
     (acc_init_fp_pos, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosFPUInt(sew))})(vd_eew)),
     (acc_init_fp_neg, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)),
   ))

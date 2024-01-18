@@ -20,7 +20,7 @@ object ReadsVS1          extends NDefaultInstructionField
 object ReadsVS2          extends YDefaultInstructionField
 object ReadsVD           extends NDefaultInstructionField
 object WritesVD          extends YDefaultInstructionField
-object ScalarToVD0         extends NDefaultInstructionField
+object ScalarToVD0       extends NDefaultInstructionField
 object Reduction         extends NDefaultInstructionField
 object Wide2VD           extends NDefaultInstructionField
 object Wide2VS2          extends NDefaultInstructionField
@@ -30,7 +30,11 @@ object WritesScalar      extends NDefaultInstructionField
 
 
 // Execute Sequencer control
-object VLAlways1         extends NDefaultInstructionField
+object SetsWMask         extends YDefaultInstructionField
+object AccInitZeros      extends XDefaultInstructionField
+object AccInitOnes       extends XDefaultInstructionField
+object AccInitPos        extends XDefaultInstructionField
+object AccInitNeg        extends XDefaultInstructionField
 
 // Integer Pipe control
 object Swap12            extends NDefaultInstructionField

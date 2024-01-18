@@ -126,7 +126,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls  = Module(new LoadSequencer)
   val vss  = Module(new StoreSequencer)
-  val vxs  = Module(new ExecuteSequencer)
+  val vxs  = Module(new ExecuteSequencer(vxu.supported_insns))
   val vims = Module(new IndexMaskSequencer)
 
   val issGroups = Seq(
