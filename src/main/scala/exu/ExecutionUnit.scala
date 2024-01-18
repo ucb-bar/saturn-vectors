@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
   val fus = genFUs.map(gen => Module(gen()))
   val supported_insns = fus.map(_.supported_insns).flatten
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
@@ -17,50 +17,48 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
   val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
   val nHazards = pipe_depth + iter_fus.size
 
-  val io = IO(new Bundle {
-    val iss_sub_dlen = Output(UInt(log2Ceil(dLenB).W))
-    val iss = Flipped(Decoupled(new ExecuteMicroOp))
+  val iss_sub_dlen = Wire(UInt(log2Ceil(dLenB).W))
+  val iss = Wire(Decoupled(new ExecuteMicroOp))
 
-    val write = Valid(new VectorWrite(dLen))
-    val acc_write = Valid(new VectorWrite(dLen))
-    val vat_release = Valid(UInt(vParams.vatSz.W))
-    val hazards = Vec(nHazards, Valid(new PipeHazard))
-    val busy = Output(Bool())
+  val write = Wire(Valid(new VectorWrite(dLen)))
+  val acc_write = Wire(Valid(new VectorWrite(dLen)))
+  val vat_release = Wire(Valid(UInt(vParams.vatSz.W)))
+  val hazards = Wire(Vec(nHazards, Valid(new PipeHazard)))
+  val busy = Wire(Bool())
 
-    val set_vxsat = Output(Bool())
-    val set_fflags = Output(Valid(UInt(5.W)))
-    val scalar_write = Decoupled(new ScalarWrite)
-  })
+  val set_vxsat = Wire(Bool())
+  val set_fflags = Wire(Valid(UInt(5.W)))
+  val scalar_write = Wire(Decoupled(new ScalarWrite))
 
-  fus.map(_.io.iss).foreach { iss =>
-    iss.op := io.iss.bits
-    iss.valid := io.iss.valid
+  fus.foreach { fu =>
+    fu.io.iss.op := iss.bits
+    fu.io.iss.valid := iss.valid
   }
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
-  io.iss.ready := readies.orR && !pipe_write_hazard
-  io.iss_sub_dlen := Mux1H(readies, fus.map(_.io.iss.sub_dlen))
-  when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
+  iss.ready := readies.orR && !pipe_write_hazard
+  iss_sub_dlen := Mux1H(readies, fus.map(_.io.iss.sub_dlen))
+  when (iss.valid) { assert(PopCount(readies) <= 1.U) }
 
   val pipe_write = WireInit(false.B)
 
-  io.vat_release.valid := false.B
-  io.vat_release.bits := DontCare
+  vat_release.valid := false.B
+  vat_release.bits := DontCare
 
-  io.write.valid := false.B
-  io.write.bits := DontCare
-  io.acc_write.valid := false.B
-  io.acc_write.bits := DontCare
-  io.busy := false.B
-  io.set_vxsat := fus.map(_.io.set_vxsat).orR
-  io.set_fflags.valid := fus.map(_.io.set_fflags.valid).orR
-  io.set_fflags.bits := fus.map(f => Mux(f.io.set_fflags.valid, f.io.set_fflags.bits, 0.U)).reduce(_|_)
+  write.valid := false.B
+  write.bits := DontCare
+  acc_write.valid := false.B
+  acc_write.bits := DontCare
+  busy := false.B
+  set_vxsat := fus.map(_.io.set_vxsat).orR
+  set_fflags.valid := fus.map(_.io.set_fflags.valid).orR
+  set_fflags.bits := fus.map(f => Mux(f.io.set_fflags.valid, f.io.set_fflags.bits, 0.U)).reduce(_|_)
 
 
   val scalar_write_arb = Module(new Arbiter(new ScalarWrite, fus.size))
   scalar_write_arb.io.in.zip(fus.map(_.io.scalar_write)).foreach { case (l, r) => l <> r }
-  io.scalar_write <> scalar_write_arb.io.out
+  scalar_write <> scalar_write_arb.io.out
 
   if (pipe_fus.size > 0) {
     val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
@@ -75,10 +73,10 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
       pipe_valids(i) && pipe_latencies(i) === pipe_iss_depth
     }.orR
 
-    val pipe_iss = io.iss.fire && pipe_fus.map(_.io.iss.ready).orR
+    val pipe_iss = iss.fire && pipe_fus.map(_.io.iss.ready).orR
     pipe_valids.head := pipe_iss
     when (pipe_iss) {
-      pipe_bits.head      := io.iss.bits
+      pipe_bits.head      := iss.bits
       pipe_latencies.head := pipe_iss_depth - 1.U
       pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
     }
@@ -100,24 +98,23 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
 
     val write_sel = pipe_valids.zip(pipe_latencies).map { case (v,l) => v && l === 0.U }
     val fu_sel = Mux1H(write_sel, pipe_sels)
-    val vat_release = Mux1H(write_sel, pipe_bits.map(_.tail))
     pipe_write := write_sel.orR
     when (write_sel.orR) {
       val acc = Mux1H(write_sel, pipe_bits.map(_.acc))
       val tail = Mux1H(write_sel, pipe_bits.map(_.tail))
-      io.write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
-      io.write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
-      io.acc_write.valid := acc && !tail
-      io.acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
-      io.vat_release.valid := vat_release
-      io.vat_release.bits := Mux1H(write_sel, pipe_bits.map(_.vat))
+      write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
+      write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+      acc_write.valid := acc && !tail
+      acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+      vat_release.valid := Mux1H(write_sel, pipe_bits.map(_.tail))
+      vat_release.bits := Mux1H(write_sel, pipe_bits.map(_.vat))
     }
 
-    when (pipe_valids.orR) { io.busy := true.B }
+    when (pipe_valids.orR) { busy := true.B }
     for (i <- 0 until pipe_depth) {
-      io.hazards(i).valid       := pipe_valids(i)
-      io.hazards(i).bits.vat    := pipe_bits(i).vat
-      io.hazards(i).bits.eg     := pipe_bits(i).wvd_eg
+      hazards(i).valid       := pipe_valids(i)
+      hazards(i).bits.vat    := pipe_bits(i).vat
+      hazards(i).bits.eg     := pipe_bits(i).wvd_eg
     }
   }
 
@@ -127,16 +124,16 @@ class ExecutionUnit(genFUs: Seq[() => FunctionalUnit])(implicit p: Parameters) e
     iter_write_arb.io.out.ready := !pipe_write
 
     when (!pipe_write) {
-      io.write.valid     := iter_write_arb.io.out.valid
-      io.write.bits.eg   := iter_write_arb.io.out.bits.eg
-      io.write.bits.mask := iter_write_arb.io.out.bits.mask
-      io.write.bits.data := iter_write_arb.io.out.bits.data
-      io.vat_release.valid := iter_write_arb.io.out.fire() && Mux1H(iter_write_arb.io.in.map(_.ready), iter_fus.map(_.io.vat.valid))
-      io.vat_release.bits  := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat.bits))
+      write.valid     := iter_write_arb.io.out.valid
+      write.bits.eg   := iter_write_arb.io.out.bits.eg
+      write.bits.mask := iter_write_arb.io.out.bits.mask
+      write.bits.data := iter_write_arb.io.out.bits.data
+      vat_release.valid := iter_write_arb.io.out.fire() && Mux1H(iter_write_arb.io.in.map(_.ready), iter_fus.map(_.io.vat.valid))
+      vat_release.bits  := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat.bits))
     }
-    when (iter_fus.map(_.io.busy).orR) { io.busy := true.B }
+    when (iter_fus.map(_.io.busy).orR) { busy := true.B }
     for (i <- 0 until iter_fus.size) {
-      io.hazards(i+pipe_depth) := iter_fus(i).io.hazard
+      hazards(i+pipe_depth) := iter_fus(i).io.hazard
     }
   }
 }

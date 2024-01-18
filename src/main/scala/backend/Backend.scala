@@ -107,7 +107,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.vat_tail := vat_tail
 
-  val vxu = Module(new ExecutionUnit(Seq(
+  val vxu = new ExecutionUnit(Seq(
     () => new IntegerPipe,
     () => new BitwisePipe,
     () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)),
@@ -118,7 +118,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     () => new FPDivSqrt,
     () => new FPCompPipe,
     () => new FPConvPipe,
-  )))
+  ))
 
   val vlissq  = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq  = Module(new IssueQueue(vParams.vsissqEntries))
@@ -138,9 +138,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   )
   val issqs = issGroups.map(_._1)
   val seqs = issGroups.map(_._2)
-
-
-  val pipe_hazards = vxu.io.hazards
 
   vlissq.io.enq.bits.reduction := false.B
   vlissq.io.enq.bits.wide_vd := false.B
@@ -237,7 +234,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }.reduce(_|_)
     val older_rintents = older_issq_rintents | older_seq_rintents
 
-    val older_pipe_writes = pipe_hazards.map { h =>
+    val older_pipe_writes = vxu.hazards.map { h =>
       Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.eg_oh, 0.U)
     }.reduce(_|_)
 
@@ -274,11 +271,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   for (b <- 0 until 2) {
-    writes(b)(0).valid := vxu.io.write.valid && vxu.io.write.bits.eg(0) === b.U
-    writes(b)(0).bits.data  := vxu.io.write.bits.data
-    writes(b)(0).bits.mask  := vxu.io.write.bits.mask
-    writes(b)(0).bits.eg    := vxu.io.write.bits.eg >> 1
-    when (vxu.io.write.valid) { assert(writes(b)(0).ready) }
+    writes(b)(0).valid := vxu.write.valid && vxu.write.bits.eg(0) === b.U
+    writes(b)(0).bits.data  := vxu.write.bits.data
+    writes(b)(0).bits.mask  := vxu.write.bits.mask
+    writes(b)(0).bits.eg    := vxu.write.bits.eg >> 1
+    when (vxu.write.valid) { assert(writes(b)(0).ready) }
   }
 
   load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(0)), writes.map(_(1).ready))
@@ -350,11 +347,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  clearVat(vxu.io.vat_release.valid               , vxu.io.vat_release.bits)
+  clearVat(vxu.vat_release.valid               , vxu.vat_release.bits)
 
-  vxu.io.iss <> vxs.io.iss
-  vxs.io.sub_dlen := vxu.io.iss_sub_dlen
-  vxs.io.acc := vxu.io.acc_write
+  vxu.iss <> vxs.io.iss
+  vxs.io.sub_dlen := vxu.iss_sub_dlen
+  vxs.io.acc := vxu.acc_write
 
 
   // Signalling to frontend
@@ -362,7 +359,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     h.valid && ((h.bits.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ issqs.map(_.io.hazards).flatten.map { h =>
     h.valid && h.bits.wintent(0)
-  } ++ pipe_hazards.map { h =>
+  } ++ vxu.hazards.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>
@@ -371,8 +368,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.mem_busy := vmu.io.busy
   io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
-  io.set_vxsat := vxu.io.set_vxsat
-  io.set_fflags := vxu.io.set_fflags
-  scalar_resp_arb.io.in(0) <> vxu.io.scalar_write
+  io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.busy || resetting
+  io.set_vxsat := vxu.set_vxsat
+  io.set_fflags := vxu.set_fflags
+  scalar_resp_arb.io.in(0) <> vxu.scalar_write
 }
