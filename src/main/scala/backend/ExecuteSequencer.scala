@@ -27,7 +27,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_tail  = Reg(Bool())
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
 
-  val vs1_eew  = inst.vconfig.vtype.vsew
+  val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
+  val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew)
   val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(inst.opmf6 === OPMFunct6.xunary0,
     ~inst.rs1(2,1) + 1.U, 0.U)
   val vs3_eew  = inst.vconfig.vtype.vsew + inst.wide_vd
@@ -39,7 +40,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
   val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
-  val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
+  val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U) && inst.funct3 =/= OPIVV
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
   val sscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5_sext)
   val rgather    = inst.opif6 === OPIFunct6.rgather
@@ -125,9 +126,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     (acc_init_fp_neg, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)),
   ))
 
-  val rgather_eidx = get_max_offset(Mux(rgather_ix, uscalar, io.perm.data & eewBitMask(vs2_eew)))
+  val rgather_eidx = get_max_offset(Mux(rgather_ix && rgather, uscalar, io.perm.data & eewBitMask(vs1_eew)))
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
-  val rvs2_eidx = Mux(rgather, rgather_eidx, eidx)
+  val rvs2_eidx = Mux(rgather || rgatherei16, rgather_eidx, eidx)
   io.rvs1.req.bits := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_mask)
   io.rvs2.req.bits := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_mask)
   io.rvd.req.bits  := getEgId(inst.rd , eidx     , vs3_eew, inst.reads_mask)
@@ -252,7 +253,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
       io.iss.bits.rvs1_eew := vd_eew
     }
   }
-  when (rgather_v) {
+  when (rgather_v || rgatherei16) {
     io.iss.bits.rvs1_data := rgather_eidx
   }
   when (rgather_zero) {
@@ -273,7 +274,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
       val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }
-    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask) && !(inst.reduction && head) && !rgather_v) {
+    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask) && !(inst.reduction && head) && !rgather_v && !rgatherei16) {
       rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.req.bits)
     }
     when (rgather_ix) {

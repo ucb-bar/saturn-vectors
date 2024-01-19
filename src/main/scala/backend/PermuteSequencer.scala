@@ -19,11 +19,13 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   val slide = !inst.vmu && inst.funct3 =/= OPIVV
   val slide_up = !inst.funct6(0)
   val rs2 = Mux(inst.rs1_is_rs2, inst.rs1, inst.rs2)
+  val gatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
 
   val elementwise = inst.vmu
   val renvm = inst.renvm
   val renv2 = inst.renv2
-  val incr_eew = Mux(inst.vmu, inst.mem_idx_size, inst.vconfig.vtype.vsew)
+  val incr_eew = Mux(inst.vmu, inst.mem_idx_size,
+    Mux(gatherei16, 1.U, inst.vconfig.vtype.vsew))
   val eff_vl = Mux(slide,
     Mux(slide_up, inst.vconfig.vl - slide_offset, min(inst.vconfig.vtype.vlMax, inst.vconfig.vl + slide_offset)),
     inst.vconfig.vl

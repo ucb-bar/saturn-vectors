@@ -13,14 +13,17 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val supported_insns = Seq(
     SLIDEUP.VI, SLIDEUP.VX, SLIDEDOWN.VI, SLIDEDOWN.VX,
     SLIDE1UP.VX, SLIDE1DOWN.VX, FSLIDE1UP.VF, FSLIDE1DOWN.VF,
-    RGATHER_VV, RGATHER_VI, RGATHER_VX
+    RGATHER_VV, RGATHER_VI, RGATHER_VX,
+    RGATHEREI16
   )
 
-  io.iss.sub_dlen := Mux(io.iss.op.funct3 === OPIVV && io.iss.op.opif6 === OPIFunct6.rgather,
+  io.iss.sub_dlen := Mux(io.iss.op.funct3 === OPIVV && io.iss.op.opif6.isOneOf(OPIFunct6.rgather, OPIFunct6.rgatherei16),
     log2Ceil(dLenB).U - io.iss.op.vd_eew, 0.U)
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
     supported_insns, Nil).matched
 
+  val rgatherei16 = io.pipe(0).bits.funct3 === OPIVV && io.pipe(0).bits.opif6 === OPIFunct6.rgatherei16
+  val index_eew = Mux(rgatherei16, 1.U, io.pipe(0).bits.rvs2_eew)
   val rgather_splat_reg = Reg(UInt(64.W))
   val rgather_head_elem = VecInit.tabulate(4)({sew => if (sew == 3 && dLenB == 8) {
     io.pipe(0).bits.rvs2_data
@@ -30,7 +33,7 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val rgather_elem = Mux(io.pipe(0).bits.head || io.pipe(0).bits.funct3 === OPIVV, rgather_head_elem, rgather_splat_reg)
   when (io.pipe(0).valid && io.pipe(0).bits.head) { rgather_splat_reg := rgather_head_elem }
   val rgather_splat = dLenSplat(rgather_elem, io.pipe(0).bits.rvs2_eew)
-  val rgather = io.pipe(0).bits.opif6 === OPIFunct6.rgather
+  val rgather = io.pipe(0).bits.opif6 === OPIFunct6.rgather || rgatherei16
 
   val slide_up = !io.pipe(0).bits.funct6(0)
   val slide1 = !io.pipe(0).bits.isOpi

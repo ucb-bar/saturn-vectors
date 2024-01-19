@@ -183,7 +183,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vmu
   vpissq.io.enq.bits.wvd   := false.B
   vpissq.io.enq.bits.scalar_to_vd0 := false.B
-  vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && vdq.io.deq.bits.opif6 === OPIFunct6.rgather
+  vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && (vdq.io.deq.bits.opif6 === OPIFunct6.rgather || (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.opif6 === OPIFunct6.rgatherei16))
 
   val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6, vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, vxu.supported_insns,
     Seq(Reduction, Wide2VD, Wide2VS2, WritesAsMask, ReadsAsMask, ReadsVS1, ReadsVS2, ReadsVD, VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0))
