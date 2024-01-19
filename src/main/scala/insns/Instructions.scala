@@ -210,4 +210,7 @@ object SLIDE1UP    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slid
 object SLIDE1DOWN  extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slide1down) , UsesPermuteSeq.Y, ReadsVS2.N) }
 object FSLIDE1UP   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1up)  , UsesPermuteSeq.Y, ReadsVS2.N) }
 object FSLIDE1DOWN extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1down), UsesPermuteSeq.Y, ReadsVS2.N) }
-object RGATHER     extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rgather)) }
+
+object RGATHER_VX extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather), F3(VectorConsts.OPIVX)) }
+object RGATHER_VI extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather), F3(VectorConsts.OPIVI)) }
+object RGATHER_VV extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather), F3(VectorConsts.OPIVV), UsesPermuteSeq.Y) }

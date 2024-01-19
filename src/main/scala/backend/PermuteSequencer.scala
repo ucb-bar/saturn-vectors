@@ -16,10 +16,11 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   val rvm_mask = Reg(UInt(egsPerVReg.W))
   val head = Reg(Bool())
   val slide_offset = Reg(UInt((1+log2Ceil(maxVLMax)).W))
-  val slide = !inst.vmu
+  val slide = !inst.vmu && inst.funct3 =/= OPIVV
   val slide_up = !inst.funct6(0)
+  val rs2 = Mux(inst.rs1_is_rs2, inst.rs1, inst.rs2)
 
-  val elementwise = !slide
+  val elementwise = inst.vmu
   val renvm = inst.renvm
   val renv2 = inst.renv2
   val incr_eew = Mux(inst.vmu, inst.mem_idx_size, inst.vconfig.vtype.vsew)
@@ -36,19 +37,21 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
 
   when (io.dis.fire) {
     val iss_inst = io.dis.bits
-    val offset = Mux(iss_inst.isOpi, get_slide_offset(Mux(iss_inst.funct3(2), iss_inst.rs1_data, iss_inst.imm5)), 1.U)
+    val offset = Mux(iss_inst.isOpi, get_max_offset(Mux(iss_inst.funct3(2), iss_inst.rs1_data, iss_inst.imm5)), 1.U)
+    val slide = !inst.vmu && iss_inst.funct3 =/= OPIVV
     val slide_up = !iss_inst.funct6(0)
     val slide_start = Mux(slide_up, 0.U, offset)
     val vlmax = iss_inst.vconfig.vtype.vlMax
     val slide_no_read = Mux(slide_up,
       iss_inst.vconfig.vl <= offset,
       offset >= vlmax)
-    valid := Mux(iss_inst.vmu, true.B, !slide_no_read)
+    valid := Mux(!slide, true.B, !slide_no_read)
     inst  := iss_inst
-    eidx  := Mux(iss_inst.vmu, iss_inst.vstart, slide_start)
+    eidx  := Mux(!slide, iss_inst.vstart, slide_start)
     slide_offset := offset
 
-    val renv2_arch_mask = get_arch_mask(iss_inst.rs2, iss_inst.pos_lmul, 3)
+    val rs2 = Mux(iss_inst.rs1_is_rs2, iss_inst.rs1, iss_inst.rs2)
+    val renv2_arch_mask = get_arch_mask(rs2, iss_inst.pos_lmul, 3)
     rvs2_mask := Mux(iss_inst.renv2, FillInterleaved(egsPerVReg, renv2_arch_mask), 0.U)
     rvm_mask := Mux(iss_inst.renvm, ~(0.U(egsPerVReg.W)), 0.U)
     head := true.B
@@ -70,7 +73,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   val data_hazard = raw_hazard
 
   io.rvs2.req.valid := valid && renv2
-  io.rvs2.req.bits := getEgId(inst.rs2, eidx, incr_eew, false.B)
+  io.rvs2.req.bits := getEgId(rs2, eidx, incr_eew, false.B)
   io.rvm.req.valid := valid && renvm
   io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
 

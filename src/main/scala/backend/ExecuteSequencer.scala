@@ -42,9 +42,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
   val sscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5_sext)
-  val rgather_ix = OPIFunct6(inst.funct6) === OPIFunct6.rgather && inst.funct3.isOneOf(OPIVX, OPIVI)
-  val rgather_zero = uscalar >= inst.vconfig.vtype.vlMax
-  val slide_offset = Mux(inst.isOpi, get_slide_offset(uscalar), 1.U)
+  val rgather    = inst.opif6 === OPIFunct6.rgather
+  val rgather_ix = rgather && inst.funct3.isOneOf(OPIVX, OPIVI)
+  val rgather_v  = rgather && inst.funct3.isOneOf(OPIVV)
+  val slide_offset = Mux(inst.isOpi, get_max_offset(uscalar), 1.U)
   val slide_up = !inst.funct6(0)
   val renv1    = Mux(inst.reduction, head, inst.renv1)
   val renv2    = Mux(rgather_ix, head, Mux(inst.reduction, !head && !acc_tail, inst.renv2))
@@ -124,7 +125,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     (acc_init_fp_neg, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)),
   ))
 
-  val rvs2_eidx = Mux(rgather_ix, uscalar(log2Ceil(maxVLMax),0), eidx)
+  val rgather_eidx = get_max_offset(Mux(rgather_ix, uscalar, io.perm.data & eewBitMask(vs2_eew)))
+  val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
+  val rvs2_eidx = Mux(rgather, rgather_eidx, eidx)
   io.rvs1.req.bits := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_mask)
   io.rvs2.req.bits := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_mask)
   io.rvd.req.bits  := getEgId(inst.rd , eidx     , vs3_eew, inst.reads_mask)
@@ -135,22 +138,25 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.rvd.req.valid  := valid && renvd
   io.rvm.req.valid  := valid && renvm
 
-  val read_perm_buffer = ctrl.bool(UsesPermuteSeq) && slide && Mux(slide_up,
+  val read_perm_buffer = ctrl.bool(UsesPermuteSeq) && (!slide || Mux(slide_up,
     next_eidx > slide_offset,
-    eidx +& slide_offset < inst.vconfig.vtype.vlMax)
-  io.perm.req.bits.head := Mux(slide_up,
-    Mux(eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U),
-    eidx << vs2_eew)
-  io.perm.req.bits.tail := Mux(slide_up,
-    Mux(tail, eff_vl << vs2_eew, 0.U),
-    Mux(next_eidx + slide_offset < inst.vconfig.vtype.vlMax, 0.U, ((next_eidx - slide_offset) << vs2_eew)(dLenOffBits-1,0)))
+    eidx +& slide_offset < inst.vconfig.vtype.vlMax))
+  io.perm.req.bits.head := Mux(slide,
+    Mux(slide_up,
+      Mux(eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U),
+      eidx << vs2_eew),
+    0.U)
+  io.perm.req.bits.tail := Mux(slide,
+    Mux(slide_up,
+      Mux(tail, eff_vl << vs2_eew, 0.U),
+      Mux(next_eidx + slide_offset < inst.vconfig.vtype.vlMax, 0.U, ((next_eidx - slide_offset) << vs2_eew)(dLenOffBits-1,0))),
+    1.U << vs1_eew)
   val slide_down_byte_mask = Mux(slide && !slide_up && next_eidx + slide_offset > inst.vconfig.vtype.vlMax,
     Mux(eidx +& slide_offset >= inst.vconfig.vtype.vlMax,
       0.U,
       ~(0.U(dLenB.W)) >> (0.U(dLenOffBits.W) - ((inst.vconfig.vtype.vlMax - slide_offset) << vs2_eew))(dLenOffBits-1,0)),
     ~(0.U(dLenB.W)))
   val slide_down_bit_mask = FillInterleaved(8, slide_down_byte_mask)
-
   val iss_valid = (valid &&
     !data_hazard &&
     !(renv1 && !io.rvs1.req.ready) &&
@@ -164,8 +170,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.valid := iss_valid && !(inst.reduction && head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
-  io.iss.bits.rvs2_data := Mux(rgather_ix && rgather_zero, 0.U,
-    Mux(slide, io.perm.data & slide_down_bit_mask, io.rvs2.resp))
+  io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvd_data  := io.rvd.resp
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew
@@ -215,7 +220,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.bits.rvm_data := Mux(inst.vm, ~(0.U(dLen.W)), io.rvm.resp)
   io.iss.bits.full_tail_mask := full_tail_mask
 
-  when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
+  when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF)) {
     io.iss.bits.rvs1_data := dLenSplat(sscalar, vs1_eew)
   }
   when (inst.reduction) {
@@ -247,7 +252,15 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
       io.iss.bits.rvs1_eew := vd_eew
     }
   }
-
+  when (rgather_v) {
+    io.iss.bits.rvs1_data := rgather_eidx
+  }
+  when (rgather_zero) {
+    io.iss.bits.rvs2_data := 0.U
+  }
+  when (slide) {
+    io.iss.bits.rvs2_data := io.perm.data & slide_down_bit_mask
+  }
 
   when (iss_valid && inst.reduction && head) {
     val v0_mask = eewBitMask(vd_eew)
@@ -260,7 +273,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
       val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }
-    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask) && !(inst.reduction && head)) {
+    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask) && !(inst.reduction && head) && !rgather_v) {
       rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.req.bits)
     }
     when (rgather_ix) {

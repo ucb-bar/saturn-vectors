@@ -155,6 +155,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vlissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm
   vlissq.io.enq.bits.wvd   := true.B
   vlissq.io.enq.bits.scalar_to_vd0 := false.B
+  vlissq.io.enq.bits.rs1_is_rs2 := false.B
 
   vsissq.io.enq.bits.reduction := false.B
   vsissq.io.enq.bits.wide_vd := false.B
@@ -168,6 +169,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vsissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
   vsissq.io.enq.bits.wvd   := false.B
   vsissq.io.enq.bits.scalar_to_vd0 := false.B
+  vsissq.io.enq.bits.rs1_is_rs2 := false.B
 
   vpissq.io.enq.bits.reduction := false.B
   vpissq.io.enq.bits.wide_vd := false.B
@@ -181,6 +183,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vmu
   vpissq.io.enq.bits.wvd   := false.B
   vpissq.io.enq.bits.scalar_to_vd0 := false.B
+  vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && vdq.io.deq.bits.opif6 === OPIFunct6.rgather
 
   val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6, vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, vxu.supported_insns,
     Seq(Reduction, Wide2VD, Wide2VS2, WritesAsMask, ReadsAsMask, ReadsVS1, ReadsVS2, ReadsVD, VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0))
@@ -196,6 +199,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vxissq.io.enq.bits.wvd := !xdis_ctrl.bool(WritesScalar)
   vxissq.io.enq.bits.scalar_to_vd0 := xdis_ctrl.bool(ScalarToVD0)
   vxissq.io.enq.bits.reduction := xdis_ctrl.bool(Reduction)
+  vxissq.io.enq.bits.rs1_is_rs2 := false.B
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR
