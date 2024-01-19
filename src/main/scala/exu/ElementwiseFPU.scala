@@ -61,7 +61,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   val is_funary1 = io.iss.op.opff6.isOneOf(OPFFunct6.funary1)
   val is_funary0 = io.iss.op.opff6.isOneOf(OPFFunct6.funary0)
-  val is_vfclass = is_funary0 && (io.iss.op.rs1 === 16.U)
+  val is_vfclass = is_funary1 && (io.iss.op.rs1 === 16.U)
   val rs1 = io.iss.op.rs1
   val ctrl_widen = rs1(3)
   val ctrl_narrow = rs1(4)
@@ -128,8 +128,8 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     mgt_NaN_reg := false.B
   }
 
-  val rvs2_elem = Mux(is_double, d_rvs2, Mux(ctrl_isFMA || (io.iss.op.opff6.isOneOf(OPFFunct6.funary1) && io.iss.op.rs1 === 16.U), s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
-  val rvs1_elem = Mux(is_double, d_rvs1, Mux(ctrl_isFMA || (io.iss.op.opff6.isOneOf(OPFFunct6.funary1) && io.iss.op.rs1 === 16.U), s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
+  val rvs2_elem = Mux(is_double, d_rvs2, Mux(ctrl_isFMA, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
+  val rvs1_elem = Mux(is_double, d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
   val rvd_elem = Mux(is_double, d_rvd, s_rvd)
 
   // widening circuitry
