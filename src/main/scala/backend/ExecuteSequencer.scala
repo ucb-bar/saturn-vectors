@@ -40,10 +40,14 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
-  val slide_offset = Mux(inst.isOpi, get_slide_offset(Mux(inst.funct3(2), inst.rs1_data, inst.imm5)), 1.U)
+  val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
+  val sscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5_sext)
+  val rgather_ix = OPIFunct6(inst.funct6) === OPIFunct6.rgather && inst.funct3.isOneOf(OPIVX, OPIVI)
+  val rgather_zero = uscalar >= inst.vconfig.vtype.vlMax
+  val slide_offset = Mux(inst.isOpi, get_slide_offset(uscalar), 1.U)
   val slide_up = !inst.funct6(0)
   val renv1    = Mux(inst.reduction, head, inst.renv1)
-  val renv2    = Mux(inst.reduction, !head && !acc_tail, inst.renv2)
+  val renv2    = Mux(rgather_ix, head, Mux(inst.reduction, !head && !acc_tail, inst.renv2))
   val renvd    = inst.renvd
   val renvm    = inst.renvm
   val renacc   = inst.reduction
@@ -120,10 +124,11 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     (acc_init_fp_neg, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)),
   ))
 
-  io.rvs1.req.bits := getEgId(inst.rs1, eidx, vs1_eew, inst.reads_mask)
-  io.rvs2.req.bits := getEgId(inst.rs2, eidx, vs2_eew, inst.reads_mask)
-  io.rvd.req.bits  := getEgId(inst.rd , eidx, vs3_eew, inst.reads_mask)
-  io.rvm.req.bits  := getEgId(0.U     , eidx, 0.U    , true.B)
+  val rvs2_eidx = Mux(rgather_ix, uscalar(log2Ceil(maxVLMax),0), eidx)
+  io.rvs1.req.bits := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_mask)
+  io.rvs2.req.bits := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_mask)
+  io.rvd.req.bits  := getEgId(inst.rd , eidx     , vs3_eew, inst.reads_mask)
+  io.rvm.req.bits  := getEgId(0.U     , eidx     , 0.U    , true.B)
 
   io.rvs1.req.valid := valid && renv1
   io.rvs2.req.valid := valid && renv2
@@ -159,7 +164,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.valid := iss_valid && !(inst.reduction && head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
-  io.iss.bits.rvs2_data := Mux(ctrl.bool(UsesPermuteSeq), io.perm.data & slide_down_bit_mask, io.rvs2.resp)
+  io.iss.bits.rvs2_data := Mux(rgather_ix && rgather_zero, 0.U,
+    Mux(slide, io.perm.data & slide_down_bit_mask, io.rvs2.resp))
   io.iss.bits.rvd_data  := io.rvd.resp
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew
@@ -210,8 +216,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.bits.full_tail_mask := full_tail_mask
 
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
-    val rs1_data = Mux(inst.funct3 === OPIVI, inst.imm5_sext, inst.rs1_data)
-    io.iss.bits.rvs1_data := dLenSplat(rs1_data, vs1_eew)
+    io.iss.bits.rvs1_data := dLenSplat(sscalar, vs1_eew)
   }
   when (inst.reduction) {
     val bypass_mask = Mux(io.acc.valid, io.acc.bits.mask, 0.U)
@@ -257,6 +262,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     }
     when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask) && !(inst.reduction && head)) {
       rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.req.bits)
+    }
+    when (rgather_ix) {
+      rvs2_mask := 0.U
     }
     when (next_is_new_eg(eidx, next_eidx, vs1_eew, inst.reads_mask)) {
       rvs1_mask := rvs1_mask & ~UIntToOH(io.rvs1.req.bits)

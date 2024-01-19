@@ -12,12 +12,24 @@ import vector.insns._
 class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = Seq(
     SLIDEUP.VI, SLIDEUP.VX, SLIDEDOWN.VI, SLIDEDOWN.VX,
-    SLIDE1UP.VX, SLIDE1DOWN.VX, FSLIDE1UP.VF, FSLIDE1DOWN.VF
+    SLIDE1UP.VX, SLIDE1DOWN.VX, FSLIDE1UP.VF, FSLIDE1DOWN.VF,
+    RGATHER.VI, RGATHER.VX
   )
 
   io.iss.sub_dlen := 0.U
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
     supported_insns, Nil).matched
+
+  val rgather_reg = Reg(UInt(64.W))
+  val rgather_head_elem = VecInit.tabulate(4)({sew => if (sew == 3 && dLenB == 8) {
+    io.pipe(0).bits.rvs2_data
+  } else {
+    io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB >> sew, UInt((8 << sew).W)))(io.pipe(0).bits.rvs1_data(dLenOffBits-sew-1,0))
+  }})(io.pipe(0).bits.rvs2_eew)
+  val rgather_elem = Mux(io.pipe(0).bits.head, rgather_head_elem, rgather_reg)
+  when (io.pipe(0).valid && io.pipe(0).bits.head) { rgather_reg := rgather_head_elem }
+  val rgather_splat = dLenSplat(rgather_elem, io.pipe(0).bits.rvs2_eew)
+  val rgather = io.pipe(0).bits.opif6 === OPIFunct6.rgather
 
   val slide_up = !io.pipe(0).bits.funct6(0)
   val slide1 = !io.pipe(0).bits.isOpi
@@ -39,5 +51,7 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg
   io.write.bits.mask := FillInterleaved(8, io.pipe(0).bits.wmask)
-  io.write.bits.data := (io.pipe(0).bits.rvs2_data & ~use_rvs1_mask) | (io.pipe(0).bits.rvs1_data & use_rvs1_mask)
+  io.write.bits.data := Mux(rgather,
+    rgather_splat,
+    (io.pipe(0).bits.rvs2_data & ~use_rvs1_mask) | (io.pipe(0).bits.rvs1_data & use_rvs1_mask))
 }
