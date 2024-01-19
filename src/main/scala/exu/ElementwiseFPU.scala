@@ -82,7 +82,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val req = Wire(new FPInput)
   req.ldst := false.B
   req.wen := false.B
-  req.ren1 := DontCare
+  req.ren1 := true.B
   req.ren2 := !ctrl_isFUnary
   req.ren3 := ctrl.bool(ReadsVD)
   req.swap12 := false.B
@@ -111,9 +111,22 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
   val s_rvd = FType.S.recode(rvd_extract(31,0))
 
+  val s_isNaN = FType.S.isNaN(s_rvs2) || FType.S.isNaN(s_rvs1)
+
   val d_rvs2 = FType.D.recode(rvs2_extract)
   val d_rvs1 = FType.D.recode(rvs1_extract)
   val d_rvd = FType.D.recode(rvd_extract)
+
+  val d_isNaN = FType.D.isNaN(d_rvs2) || FType.D.isNaN(d_rvs1)
+
+  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((io.iss.op.vd_eew === 3.U && d_isNaN) || (io.iss.op.vd_eew === 2.U && s_isNaN)) 
+  val mgt_NaN_reg = RegInit(false.B)
+
+  when (io.fp_req.fire() && mgt_NaN) {
+    mgt_NaN_reg := true.B
+  } .elsewhen (io.write.fire) {
+    mgt_NaN_reg := false.B
+  }
 
   val rvs2_elem = Mux(is_double, d_rvs2, Mux(ctrl_isFMA || (io.iss.op.opff6.isOneOf(OPFFunct6.funary1) && io.iss.op.rs1 === 16.U), s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
   val rvs1_elem = Mux(is_double, d_rvs1, Mux(ctrl_isFMA || (io.iss.op.opff6.isOneOf(OPFFunct6.funary1) && io.iss.op.rs1 === 16.U), s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
@@ -135,7 +148,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.in3 := Mux(ctrl.bool(FPSwapVdV2), rvs2_elem, rvd_elem)
 
   io.fp_req.bits := req
-  io.fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst 
+  io.fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst
 
   io.fp_resp.ready := io.write.ready
 
@@ -155,10 +168,12 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val final_write_bits = Wire(UInt(64.W))
 
   when (ctrl.bool(WritesAsMask)) {
-    when (ctrl.bool(FPMNE) || ctrl.bool(FPMGT)) {
+    when (ctrl.bool(FPMNE) || (ctrl.bool(FPMGT) && !mgt_NaN_reg)) {
       final_write_bits := Fill(dLen, !io.fp_resp.bits.data(0))
+    } .elsewhen (ctrl.bool(FPMGT) && mgt_NaN_reg) {
+      final_write_bits := Fill(dLen, 0.U)
     } .otherwise {
-     final_write_bits := Fill(dLen, io.fp_resp.bits.data(0)) 
+      final_write_bits := Fill(dLen, io.fp_resp.bits.data(0)) 
     }
   } .elsewhen (vfclass_inst) {
     final_write_bits := Mux(vd_eew === 3.U, Cat(0.U(54.W), io.fp_resp.bits.data(9,0)), Fill(2, Cat(0.U(22.W), io.fp_resp.bits.data(9,0)))) 
