@@ -40,7 +40,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
-  val slide_offset = Mux(inst.isOpi, Mux(inst.funct3(2), inst.rs1_data, inst.imm5), 1.U)
+  val slide_offset = get_slide_offset(Mux(inst.isOpi, Mux(inst.funct3(2), inst.rs1_data, inst.imm5), 1.U))
   val slide_up = !inst.funct6(0)
   val renv1    = Mux(inst.reduction, head, inst.renv1)
   val renv2    = Mux(inst.reduction, !head && !acc_tail, inst.renv2)
@@ -130,9 +130,21 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.rvd.req.valid  := valid && renvd
   io.rvm.req.valid  := valid && renvm
 
-  val read_perm_buffer = ctrl.bool(UsesPermuteSeq) && slide && slide_up && next_eidx > slide_offset
-  io.perm.req.bits.head := Mux(eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U)
-  io.perm.req.bits.tail := Mux(tail, eff_vl << vs2_eew, 0.U)
+  val read_perm_buffer = ctrl.bool(UsesPermuteSeq) && slide && Mux(slide_up,
+    next_eidx > slide_offset,
+    eidx +& slide_offset < inst.vconfig.vtype.vlMax)
+  io.perm.req.bits.head := Mux(slide_up,
+    Mux(eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U),
+    eidx << vs2_eew)
+  io.perm.req.bits.tail := Mux(slide_up,
+    Mux(tail, eff_vl << vs2_eew, 0.U),
+    Mux(next_eidx + slide_offset < inst.vconfig.vtype.vlMax, 0.U, ((next_eidx - slide_offset) << vs2_eew)(dLenOffBits-1,0)))
+  val slide_down_byte_mask = Mux(slide && !slide_up && next_eidx + slide_offset > inst.vconfig.vtype.vlMax,
+    Mux(eidx +& slide_offset >= inst.vconfig.vtype.vlMax,
+      0.U,
+      ~(0.U(dLenB.W)) >> (0.U(dLenOffBits.W) - ((inst.vconfig.vtype.vlMax - slide_offset) << vs2_eew))(dLenOffBits-1,0)),
+    ~(0.U(dLenB.W)))
+  val slide_down_bit_mask = FillInterleaved(8, slide_down_byte_mask)
 
   val iss_valid = (valid &&
     !data_hazard &&
@@ -147,7 +159,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.valid := iss_valid && !(inst.reduction && head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
-  io.iss.bits.rvs2_data := Mux(ctrl.bool(UsesPermuteSeq), io.perm.data, io.rvs2.resp)
+  io.iss.bits.rvs2_data := Mux(ctrl.bool(UsesPermuteSeq), io.perm.data & slide_down_bit_mask, io.rvs2.resp)
   io.iss.bits.rvd_data  := io.rvd.resp
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew

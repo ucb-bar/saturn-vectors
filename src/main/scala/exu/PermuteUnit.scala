@@ -11,7 +11,7 @@ import vector.insns._
 
 class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = Seq(
-    SLIDEUP.VI, SLIDEUP.VX
+    SLIDEUP.VI, SLIDEUP.VX, SLIDEDOWN.VI, SLIDEDOWN.VX
   )
 
   io.iss.sub_dlen := 0.U

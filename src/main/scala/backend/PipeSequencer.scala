@@ -36,6 +36,7 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
   def accepts(inst: VectorIssueInst): Bool
 
   def min(a: UInt, b: UInt) = Mux(a > b, b, a)
+  def get_slide_offset(offset: UInt): UInt = min(offset, maxVLMax.U)(log2Ceil(maxVLMax),0)
   def get_head_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask << (eidx << eew)(dLenOffBits-1,0)
   def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask >> (0.U(dLenOffBits.W) - (eidx << eew)(dLenOffBits-1,0))
   def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {
