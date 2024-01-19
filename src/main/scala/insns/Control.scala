@@ -91,3 +91,4 @@ object FPMLT             extends XDefaultInstructionField
 object FPMGT             extends XDefaultInstructionField
 
 object FPSgnj            extends NDefaultInstructionField
+object FPSpecRM          extends XDefaultInstructionField { override val width = 3 }
