@@ -204,5 +204,9 @@ object FCVT_SGL  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary
 object FCVT_WID  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary0), F3(VectorConsts.OPFVV), RS1(BitPat("b01???")),  Wide2VD.Y) }
 object FCVT_NRW  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary0), F3(VectorConsts.OPFVV), RS1(BitPat("b10???")),  Wide2VS2.Y) }
 
-object SLIDEUP   extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slideup)  , UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }
-object SLIDEDOWN extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slidedown), UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }
+object SLIDEUP     extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slideup)    , UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }
+object SLIDEDOWN   extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slidedown)  , UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }
+object SLIDE1UP    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slide1up)   , UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }
+object SLIDE1DOWN  extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slide1down) , UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }
+object FSLIDE1UP   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1up)  , UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }
+object FSLIDE1DOWN extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1down), UsesPermuteSeq.Y, ReadsVS1.N, ReadsVS2.N) }

@@ -15,17 +15,16 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   val rvs2_mask = Reg(UInt(egsTotal.W))
   val rvm_mask = Reg(UInt(egsPerVReg.W))
   val head = Reg(Bool())
-
+  val slide_offset = Reg(UInt((1+log2Ceil(maxVLMax)).W))
   val slide = !inst.vmu
   val slide_up = !inst.funct6(0)
 
-  val offset = get_slide_offset(Mux(inst.funct3(2), inst.rs1_data, inst.imm5))
   val elementwise = !slide
   val renvm = inst.renvm
   val renv2 = inst.renv2
   val incr_eew = Mux(inst.vmu, inst.mem_idx_size, inst.vconfig.vtype.vsew)
   val eff_vl = Mux(slide,
-    Mux(slide_up, inst.vconfig.vl - offset, min(inst.vconfig.vtype.vlMax, inst.vconfig.vl + offset)),
+    Mux(slide_up, inst.vconfig.vl - slide_offset, min(inst.vconfig.vtype.vlMax, inst.vconfig.vl + slide_offset)),
     inst.vconfig.vl
   )(log2Ceil(maxVLMax),0)
   val next_eidx = Mux(elementwise,
@@ -37,7 +36,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
 
   when (io.dis.fire) {
     val iss_inst = io.dis.bits
-    val offset = get_slide_offset(Mux(iss_inst.funct3(2), iss_inst.rs1_data, iss_inst.imm5))
+    val offset = Mux(iss_inst.isOpi, get_slide_offset(Mux(iss_inst.funct3(2), iss_inst.rs1_data, iss_inst.imm5)), 1.U)
     val slide_up = !iss_inst.funct6(0)
     val slide_start = Mux(slide_up, 0.U, offset)
     val vlmax = iss_inst.vconfig.vtype.vlMax
@@ -47,6 +46,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
     valid := Mux(iss_inst.vmu, true.B, !slide_no_read)
     inst  := iss_inst
     eidx  := Mux(iss_inst.vmu, iss_inst.vstart, slide_start)
+    slide_offset := offset
 
     val renv2_arch_mask = get_arch_mask(iss_inst.rs2, iss_inst.pos_lmul, 3)
     rvs2_mask := Mux(iss_inst.renv2, FillInterleaved(egsPerVReg, renv2_arch_mask), 0.U)

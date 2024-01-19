@@ -40,7 +40,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
-  val slide_offset = get_slide_offset(Mux(inst.isOpi, Mux(inst.funct3(2), inst.rs1_data, inst.imm5), 1.U))
+  val slide_offset = Mux(inst.isOpi, get_slide_offset(Mux(inst.funct3(2), inst.rs1_data, inst.imm5)), 1.U)
   val slide_up = !inst.funct6(0)
   val renv1    = Mux(inst.reduction, head, inst.renv1)
   val renv2    = Mux(inst.reduction, !head && !acc_tail, inst.renv2)
@@ -183,8 +183,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
+  val slide1up_mask = Mux(head, eewByteMask(vs2_eew), 0.U)
   val slideup_mask = Mux(slide && slide_up && eidx < slide_offset,
-    Mux(next_eidx <= slide_offset, 0.U, dlen_mask << (slide_offset << vd_eew)(dLenOffBits-1,0)),
+    Mux(next_eidx <= slide_offset, 0.U, dlen_mask << (slide_offset << vd_eew)(dLenOffBits-1,0)) | slide1up_mask,
     dlen_mask)
   val full_tail_mask = Mux(tail,
     ~(0.U(dLen.W)) >> (0.U(log2Ceil(dLen).W) - eff_vl(log2Ceil(dLen)-1,0)),
@@ -192,9 +193,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   )
   val vm_off    = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
   val vm_eidx   = (eidx & ~(vm_off >> vd_eew))(log2Ceil(dLen)-1,0)
-  val vm_resp   = (io.rvm.resp >> vm_eidx)
+  val vm_resp   = (io.rvm.resp >> vm_eidx)(dLenB-1,0)
   val vm_mask   = Mux(use_wmask,
-    VecInit.tabulate(4)({ sew => FillInterleaved(1 << sew, vm_resp) })(vd_eew),
+    VecInit.tabulate(4)({ sew => FillInterleaved(1 << sew, vm_resp)(dLenB-1,0) })(vd_eew),
     ~(0.U(dLenB.W))
   )
   val acc_mask  = Mux(acc_last,
