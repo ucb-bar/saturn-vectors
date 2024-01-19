@@ -23,6 +23,8 @@ class PermutationUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
-  io.write.valid := false.B
-  io.write.bits := DontCare
+  io.write.valid := io.pipe(0).valid
+  io.write.bits.eg := io.pipe(0).bits.wvd_eg
+  io.write.bits.mask := FillInterleaved(8, io.pipe(0).bits.wmask)
+  io.write.bits.data := io.pipe(0).bits.rvs2_data
 }

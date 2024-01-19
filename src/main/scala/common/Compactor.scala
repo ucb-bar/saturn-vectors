@@ -1,4 +1,4 @@
-package vector.mem
+package vector.common
 
 import chisel3._
 import chisel3.util._
@@ -6,7 +6,6 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
-import vector.common._
 
 class CompactorReq(n: Int) extends Bundle {
   val head  = UInt(log2Ceil(n).W)

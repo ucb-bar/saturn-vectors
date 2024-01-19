@@ -60,6 +60,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def may_write_v0 = rd === 0.U && opcode =/= opcStore
   def funct3 = bits(14,12)
   def imm5 = bits(19,15)
+  def imm5_sext = Cat(Fill(59, imm5(4)), imm5)
   def funct6 = bits(31,26)
 
   def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)
@@ -190,6 +191,8 @@ class IndexMaskMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val rvs2_eew = UInt(2.W)
   val rvm_data = UInt(dLen.W)
   val vmu = Bool()
+  val vl = UInt((1+log2Ceil(maxVLMax)).W)
+  val tail = Bool()
 }
 
 class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

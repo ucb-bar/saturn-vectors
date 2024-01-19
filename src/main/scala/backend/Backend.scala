@@ -119,6 +119,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val fpcomp_unit = Module(new FPCompPipe)
   val fpconv_unit = Module(new FPConvPipe)
 
+  val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
+
   val vxu = new ExecutionUnit(int_unit, bw_unit, mul_unit, div_unit, mask_unit, perm_unit,
     fpfma_unit, fpdiv_unit, fpcomp_unit, fpconv_unit)
 
@@ -216,6 +218,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.rvs2 := DontCare
     seq.io.rvd := DontCare
     seq.io.rvm := DontCare
+    seq.io.perm := DontCare
     seq.io.sub_dlen := 0.U
     seq.io.acc.valid := false.B
     seq.io.acc.bits := DontCare
@@ -332,14 +335,30 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.mask_access.mask   := reads(3)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
-  val maskindex_q = Module(new Queue(new MaskIndex, 2))
+  val maskindex_q = Module(new DCEQueue(new MaskIndex, 2))
+  val perm_q = Module(new DCEQueue(new IndexMaskMicroOp, 2))
+
   vmu.io.maskindex <> maskindex_q.io.deq
 
-  maskindex_q.io.enq.valid := vims.io.iss.valid
+  maskindex_q.io.enq.valid := vims.io.iss.valid && vims.io.iss.bits.vmu
   val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
   maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.rvs2_eew)
   maskindex_q.io.enq.bits.mask  := vims.io.iss.bits.rvm_data >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
-  vims.io.iss.ready             := maskindex_q.io.enq.ready
+  vims.io.iss.ready             := Mux(vims.io.iss.bits.vmu, maskindex_q.io.enq.ready, perm_q.io.enq.ready)
+
+  perm_q.io.enq.valid := vims.io.iss.valid && !vims.io.iss.bits.vmu
+  perm_q.io.enq.bits := vims.io.iss.bits
+
+  perm_q.io.deq.ready := perm_buffer.io.push.ready
+  perm_buffer.io.push.valid := perm_q.io.deq.valid
+  perm_buffer.io.push.bits.head := perm_q.io.deq.bits.eidx << perm_q.io.deq.bits.rvs2_eew
+  perm_buffer.io.push.bits.tail := Mux(perm_q.io.deq.bits.tail,
+    perm_q.io.deq.bits.vl << perm_q.io.deq.bits.rvs2_eew,
+    0.U)
+  perm_buffer.io.push_data := perm_q.io.deq.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+
+  perm_buffer.io.pop <> vxs.io.perm.req
+  vxs.io.perm.data := perm_buffer.io.pop_data.asUInt
 
   // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {

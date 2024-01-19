@@ -39,13 +39,16 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
   val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
+  val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
+  val slide_offset = Mux(inst.isOpi, Mux(inst.funct3(2), inst.rs1_data, inst.imm5), 1.U)
+  val slide_up = !inst.funct6(0)
   val renv1    = Mux(inst.reduction, head, inst.renv1)
   val renv2    = Mux(inst.reduction, !head && !acc_tail, inst.renv2)
   val renvd    = inst.renvd
   val renvm    = inst.renvm
   val renacc   = inst.reduction
   val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
-    Seq(SetsWMask))
+    Seq(SetsWMask, UsesIndexMaskSeq))
 
   val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -103,7 +106,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-
   val acc_insns = supported_insns.filter(_.props.contains(Reduction.Y))
   val acc_ctrl = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, acc_insns, Seq(AccInitZeros, AccInitOnes, AccInitPos, AccInitNeg))
   val acc_init_fp_pos = inst.opff6 === OPFFunct6.fredmin
@@ -128,18 +130,24 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.rvd.req.valid  := valid && renvd
   io.rvm.req.valid  := valid && renvm
 
+  val read_perm_buffer = ctrl.bool(UsesIndexMaskSeq) && slide && slide_up && next_eidx > slide_offset
+  io.perm.req.bits.head := Mux(eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U)
+  io.perm.req.bits.tail := Mux(tail, eff_vl << vs2_eew, 0.U)
+
   val iss_valid = (valid &&
     !data_hazard &&
     !(renv1 && !io.rvs1.req.ready) &&
     !(renv2 && !io.rvs2.req.ready) &&
     !(renvd && !io.rvd.req.ready) &&
     !(renvm && !io.rvm.req.ready) &&
+    !(read_perm_buffer && !io.perm.req.ready) &&
     !(renacc && !acc_ready && !io.acc.valid)
   )
+  io.perm.req.valid := iss_valid && read_perm_buffer
   io.iss.valid := iss_valid && !(inst.reduction && head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
-  io.iss.bits.rvs2_data := io.rvs2.resp
+  io.iss.bits.rvs2_data := Mux(ctrl.bool(UsesIndexMaskSeq), io.perm.data, io.rvs2.resp)
   io.iss.bits.rvd_data  := io.rvd.resp
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew
@@ -163,6 +171,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
+  val slideup_mask = Mux(slide && slide_up && eidx < slide_offset,
+    Mux(next_eidx <= slide_offset, 0.U, dlen_mask << (slide_offset << vd_eew)(dLenOffBits-1,0)),
+    dlen_mask)
   val full_tail_mask = Mux(tail,
     ~(0.U(dLen.W)) >> (0.U(log2Ceil(dLen).W) - eff_vl(log2Ceil(dLen)-1,0)),
     ~(0.U(dLen.W))
@@ -179,14 +190,14 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     VecInit.tabulate(log2Ceil(dLenB))(i => ~(0.U((dLen>>i).W)))(acc_tail_id))
   io.iss.bits.wmask := Mux(inst.reduction && acc_tail,
     acc_mask,
-    head_mask & tail_mask & vm_mask)
+    head_mask & tail_mask & vm_mask & slideup_mask)
 
   io.iss.bits.rmask := Mux(inst.vm, ~(0.U(dLenB.W)), vm_resp)
   io.iss.bits.rvm_data := Mux(inst.vm, ~(0.U(dLen.W)), io.rvm.resp)
   io.iss.bits.full_tail_mask := full_tail_mask
 
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) && !inst.vmu) {
-    val rs1_data = Mux(inst.funct3 === OPIVI, Cat(Fill(59, inst.imm5(4)), inst.imm5), inst.rs1_data)
+    val rs1_data = Mux(inst.funct3 === OPIVI, inst.imm5_sext, inst.rs1_data)
     io.iss.bits.rvs1_data := dLenSplat(rs1_data, vs1_eew)
   }
   when (inst.reduction) {

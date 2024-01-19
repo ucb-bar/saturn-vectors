@@ -104,14 +104,14 @@ trait HasVectorConsts {
   def opcStore  = "b0100111".U
   def opcVector = "b1010111".U
 
-  def OPIVV = 0.U(3.W)
-  def OPFVV = 1.U(3.W)
-  def OPMVV = 2.U(3.W)
-  def OPIVI = 3.U(3.W)
-  def OPIVX = 4.U(3.W)
-  def OPFVF = 5.U(3.W)
-  def OPMVX = 6.U(3.W)
-  def OPCFG = 7.U(3.W)
+  def OPIVV = "b000".U(3.W)
+  def OPFVV = "b001".U(3.W)
+  def OPMVV = "b010".U(3.W)
+  def OPIVI = "b011".U(3.W)
+  def OPIVX = "b100".U(3.W)
+  def OPFVF = "b101".U(3.W)
+  def OPMVX = "b110".U(3.W)
+  def OPCFG = "b111".U(3.W)
 
   def X = BitPat("b?")
   def N = BitPat("b0")
