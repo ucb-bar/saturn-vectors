@@ -113,7 +113,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val mul_unit = Module(if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)))
   val div_unit = Module(new IterativeIntegerDivider)
   val mask_unit = Module(new MaskUnit)
-  val perm_unit = Module(new PermutationUnit)
+  val perm_unit = Module(new PermuteUnit)
   val fpfma_unit = Module(new FPFMAPipe(vParams.fmaPipeDepth))
   val fpdiv_unit = Module(new FPDivSqrt)
   val fpcomp_unit = Module(new FPCompPipe)
@@ -124,21 +124,21 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vxu = new ExecutionUnit(int_unit, bw_unit, mul_unit, div_unit, mask_unit, perm_unit,
     fpfma_unit, fpdiv_unit, fpcomp_unit, fpconv_unit)
 
-  val vlissq  = Module(new IssueQueue(vParams.vlissqEntries))
-  val vsissq  = Module(new IssueQueue(vParams.vsissqEntries))
-  val vxissq  = Module(new IssueQueue(vParams.vxissqEntries))
-  val vimissq = Module(new IssueQueue(vParams.vimissqEntries))
+  val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
+  val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
+  val vxissq = Module(new IssueQueue(vParams.vxissqEntries))
+  val vpissq = Module(new IssueQueue(vParams.vpissqEntries))
 
-  val vls  = Module(new LoadSequencer)
-  val vss  = Module(new StoreSequencer)
-  val vxs  = Module(new ExecuteSequencer(vxu.supported_insns))
-  val vims = Module(new IndexMaskSequencer(vxu.supported_insns))
+  val vls = Module(new LoadSequencer)
+  val vss = Module(new StoreSequencer)
+  val vxs = Module(new ExecuteSequencer(vxu.supported_insns))
+  val vps = Module(new PermuteSequencer(vxu.supported_insns))
 
   val issGroups = Seq(
     (vlissq, vls),
     (vsissq, vss),
     (vxissq, vxs),
-    (vimissq, vims)
+    (vpissq, vps)
   )
   val issqs = issGroups.map(_._1)
   val seqs = issGroups.map(_._2)
@@ -169,18 +169,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vsissq.io.enq.bits.wvd   := false.B
   vsissq.io.enq.bits.scalar_to_vd0 := false.B
 
-  vimissq.io.enq.bits.reduction := false.B
-  vimissq.io.enq.bits.wide_vd := false.B
-  vimissq.io.enq.bits.wide_vs2 := false.B
-  vimissq.io.enq.bits.writes_mask := false.B
-  vimissq.io.enq.bits.reads_mask := false.B
-  vimissq.io.enq.bits.nf_log2 := 0.U
-  vimissq.io.enq.bits.renv1 := false.B
-  vimissq.io.enq.bits.renv2 := vdq.io.deq.bits.mop(0) || !vdq.io.deq.bits.vmu
-  vimissq.io.enq.bits.renvd := true.B
-  vimissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vmu
-  vimissq.io.enq.bits.wvd   := false.B
-  vimissq.io.enq.bits.scalar_to_vd0 := false.B
+  vpissq.io.enq.bits.reduction := false.B
+  vpissq.io.enq.bits.wide_vd := false.B
+  vpissq.io.enq.bits.wide_vs2 := false.B
+  vpissq.io.enq.bits.writes_mask := false.B
+  vpissq.io.enq.bits.reads_mask := false.B
+  vpissq.io.enq.bits.nf_log2 := 0.U
+  vpissq.io.enq.bits.renv1 := false.B
+  vpissq.io.enq.bits.renv2 := vdq.io.deq.bits.mop(0) || !vdq.io.deq.bits.vmu
+  vpissq.io.enq.bits.renvd := true.B
+  vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vmu
+  vpissq.io.enq.bits.wvd   := false.B
+  vpissq.io.enq.bits.scalar_to_vd0 := false.B
 
   val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6, vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, vxu.supported_insns,
     Seq(Reduction, Wide2VD, Wide2VS2, WritesAsMask, ReadsAsMask, ReadsVS1, ReadsVS2, ReadsVD, VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0))
@@ -299,7 +299,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs-vrs1, vmu-index, frontend-index
   // vxs-vrs2
   // vxs-vrs3, vss-vrd
-  // vls-mask, vss-mask, vxs-mask, vims-mask, frontend-mask
+  // vls-mask, vss-mask, vxs-mask, vps-mask, frontend-mask
   val reads = Seq(3, 1, 2, 5).zipWithIndex.map { case (rc, i) =>
     val arb = Module(new RegisterReadXbar(rc))
     vrf(0).io.read(i) <> arb.io.out(0)
@@ -307,8 +307,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     arb.io.in
   }
 
-  reads(0)(1) <> vims.io.rvs2
-  vims.io.rvs1.req.ready := true.B
+  reads(0)(1) <> vps.io.rvs2
+  vps.io.rvs1.req.ready := true.B
 
   reads(0)(2).req.valid := io.index_access.valid
   io.index_access.ready := reads(0)(2).req.ready
@@ -328,7 +328,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(3)(0) <> vls.io.rvm
   reads(3)(1) <> vss.io.rvm
   reads(3)(2) <> vxs.io.rvm
-  reads(3)(3) <> vims.io.rvm
+  reads(3)(3) <> vps.io.rvm
   reads(3)(4).req.valid := io.mask_access.valid
   reads(3)(4).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
   io.mask_access.ready  := reads(3)(4).req.ready
@@ -336,18 +336,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   val maskindex_q = Module(new DCEQueue(new MaskIndex, 2))
-  val perm_q = Module(new DCEQueue(new IndexMaskMicroOp, 2))
+  val perm_q = Module(new DCEQueue(new PermuteMicroOp, 2))
 
   vmu.io.maskindex <> maskindex_q.io.deq
 
-  maskindex_q.io.enq.valid := vims.io.iss.valid && vims.io.iss.bits.vmu
-  val index_shifted = (vims.io.iss.bits.rvs2_data >> ((vims.io.iss.bits.eidx << vims.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
-  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vims.io.iss.bits.rvs2_eew)
-  maskindex_q.io.enq.bits.mask  := vims.io.iss.bits.rvm_data >> vims.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
-  vims.io.iss.ready             := Mux(vims.io.iss.bits.vmu, maskindex_q.io.enq.ready, perm_q.io.enq.ready)
+  maskindex_q.io.enq.valid := vps.io.iss.valid && vps.io.iss.bits.vmu
+  val index_shifted = (vps.io.iss.bits.rvs2_data >> ((vps.io.iss.bits.eidx << vps.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
+  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vps.io.iss.bits.rvs2_eew)
+  maskindex_q.io.enq.bits.mask  := vps.io.iss.bits.rvm_data >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
+  vps.io.iss.ready             := Mux(vps.io.iss.bits.vmu, maskindex_q.io.enq.ready, perm_q.io.enq.ready)
 
-  perm_q.io.enq.valid := vims.io.iss.valid && !vims.io.iss.bits.vmu
-  perm_q.io.enq.bits := vims.io.iss.bits
+  perm_q.io.enq.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
+  perm_q.io.enq.bits := vps.io.iss.bits
 
   perm_q.io.deq.ready := perm_buffer.io.push.ready
   perm_buffer.io.push.valid := perm_q.io.deq.valid

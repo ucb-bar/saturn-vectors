@@ -48,7 +48,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val renvm    = inst.renvm
   val renacc   = inst.reduction
   val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
-    Seq(SetsWMask, UsesIndexMaskSeq))
+    Seq(SetsWMask, UsesPermuteSeq))
 
   val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -130,7 +130,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.rvd.req.valid  := valid && renvd
   io.rvm.req.valid  := valid && renvm
 
-  val read_perm_buffer = ctrl.bool(UsesIndexMaskSeq) && slide && slide_up && next_eidx > slide_offset
+  val read_perm_buffer = ctrl.bool(UsesPermuteSeq) && slide && slide_up && next_eidx > slide_offset
   io.perm.req.bits.head := Mux(eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U)
   io.perm.req.bits.tail := Mux(tail, eff_vl << vs2_eew, 0.U)
 
@@ -147,7 +147,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.valid := iss_valid && !(inst.reduction && head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
-  io.iss.bits.rvs2_data := Mux(ctrl.bool(UsesIndexMaskSeq), io.perm.data, io.rvs2.resp)
+  io.iss.bits.rvs2_data := Mux(ctrl.bool(UsesPermuteSeq), io.perm.data, io.rvs2.resp)
   io.iss.bits.rvd_data  := io.rvd.resp
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew

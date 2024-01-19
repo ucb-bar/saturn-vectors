@@ -185,7 +185,7 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val vat = UInt(vParams.vatSz.W)
 }
 
-class IndexMaskMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val rvs2_data = UInt(dLen.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val rvs2_eew = UInt(2.W)

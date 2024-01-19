@@ -27,7 +27,7 @@ object Wide2VS2          extends NDefaultInstructionField
 object WritesAsMask      extends NDefaultInstructionField
 object ReadsAsMask       extends NDefaultInstructionField
 object WritesScalar      extends NDefaultInstructionField
-object UsesIndexMaskSeq  extends NDefaultInstructionField
+object UsesPermuteSeq    extends NDefaultInstructionField
 
 // Execute Sequencer control
 object SetsWMask         extends YDefaultInstructionField

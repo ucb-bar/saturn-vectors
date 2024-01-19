@@ -9,7 +9,7 @@ import freechips.rocketchip.tile._
 import vector.common._
 import vector.insns._
 
-class PermutationUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = Seq(
     SLIDEUP.VI, SLIDEUP.VX
   )

@@ -6,8 +6,8 @@ import org.chipsalliance.cde.config._
 import vector.common._
 import vector.insns._
 
-class IndexMaskSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new IndexMaskMicroOp)(p) {
-  def accepts(inst: VectorIssueInst) = inst.vmu && ((!inst.vm && inst.mop =/= mopUnit) || inst.mop(0)) || new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns.filter(_.props.contains(UsesIndexMaskSeq.Y)), Nil).matched
+class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new PermuteMicroOp)(p) {
+  def accepts(inst: VectorIssueInst) = inst.vmu && ((!inst.vm && inst.mop =/= mopUnit) || inst.mop(0)) || new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns.filter(_.props.contains(UsesPermuteSeq.Y)), Nil).matched
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
