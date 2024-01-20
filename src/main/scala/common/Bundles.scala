@@ -78,7 +78,8 @@ class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
   val wide_vd = Bool()       // vd reads/writes at 2xSEW
   val wide_vs2 = Bool()      // vs2 reads at 2xSEW
   val writes_mask = Bool()   // writes dest as a mask
-  val reads_mask = Bool()    // vs1/vs2 read as mask
+  val reads_vs1_mask = Bool() // vs1 read as mask
+  val reads_vs2_mask = Bool() // vs2 read as mask
   val rs1_is_rs2 = Bool()
   val nf_log2 = UInt(2.W)
 

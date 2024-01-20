@@ -114,6 +114,9 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
       hazards(i).valid       := pipe_valids(i)
       hazards(i).bits.vat    := pipe_bits(i).vat
       hazards(i).bits.eg     := pipe_bits(i).wvd_eg
+      when (pipe_latencies(i) === 0.U) { // hack to deal with compress unit
+        hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
+      }
     }
   }
 

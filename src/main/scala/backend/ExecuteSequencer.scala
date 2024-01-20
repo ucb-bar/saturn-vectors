@@ -28,6 +28,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
 
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
+  val compress = inst.opmf6 === OPMFunct6.compress
   val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew)
   val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(inst.opmf6 === OPMFunct6.xunary0,
     ~inst.rs1(2,1) + 1.U, 0.U)
@@ -59,7 +60,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val eff_vl    = Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, inst.reads_mask && (inst.writes_mask || !inst.wvd))
+  val increments_as_mask = (!inst.renv1 || inst.reads_vs1_mask) && (!inst.renv2 || inst.reads_vs2_mask) && (!inst.wvd || inst.writes_mask)
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, increments_as_mask)
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 
@@ -73,8 +75,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     eidx := 0.U
 
     val vd_arch_mask  = get_arch_mask(iss_inst.rd , iss_inst.pos_lmul +& iss_inst.wide_vd                                , 4)
-    val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_mask, 0.U, iss_inst.pos_lmul                     ), 3)
-    val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_mask, 0.U, iss_inst.pos_lmul +& iss_inst.wide_vs2), 4)
+    val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_vs1_mask, 0.U, iss_inst.pos_lmul                     ), 3)
+    val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_vs2_mask, 0.U, iss_inst.pos_lmul +& iss_inst.wide_vs2), 4)
 
     wvd_mask    := Mux(iss_inst.wvd  , FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvs1_mask   := Mux(iss_inst.renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
@@ -129,9 +131,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val rgather_eidx = get_max_offset(Mux(rgather_ix && rgather, uscalar, io.perm.data & eewBitMask(vs1_eew)))
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
   val rvs2_eidx = Mux(rgather || rgatherei16, rgather_eidx, eidx)
-  io.rvs1.req.bits := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_mask)
-  io.rvs2.req.bits := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_mask)
-  io.rvd.req.bits  := getEgId(inst.rd , eidx     , vs3_eew, inst.reads_mask)
+  io.rvs1.req.bits := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_vs1_mask)
+  io.rvs2.req.bits := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_vs2_mask)
+  io.rvd.req.bits  := getEgId(inst.rd , eidx     , vs3_eew, false.B)
   io.rvm.req.bits  := getEgId(0.U     , eidx     , 0.U    , true.B)
 
   io.rvs1.req.valid := valid && renv1
@@ -256,7 +258,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   when (rgather_v || rgatherei16) {
     io.iss.bits.rvs1_data := rgather_eidx
   }
-  when (rgather_zero) {
+  when (rgather_zero && rgather) {
     io.iss.bits.rvs2_data := 0.U
   }
   when (slide) {
@@ -270,17 +272,17 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   }
 
   when (io.iss.fire && !tail) {
-    when (next_is_new_eg(eidx, next_eidx, vd_eew, inst.writes_mask) && !(inst.reduction && !acc_tail)) {
+    when (next_is_new_eg(eidx, next_eidx, vd_eew, inst.writes_mask) && !(inst.reduction && !acc_tail) && !compress) {
       val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }
-    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_mask) && !(inst.reduction && head) && !rgather_v && !rgatherei16) {
+    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_vs2_mask) && !(inst.reduction && head) && !rgather_v && !rgatherei16) {
       rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.req.bits)
     }
     when (rgather_ix) {
       rvs2_mask := 0.U
     }
-    when (next_is_new_eg(eidx, next_eidx, vs1_eew, inst.reads_mask)) {
+    when (next_is_new_eg(eidx, next_eidx, vs1_eew, inst.reads_vs1_mask)) {
       rvs1_mask := rvs1_mask & ~UIntToOH(io.rvs1.req.bits)
     }
     when (next_is_new_eg(eidx, next_eidx, vs3_eew, false.B)) {

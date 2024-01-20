@@ -25,7 +25,8 @@ object Reduction         extends NDefaultInstructionField
 object Wide2VD           extends NDefaultInstructionField
 object Wide2VS2          extends NDefaultInstructionField
 object WritesAsMask      extends NDefaultInstructionField
-object ReadsAsMask       extends NDefaultInstructionField
+object ReadsVS1AsMask    extends NDefaultInstructionField
+object ReadsVS2AsMask    extends NDefaultInstructionField
 object WritesScalar      extends NDefaultInstructionField
 object UsesPermuteSeq    extends NDefaultInstructionField
 
