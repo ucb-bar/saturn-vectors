@@ -29,10 +29,10 @@ class IssueQueue(depth: Int)(implicit p: Parameters) extends CoreModule()(p) wit
       val only_writes_vd0 = e.bits.scalar_to_vd0 || e.bits.reduction
       val vd_lmul  = Mux(only_writes_vd0      , 0.U, e.bits.pos_lmul +& e.bits.wide_vd +& e.bits.nf_log2)
       val vs1_lmul = Mux(e.bits.reads_vs1_mask, 0.U, e.bits.pos_lmul)
-      val vs2_lmul = Mux(e.bits.reads_vs2_mask, 0.U, e.bits.pos_lmul +& e.bits.wide_vs2)
-      val vd_arch_mask  = get_arch_mask(e.bits.rd , vd_lmul , 5)
-      val vs1_arch_mask = get_arch_mask(e.bits.rs1, vs1_lmul, 3)
-      val vs2_arch_mask = get_arch_mask(rs2       , vs2_lmul, 4)
+      val vs2_lmul = Mux(e.bits.reads_vs2_mask, 0.U, e.bits.pos_lmul +& e.bits.wide_vs2 +& e.bits.nf_log2)
+      val vd_arch_mask  = get_arch_mask(e.bits.rd , vd_lmul )
+      val vs1_arch_mask = get_arch_mask(e.bits.rs1, vs1_lmul)
+      val vs2_arch_mask = get_arch_mask(rs2       , vs2_lmul)
       h.bits.rintent := Seq(
         (e.bits.renv1, vs1_arch_mask),
         (e.bits.renv2, vs2_arch_mask),

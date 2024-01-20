@@ -74,9 +74,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     assert(iss_inst.vstart === 0.U)
     eidx := 0.U
 
-    val vd_arch_mask  = get_arch_mask(iss_inst.rd , iss_inst.pos_lmul +& iss_inst.wide_vd                                , 4)
-    val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_vs1_mask, 0.U, iss_inst.pos_lmul                     ), 3)
-    val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_vs2_mask, 0.U, iss_inst.pos_lmul +& iss_inst.wide_vs2), 4)
+    val vd_arch_mask  = get_arch_mask(iss_inst.rd , iss_inst.pos_lmul +& iss_inst.wide_vd)
+    val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_vs1_mask, 0.U, iss_inst.pos_lmul))
+    val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_vs2_mask, 0.U, iss_inst.pos_lmul +& iss_inst.wide_vs2))
 
     wvd_mask    := Mux(iss_inst.wvd  , FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvs1_mask   := Mux(iss_inst.renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
