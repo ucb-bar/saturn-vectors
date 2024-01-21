@@ -216,4 +216,4 @@ object RGATHER_VI  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.r
 object RGATHER_VV  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather)    , F3(VectorConsts.OPIVV), UsesPermuteSeq.Y) }
 object RGATHEREI16 extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgatherei16), F3(VectorConsts.OPIVV), UsesPermuteSeq.Y) }
 object COMPRESS    extends OPMInstruction       { val props = Seq(F6(OPMFunct6.compress)   , ReadsVS1AsMask.Y) }
-
+object MVNRR       extends VectorInstruction    { val props = Seq(F6(OPIFunct6.mvnrr)      , F3(VectorConsts.OPIVI)) }

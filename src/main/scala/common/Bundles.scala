@@ -40,6 +40,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val vat = UInt(vParams.vatSz.W)
   val phys = Bool()
   val rm = UInt(3.W)
+  val emul = UInt(2.W)
 
   def opcode = bits(6,0)
   def store = opcode(5)
@@ -52,7 +53,6 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def wr = mop === mopUnit && umop === lumopWhole
   def seg_nf = Mux(wr, 0.U, nf)
   def wr_nf = Mux(wr, nf, 0.U)
-  def pos_lmul = Mux(vconfig.vtype.vlmul_sign, 0.U, vconfig.vtype.vlmul_mag)
   def vmu = opcode.isOneOf(opcLoad, opcStore)
   def rs1 = bits(19,15)
   def rs2 = bits(24,20)
@@ -73,11 +73,11 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 }
 
 class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
-  val reduction = Bool()     // accumulates into vd[0]
-  val scalar_to_vd0 = Bool() // mv scalar to vd[0]
-  val wide_vd = Bool()       // vd reads/writes at 2xSEW
-  val wide_vs2 = Bool()      // vs2 reads at 2xSEW
-  val writes_mask = Bool()   // writes dest as a mask
+  val reduction = Bool()      // accumulates into vd[0]
+  val scalar_to_vd0 = Bool()  // mv scalar to vd[0]
+  val wide_vd = Bool()        // vd reads/writes at 2xSEW
+  val wide_vs2 = Bool()       // vs2 reads at 2xSEW
+  val writes_mask = Bool()    // writes dest as a mask
   val reads_vs1_mask = Bool() // vs1 read as mask
   val reads_vs2_mask = Bool() // vs2 read as mask
   val rs1_is_rs2 = Bool()

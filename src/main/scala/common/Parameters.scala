@@ -89,7 +89,8 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     val fracBits = (8 << sew) - expBits - 1
     Cat(1.U, ~(0.U(expBits.W)), 0.U(fracBits.W))
   }
-  def get_arch_mask(reg: UInt, pos_lmul: UInt) = VecInit.tabulate(4)({ lmul =>
+  def get_arch_mask(reg: UInt, emul: UInt) = VecInit.tabulate(4)({ lmul =>
     FillInterleaved(1 << lmul, UIntToOH(reg >> lmul)((32>>lmul)-1,0))
-  })(pos_lmul)
+  })(emul)
+  def log2_up(f: UInt, max: Int) = VecInit.tabulate(max)({nf => log2Ceil(nf+1).U})(f)
 }

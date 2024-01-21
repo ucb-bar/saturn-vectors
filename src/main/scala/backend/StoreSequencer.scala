@@ -32,8 +32,8 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
 
     val rvd_arch_mask = Wire(Vec(32, Bool()))
     for (i <- 0 until 32) {
-      val group = i.U >> iss_inst.pos_lmul
-      val rd_group = iss_inst.rd >> iss_inst.pos_lmul
+      val group = i.U >> iss_inst.emul
+      val rd_group = iss_inst.rd >> iss_inst.emul
       rvd_arch_mask(i) := group >= rd_group && group <= (rd_group + iss_inst.nf)
     }
     rvd_mask := FillInterleaved(egsPerVReg, rvd_arch_mask.asUInt)
@@ -60,7 +60,7 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
   val data_hazard = raw_hazard
 
   io.rvd.req.valid := valid
-  io.rvd.req.bits := getEgId(inst.rd + (sidx << inst.pos_lmul), eidx, inst.mem_elem_size, false.B)
+  io.rvd.req.bits := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
   io.rvm.req.valid := valid && renvm
   io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
 

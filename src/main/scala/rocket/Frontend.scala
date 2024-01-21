@@ -154,6 +154,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.vstart := io.core.ex.vstart
   x_core_inst.rs1_data := io.core.ex.rs1
   x_core_inst.rs2_data := io.core.ex.rs2
+  x_core_inst.emul := Mux(io.core.ex.vconfig.vtype.vlmul_sign, 0.U, io.core.ex.vconfig.vtype.vlmul_mag)
   x_core_inst.vat := DontCare
   x_core_inst.phys := DontCare
 

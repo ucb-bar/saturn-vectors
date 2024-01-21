@@ -53,7 +53,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
     slide_offset := offset
 
     val rs2 = Mux(iss_inst.rs1_is_rs2, iss_inst.rs1, iss_inst.rs2)
-    val renv2_arch_mask = get_arch_mask(rs2, iss_inst.pos_lmul)
+    val renv2_arch_mask = get_arch_mask(rs2, iss_inst.emul)
     rvs2_mask := Mux(iss_inst.renv2, FillInterleaved(egsPerVReg, renv2_arch_mask), 0.U)
     rvm_mask := Mux(iss_inst.renvm, ~(0.U(egsPerVReg.W)), 0.U)
     head := true.B

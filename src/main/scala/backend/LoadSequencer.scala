@@ -31,8 +31,8 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
 
     val wvd_arch_mask = Wire(Vec(32, Bool()))
     for (i <- 0 until 32) {
-      val group = i.U >> iss_inst.pos_lmul
-      val rd_group = iss_inst.rd >> iss_inst.pos_lmul
+      val group = i.U >> iss_inst.emul
+      val rd_group = iss_inst.rd >> iss_inst.emul
       wvd_arch_mask(i) := group >= rd_group && group <= (rd_group + iss_inst.nf)
     }
     wvd_mask := FillInterleaved(egsPerVReg, wvd_arch_mask.asUInt)
@@ -61,7 +61,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready)
-  io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.pos_lmul), eidx, inst.mem_elem_size, false.B)
+  io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
   io.iss.bits.tail       := tail
   io.iss.bits.vat        := inst.vat
 

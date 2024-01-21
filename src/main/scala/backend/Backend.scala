@@ -75,7 +75,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
 
-  when (issue_inst.vconfig.vl <= issue_inst.vstart) {
+  when (issue_inst.vconfig.vl <= issue_inst.vstart && !(issue_inst.funct3 === OPIVI && issue_inst.opif6 === OPIFunct6.mvnrr)) {
     io.issue.ready := true.B
     vdq.io.enq.valid := false.B
     vmu.io.enq.valid := false.B
@@ -149,7 +149,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vlissq.io.enq.bits.writes_mask := false.B
   vlissq.io.enq.bits.reads_vs1_mask := false.B
   vlissq.io.enq.bits.reads_vs2_mask := false.B
-  vlissq.io.enq.bits.nf_log2 := VecInit.tabulate(8)({nf => log2Ceil(nf+1).U})(vdq.io.deq.bits.nf)
+  vlissq.io.enq.bits.nf_log2 := log2_up(vdq.io.deq.bits.nf, 8)
   vlissq.io.enq.bits.renv1 := false.B
   vlissq.io.enq.bits.renv2 := false.B
   vlissq.io.enq.bits.renvd := false.B
@@ -164,7 +164,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vsissq.io.enq.bits.writes_mask := false.B
   vsissq.io.enq.bits.reads_vs1_mask := false.B
   vsissq.io.enq.bits.reads_vs2_mask := false.B
-  vsissq.io.enq.bits.nf_log2 := VecInit.tabulate(8)({nf => log2Ceil(nf+1).U})(vdq.io.deq.bits.nf)
+  vsissq.io.enq.bits.nf_log2 := log2_up(vdq.io.deq.bits.nf, 8)
   vsissq.io.enq.bits.renv1 := false.B
   vsissq.io.enq.bits.renv2 := false.B
   vsissq.io.enq.bits.renvd := true.B
@@ -204,6 +204,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vxissq.io.enq.bits.scalar_to_vd0 := xdis_ctrl.bool(ScalarToVD0)
   vxissq.io.enq.bits.reduction := xdis_ctrl.bool(Reduction)
   vxissq.io.enq.bits.rs1_is_rs2 := false.B
+  when (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.funct6 === OPIFunct6.mvnrr.litValue.U) {
+    vxissq.io.enq.bits.emul := log2_up(vdq.io.deq.bits.nf, 8)
+  }
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR

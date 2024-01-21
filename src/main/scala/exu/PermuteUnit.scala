@@ -14,7 +14,8 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     SLIDEUP.VI, SLIDEUP.VX, SLIDEDOWN.VI, SLIDEDOWN.VX,
     SLIDE1UP.VX, SLIDE1DOWN.VX, FSLIDE1UP.VF, FSLIDE1DOWN.VF,
     RGATHER_VV, RGATHER_VI, RGATHER_VX,
-    RGATHEREI16, COMPRESS.VV
+    RGATHEREI16, COMPRESS.VV,
+    MVNRR
   )
 
   io.iss.sub_dlen := Mux((io.iss.op.funct3 === OPIVV && io.iss.op.opif6.isOneOf(OPIFunct6.rgather, OPIFunct6.rgatherei16)) || (io.iss.op.funct3 === OPMVV && io.iss.op.funct6 === OPMFunct6.compress.litValue.U),
@@ -25,6 +26,7 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val wvd_reg = Reg(UInt(5.W))
   val result_reg = Reg(UInt(64.W))
 
+  val mvnrr = io.pipe(0).bits.funct3 === OPIVV && io.pipe(0).bits.opif6 === OPIFunct6.mvnrr
   val compress = io.pipe(0).bits.opmf6 === OPMFunct6.compress
   val rgatherei16 = io.pipe(0).bits.funct3 === OPIVV && io.pipe(0).bits.opif6 === OPIFunct6.rgatherei16
   val rgather = io.pipe(0).bits.opif6 === OPIFunct6.rgather || rgatherei16
@@ -68,6 +70,8 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     Mux(io.pipe(0).bits.tail, shifted_mask, 0.U))
   val use_rvs1_mask = FillInterleaved(8, Mux(slide1, slide1_mask, 0.U).pad(dLenB))
 
+  val wmask = Mux(mvnrr, ~(0.U(dLenB.W)),
+    Mux(compress, Mux(compress_bit, shifted_mask, 0.U), io.pipe(0).bits.wmask))
 
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
@@ -78,7 +82,7 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.write.bits.eg := Mux(compress,
     getEgId(compress_wvd, compress_eidx, io.pipe(0).bits.rvs2_eew, false.B),
     io.pipe(0).bits.wvd_eg)
-  io.write.bits.mask := FillInterleaved(8, Mux(compress, Mux(compress_bit, shifted_mask, 0.U), io.pipe(0).bits.wmask))
+  io.write.bits.mask := FillInterleaved(8, wmask)
   io.write.bits.data := Mux(rgather || compress,
     splat,
     (io.pipe(0).bits.rvs2_data & ~use_rvs1_mask) | (io.pipe(0).bits.rvs1_data & use_rvs1_mask))

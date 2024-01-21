@@ -27,6 +27,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_tail  = Reg(Bool())
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
 
+  val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
   val compress = inst.opmf6 === OPMFunct6.compress
   val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew)
@@ -59,7 +60,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
 
   val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
-  val eff_vl    = Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl)
+  val eff_vl    = Mux(mvnrr, ((vLen/8).U >> vd_eew) << inst.emul, Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl))
   val increments_as_mask = (!inst.renv1 || inst.reads_vs1_mask) && (!inst.renv2 || inst.reads_vs2_mask) && (!inst.wvd || inst.writes_mask)
   val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, increments_as_mask)
   val eidx_tail = next_eidx === eff_vl
@@ -74,9 +75,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     assert(iss_inst.vstart === 0.U)
     eidx := 0.U
 
-    val vd_arch_mask  = get_arch_mask(iss_inst.rd , iss_inst.pos_lmul +& iss_inst.wide_vd)
-    val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_vs1_mask, 0.U, iss_inst.pos_lmul))
-    val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_vs2_mask, 0.U, iss_inst.pos_lmul +& iss_inst.wide_vs2))
+    val vd_arch_mask  = get_arch_mask(iss_inst.rd , iss_inst.emul +& iss_inst.wide_vd)
+    val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_vs1_mask, 0.U, iss_inst.emul))
+    val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_vs2_mask, 0.U, iss_inst.emul +& iss_inst.wide_vs2))
 
     wvd_mask    := Mux(iss_inst.wvd  , FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvs1_mask   := Mux(iss_inst.renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
