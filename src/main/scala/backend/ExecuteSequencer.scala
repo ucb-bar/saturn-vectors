@@ -198,7 +198,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
   val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << vd_eew)(dLenOffBits-1,0))
-  val slide1up_mask = Mux(head, eewByteMask(vs2_eew), 0.U)
+  val slide1up_mask = Mux(head && !inst.isOpi, eewByteMask(vs2_eew), 0.U)
   val slideup_mask = Mux(slide && slide_up && eidx < slide_offset,
     Mux(next_eidx <= slide_offset, 0.U, dlen_mask << (slide_offset << vd_eew)(dLenOffBits-1,0)) | slide1up_mask,
     dlen_mask)
