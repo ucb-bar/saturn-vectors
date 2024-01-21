@@ -40,7 +40,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   when (io.dis.fire) {
     val iss_inst = io.dis.bits
     val offset = Mux(iss_inst.isOpi, get_max_offset(Mux(iss_inst.funct3(2), iss_inst.rs1_data, iss_inst.imm5)), 1.U)
-    val slide = !inst.vmu && iss_inst.funct3 =/= OPIVV
+    val slide = !iss_inst.vmu && iss_inst.funct3 =/= OPIVV
     val slide_up = !iss_inst.funct6(0)
     val slide_start = Mux(slide_up, 0.U, offset)
     val vlmax = iss_inst.vconfig.vtype.vlMax
