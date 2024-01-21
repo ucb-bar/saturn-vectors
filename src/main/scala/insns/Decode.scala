@@ -23,7 +23,7 @@ class VectorDecoder(
   val table = insns.map { i => fields.map(f => i.lookup(f)) :+ BitPat(true.B) }
 
   val elementsGrouped = table.transpose
-  val defaults = fields.map(_.default) :+ BitPat(false.B)
+  val defaults = fields.map(_.dontCare) :+ BitPat(false.B)
   val elementWidths = elementsGrouped.zip(defaults).map { case (elts, default) =>
     require(elts.forall(_.getWidth == default.getWidth))
     default.getWidth

@@ -32,10 +32,10 @@ object UsesPermuteSeq    extends NDefaultInstructionField
 
 // Execute Sequencer control
 object SetsWMask         extends YDefaultInstructionField
-object AccInitZeros      extends XDefaultInstructionField
-object AccInitOnes       extends XDefaultInstructionField
-object AccInitPos        extends XDefaultInstructionField
-object AccInitNeg        extends XDefaultInstructionField
+object AccInitZeros      extends NDefaultInstructionField
+object AccInitOnes       extends NDefaultInstructionField
+object AccInitPos        extends NDefaultInstructionField
+object AccInitNeg        extends NDefaultInstructionField
 
 // Integer Pipe control
 object Swap12            extends NDefaultInstructionField

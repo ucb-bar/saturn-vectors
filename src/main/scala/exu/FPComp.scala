@@ -25,8 +25,8 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     supported_insns, Seq(WritesAsMask, FPComp, FPCompMin, FPMEQ, FPMNE, FPMLT, FPMGT, FPSgnj))
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
-  val ctrl_sgnjn = io.pipe(0).bits.funct6(0) === 1.U
-  val ctrl_sgnjx = io.pipe(0).bits.funct6(1) === 2.U
+  val ctrl_sgnjn = io.pipe(0).bits.funct6(0)
+  val ctrl_sgnjx = io.pipe(0).bits.funct6(1)
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val rvd_eew  = io.pipe(0).bits.rvd_eew

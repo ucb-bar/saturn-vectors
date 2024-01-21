@@ -14,6 +14,7 @@ trait InstructionField {
   def width: Int
   def Y = InstructionProperty(this, true.B)
   def N = InstructionProperty(this, false.B)
+  def dontCare: BitPat = BitPat.dontCare(width)
   def apply(v: UInt) = InstructionProperty(this, v(width-1,0))
   def apply(v: BitPat) = InstructionProperty(this, v)
   def apply(e: EnumType) = InstructionProperty(this, e.litValue.U(width.W))
