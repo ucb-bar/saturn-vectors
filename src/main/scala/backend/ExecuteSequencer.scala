@@ -259,7 +259,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   when (rgather_v || rgatherei16) {
     io.iss.bits.rvs1_data := rgather_eidx
   }
-  when (rgather_zero && rgather) {
+  when (rgather_zero && (rgather || rgatherei16)) {
     io.iss.bits.rvs2_data := 0.U
   }
   when (slide) {
