@@ -91,7 +91,8 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
     for ((fu, j) <- pipe_fus.zipWithIndex) {
       for (i <- 0 until fu.depth) {
         fu.io.pipe(i).valid := pipe_valids(i) && pipe_sels(i)(j)
-        fu.io.pipe(i).bits  := pipe_bits(i)
+        fu.io.pipe(i).bits  := Mux(pipe_valids(i) && pipe_sels(i)(j),
+          pipe_bits(i), 0.U.asTypeOf(new ExecuteMicroOp))
       }
     }
 
