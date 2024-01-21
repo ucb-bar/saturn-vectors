@@ -386,7 +386,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   shift_arr.io.shl       := ctrl.bool(ShiftsLeft)
   shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
   shift_arr.io.rm        := io.pipe(0).bits.vxrm
-  shift_arr.io.scaling   := ctrl.bool(ScalingShift) //io.pipe(0).bits.opif6.isOneOf(OPIFunct6.ssra, OPIFunct6.ssrl, OPIFunct6.nclip, OPIFunct6.nclipu)
+  shift_arr.io.scaling   := ctrl.bool(ScalingShift)
   shift_arr.io.narrowing := shift_narrowing
 
   val shift_out = shift_arr.io.out.asUInt

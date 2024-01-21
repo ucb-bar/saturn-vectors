@@ -92,15 +92,15 @@ object ASUBU     extends OPMInstruction    { val props = Seq(F6(OPMFunct6.asubu)
 object ASUB      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.asub)    , DoSub.Y, Averaging.Y, CarryIn.N) }
 object SSRL      extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ssrl)    , UsesShift.Y, ShiftsLeft.N, ScalingShift.Y) }
 object SSRA      extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ssra)    , UsesShift.Y, ShiftsLeft.N, ScalingShift.Y) }
-object NCLIPU    extends OPIInstruction    { val props = Seq(F6(OPIFunct6.nclipu)  , UsesShift.Y, ShiftsLeft.N, ScalingShift.Y) }
-object NCLIP     extends OPIInstruction    { val props = Seq(F6(OPIFunct6.nclip)   , UsesShift.Y, ShiftsLeft.N, ScalingShift.Y) }
+object NCLIPU    extends OPIInstruction    { val props = Seq(F6(OPIFunct6.nclipu)  , UsesShift.Y, ShiftsLeft.N, ScalingShift.Y, Wide2VS2.Y) }
+object NCLIP     extends OPIInstruction    { val props = Seq(F6(OPIFunct6.nclip)   , UsesShift.Y, ShiftsLeft.N, ScalingShift.Y, Wide2VS2.Y) }
 object REDSUM    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.redsum)  , Reduction.Y, AccInitZeros.Y, DoSub.N, Averaging.N, CarryIn.N) }
 object WREDSUM   extends OPIInstruction    { val props = Seq(F6(OPIFunct6.wredsum) , Reduction.Y, AccInitZeros.Y, DoSub.N, Averaging.N, CarryIn.N, WideningSext.Y, Wide2VD.Y) }
 object WREDSUMU  extends OPIInstruction    { val props = Seq(F6(OPIFunct6.wredsumu), Reduction.Y, AccInitZeros.Y, DoSub.N, Averaging.N, CarryIn.N, WideningSext.N, Wide2VD.Y) }
 object REDMINU   extends OPMInstruction    { val props = Seq(F6(OPMFunct6.redminu) , Reduction.Y, AccInitOnes.Y , UsesMinMax.Y, CmpLess.Y) }
 object REDMIN    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.redmin)  , Reduction.Y, AccInitPos.Y  , UsesMinMax.Y, CmpLess.Y) }
 object REDMAXU   extends OPMInstruction    { val props = Seq(F6(OPMFunct6.redmaxu) , Reduction.Y, AccInitZeros.Y, UsesMinMax.Y, CmpLess.Y, Swap12.Y) }
-object REDMAX    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.redmax)  , Reduction.Y, AccInitNeg.Y  ,UsesMinMax.Y, CmpLess.Y, Swap12.Y) }
+object REDMAX    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.redmax)  , Reduction.Y, AccInitNeg.Y  , UsesMinMax.Y, CmpLess.Y, Swap12.Y) }
 object FMERGE    extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fmerge)  , AlwaysReadsVM.Y, UsesMerge.Y, SetsWMask.N) }
 
 
