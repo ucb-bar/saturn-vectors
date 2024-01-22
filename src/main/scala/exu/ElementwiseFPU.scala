@@ -44,7 +44,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
 
   val ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Seq(
-    FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT))
+    FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VS2))
   val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
   val ctrl_isFUnary = io.iss.op.opff6.isOneOf(OPFFunct6.funary0, OPFFunct6.funary1)
   val ctrl_isFMA = ctrl.bool(FPMul) || ctrl.bool(FPAdd)
@@ -133,7 +133,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   }
 
   val rvs2_elem = Mux((is_double && !(ctrl_widen && ctrl_inttofp)) || (is_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
-  val rvs1_elem = Mux(is_double, d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
+  val rvs1_elem = Mux(is_double && !ctrl.bool(Wide2VS2), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
   val rvd_elem = Mux(is_double, d_rvd, s_rvd)
 
   // widening circuitry
