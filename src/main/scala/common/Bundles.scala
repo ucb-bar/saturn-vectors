@@ -159,6 +159,11 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   def opif6 = Mux(isOpi, OPIFunct6(funct6), OPIFunct6.illegal)
   def opff6 = Mux(isOpf, OPFFunct6(funct6), OPFFunct6.illegal)
 
+  def vd_eew8  = vd_eew === 0.U
+  def vd_eew16 = vd_eew === 1.U
+  def vd_eew32 = vd_eew === 2.U
+  def vd_eew64 = vd_eew === 3.U
+
   val funct6 = UInt(6.W)
   val rs1 = UInt(5.W)
   val rs2 = UInt(5.W)

@@ -38,92 +38,86 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     FCVT_SGL, FCVT_NRW, FCVT_WID
   )
 
-  io.iss.sub_dlen := log2Ceil(dLenB).U - Mux(io.iss.op.rvs2_eew === 3.U, io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
-  io.set_vxsat := false.B
-
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
-
   val ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Seq(
-    FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VS2))
-  val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
-  val ctrl_isFUnary = io.iss.op.opff6.isOneOf(OPFFunct6.funary0, OPFFunct6.funary1)
-  val ctrl_isFMA = ctrl.bool(FPMul) || ctrl.bool(FPAdd)
+    FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2))
 
-  val vs1_eew = io.iss.op.rvs1_eew
-  val vs2_eew = io.iss.op.rvs2_eew
-  val vd_eew  = io.iss.op.vd_eew
-  val ctrl_widen_vs2 = vs2_eew =/= vd_eew
-  val ctrl_widen_vs1 = vs1_eew =/= vd_eew
-
-  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
-  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
-  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
-
-  val is_funary1 = io.iss.op.opff6.isOneOf(OPFFunct6.funary1)
-  val is_funary0 = io.iss.op.opff6.isOneOf(OPFFunct6.funary0)
-  val is_vfclass = is_funary1 && (io.iss.op.rs1 === 16.U)
-  val rs1 = io.iss.op.rs1
-  val ctrl_widen = rs1(3)
-  val ctrl_narrow = rs1(4)
-  val ctrl_signed = rs1(0)
-  val ctrl_out = !rs1(2) && rs1(1)
-  val ctrl_truncating = rs1(2) && rs1(1)
-  val ctrl_round_to_odd = rs1(0)
-  val ctrl_fptoint = is_funary0 && ((!rs1(2) && !rs1(1)) || (rs1(2) && rs1(1)))
-  val ctrl_inttofp = is_funary0 && (!rs1(2) && rs1(1)) 
-  val ctrl_fptofp = is_funary0 && (rs1(2) && !rs1(1))
+  // Functional unit is ready if not currently running and the scalar FPU is available
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
+  io.iss.sub_dlen := log2Ceil(dLenB).U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
 
-  val eidx = io.iss.op.eidx
-  val in_eew = io.iss.op.rvs2_eew
-  val out_eew = io.iss.op.vd_eew
-  val is_double = io.iss.op.vd_eew === 3.U 
+  val vs1_eew = io.iss.op.rvs1_eew
+  val vs2_eew = io.iss.op.rvs2_eew
+  val vd_eew  = io.iss.op.vd_eew
+  val vd_eew64 = io.iss.op.vd_eew64
 
+  val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
+  val ctrl_isFMA = ctrl.bool(FPMul) || ctrl.bool(FPAdd)
+  val ctrl_funary0 = io.iss.op.opff6.isOneOf(OPFFunct6.funary0)
+  val ctrl_funary1 = io.iss.op.opff6.isOneOf(OPFFunct6.funary1)
+  val ctrl_vfclass = ctrl_funary1 && (io.iss.op.rs1 === 16.U)
+
+  val rs1 = io.iss.op.rs1
+  val ctrl_widen = rs1(3)
+  val ctrl_narrow = rs1(4)
+  val ctrl_signed = rs1(0)
+  val ctrl_truncating = rs1(2) && rs1(1)
+  val ctrl_round_to_odd = rs1(0)
+  val ctrl_fptoint = ctrl_funary0 && ((!rs1(2) && !rs1(1)) || (rs1(2) && rs1(1)))
+  val ctrl_inttofp = ctrl_funary0 && (!rs1(2) && rs1(1)) 
+  val ctrl_fptofp = ctrl_funary0 && (rs1(2) && !rs1(1))
+
+  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
+  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
+  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
+
+  val eidx = io.iss.op.eidx
+  //val in_eew = io.iss.op.rvs2_eew
+  val out_eew = io.iss.op.vd_eew
+
+  // Create FPInput 
   val req = Wire(new FPInput)
   req.ldst := false.B
   req.wen := false.B
   req.ren1 := true.B
-  req.ren2 := !ctrl_isFUnary
+  req.ren2 := !(ctrl_funary0 || ctrl_funary1)
   req.ren3 := ctrl.bool(ReadsVD)
   req.swap12 := false.B
   req.swap23 := ctrl.bool(FPAdd) && !ctrl.bool(FPMul)
-  req.typeTagIn := Mux(vd_eew === 3.U, D, S)
-  req.typeTagOut := Mux(vd_eew === 3.U, D, S)
-  req.fromint := is_funary0 && (!rs1(2) && rs1(1))
-  req.toint := (ctrl_fptoint) || (is_funary1 && io.iss.op.rs1 === 16.U) || ctrl.bool(WritesAsMask)  
+  req.typeTagIn := Mux(vd_eew64, D, S)
+  req.typeTagOut := Mux(vd_eew64, D, S)
+  req.fromint := ctrl_inttofp
+  req.toint := (ctrl_fptoint) || ctrl_vfclass || ctrl.bool(WritesAsMask)  
   req.fastpipe := ctrl_fptofp || ctrl.bool(FPSgnj) || ctrl.bool(FPComp)
   req.fma := ctrl_isFMA 
   req.div := ctrl_isDiv
-  req.sqrt := is_funary1 && (io.iss.op.rs1 === 0.U)
-  req.wflags := !is_vfclass && !ctrl.bool(FPSgnj) 
+  req.sqrt := ctrl_funary1 && (rs1 === 0.U)
+  req.wflags := !ctrl_vfclass && !ctrl.bool(FPSgnj) 
   req.vec := true.B
-  
-  req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl.bool(FPAdd) && !ctrl.bool(FPMul) && !ctrl_isDiv && !is_funary1 && !is_funary0) || is_vfclass, ctrl.uint(FPSpecRM), io.iss.op.frm))
+  req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl.bool(FPAdd) && !ctrl.bool(FPMul) && !ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), io.iss.op.frm))
   req.fmaCmd := ctrl.uint(FPFMACmd)
-  req.typ := Mux(is_funary0, Cat(((vd_eew === 3.U) && !ctrl_widen) || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
-  //req.typ := Mux(is_funary0, Cat(ctrl_widen || (vd_eew === 3.U), !ctrl_signed), 0.U)
+  req.typ := Mux(ctrl_funary0, Cat((vd_eew64 && !ctrl_widen) || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
-  val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, in_eew, eidx)(63, 0)
-  val rvs1_extract = extract(io.iss.op.rvs1_data, false.B, in_eew, eidx)(63, 0) 
-  val rvd_extract = extract(io.iss.op.rvd_data, false.B, out_eew, eidx)(63, 0) 
+  val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, vs2_eew, eidx)(63,0)
+  val rvs1_extract = extract(io.iss.op.rvs1_data, false.B, vs1_eew, eidx)(63,0) 
+  val rvd_extract = extract(io.iss.op.rvd_data, false.B, out_eew, eidx)(63,0) 
 
-  val s_rvs2 = Mux(ctrl_inttofp, rvs2_extract(31,0), FType.S.recode(Mux(is_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0))))
+  val s_rvs2 = Mux(ctrl_inttofp, rvs2_extract(31,0), FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0))))
   val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
   val s_rvd = FType.S.recode(rvd_extract(31,0))
 
-  val s_isNaN = FType.S.isNaN(s_rvs2) || FType.S.isNaN(s_rvs1)
-
-  val d_rvs2 = Mux(ctrl_inttofp, rvs2_extract(63,0), FType.D.recode(Mux(is_funary0 && ctrl_truncating, rvs2_extract(63, 51) << 51, rvs2_extract)))
+  val d_rvs2 = Mux(ctrl_inttofp, rvs2_extract, FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(63, 51) << 51, rvs2_extract)))
   val d_rvs1 = FType.D.recode(rvs1_extract)
   val d_rvd = FType.D.recode(rvd_extract)
 
+  val s_isNaN = FType.S.isNaN(s_rvs2) || FType.S.isNaN(s_rvs1)
   val d_isNaN = FType.D.isNaN(d_rvs2) || FType.D.isNaN(d_rvs1)
 
-  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((io.iss.op.vd_eew === 3.U && d_isNaN) || (io.iss.op.vd_eew === 2.U && s_isNaN)) 
+  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (io.iss.op.vd_eew32 && s_isNaN)) 
   val mgt_NaN_reg = RegInit(false.B)
 
   when (io.fp_req.fire() && mgt_NaN) {
@@ -132,11 +126,11 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     mgt_NaN_reg := false.B
   }
 
-  val rvs2_elem = Mux((is_double && !(ctrl_widen && ctrl_inttofp)) || (is_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
-  val rvs1_elem = Mux(is_double && !ctrl.bool(Wide2VS2), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
-  val rvd_elem = Mux(is_double, d_rvd, s_rvd)
+  val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && ctrl_inttofp)) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
+  val rvs1_elem = Mux(vd_eew64 && !ctrl.bool(Wide2VD), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
+  val rvd_elem = Mux(vd_eew64, d_rvd, s_rvd)
 
-  // widening circuitry
+  // For widening operations, widen the narrow operands to compute with the scalar FPU 
   val widen_rvs1 = Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53))
   widen_rvs1.io.in := s_rvs1
   widen_rvs1.io.roundingMode := io.iss.op.frm
@@ -147,8 +141,8 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   widen_rvs2.io.roundingMode := io.iss.op.frm
   widen_rvs2.io.detectTininess := hardfloat.consts.tininess_afterRounding
 
-  req.in1 := Mux(ctrl_widen_vs2 && !(ctrl_widen && ctrl_inttofp) && !(is_funary0 && ctrl_narrow), widen_rvs2.io.out, Mux(ctrl.bool(FPSwapVdV2), rvd_elem, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs1_elem, rvs2_elem)))
-  req.in2 := Mux(ctrl_widen_vs1, widen_rvs1.io.out, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs2_elem, rvs1_elem))
+  req.in1 := Mux(ctrl.bool(Wide2VD) && !ctrl.bool(Wide2VS2) && !(ctrl_widen && ctrl_inttofp) && !(ctrl_funary0 && ctrl_narrow), widen_rvs2.io.out, Mux(ctrl.bool(FPSwapVdV2), rvd_elem, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs1_elem, rvs2_elem)))
+  req.in2 := Mux(ctrl.bool(Wide2VD), widen_rvs1.io.out, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs2_elem, rvs1_elem))
   req.in3 := Mux(ctrl.bool(FPSwapVdV2), rvs2_elem, rvd_elem)
 
   io.fp_req.bits := req
@@ -156,6 +150,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   io.fp_resp.ready := io.write.ready
 
+  // Approximation Instructions
   val rvs2_op_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
 
   // Reciprocal Sqrt Approximation
@@ -169,36 +164,36 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   rec7.io.eew := op.rvs2_eew
   rec7.io.frm := op.frm
 
-  val final_write_bits = Wire(UInt(64.W))
+  val write_bits = Wire(UInt(64.W))
 
   when (ctrl.bool(WritesAsMask)) {
     when (ctrl.bool(FPMNE) || (ctrl.bool(FPMGT) && !mgt_NaN_reg)) {
-      final_write_bits := Fill(dLen, !io.fp_resp.bits.data(0))
+      write_bits := Fill(dLen, !io.fp_resp.bits.data(0))
     } .elsewhen (ctrl.bool(FPMGT) && mgt_NaN_reg) {
-      final_write_bits := Fill(dLen, 0.U)
+      write_bits := Fill(dLen, 0.U)
     } .otherwise {
-      final_write_bits := Fill(dLen, io.fp_resp.bits.data(0)) 
+      write_bits := Fill(dLen, io.fp_resp.bits.data(0)) 
     }
   } .elsewhen (vfclass_inst) {
-    final_write_bits := Mux(vd_eew === 3.U, Cat(0.U(54.W), io.fp_resp.bits.data(9,0)), Fill(2, Cat(0.U(22.W), io.fp_resp.bits.data(9,0)))) 
+    write_bits := Mux(vd_eew64, Cat(0.U(54.W), io.fp_resp.bits.data(9,0)), Fill(2, Cat(0.U(22.W), io.fp_resp.bits.data(9,0)))) 
   } .elsewhen (ctrl_fptoint) {
-    final_write_bits := Mux(vd_eew === 3.U, io.fp_resp.bits.data(63,0), Fill(2, io.fp_resp.bits.data(31,0)))
+    write_bits := Mux(vd_eew64, io.fp_resp.bits.data(63,0), Fill(2, io.fp_resp.bits.data(31,0)))
   } .otherwise {
-    final_write_bits := Mux(is_double, FType.D.ieee(io.fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io.fp_resp.bits.data, 0.U, Some(FType.S)))))
+    write_bits := Mux(vd_eew64, FType.D.ieee(io.fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io.fp_resp.bits.data, 0.U, Some(FType.S)))))
   }
 
-  val mask_bit = Mux(op.vd_eew === 3.U, op.wmask(0), Mux(op.eidx(0), op.wmask(4), op.wmask(0)))
+  val mask_bit = Mux(op.vd_eew64, op.wmask(0), Mux(op.eidx(0), op.wmask(4), op.wmask(0)))
 
   io.write.valid := io.fp_resp.fire() || ((vfrsqrt7_inst || vfrec7_inst) && valid)
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), ((1.U(dLen.W) & mask_bit) << (op.eidx % dLen.U)), FillInterleaved(8, op.wmask))
   io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io.fp_resp.fire()),
-                              Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, final_write_bits)))
+                              Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, write_bits)))
 
   last := io.write.fire()
 
   io.set_fflags := DontCare
-
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
+  io.set_vxsat := false.B
 }
