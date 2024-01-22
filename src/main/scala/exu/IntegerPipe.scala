@@ -43,30 +43,49 @@ class AdderArray(dLenB: Int) extends Module {
   val in1 = Mux(io.avg, avg_in1, io.in1)
   val in2 = Mux(io.avg, avg_in2, io.in2)
 
-  val round_incrs = io.in1.zip(io.in2).zipWithIndex.map{ case((l, r), i) =>
-    val sum = r(1,0) +& ((l(1,0) ^ Fill(2, io.sub)) +& io.sub)
-    Cat(0.U(7.W), Cat(Mux(io.avg, RoundingIncrement(io.rm, sum(1), sum(0), None) & !use_carry(i), 0.U), 0.U(1.W)))
-  }.asUInt
-
-  val in1_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
-  val in2_dummy_bits = Wire(Vec(dLenB/8, UInt(8.W)))
-
   for (i <- 0 until (dLenB >> 3)) {
+    val h = (i+1)*8-1
+    val l = i*8
+    val io_in1_slice = io.in1.slice(l,h+1)
+    val io_in2_slice = io.in2.slice(l,h+1)
+    val in1_slice = in1.slice(l,h+1)
+    val in2_slice = in2.slice(l,h+1)
+    val use_carry_slice = use_carry(h,l).asBools
+    val mask_carry_slice = io.mask_carry(h,l).asBools
+    val incr_slice = io.incr.slice(l,h+1)
 
-    in1_dummy_bits(i) := io.in1.zip(io.in2).zip(use_carry.asBools).zip(io.mask_carry((i*8)+7,i*8).asBools).map { case(((i1, i2), carry), mask_bit) => 
-      Mux(carry, 1.U(1.W), Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit)))) 
-    }.asUInt
-    in2_dummy_bits(i) := io.in1.zip(io.in2).zip(use_carry.asBools).zip(io.mask_carry((i*8)+7,i*8).asBools).map { case(((i1, i2), carry), mask_bit) => 
-      Mux(carry, 0.U(1.W), Mux(io.avg, ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub), (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))))
-    }.asUInt
+    val in1_dummy_bits = (io_in1_slice
+      .zip(io_in2_slice)
+      .zip(use_carry_slice)
+      .zip(mask_carry_slice).map { case(((i1, i2), carry), mask_bit) => {
+        val avg_bit = ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub)
+        val bit = (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))
+        Mux(carry, 1.U(1.W), Mux(io.avg, avg_bit, bit))
+      }})
+    val in2_dummy_bits = (io_in1_slice
+      .zip(io_in2_slice)
+      .zip(use_carry_slice)
+      .zip(mask_carry_slice).map { case(((i1, i2), carry), mask_bit) => {
+        val avg_bit = ((io.sub ^ i1(0)) & i2(0)) | (((io.sub ^ i1(0)) ^ i2(0)) & io.sub)
+        val bit = (!io.cmask & io.sub) | (io.cmask & (io.sub ^ mask_bit))
+        Mux(carry, 0.U(1.W), Mux(io.avg, avg_bit, bit))
+      }})
+    val round_incrs = (io_in1_slice
+      .zip(io_in2_slice)
+      .zipWithIndex.map { case((l, r), i) => {
+        val sum = r(1,0) +& ((l(1,0) ^ Fill(2, io.sub)) +& io.sub)
+        Cat(0.U(7.W), Cat(Mux(io.avg, RoundingIncrement(io.rm, sum(1), sum(0), None) & !use_carry_slice(i), 0.U), 0.U(1.W)))
+      }}
+      .asUInt)
 
-    val in1_constructed = in1.zip(in1_dummy_bits(i).asBools).map{ case(i1, dummy_bit) => (i1 ^ Fill(8, io.sub)) ## dummy_bit }.asUInt
-    val in2_constructed = in2.zip(in2_dummy_bits(i).asBools).map{ case(i2, dummy_bit) => i2 ## dummy_bit }.asUInt
 
-    val incr_constructed = io.incr.zip(use_carry.asBools).map{ case(incr, masking) => Cat(0.U(7.W), Cat(Mux(!masking, incr, 0.U(1.W)), 0.U(1.W))) }.asUInt
+    val in1_constructed = in1_slice.zip(in1_dummy_bits).map { case(i1, dummy_bit) => (i1 ^ Fill(8, io.sub)) ## dummy_bit }.asUInt
+    val in2_constructed = in2_slice.zip(in2_dummy_bits).map { case(i2, dummy_bit) => i2 ## dummy_bit }.asUInt
+
+    val incr_constructed = incr_slice.zip(use_carry_slice).map { case(incr, masking) => Cat(0.U(7.W), Cat(Mux(!masking, incr, 0.U(1.W)), 0.U(1.W))) }.asUInt
 
     val sum = (((in1_constructed +& in2_constructed) & carry_clear) | carry_restore) +& round_incrs +& incr_constructed
-    
+
     for (j <- 0 until 8) {
       io.out((i*8) + j) := sum(((j+1)*9)-1, (j*9) + 1)
       io.carry((i*8) + j) := sum((j+1)*9)
