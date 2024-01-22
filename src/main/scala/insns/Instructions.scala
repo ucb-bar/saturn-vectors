@@ -197,8 +197,8 @@ object MFLT      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.mflt) 
 object MFLE      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.mfle)     , WritesAsMask.Y, FPMEQ.Y, FPMNE.N, FPMLT.Y, FPMGT.N, FPAdd.N, FPMul.N, FPSpecRM(0.U(3.W))) }
 object MFGT      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.mfgt)     , WritesAsMask.Y, FPMEQ.N, FPMNE.N, FPMLT.N, FPMGT.Y, FPAdd.N, FPMul.N, FPSpecRM(0.U(3.W))) }
 object MFGE      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.mfge)     , WritesAsMask.Y, FPMEQ.Y, FPMNE.N, FPMLT.N, FPMGT.Y, FPAdd.N, FPMul.N, FPSpecRM(1.U(3.W))) }
-object FREDMIN   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredmin)  , FPComp.Y, FPCompMin.Y, Reduction.Y, FPAdd.N, FPMul.N) }
-object FREDMAX   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredmax)  , FPComp.Y, FPCompMin.N, Reduction.Y, FPAdd.N, FPMul.N) }
+object FREDMIN   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredmin)  , FPComp.Y, FPCompMin.Y, Reduction.Y, FPAdd.N, FPMul.N, FPSpecRM(0.U(3.W))) }
+object FREDMAX   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredmax)  , FPComp.Y, FPCompMin.N, Reduction.Y, FPAdd.N, FPMul.N, FPSpecRM(1.U(3.W))) }
 
 object FCVT_SGL  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary0), F3(VectorConsts.OPFVV), RS1(BitPat("b00???")), FPAdd.N, FPMul.N) }
 object FCVT_WID  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary0), F3(VectorConsts.OPFVV), RS1(BitPat("b01???")), Wide2VD.Y, FPAdd.N, FPMul.N) }

@@ -42,12 +42,8 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2))
 
   // Functional unit is ready if not currently running and the scalar FPU is available
-  val sub_dlen_subtract = Wire(UInt(2.W))
-  sub_dlen_subtact := Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.vd_eew)
-
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
-  io.iss.sub_dlen := dLenOffBits.U - sub_dlen_subtract
-  //io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
+  io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
@@ -90,8 +86,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.swap23 := ctrl.bool(FPAdd) && !ctrl.bool(FPMul)
   req.typeTagIn := Mux((vs2_eew === 3.U) && !(ctrl_inttofp && ctrl_narrow), D, S)
   req.typeTagOut := Mux(vd_eew64, D, S)
-  //req.typeTagIn := Mux(vd_eew64, D, S)
-  //req.typeTagOut := Mux(vd_eew64, D, S)
   req.fromint := ctrl_inttofp
   req.toint := (ctrl_fptoint) || ctrl_vfclass || ctrl.bool(WritesAsMask)  
   req.fastpipe := ctrl_fptofp || ctrl.bool(FPSgnj) || ctrl.bool(FPComp)
@@ -103,7 +97,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl.bool(FPAdd) && !ctrl.bool(FPMul) && !ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), io.iss.op.frm))
   req.fmaCmd := ctrl.uint(FPFMACmd)
   req.typ := Mux(ctrl_funary0, Cat(vd_eew64 || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
-  //req.typ := Mux(ctrl_funary0, Cat((vd_eew64 && !ctrl_widen) || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
   val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, vs2_eew, eidx)(63,0)
@@ -126,13 +119,11 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   when (io.fp_req.fire() && mgt_NaN) {
     mgt_NaN_reg := true.B
-  } .elsewhen (io.write.fire) {
+  } .elsewhen (io.write.fire()) {
     mgt_NaN_reg := false.B
   }
 
   val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint || ctrl_fptofp))) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
-  //val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint))) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
-  //val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && ctrl_inttofp)) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
   val rvs1_elem = Mux(vd_eew64 && !ctrl.bool(Wide2VD), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
   val rvd_elem = Mux(vd_eew64, d_rvd, s_rvd)
 
@@ -152,7 +143,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.in3 := Mux(ctrl.bool(FPSwapVdV2), rvs2_elem, rvd_elem)
 
   io.fp_req.bits := req
-  io.fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst
+  io.fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN 
 
   io.fp_resp.ready := io.write.ready
 
@@ -190,7 +181,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   val mask_bit = Mux(op.vd_eew64, op.wmask(0), Mux(op.eidx(0), op.wmask(4), op.wmask(0)))
 
-  io.write.valid := io.fp_resp.fire() || ((vfrsqrt7_inst || vfrec7_inst) && valid)
+  io.write.valid := io.fp_resp.fire() || ((vfrsqrt7_inst || vfrec7_inst || mgt_NaN_reg) && valid)
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), ((1.U(dLen.W) & mask_bit) << (op.eidx % dLen.U)), FillInterleaved(8, op.wmask))
   io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io.fp_resp.fire()),
