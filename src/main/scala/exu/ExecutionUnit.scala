@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
+class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
   val supported_insns = fus.map(_.supported_insns).flatten
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
@@ -37,19 +37,6 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
 
   val fp_req = Wire(Decoupled(new FPInput()))
   val fp_resp = Wire(Flipped(Decoupled(new FPResult)))
-
-  if (vParams.useScalarFPUFMAPipe) {
-    fp_req <> elementwise_fpu.io.fp_req
-    elementwise_fpu.io.fp_resp <> io.fp_resp
-  } else {
-    io.fp_req.valid := DontCare
-    io.fp_req.bits := DontCare
-  }
-
-  fus.map(_.io.iss).foreach { iss =>
-    iss.op := io.iss.bits
-    iss.valid := io.iss.valid
-  }
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
@@ -163,12 +150,12 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
     }
   }
   
-  if (vParams.useScalarFPUFMAPipe) {
-    io.fp_req <> elementwise_fpu(0).io.fp_req
-    elementwise_fpu(0).io.fp_resp <> io.fp_resp
+  if (elementwise_fpu.isEmpty) {
+    fp_req.valid := DontCare
+    fp_req.bits := DontCare
+    fp_resp.ready := DontCare
   } else {
-    io.fp_req.valid := DontCare
-    io.fp_req.bits := DontCare
-    io.fp_resp.ready := DontCare
-  }
+    fp_req <> elementwise_fpu.head.io.fp_req
+    elementwise_fpu.head.io.fp_resp <> fp_resp
+  } 
 }

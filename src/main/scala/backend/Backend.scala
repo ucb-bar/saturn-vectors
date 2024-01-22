@@ -111,43 +111,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.vat_tail := vat_tail
 
   val IntegerFUs = Seq(
-    () => new IntegerPipe,
-    () => new BitwisePipe,
-    () => if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(4)) else (new ElementwiseMultiplyPipe(4)),
-    () => new IterativeIntegerDivider,
-    () => new MaskUnit,
-    () => new PermutationUnit,
+    Module(new IntegerPipe),
+    Module(new BitwisePipe),
+    if (vParams.useSegmentedIMul) Module(new SegmentedMultiplyPipe(4)) else Module(new ElementwiseMultiplyPipe(4)),
+    Module(new IterativeIntegerDivider),
+    Module(new MaskUnit),
+    Module(new PermuteUnit),
   )
 
-  val ParallelFPFUs = Seq(
-    () => new FPFMAPipe(vParams.fmaPipeDepth),
-    () => new FPDivSqrt,
-    () => new FPCompPipe,
-    () => new FPConvPipe,
-  )
-
-  val IterativeFPFUs = Seq(
-    () => new ElementwiseFPU
-  )
-
-  val vxu = if (vParams.useScalarFPUFMAPipe) Module(new ExecutionUnit(IntegerFUs ++ IterativeFPFUs)) else
-                                             Module(new ExecutionUnit(IntegerFUs ++ ParallelFPFUs))
-
-  val int_unit = Module(new IntegerPipe)
-  val bw_unit = Module(new BitwisePipe)
-  val mul_unit = Module(if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)))
-  val div_unit = Module(new IterativeIntegerDivider)
-  val mask_unit = Module(new MaskUnit)
-  val perm_unit = Module(new PermuteUnit)
-  val fpfma_unit = Module(new FPFMAPipe(vParams.fmaPipeDepth))
-  val fpdiv_unit = Module(new FPDivSqrt)
-  val fpcomp_unit = Module(new FPCompPipe)
-  val fpconv_unit = Module(new FPConvPipe)
+  val FPFUs = if (vParams.useScalarFPUFMAPipe) 
+                Seq(Module(new ElementwiseFPU)) 
+              else
+                Seq(Module(new FPFMAPipe(vParams.fmaPipeDepth)),
+                Module(new FPDivSqrt),
+                Module(new FPCompPipe),
+                Module(new FPConvPipe))
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = new ExecutionUnit(int_unit, bw_unit, mul_unit, div_unit, mask_unit, perm_unit,
-    fpfma_unit, fpdiv_unit, fpcomp_unit, fpconv_unit)
+  val vxu = new ExecutionUnit(IntegerFUs ++ FPFUs)
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -168,8 +150,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val issqs = issGroups.map(_._1)
   val seqs = issGroups.map(_._2)
 
-  io.fp_req <> vxu.io.fp_req
-  vxu.io.fp_resp <> io.fp_resp
+  io.fp_req <> vxu.fp_req
+  vxu.fp_resp <> io.fp_resp
 
   vlissq.io.enq.bits.reduction := false.B
   vlissq.io.enq.bits.wide_vd := false.B
