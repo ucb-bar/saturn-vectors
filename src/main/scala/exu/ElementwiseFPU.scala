@@ -35,15 +35,19 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     MFLT.VV, MFLT.VF, MFLE.VV, MFLE.VF,
     MFGT.VF, MFGE.VF,
     FREDMIN.VV, FREDMAX.VV,
-    FCVT_SGL, FCVT_NRW, FCVT_WID
+    FCVT_SGL, FCVT_WID, FCVT_NRW
   )
 
   val ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2))
 
   // Functional unit is ready if not currently running and the scalar FPU is available
+  val sub_dlen_subtract = Wire(UInt(2.W))
+  sub_dlen_subtact := Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.vd_eew)
+
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
-  io.iss.sub_dlen := log2Ceil(dLenB).U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
+  io.iss.sub_dlen := dLenOffBits.U - sub_dlen_subtract
+  //io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
@@ -53,6 +57,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val vs2_eew = io.iss.op.rvs2_eew
   val vd_eew  = io.iss.op.vd_eew
   val vd_eew64 = io.iss.op.vd_eew64
+  val eidx = io.iss.op.eidx
 
   val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
   val ctrl_isFMA = ctrl.bool(FPMul) || ctrl.bool(FPAdd)
@@ -74,10 +79,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
 
-  val eidx = io.iss.op.eidx
-  //val in_eew = io.iss.op.rvs2_eew
-  val out_eew = io.iss.op.vd_eew
-
   // Create FPInput 
   val req = Wire(new FPInput)
   req.ldst := false.B
@@ -87,8 +88,10 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.ren3 := ctrl.bool(ReadsVD)
   req.swap12 := false.B
   req.swap23 := ctrl.bool(FPAdd) && !ctrl.bool(FPMul)
-  req.typeTagIn := Mux(vd_eew64, D, S)
+  req.typeTagIn := Mux((vs2_eew === 3.U) && !(ctrl_inttofp && ctrl_narrow), D, S)
   req.typeTagOut := Mux(vd_eew64, D, S)
+  //req.typeTagIn := Mux(vd_eew64, D, S)
+  //req.typeTagOut := Mux(vd_eew64, D, S)
   req.fromint := ctrl_inttofp
   req.toint := (ctrl_fptoint) || ctrl_vfclass || ctrl.bool(WritesAsMask)  
   req.fastpipe := ctrl_fptofp || ctrl.bool(FPSgnj) || ctrl.bool(FPComp)
@@ -99,12 +102,13 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.vec := true.B
   req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl.bool(FPAdd) && !ctrl.bool(FPMul) && !ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), io.iss.op.frm))
   req.fmaCmd := ctrl.uint(FPFMACmd)
-  req.typ := Mux(ctrl_funary0, Cat((vd_eew64 && !ctrl_widen) || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
+  req.typ := Mux(ctrl_funary0, Cat(vd_eew64 || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
+  //req.typ := Mux(ctrl_funary0, Cat((vd_eew64 && !ctrl_widen) || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
   val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, vs2_eew, eidx)(63,0)
   val rvs1_extract = extract(io.iss.op.rvs1_data, false.B, vs1_eew, eidx)(63,0) 
-  val rvd_extract = extract(io.iss.op.rvd_data, false.B, out_eew, eidx)(63,0) 
+  val rvd_extract = extract(io.iss.op.rvd_data, false.B, vd_eew, eidx)(63,0) 
 
   val s_rvs2 = Mux(ctrl_inttofp, rvs2_extract(31,0), FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0))))
   val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
@@ -126,7 +130,9 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     mgt_NaN_reg := false.B
   }
 
-  val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && ctrl_inttofp)) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
+  val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint || ctrl_fptofp))) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
+  //val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint))) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
+  //val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && ctrl_inttofp)) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
   val rvs1_elem = Mux(vd_eew64 && !ctrl.bool(Wide2VD), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
   val rvd_elem = Mux(vd_eew64, d_rvd, s_rvd)
 
@@ -141,7 +147,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   widen_rvs2.io.roundingMode := io.iss.op.frm
   widen_rvs2.io.detectTininess := hardfloat.consts.tininess_afterRounding
 
-  req.in1 := Mux(ctrl.bool(Wide2VD) && !ctrl.bool(Wide2VS2) && !(ctrl_widen && ctrl_inttofp) && !(ctrl_funary0 && ctrl_narrow), widen_rvs2.io.out, Mux(ctrl.bool(FPSwapVdV2), rvd_elem, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs1_elem, rvs2_elem)))
+  req.in1 := Mux(ctrl.bool(Wide2VD) && !ctrl.bool(Wide2VS2) && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint)) && !(ctrl_funary0 && ctrl_narrow), widen_rvs2.io.out, Mux(ctrl.bool(FPSwapVdV2), rvd_elem, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs1_elem, rvs2_elem)))
   req.in2 := Mux(ctrl.bool(Wide2VD), widen_rvs1.io.out, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs2_elem, rvs1_elem))
   req.in3 := Mux(ctrl.bool(FPSwapVdV2), rvs2_elem, rvd_elem)
 
