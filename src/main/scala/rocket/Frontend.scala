@@ -203,12 +203,10 @@ class VectorUnitModuleImp(outer: VectorUnit)(implicit p: Parameters) extends Roc
   d_load := tl_out.d.bits.opcode === TLMessages.AccessAckData
 
   // Save data returning on D channel
-  for (i <- 0 until vParams.tlMaxInflight) {
-    when(tl_out.d.bits.source === i.U && tl_out.d.valid) {
-      inflight_reqs_data(i.U).valid := d_load
-      inflight_reqs_data(i.U).bits := tl_out.d.bits.data
-      inflight_reqs_valid(i.U) := d_load //if d message was store, then free source id
-    }
+  when (tl_out.d.valid) {
+    inflight_reqs_data(tl_out.d.bits.source).valid := d_load
+    inflight_reqs_data(tl_out.d.bits.source).bits := tl_out.d.bits.data
+    inflight_reqs_valid(tl_out.d.bits.source) := d_load //if d message was store, then free source id
   }
 
   //Interface with vector unit
