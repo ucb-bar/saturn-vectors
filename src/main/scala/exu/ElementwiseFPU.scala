@@ -39,7 +39,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   )
 
   val ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Seq(
-    FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2))
+    FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
 
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
@@ -53,7 +53,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val vs2_eew = io.iss.op.rvs2_eew
   val vd_eew  = io.iss.op.vd_eew
   val vd_eew64 = io.iss.op.vd_eew64
-  val eidx = io.iss.op.eidx
+  val eidx = Mux(io.iss.op.acc, 0.U, io.iss.op.eidx)
 
   val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
   val ctrl_isFMA = ctrl.bool(FPMul) || ctrl.bool(FPAdd)
@@ -193,4 +193,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
   io.set_vxsat := false.B
+
+  io.acc := io.iss.op.acc
+  io.tail := io.iss.op.tail
 }

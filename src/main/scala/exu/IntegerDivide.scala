@@ -58,4 +58,7 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   io.fp_req.valid := DontCare
   io.fp_req.bits := DontCare
   io.fp_resp.ready := DontCare
+
+  io.acc := DontCare
+  io.tail := DontCare
 }
