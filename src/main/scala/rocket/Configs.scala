@@ -13,12 +13,9 @@ class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams
       val buildVector = cores.map(_.contains(tp.tileParams.hartId)).getOrElse(true)
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
         core = tp.tileParams.core.copy(vector = Some(RocketCoreVectorParams(
-          build = ((p: Parameters) => {
-            val vec = Module(new VectorUnit()(p.alterPartial {
-              case VectorParamsKey => params.copy(dLen=dLen)
-            }))
-            vec
-          }),
+          build = ((p: Parameters) => new SaturnRocketUnit()(p.alterPartial {
+            case VectorParamsKey => params.copy(dLen=dLen)
+          })),
           vLen = vLen,
           vMemDataBits = dLen,
           decoder = ((p: Parameters) => {

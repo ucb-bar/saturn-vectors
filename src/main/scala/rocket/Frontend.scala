@@ -11,101 +11,106 @@ import vector.common._
 import vector.backend.{VectorBackend}
 import vector.mem.{ScalarMemOrderCheckIO}
 
-class VectorUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams {
-  require(dLen == vMemDataBits)
+class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams with HasCoreParameters {
 
-  val trap_check = Module(new FrontendTrapCheck)
-  trap_check.io.core <> io.core
-  trap_check.io.tlb <> io.tlb
+  override lazy val module = new SaturnRocketImpl
 
-  val vu = Module(new VectorBackend)
-  vu.io.issue <> trap_check.io.issue
-  trap_check.io.index_access <> vu.io.index_access
-  trap_check.io.mask_access  <> vu.io.mask_access
-  trap_check.io.scalar_check <> vu.io.mem.scalar_check
-  trap_check.io.backend_busy := vu.io.backend_busy
-  trap_check.io.mem_busy := vu.io.mem_busy
-  trap_check.io.vm_busy  := vu.io.vm_busy
-  io.core.backend_busy   := vu.io.backend_busy
-  io.core.set_vxsat      := vu.io.set_vxsat
-  io.core.set_fflags     := vu.io.set_fflags
-  io.core.resp           <> vu.io.scalar_resp
+  class SaturnRocketImpl extends RocketVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
+    require(dLen == vMemDataBits)
 
-  val hella_simple = Module(new SimpleHellaCacheIF)
-  val hella_arb = Module(new HellaCacheArbiter(2))
-  hella_simple.io.requestor <> hella_arb.io.mem
-  io.dmem <> hella_simple.io.cache
+    val trap_check = Module(new FrontendTrapCheck)
+    trap_check.io.core <> io.core
+    trap_check.io.tlb <> io.tlb
 
-  val hella_load = hella_arb.io.requestor(1)
-  val hella_store = hella_arb.io.requestor(0)
+    val vu = Module(new VectorBackend)
+    vu.io.issue <> trap_check.io.issue
+    trap_check.io.index_access <> vu.io.index_access
+    trap_check.io.mask_access  <> vu.io.mask_access
+    trap_check.io.scalar_check <> vu.io.mem.scalar_check
+    trap_check.io.backend_busy := vu.io.backend_busy
+    trap_check.io.mem_busy := vu.io.mem_busy
+    trap_check.io.vm_busy  := vu.io.vm_busy
+    io.core.backend_busy   := vu.io.backend_busy
+    io.core.set_vxsat      := vu.io.set_vxsat
+    io.core.set_fflags     := vu.io.set_fflags
+    io.core.resp           <> vu.io.scalar_resp
 
-  val hella_load_q = Module(new Queue(new HellaCacheReq, 2))
-  hella_load.req <> hella_load_q.io.deq
-  val hella_store_q = Module(new Queue(new HellaCacheReq, 2))
-  hella_store.req <> hella_store_q.io.deq
+    val hella_simple = Module(new SimpleHellaCacheIF)
+    val hella_arb = Module(new HellaCacheArbiter(2))
+    hella_simple.io.requestor <> hella_arb.io.mem
+    io.dmem <> hella_simple.io.cache
 
-  hella_arb.io.requestor.foreach { h =>
-    h.s1_kill := false.B
-    h.s1_data := DontCare
-    h.s2_kill := false.B
-    h.keep_clock_enabled := vu.io.backend_busy
+    val hella_load = hella_arb.io.requestor(1)
+    val hella_store = hella_arb.io.requestor(0)
+
+    val hella_load_q = Module(new Queue(new HellaCacheReq, 2))
+    hella_load.req <> hella_load_q.io.deq
+    val hella_store_q = Module(new Queue(new HellaCacheReq, 2))
+    hella_store.req <> hella_store_q.io.deq
+
+    hella_arb.io.requestor.foreach { h =>
+      h.s1_kill := false.B
+      h.s1_data := DontCare
+      h.s2_kill := false.B
+      h.keep_clock_enabled := vu.io.backend_busy
+    }
+
+
+    val load_tag_oh = RegInit(VecInit.fill(4)(false.B))
+    val load_tag = PriorityEncoder(~(load_tag_oh.asUInt))
+    val load_tag_available = !load_tag_oh(load_tag)
+    when (hella_load_q.io.enq.fire) { load_tag_oh(load_tag) := true.B }
+    when (hella_load.resp.fire) {
+      assert(load_tag_oh(hella_load.resp.bits.tag))
+      load_tag_oh(hella_load.resp.bits.tag) := false.B
+    }
+
+    vu.io.mem.load_req.ready       := hella_load_q.io.enq.ready && load_tag_available
+    hella_load_q.io.enq.valid       := vu.io.mem.load_req.valid && load_tag_available
+    hella_load_q.io.enq.bits.addr   := vu.io.mem.load_req.bits.addr
+    hella_load_q.io.enq.bits.size   := log2Ceil(dLenB).U
+    hella_load_q.io.enq.bits.tag    := load_tag
+    hella_load_q.io.enq.bits.cmd    := M_XRD
+    hella_load_q.io.enq.bits.signed := false.B
+    hella_load_q.io.enq.bits.dprv   := io.core.status.prv
+    hella_load_q.io.enq.bits.dv     := io.core.status.dv
+    hella_load_q.io.enq.bits.data   := DontCare
+    hella_load_q.io.enq.bits.mask   := DontCare
+    hella_load_q.io.enq.bits.phys   := vu.io.mem.load_req.bits.phys
+    hella_load_q.io.enq.bits.no_alloc := false.B
+    hella_load_q.io.enq.bits.no_xcpt := true.B
+
+    vu.io.mem.load_resp.valid := hella_load.resp.valid
+    vu.io.mem.load_resp.bits  := hella_load.resp.bits.data_raw
+
+    val store_tag_oh = RegInit(VecInit.fill(4)(false.B))
+    val store_tag = PriorityEncoder(~(store_tag_oh.asUInt))
+    val store_tag_available = !store_tag_oh(store_tag)
+    when (hella_store_q.io.enq.fire) { store_tag_oh(store_tag) := true.B }
+    when (hella_store.resp.fire) {
+      assert(store_tag_oh(hella_store.resp.bits.tag))
+      store_tag_oh(hella_store.resp.bits.tag) := false.B
+    }
+
+    vu.io.mem.store_req.ready  := hella_store_q.io.enq.ready && store_tag_available
+    hella_store_q.io.enq.valid       := vu.io.mem.store_req.valid && store_tag_available
+    hella_store_q.io.enq.bits.addr   := vu.io.mem.store_req.bits.addr
+    hella_store_q.io.enq.bits.tag    := store_tag
+    hella_store_q.io.enq.bits.cmd    := M_PWR
+    hella_store_q.io.enq.bits.size   := log2Ceil(dLenB).U
+    hella_store_q.io.enq.bits.signed := false.B
+    hella_store_q.io.enq.bits.dprv   := io.core.status.prv
+    hella_store_q.io.enq.bits.dv     := io.core.status.dv
+    hella_store_q.io.enq.bits.data   := vu.io.mem.store_req.bits.data
+    hella_store_q.io.enq.bits.mask   := vu.io.mem.store_req.bits.mask
+    hella_store_q.io.enq.bits.phys   := vu.io.mem.store_req.bits.phys
+    hella_store_q.io.enq.bits.no_alloc := false.B
+    hella_store_q.io.enq.bits.no_xcpt := true.B
+
+    vu.io.mem.store_ack := hella_store.resp.fire
+
+    when (store_tag_oh.orR || load_tag_oh.orR) { trap_check.io.mem_busy := true.B }
   }
-
-
-  val load_tag_oh = RegInit(VecInit.fill(4)(false.B))
-  val load_tag = PriorityEncoder(~(load_tag_oh.asUInt))
-  val load_tag_available = !load_tag_oh(load_tag)
-  when (hella_load_q.io.enq.fire) { load_tag_oh(load_tag) := true.B }
-  when (hella_load.resp.fire) {
-    assert(load_tag_oh(hella_load.resp.bits.tag))
-    load_tag_oh(hella_load.resp.bits.tag) := false.B
-  }
-
-  vu.io.mem.load_req.ready       := hella_load_q.io.enq.ready && load_tag_available
-  hella_load_q.io.enq.valid       := vu.io.mem.load_req.valid && load_tag_available
-  hella_load_q.io.enq.bits.addr   := vu.io.mem.load_req.bits.addr
-  hella_load_q.io.enq.bits.size   := log2Ceil(dLenB).U
-  hella_load_q.io.enq.bits.tag    := load_tag
-  hella_load_q.io.enq.bits.cmd    := M_XRD
-  hella_load_q.io.enq.bits.signed := false.B
-  hella_load_q.io.enq.bits.dprv   := io.core.status.prv
-  hella_load_q.io.enq.bits.dv     := io.core.status.dv
-  hella_load_q.io.enq.bits.data   := DontCare
-  hella_load_q.io.enq.bits.mask   := DontCare
-  hella_load_q.io.enq.bits.phys   := vu.io.mem.load_req.bits.phys
-  hella_load_q.io.enq.bits.no_alloc := false.B
-  hella_load_q.io.enq.bits.no_xcpt := true.B
-
-  vu.io.mem.load_resp.valid := hella_load.resp.valid
-  vu.io.mem.load_resp.bits  := hella_load.resp.bits.data_raw
-
-  val store_tag_oh = RegInit(VecInit.fill(4)(false.B))
-  val store_tag = PriorityEncoder(~(store_tag_oh.asUInt))
-  val store_tag_available = !store_tag_oh(store_tag)
-  when (hella_store_q.io.enq.fire) { store_tag_oh(store_tag) := true.B }
-  when (hella_store.resp.fire) {
-    assert(store_tag_oh(hella_store.resp.bits.tag))
-    store_tag_oh(hella_store.resp.bits.tag) := false.B
-  }
-
-  vu.io.mem.store_req.ready  := hella_store_q.io.enq.ready && store_tag_available
-  hella_store_q.io.enq.valid       := vu.io.mem.store_req.valid && store_tag_available
-  hella_store_q.io.enq.bits.addr   := vu.io.mem.store_req.bits.addr
-  hella_store_q.io.enq.bits.tag    := store_tag
-  hella_store_q.io.enq.bits.cmd    := M_PWR
-  hella_store_q.io.enq.bits.size   := log2Ceil(dLenB).U
-  hella_store_q.io.enq.bits.signed := false.B
-  hella_store_q.io.enq.bits.dprv   := io.core.status.prv
-  hella_store_q.io.enq.bits.dv     := io.core.status.dv
-  hella_store_q.io.enq.bits.data   := vu.io.mem.store_req.bits.data
-  hella_store_q.io.enq.bits.mask   := vu.io.mem.store_req.bits.mask
-  hella_store_q.io.enq.bits.phys   := vu.io.mem.store_req.bits.phys
-  hella_store_q.io.enq.bits.no_alloc := false.B
-  hella_store_q.io.enq.bits.no_xcpt := true.B
-
-  vu.io.mem.store_ack := hella_store.resp.fire
-
-  when (store_tag_oh.orR || load_tag_oh.orR) { trap_check.io.mem_busy := true.B }
 }
 
 class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
