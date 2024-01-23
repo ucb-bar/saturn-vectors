@@ -248,7 +248,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.core.mem.block_mem := io.scalar_check.conflict
 
   // W stage
-  val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, io.core.killm), false.B)
+  val killm = WireInit(io.core.killm)
+  val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, killm), false.B)
   val w_replay = RegEnable(m_replay, m_valid)
   val w_inst = Reg(new VectorIssueInst)
   val w_baseaddr = RegEnable(m_baseaddr, m_valid)
@@ -330,6 +331,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       io.issue.valid := true.B
     } .elsewhen (w_inst.vmu && (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
       x_set_replay := true.B
+      killm := true.B
     } .elsewhen (w_tlb_resp.miss) {
       io.core.wb.replay := true.B
     } .otherwise {
