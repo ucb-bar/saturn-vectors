@@ -41,14 +41,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
 
-  // Functional unit is ready if not currently running and the scalar FPU is available
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
-  io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
-
-  io.hazard.valid := valid
-  io.hazard.bits.vat := op.vat
-  io.hazard.bits.eg := op.wvd_eg
-
   val vs1_eew = io.iss.op.rvs1_eew
   val vs2_eew = io.iss.op.rvs2_eew
   val vd_eew  = io.iss.op.vd_eew
@@ -64,7 +56,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   val rs1 = io.iss.op.rs1
   val ctrl_widen = ctrl_funary0 && rs1(3)
-  //val ctrl_widen = rs1(3)
   val ctrl_narrow = rs1(4)
   val ctrl_signed = rs1(0)
   val ctrl_truncating = rs1(2) && rs1(1)
@@ -76,6 +67,14 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U && valid
   val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U && valid
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U && valid
+
+  // Functional unit is ready if not currently running and the scalar FPU is available
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
+  io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2) || (ctrl_funary0 && ctrl_narrow), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
+
+  io.hazard.valid := valid
+  io.hazard.bits.vat := op.vat
+  io.hazard.bits.eg := op.wvd_eg
 
   // Create FPInput 
   val req = Wire(new FPInput)
@@ -108,7 +107,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val s_rvs2_int = rvs2_extract(31,0)
   val s_rvs2_fp = FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0)))
   val s_rvs2_unbox = unbox(box(s_rvs2_fp, FType.S), S, None) 
-  //val s_rvs2 = Mux(ctrl_inttofp, rvs2_extract(31,0), FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0))))
+
   val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
   val s_rvs1_unbox = unbox(box(s_rvs1, FType.S), S, None)
   val s_rvd = FType.S.recode(rvd_extract(31,0))
@@ -126,7 +125,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   val d_rvs2_int = rvs2_extract
   val d_rvs2_fp = FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(63, 51) << 51, rvs2_extract))
-  //val d_rvs2 = Mux(ctrl_inttofp, rvs2_extract, FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(63, 51) << 51, rvs2_extract)))
+
   val d_rvs1 = FType.D.recode(rvs1_extract)
   val d_rvd = FType.D.recode(rvd_extract)
 
@@ -136,17 +135,11 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (io.iss.op.vd_eew32 && s_isNaN)) 
   val mgt_NaN_reg = RegInit(false.B)
 
-  when (io.iss.fire() && mgt_NaN) {
+  when (io.iss.ready && io.iss.valid && mgt_NaN) {
     mgt_NaN_reg := true.B
   } .elsewhen (io.write.fire()) {
     mgt_NaN_reg := false.B
   }
-
-  // rvs2_elem cases: double or single, unbox or not, recode, truncate, int
-  // - extract step for the width
-  // - keep as int, recode, truncate and recode, unbox the single
-  //
-  // if it's not an fma op, then we need to box the single wide ops unless it's inttofp convert
 
   // Set req.in1
   when (ctrl_swap12) {
@@ -190,14 +183,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   } .otherwise {
     req.in3 := Mux(vd_eew64, d_rvd, s_rvd)
   }
-
-  //val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint || ctrl_fptofp))) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
-  //val rvs1_elem = Mux(vd_eew64 && !ctrl.bool(Wide2VD) || (io.iss.op.acc && ctrl.bool(Wide2VD)), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
-  //val rvd_elem = Mux(vd_eew64, d_rvd, s_rvd)
-
-  //req.in1 := Mux((ctrl.bool(Wide2VD) && !ctrl.bool(Wide2VS2) && !(ctrl.bool(Reduction) && ctrl.bool(Wide2VD) && io.iss.op.tail) && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint)) && !(ctrl_funary0 && ctrl_narrow)) || (ctrl.bool(Reduction) && ctrl.bool(Wide2VS2) && !io.iss.op.tail), widen_rvs2.io.out, Mux(ctrl.bool(FPSwapVdV2), rvd_elem, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs1_elem, rvs2_elem)))
-  //req.in2 := Mux(ctrl.bool(Wide2VD) && !(io.iss.op.acc && ctrl.bool(Wide2VD)), widen_rvs1.io.out, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs2_elem, rvs1_elem))
-  //req.in3 := Mux(ctrl.bool(FPSwapVdV2), rvs2_elem, rvd_elem)
 
   io.fp_req.bits := req
   io.fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN 
