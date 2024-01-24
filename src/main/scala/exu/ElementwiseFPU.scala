@@ -84,7 +84,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.ren3 := ctrl.bool(ReadsVD)
   req.swap12 := false.B
   req.swap23 := ctrl.bool(FPAdd) && !ctrl.bool(FPMul)
-  req.typeTagIn := Mux((vs2_eew === 3.U) && !(ctrl_inttofp && ctrl_narrow), D, S)
+  req.typeTagIn := Mux(((vs2_eew === 3.U) && !(ctrl_inttofp && ctrl_narrow)) || (ctrl_inttofp && ctrl_widen), D, S)
   req.typeTagOut := Mux(vd_eew64, D, S)
   req.fromint := ctrl_inttofp
   req.toint := (ctrl_fptoint) || ctrl_vfclass || ctrl.bool(WritesAsMask)  
@@ -96,7 +96,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.vec := true.B
   req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl.bool(FPAdd) && !ctrl.bool(FPMul) && !ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), io.iss.op.frm))
   req.fmaCmd := ctrl.uint(FPFMACmd)
-  req.typ := Mux(ctrl_funary0, Cat(vd_eew64 || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
+  req.typ := Mux(ctrl_funary0, Cat((vd_eew64 && !(ctrl_inttofp && ctrl_widen)) || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
   val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, vs2_eew, eidx)(63,0)
