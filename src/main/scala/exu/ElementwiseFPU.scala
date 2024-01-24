@@ -73,9 +73,9 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val ctrl_inttofp = ctrl_funary0 && (!rs1(2) && rs1(1)) 
   val ctrl_fptofp = ctrl_funary0 && (rs1(2) && !rs1(1))
 
-  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
-  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
-  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
+  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U && valid
+  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U && valid
+  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U && valid
 
   // Create FPInput 
   val req = Wire(new FPInput)
@@ -110,6 +110,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val s_rvs2_unbox = unbox(box(s_rvs2_fp, FType.S), S, None) 
   //val s_rvs2 = Mux(ctrl_inttofp, rvs2_extract(31,0), FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0))))
   val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
+  val s_rvs1_unbox = unbox(box(s_rvs1, FType.S), S, None)
   val s_rvd = FType.S.recode(rvd_extract(31,0))
 
   // For widening operations, widen the narrow operands to compute with the scalar FPU 
@@ -135,7 +136,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (io.iss.op.vd_eew32 && s_isNaN)) 
   val mgt_NaN_reg = RegInit(false.B)
 
-  when (io.fp_req.fire() && mgt_NaN) {
+  when (io.iss.fire() && mgt_NaN) {
     mgt_NaN_reg := true.B
   } .elsewhen (io.write.fire()) {
     mgt_NaN_reg := false.B
@@ -149,7 +150,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   // Set req.in1
   when (ctrl_swap12) {
-    req.in1 := Mux(vd_eew64, d_rvs1, s_rvs1)
+    req.in1 := Mux(vd_eew64, d_rvs1, s_rvs1_unbox)
   } .elsewhen (ctrl.bool(FPAdd) || ctrl.bool(FPMul)) {
     when (ctrl.bool(FPSwapVdV2)) {
       req.in1 := Mux(vd_eew64, d_rvd, s_rvd)
@@ -164,13 +165,13 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     when (ctrl_inttofp) {
       req.in1 := Mux(vd_eew64 && !ctrl_widen, d_rvs2_int, s_rvs2_int)  
     } .otherwise {
-      req.in1 := Mux(vd_eew64 && !ctrl_widen, d_rvs2_fp, unbox(box(s_rvs2_fp, FType.S), S, None))
+      req.in1 := Mux(vd_eew64 && !ctrl_widen, d_rvs2_fp, s_rvs2_unbox)
     }    
   }
 
   // Set req.in2
   when (ctrl_swap12) {
-    req.in2 := Mux(vd_eew64, d_rvs2_fp, s_rvs2_fp)
+    req.in2 := Mux(vd_eew64, d_rvs2_fp, s_rvs2_unbox)
   } .elsewhen (ctrl.bool(FPAdd) || ctrl.bool(FPMul)) {
     when (vs1_eew === 3.U) {
       req.in2 := d_rvs1
@@ -180,7 +181,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
       req.in2 := s_rvs1
     }
   } .otherwise {
-    req.in2 := Mux(vd_eew64, d_rvs1, unbox(box(s_rvs1, FType.S), S, None))
+    req.in2 := Mux(vd_eew64, d_rvs1, s_rvs1_unbox)
   }
   
   // Set req.in3
