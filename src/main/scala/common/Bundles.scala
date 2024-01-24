@@ -174,6 +174,7 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
   val acc = Bool()
+  val init_acc = Bool()
 
   val rm = UInt(3.W)
   def vxrm = rm(1,0)

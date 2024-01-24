@@ -26,6 +26,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_ready = Reg(Bool())
   val acc_tail  = Reg(Bool())
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
+  val init_acc = Reg(Bool())
 
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
@@ -42,7 +43,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
   val acc_copy = if (vParams.useScalarFPUFMAPipe) {
     (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum, OPFFunct6.fredusum, 
-                                          OPFFunct6.fwredusum, OPFFunct6.fmax, OPFFunct6.fmin)
+                                          OPFFunct6.fwredusum, OPFFunct6.fredmax, OPFFunct6.fredmin)
     } else {
       (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
     }  
@@ -94,12 +95,15 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     acc_tail    := false.B
     acc_tail_id := 0.U
     acc_ready   := true.B
+    init_acc := true.B
   } .elsewhen (io.iss.fire) {
     valid := !tail
     head := false.B
+    //init_acc := false.B
   }
 
   when (io.acc.valid) {
+    init_acc := false.B
     acc_ready := true.B
     for (i <- 0 until dLenB) when (io.acc.bits.mask(i*8)) { acc(i) := io.acc.bits.data >> (i*8) }
   }
@@ -209,6 +213,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.bits.vat       := inst.vat
   io.iss.bits.vm        := inst.vm
   io.iss.bits.rm        := inst.rm
+  io.iss.bits.init_acc  := init_acc
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
@@ -257,7 +262,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
         if (sew == 3 && dLenOffBits == 3) { io.rvs2.resp } else {
           io.rvs2.resp.asTypeOf(Vec(dLenB >> sew, UInt((8 << sew).W)))(eidx(dLenOffBits-sew-1,0))
         }
-      })(vd_eew)
+      })(vs2_eew)
       val mask_bit = Mux(use_wmask, (io.rvm.resp >> eidx(log2Ceil(dLen)-1,0))(0), true.B)
       io.iss.bits.wmask := VecInit.tabulate(4)({sew => Fill(1 << sew, mask_bit)})(vd_eew)
     }
@@ -270,6 +275,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
       io.iss.bits.rvs1_eew := vd_eew
       io.iss.bits.rvs2_data := acc_bits
       io.iss.bits.rvs2_eew  := vd_eew
+      //io.iss.bits.rvs2_eew  := Mux(elementwise_acc, vs2_eew, vd_eew)
     } .elsewhen (head) {
       io.iss.bits.rvs1_eew := vs1_eew
       io.iss.bits.rvs2_data := acc_init
