@@ -88,12 +88,16 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
     narrow.io.in := extract(rvs2_data, false.B, 3.U, io.pipe(0).bits.eidx + idx.U)(63,0)
     (wide.io, narrow.io)
   }
-  val inttofp_results = gen_inttofp.map { case(wide, narrow) => Mux(ctrl_widen, FType.D.ieee(wide.out), Fill(2, FType.S.ieee(narrow.out))) }
+  //val inttofp_results = gen_inttofp.map { case(wide, narrow) => Mux(ctrl_widen, FType.D.ieee(wide.out), Fill(2, FType.S.ieee(narrow.out))) }
+  val widen_inttofp_results = gen_inttofp.map{ case(wide, narrow) => FType.D.ieee(wide.out) }
+  val narrow_inttofp_results = gen_inttofp.map{ case(wide, narrow) => FType.S.ieee(narrow.out) }
+
 
   //// FP to Int
   //// 00X
   val wide_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.S.exp, FType.S.sig, FType.D.ieeeWidth)))
   val narrow_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.D.exp, FType.D.sig, FType.S.ieeeWidth)))
+
   val wide_gen_fptoint = wide_fptoint_modules.zipWithIndex.map { case(conv, idx) =>
     val extracted_rvs2_bits = extract(rvs2_data, false.B, 2.U, io.pipe(0).bits.eidx + idx.U)(31,0)
     conv.io.signedOut := ctrl_signed
@@ -127,12 +131,16 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
 
     (wide.io, narrow.io)
   }
-  val fptofp_results = gen_fptofp.map { case(wide, narrow) => Mux(ctrl_widen, FType.D.ieee(wide.out), Fill(2, FType.S.ieee(narrow.out))) }
+  //val fptofp_results = gen_fptofp.map { case(wide, narrow) => Mux(ctrl_widen, FType.D.ieee(wide.out), Fill(2, FType.S.ieee(narrow.out))) }
+  val widen_fptofp_results = gen_fptofp.map{ case(wide, narrow) => FType.D.ieee(wide.out) }
+  val narrow_fptofp_results = gen_fptofp.map{ case(wide, narrow) => FType.S.ieee(narrow.out) }
 
   when (!rs1(2) && rs1(1)) {
-    multi_width_out := inttofp_results.asUInt
+    //multi_width_out := inttofp_results.asUInt
+    multi_width_out := Mux(ctrl_widen, widen_inttofp_results.asUInt, Fill(2, narrow_inttofp_results.asUInt))
   } .elsewhen (!rs1(1) && rs1(2)) {
-    multi_width_out := fptofp_results.asUInt 
+    //multi_width_out := fptofp_results.asUInt 
+    multi_width_out := Mux(ctrl_widen, widen_fptofp_results.asUInt, Fill(2, narrow_fptofp_results.asUInt))
   } .otherwise {
     multi_width_out := Mux(ctrl_widen, wide_fptoint_results.asUInt, Fill(2, narrow_fptoint_results.asUInt))
   }
@@ -143,13 +151,9 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   val pipe_out = Pipe(io.pipe(0).valid, Mux(!ctrl_widen && !ctrl_narrow, single_out_final, multi_width_out), 1).bits
 
   io.write.valid := io.pipe(depth-1).valid
-  //io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
-  //io.write.bits.eg := io.pipe(0).bits.wvd_eg
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
-  //io.write.bits.mask := FillInterleaved(8, io.pipe(0).bits.wmask)
   io.write.bits.data := pipe_out
-  //io.write.bits.data := Mux(!ctrl_widen && !ctrl_narrow, single_out_final, multi_width_out)
 
   io.set_fflags := DontCare
   io.scalar_write.valid := false.B
