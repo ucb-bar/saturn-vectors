@@ -44,7 +44,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io.fp_req.ready
   io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
-  //io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2) || (io.iss.op.acc && ctrl.bool(Wide2VD)), io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
@@ -126,7 +125,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   val rvs2_elem = Mux((vd_eew64 && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint || ctrl_fptofp))) || (ctrl_funary0 && ctrl_narrow), d_rvs2, Mux(ctrl_isFMA || ctrl_inttofp, s_rvs2, unbox(box(s_rvs2, FType.S), S, None)))
   val rvs1_elem = Mux(vd_eew64 && !ctrl.bool(Wide2VD) || (io.iss.op.acc && ctrl.bool(Wide2VD)), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
-  //val rvs1_elem = Mux(vd_eew64 && !ctrl.bool(Wide2VD) || (io.iss.op.acc && !io.iss.op.init_acc && ctrl.bool(Wide2VD)), d_rvs1, Mux(ctrl_isFMA, s_rvs1, unbox(box(s_rvs1, FType.S), S, None)))
   val rvd_elem = Mux(vd_eew64, d_rvd, s_rvd)
 
   // For widening operations, widen the narrow operands to compute with the scalar FPU 
@@ -142,8 +140,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   req.in1 := Mux((ctrl.bool(Wide2VD) && !ctrl.bool(Wide2VS2) && !(ctrl.bool(Reduction) && ctrl.bool(Wide2VD) && io.iss.op.tail) && !(ctrl_widen && (ctrl_inttofp || ctrl_fptoint)) && !(ctrl_funary0 && ctrl_narrow)) || (ctrl.bool(Reduction) && ctrl.bool(Wide2VS2) && !io.iss.op.tail), widen_rvs2.io.out, Mux(ctrl.bool(FPSwapVdV2), rvd_elem, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs1_elem, rvs2_elem)))
   req.in2 := Mux(ctrl.bool(Wide2VD) && !(io.iss.op.acc && ctrl.bool(Wide2VD)), widen_rvs1.io.out, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs2_elem, rvs1_elem))
-  //req.in2 := Mux(ctrl.bool(Wide2VD) && !(io.iss.op.acc && ctrl.bool(Wide2VS2)), widen_rvs1.io.out, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs2_elem, rvs1_elem))
-  //req.in2 := Mux(ctrl.bool(Wide2VD) && !(io.iss.op.acc && !io.iss.op.init_acc), widen_rvs1.io.out, Mux(io.iss.op.opff6.isOneOf(OPFFunct6.frdiv), rvs2_elem, rvs1_elem))
   req.in3 := Mux(ctrl.bool(FPSwapVdV2), rvs2_elem, rvd_elem)
 
   io.fp_req.bits := req

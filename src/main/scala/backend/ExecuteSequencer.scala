@@ -26,7 +26,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_ready = Reg(Bool())
   val acc_tail  = Reg(Bool())
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
-  val init_acc = Reg(Bool())
 
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
@@ -95,15 +94,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     acc_tail    := false.B
     acc_tail_id := 0.U
     acc_ready   := true.B
-    init_acc := true.B
   } .elsewhen (io.iss.fire) {
     valid := !tail
     head := false.B
-    //init_acc := false.B
   }
 
   when (io.acc.valid) {
-    init_acc := false.B
     acc_ready := true.B
     for (i <- 0 until dLenB) when (io.acc.bits.mask(i*8)) { acc(i) := io.acc.bits.data >> (i*8) }
   }
@@ -180,15 +176,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     !(read_perm_buffer && !io.perm.req.ready) &&
     !(renacc && !acc_ready)
   )
-  //val iss_valid = (valid &&
-  //  !data_hazard &&
-  //  !(renv1 && !io.rvs1.req.ready) &&
-  //  !(renv2 && !io.rvs2.req.ready) &&
-  //  !(renvd && !io.rvd.req.ready) &&
-  //  !(renvm && !io.rvm.req.ready) &&
-  //  !(read_perm_buffer && !io.perm.req.ready) &&
-  //  !(renacc && !acc_ready && !io.acc.valid)
-  //)
   io.perm.req.valid := iss_valid && read_perm_buffer
   io.iss.valid := iss_valid && !(inst.reduction && head)
 
@@ -213,7 +200,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.bits.vat       := inst.vat
   io.iss.bits.vm        := inst.vm
   io.iss.bits.rm        := inst.rm
-  io.iss.bits.init_acc  := init_acc
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
@@ -248,15 +234,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     io.iss.bits.rvs1_data := dLenSplat(sscalar, vs1_eew)
   }
   when (inst.reduction) {
-    //val bypass_mask = Mux(io.acc.valid, io.acc.bits.mask, 0.U)
-    //val acc_bypass = (bypass_mask & io.acc.bits.data) | (~bypass_mask & acc.asUInt)
     val acc_bits = acc.asUInt
     val elementwise_acc = if (vParams.useScalarFPUFMAPipe) { 
       (ctrl.bool(FPAdd) || ctrl.bool(FPComp)) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
     } else {
       inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
     } 
-    //when (inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum) && !acc_tail) {
     when (elementwise_acc && !acc_tail) {
       io.iss.bits.rvs2_data := VecInit.tabulate(4)({sew =>
         if (sew == 3 && dLenOffBits == 3) { io.rvs2.resp } else {
@@ -275,7 +258,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
       io.iss.bits.rvs1_eew := vd_eew
       io.iss.bits.rvs2_data := acc_bits
       io.iss.bits.rvs2_eew  := vd_eew
-      //io.iss.bits.rvs2_eew  := Mux(elementwise_acc, vs2_eew, vd_eew)
     } .elsewhen (head) {
       io.iss.bits.rvs1_eew := vs1_eew
       io.iss.bits.rvs2_data := acc_init

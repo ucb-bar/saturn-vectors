@@ -138,7 +138,6 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
       write.bits.mask := iter_write_arb.io.out.bits.mask
       write.bits.data := iter_write_arb.io.out.bits.data
       acc_write.valid := iter_write_arb.io.out.valid && acc
-      //acc_write.valid := iter_write_arb.io.out.valid && acc && !tail
       acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.eg))
       acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.data))
       acc_write.bits.mask := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.mask))
