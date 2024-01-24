@@ -42,11 +42,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
   val acc_copy = if (vParams.useScalarFPUFMAPipe) {
     (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum, OPFFunct6.fredusum, 
-                                          OPFFunct6.fwredusum, OPFFunct6.fredmax, OPFFunct6.fredmin)
+                                                             OPFFunct6.fwredusum, OPFFunct6.fredmax, OPFFunct6.fredmin)
     } else {
       (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
     }  
-  //val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U) && inst.funct3 =/= OPIVV
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)

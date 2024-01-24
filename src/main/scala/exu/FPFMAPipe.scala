@@ -102,7 +102,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
 
   val nTandemFMA = dLenB / 8
 
-  val eidx = io.pipe(0).bits.eidx
+  val eidx = Mux(io.pipe(0).bits.acc, 0.U, io.pipe(0).bits.eidx)
   val one_bits = Mux(vd_eew === 3.U, "h3FF0000000000000".U, "h3F8000003F800000".U)
   val fmaCmd = ctrl.uint(FPFMACmd)
 
