@@ -83,12 +83,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_baseaddr = Mux(x_replay,
     Mux(x_inst.mop(0), x_inst.rs1_data, x_replay_addr),
     io.core.ex.rs1)(vaddrBitsExtended-1,0)
-  val x_indexaddr = x_baseaddr + x_index
+  val x_indexaddr = (x_baseaddr + x_index)(vaddrBitsExtended-1,0)
   val x_addr = Mux(x_replay && x_replay_seg_hi, nextPage(x_indexaddr),
     Mux(x_replay, x_indexaddr, x_baseaddr + (x_inst.vstart << x_mem_size)))
   def samePage(page1: UInt, page2: UInt) = page1(pgIdxBits) === page2(pgIdxBits)
   val x_single_page = samePage(x_baseaddr + (x_inst.vstart << x_mem_size), x_baseaddr + x_unit_bound - 1.U)
-  val x_replay_seg_single_page = samePage(x_indexaddr, x_indexaddr + ((x_inst.nf +& 1.U) << x_mem_size))
+  val x_replay_seg_single_page = samePage(x_indexaddr, x_indexaddr + ((x_inst.nf +& 1.U) << x_mem_size) - 1.U)
   val x_replay_next_page = x_inst.vmu && x_inst.mop === mopUnit && x_inst.nf === 0.U && !x_single_page && !x_replay
   val x_iterative = x_inst.vmu && (!x_single_page || (x_inst.mop =/= mopUnit)) && !x_replay_next_page
   val x_masked = !io.mask_access.mask && !x_inst.vm
