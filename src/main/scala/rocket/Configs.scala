@@ -5,6 +5,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.tile._
+import freechips.rocketchip.diplomacy._
 import vector.common._
 
 class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams = VectorParams(), cores: Option[Seq[Int]] = None) extends Config((site, here, up) => {

@@ -27,6 +27,12 @@ class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorP
   val phys = Bool()
   val data = UInt(dLen.W)
   val mask = UInt(dLenB.W)
+  val tag = UInt(dmemTagBits.W)
+}
+
+class LoadResponse(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val data = UInt(dLen.W)
+  val tag = UInt(dmemTagBits.W)
 }
 
 class MaskIndex(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -43,9 +49,9 @@ class ScalarMemOrderCheckIO(implicit p: Parameters) extends CoreBundle()(p) with
 
 class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val load_req = Decoupled(new MemRequest)
-  val load_resp = Input(Valid(UInt(dLen.W)))
+  val load_resp = Input(Valid(new LoadResponse))
   val store_req = Decoupled(new MemRequest)
-  val store_ack = Input(Bool())
+  val store_ack = Input(Valid(UInt(dmemTagBits.W)))
 
   val scalar_check = new ScalarMemOrderCheckIO
 }
@@ -170,28 +176,28 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   dontTouch(las_order_block)
   las.io.valid := liq_las_valid && !las_order_block
   las.io.op := liq(liq_las_ptr).op
-
+  io.dmem.load_req <> las.io.req
   las.io.maskindex.valid := io.maskindex.valid && maskindex_load
   las.io.maskindex.bits := io.maskindex.bits
-
-  io.dmem.load_req <> las.io.req
   liq_las_fire := las.io.done
+
+  val load_rob = Module(new ReorderBuffer(UInt(dLen.W), vParams.vlifqEntries))
+  las.io.tag <> load_rob.io.reserve
+  load_rob.io.push.valid := io.dmem.load_resp.valid
+  load_rob.io.push.bits.data := io.dmem.load_resp.bits.data
+  load_rob.io.push.bits.tag := io.dmem.load_resp.bits.tag
 
   val lifq = Module(new DCEQueue(new IFQEntry, vParams.vlifqEntries))
   lifq.io.enq <> las.io.out
 
-  val lrq = Module(new DCEQueue(UInt(dLen.W), vParams.vlifqEntries))
-  lrq.io.enq.valid := io.dmem.load_resp.valid
-  lrq.io.enq.bits := io.dmem.load_resp.bits
-
   // Load compacting
   val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
-  lcu.io.push.valid := lifq.io.deq.valid && (lrq.io.deq.valid || lifq.io.deq.bits.masked)
+  lcu.io.push.valid := lifq.io.deq.valid && (load_rob.io.deq.valid || lifq.io.deq.bits.masked)
   lcu.io.push.bits.head := lifq.io.deq.bits.head
   lcu.io.push.bits.tail := lifq.io.deq.bits.tail
-  lcu.io.push_data := lrq.io.deq.bits.asTypeOf(Vec(dLenB, UInt(8.W)))
-  lifq.io.deq.ready := lcu.io.push.ready && (lrq.io.deq.valid || lifq.io.deq.bits.masked)
-  lrq.io.deq.ready := lcu.io.push.ready && !lifq.io.deq.bits.masked
+  lcu.io.push_data := load_rob.io.deq.bits.asTypeOf(Vec(dLenB, UInt(8.W)))
+  lifq.io.deq.ready := lcu.io.push.ready && (load_rob.io.deq.valid || lifq.io.deq.bits.masked)
+  load_rob.io.deq.ready := lcu.io.push.ready && !lifq.io.deq.bits.masked
 
   // Load segment sequencing
   val lss = Module(new LoadSegmenter)
@@ -231,6 +237,9 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.dmem.store_req.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
   io.dmem.store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & sas.io.req.bits.mask
 
+  val store_rob = Module(new ReorderBuffer(Bool(), vParams.vsifqEntries))
+  sas.io.tag <> store_rob.io.reserve
+
   val sifq = Module(new DCEQueue(new IFQEntry, vParams.vsifqEntries))
   sas.io.out.ready := sifq.io.enq.ready && scu.io.pop.ready
   sifq.io.enq.valid := sas.io.out.valid && scu.io.pop.ready
@@ -246,7 +255,12 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   scu.io.pop.bits.head := sas.io.out.bits.head
   scu.io.pop.bits.tail := sas.io.out.bits.tail
 
-  sifq.io.deq.ready := sifq.io.deq.bits.masked || io.dmem.store_ack
+  store_rob.io.push.valid := io.dmem.store_ack.valid
+  store_rob.io.push.bits.tag := io.dmem.store_ack.bits
+  store_rob.io.push.bits.data := DontCare
+
+  sifq.io.deq.ready := sifq.io.deq.bits.masked || store_rob.io.deq.valid
+  store_rob.io.deq.ready := true.B
   siq_deq_fire := sifq.io.deq.fire && sifq.io.deq.bits.last
   io.vat_release.valid := siq_deq_fire
   io.vat_release.bits := siq(siq_deq_ptr).op.vat

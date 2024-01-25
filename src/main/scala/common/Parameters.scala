@@ -22,8 +22,8 @@ case class VectorParams(
   vsiqEntries: Int = 4,
 
   // Load store in-flight queues (in VLSU)
-  vlifqEntries: Int = 4,
-  vsifqEntries: Int = 4,
+  vlifqEntries: Int = 8,
+  vsifqEntries: Int = 8,
 
   // Load/store/execute/permute/maskindex issue queues
   vlissqEntries: Int = 0,
@@ -38,7 +38,7 @@ case class VectorParams(
   useScalarFPUFMAPipe: Boolean = false,
   fmaPipeDepth: Int = 3,
 
-  doubleBufferSegments: Boolean = false
+  doubleBufferSegments: Boolean = false,
 )
 
 case object VectorParamsKey extends Field[VectorParams]
@@ -49,7 +49,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def dLen = vParams.dLen
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
-
+  def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
 

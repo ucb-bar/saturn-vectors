@@ -12,6 +12,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val io = IO(new Bundle {
     val valid = Input(Bool())
     val done = Output(Bool())
+    val tag = Flipped(Decoupled(UInt(dmemTagBits.W)))
     val op = Input(new VectorMemMacroOp)
     val maskindex = Flipped(Decoupled(new MaskIndex))
     val req = Decoupled(new MemRequest)
@@ -71,17 +72,20 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
 
   io.done := false.B
   io.maskindex.ready := false.B
-  io.out.valid := io.valid && !block_maskindex && (masked || io.req.ready)
+  io.out.valid := io.valid && !block_maskindex && (masked || (io.req.ready && io.tag.valid))
   io.out.bits.head := saddr
   io.out.bits.tail := saddr + next_act_bytes
   io.out.bits.masked := masked
   io.out.bits.last := may_clear
 
-  io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked
+  io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked && io.tag.valid
   io.req.bits.addr := (saddr >> dLenOffBits) << dLenOffBits
   io.req.bits.data := DontCare
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
   io.req.bits.phys := io.op.phys
+  io.req.bits.tag := io.tag.bits
+
+  io.tag.ready := io.valid && io.req.ready && io.out.ready && !block_maskindex && !masked
 
   when (io.out.fire) {
     when (next_sidx > io.op.nf || fast_segmented) {
