@@ -57,6 +57,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val rs1 = io.iss.op.rs1
   val ctrl_widen = ctrl_funary0 && rs1(3)
   val ctrl_narrow = rs1(4)
+  val ctrl_single_wide = ctrl_funary0 && !ctrl_widen && !ctrl_narrow
   val ctrl_signed = rs1(0)
   val ctrl_truncating = rs1(2) && rs1(1)
   val ctrl_round_to_odd = rs1(0)
@@ -85,8 +86,8 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.ren3 := ctrl.bool(ReadsVD)
   req.swap12 := false.B
   req.swap23 := ctrl.bool(FPAdd) && !ctrl.bool(FPMul)
-  req.typeTagIn := Mux(((vs2_eew === 3.U) && !(ctrl_inttofp && ctrl_narrow)) || (ctrl_inttofp && ctrl_widen), D, S)
-  req.typeTagOut := Mux(vd_eew64, D, S)
+  req.typeTagIn := Mux((ctrl_single_wide && vd_eew64) || (ctrl_inttofp && ctrl_widen) || (ctrl_fptofp && ctrl_narrow), D, S)
+  req.typeTagOut := Mux((ctrl_single_wide && vd_eew64) || (ctrl_fptoint && ctrl_narrow) || (ctrl_fptofp && ctrl_widen), D, S)
   req.fromint := ctrl_inttofp
   req.toint := (ctrl_fptoint) || ctrl_vfclass || ctrl.bool(WritesAsMask)  
   req.fastpipe := ctrl_fptofp || ctrl.bool(FPSgnj) || ctrl.bool(FPComp)
@@ -97,7 +98,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.vec := true.B
   req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl.bool(FPAdd) && !ctrl.bool(FPMul) && !ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), io.iss.op.frm))
   req.fmaCmd := ctrl.uint(FPFMACmd)
-  req.typ := Mux(ctrl_funary0, Cat((vd_eew64 && !(ctrl_inttofp && ctrl_widen)) || ((vd_eew === 2.U) && ctrl_narrow && !ctrl_fptoint), !ctrl_signed), 0.U)
+  req.typ := Mux(ctrl_inttofp || ctrl_fptoint, Cat((ctrl_inttofp && ctrl_narrow) || (ctrl_fptoint && ctrl_widen) || (ctrl_funary0 && !ctrl_widen && !ctrl_narrow), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
   val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, vs2_eew, eidx)(63,0)
@@ -156,9 +157,9 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     }
   } .otherwise {
     when (ctrl_inttofp) {
-      req.in1 := Mux(vd_eew64 && !ctrl_widen, d_rvs2_int, s_rvs2_int)  
+      req.in1 := Mux((vd_eew64 && !ctrl_widen) || (ctrl_funary0 && ctrl_narrow), d_rvs2_int, s_rvs2_int)  
     } .otherwise {
-      req.in1 := Mux(vd_eew64 && !ctrl_widen, d_rvs2_fp, s_rvs2_unbox)
+      req.in1 := Mux((vd_eew64 && !ctrl_widen) || (ctrl_funary0 && ctrl_narrow), d_rvs2_fp, s_rvs2_unbox)
     }    
   }
 
