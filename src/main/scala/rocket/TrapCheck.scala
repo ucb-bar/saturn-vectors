@@ -69,7 +69,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     (io.core.ex.inst(27,26) === mopUnit, (io.core.ex.inst(31,29) +& 1.U) << io.core.ex.inst(13,12)),
     (io.core.ex.inst(27,26) === mopStrided, io.core.ex.rs2),
     (io.core.ex.inst(27,26).isOneOf(mopOrdered, mopUnordered), 0.U))))
-  val x_eidx = Mux(x_replay, x_replay_eidx, 0.U)
+  val x_eidx = Mux(x_replay, x_replay_eidx, x_core_inst.vstart)
   val x_vl = x_inst.vconfig.vl
   val x_pc = Mux(x_replay, x_replay_pc, io.core.ex.pc)
   val x_mem_size = x_inst.mem_elem_size
@@ -77,16 +77,20 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_indexed = x_inst.vmu && x_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val x_index_ready = !x_indexed || io.index_access.ready
   val x_mask_ready = x_inst.vm || io.mask_access.ready
-  val x_index = Mux(x_indexed, io.index_access.idx & eewBitMask(x_inst.mem_idx_size), 0.U)
+  val x_index = Mux(x_indexed,
+    io.index_access.idx & eewBitMask(x_inst.mem_idx_size),
+    0.U)
   val x_baseaddr = Mux(x_replay,
     Mux(x_inst.mop(0), x_inst.rs1_data, x_replay_addr),
-    io.core.ex.rs1)
+    io.core.ex.rs1)(vaddrBitsExtended-1,0)
   val x_indexaddr = x_baseaddr + x_index
-  val x_addr = Mux(x_replay && x_replay_seg_hi, nextPage(x_indexaddr), x_indexaddr)
-  def samePage(base: UInt, size: UInt) = (base + size - 1.U)(pgIdxBits) === base(pgIdxBits)
-  val x_single_page = samePage(x_baseaddr, x_unit_bound)
-  val x_replay_seg_single_page = samePage(x_indexaddr, ((x_inst.nf +& 1.U) << x_mem_size))
-  val x_iterative = x_inst.vmu && (!x_single_page || (x_inst.mop =/= mopUnit))
+  val x_addr = Mux(x_replay && x_replay_seg_hi, nextPage(x_indexaddr),
+    Mux(x_replay, x_indexaddr, x_baseaddr + (x_inst.vstart << x_mem_size)))
+  def samePage(page1: UInt, page2: UInt) = page1(pgIdxBits) === page2(pgIdxBits)
+  val x_single_page = samePage(x_baseaddr + (x_inst.vstart << x_mem_size), x_baseaddr + x_unit_bound - 1.U)
+  val x_replay_seg_single_page = samePage(x_indexaddr, x_indexaddr + ((x_inst.nf +& 1.U) << x_mem_size))
+  val x_replay_next_page = x_inst.vmu && x_inst.mop === mopUnit && x_inst.nf === 0.U && !x_single_page && !x_replay
+  val x_iterative = x_inst.vmu && (!x_single_page || (x_inst.mop =/= mopUnit)) && !x_replay_next_page
   val x_masked = !io.mask_access.mask && !x_inst.vm
   val x_tlb_valid = Mux(x_replay,
     x_eidx < x_vl && x_eidx >= x_inst.vstart && !x_masked,
@@ -135,11 +139,12 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val m_stride = RegEnable(x_stride, x_may_be_valid)
   val m_eidx = RegEnable(x_eidx, x_may_be_valid)
   val m_pc = RegEnable(x_pc, x_may_be_valid)
-  val m_masked = RegNext(x_masked, x_may_be_valid)
-  val m_seg_hi = RegNext(x_replay_seg_hi, x_may_be_valid)
-  val m_seg_single_page = RegNext(x_replay_seg_single_page, x_may_be_valid)
-  val m_tlb_req_valid = RegNext(x_tlb_valid, x_may_be_valid)
-  val m_tlb_resp_valid = RegNext(io.tlb.req.fire, x_may_be_valid)
+  val m_masked = RegEnable(x_masked, x_may_be_valid)
+  val m_seg_hi = RegEnable(x_replay_seg_hi, x_may_be_valid)
+  val m_seg_single_page = RegEnable(x_replay_seg_single_page, x_may_be_valid)
+  val m_replay_next_page = RegEnable(x_replay_next_page, x_may_be_valid)
+  val m_tlb_req_valid = RegEnable(x_tlb_valid, x_may_be_valid)
+  val m_tlb_resp_valid = RegEnable(io.tlb.req.fire, x_may_be_valid)
   val m_iterative = RegEnable(x_iterative, x_may_be_valid)
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
@@ -168,6 +173,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val w_tlb_resp = RegEnable(m_tlb_resp, m_valid)
   val w_seg_hi = RegEnable(m_seg_hi, m_valid)
   val w_seg_single_page = RegEnable(m_seg_single_page, m_valid)
+  val w_replay_next_page = RegEnable(m_replay_next_page, m_valid)
 
   val w_xcpts = Seq(
     (w_tlb_resp.pf.st, Causes.store_page_fault.U),
@@ -181,6 +187,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   )
   val w_xcpt = w_xcpts.map(_._1).orR && w_eidx >= w_inst.vstart && !w_masked && w_tlb_req_valid
   val w_cause = PriorityMux(w_xcpts)
+  val w_ff = w_inst.umop === lumopFF && w_inst.mop === mopUnit && w_eidx =/= 0.U
 
   when (m_valid) {
     w_inst := m_inst
@@ -210,11 +217,16 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.issue.bits := w_inst
   io.issue.bits.rm := Mux(w_inst.isOpf, io.core.wb.frm, io.core.wb.vxrm)
   io.issue.bits.phys := false.B
+  val consumed = ((1 << pgIdxBits).U - w_addr(pgIdxBits-1,0) >> w_inst.mem_elem_size)
   when (w_inst.vmu) {
     val phys = w_inst.seg_nf === 0.U && w_inst.mop.isOneOf(mopUnit, mopStrided)
     io.issue.bits.phys := phys
     io.issue.bits.rs1_data := Mux(phys, w_tlb_resp.paddr, w_baseaddr)
+    when (w_replay_next_page) {
+      io.issue.bits.vconfig.vl := w_inst.vstart +& consumed
+    }
   }
+
 
   val x_set_replay = WireInit(false.B)
   when (x_set_replay) {
@@ -238,13 +250,21 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       killm := true.B
     } .elsewhen (w_tlb_resp.miss) {
       io.core.wb.replay := true.B
-    } .otherwise {
-      io.core.wb.retire := !w_xcpt
-      io.core.wb.xcpt := w_xcpt
+    } .elsewhen (w_xcpt) {
+      io.core.wb.xcpt := true.B
       io.core.wb.cause := w_cause
-      io.core.set_vstart.valid := !w_tlb_resp.miss
+      io.core.set_vstart.valid := true.B
+      io.core.set_vstart.bits := w_inst.vstart
+    } .elsewhen (w_replay_next_page) {
+      io.core.set_vstart.valid := true.B
+      io.core.set_vstart.bits := consumed + w_inst.vstart
+      io.core.wb.replay := true.B
+      io.issue.valid := true.B
+    } .otherwise {
+      io.core.wb.retire := true.B
+      io.core.set_vstart.valid := true.B
       io.core.set_vstart.bits := 0.U
-      io.issue.valid := !w_xcpt
+      io.issue.valid := true.B
     }
   }
   when (w_valid && w_replay) {
@@ -265,12 +285,11 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       x_replay_seg_hi := w_seg_hi
     } .elsewhen (w_xcpt) {
       x_replay := false.B
-      val ff = w_inst.umop === lumopFF && w_inst.mop === mopUnit && w_eidx =/= 0.U
-      io.core.wb.retire := ff
-      io.core.wb.xcpt := !ff
-      io.core.set_vstart.valid := !ff
+      io.core.wb.retire := w_ff
+      io.core.wb.xcpt := !w_ff
+      io.core.set_vstart.valid := !w_ff
       io.core.set_vstart.bits := w_eidx
-      io.core.set_vconfig.valid := ff
+      io.core.set_vconfig.valid := w_ff
       io.core.set_vconfig.bits.vl := w_eidx
       replay_kill := true.B
     } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl && (w_seg_hi || w_seg_single_page || w_inst.seg_nf === 0.U)) {

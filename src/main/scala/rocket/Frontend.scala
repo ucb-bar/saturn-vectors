@@ -30,8 +30,6 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     val hella_if = Module(new HellaCacheInterface)
 
-    val use_tl = RegInit(true.B)
-
     val vu = Module(new VectorBackend)
     vu.io.issue <> trap_check.io.issue
     trap_check.io.index_access <> vu.io.index_access
@@ -60,25 +58,38 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     tl_if.module.io.vec.scalar_check := DontCare
     hella_if.io.vec.scalar_check := DontCare
 
-    when (use_tl) {
-      tl_if.module.io.vec.load_req <> block(vu.io.mem.load_req, hella_if.io.mem_busy)
-      tl_if.module.io.vec.store_req <> block(vu.io.mem.store_req, hella_if.io.mem_busy)
-      vu.io.mem.load_resp := tl_if.module.io.vec.load_resp
-      vu.io.mem.store_ack := tl_if.module.io.vec.store_ack
+    val load_use_tl_reg = RegInit(true.B)
+    val store_use_tl_reg = RegInit(true.B)
 
+    // virtually-addressed requests must go through L1
+    val load_use_tl = load_use_tl_reg && vu.io.mem.load_req.bits.phys
+    val store_use_tl = store_use_tl_reg && vu.io.mem.store_req.bits.phys
+
+    vu.io.mem.load_resp.valid := tl_if.module.io.vec.load_resp.valid || hella_if.io.vec.load_resp.valid
+    vu.io.mem.load_resp.bits := Mux1H(
+      Seq(tl_if.module.io.vec.load_resp.valid, hella_if.io.vec.load_resp.valid),
+      Seq(tl_if.module.io.vec.load_resp.bits , hella_if.io.vec.load_resp.bits))
+    vu.io.mem.store_ack.valid := tl_if.module.io.vec.store_ack.valid || hella_if.io.vec.store_ack.valid
+    vu.io.mem.store_ack.bits := Mux1H(
+      Seq(tl_if.module.io.vec.store_ack.valid, hella_if.io.vec.store_ack.valid),
+      Seq(tl_if.module.io.vec.store_ack.bits , hella_if.io.vec.store_ack.bits))
+
+    when (load_use_tl) {
+      tl_if.module.io.vec.load_req <> block(vu.io.mem.load_req, hella_if.io.mem_busy)
       hella_if.io.vec.load_req.valid := false.B
-      hella_if.io.vec.store_req.valid := false.B
       hella_if.io.vec.load_req.bits := DontCare
-      hella_if.io.vec.store_req.bits := DontCare
     } .otherwise {
       hella_if.io.vec.load_req <> block(vu.io.mem.load_req, tl_if.module.io.mem_busy)
-      hella_if.io.vec.store_req <> block(vu.io.mem.store_req, tl_if.module.io.mem_busy)
-      vu.io.mem.load_resp := hella_if.io.vec.load_resp
-      vu.io.mem.store_ack := hella_if.io.vec.store_ack
-
       tl_if.module.io.vec.load_req.valid := false.B
-      tl_if.module.io.vec.store_req.valid := false.B
       tl_if.module.io.vec.load_req.bits := DontCare
+    }
+    when (store_use_tl) {
+      tl_if.module.io.vec.store_req <> block(vu.io.mem.store_req, hella_if.io.mem_busy)
+      hella_if.io.vec.store_req.valid := false.B
+      hella_if.io.vec.store_req.bits := DontCare
+    } .otherwise {
+      hella_if.io.vec.store_req <> block(vu.io.mem.store_req, tl_if.module.io.mem_busy)
+      tl_if.module.io.vec.store_req.valid := false.B
       tl_if.module.io.vec.store_req.bits := DontCare
     }
   }
