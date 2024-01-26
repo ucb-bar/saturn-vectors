@@ -10,6 +10,7 @@ import freechips.rocketchip.tile._
 object VectorParams {
   def minParams = VectorParams(useScalarFPUFMAPipe = true)
   def refParams = VectorParams(vlissqEntries = 3, vsissqEntries = 3, vxissqEntries = 3, vatSz = 5, useSegmentedIMul = true, doubleBufferSegments = true)
+  def scalarFPUParallelFMA = VectorParams(useScalarFPUParallelFMA = true) 
 
 }
 
@@ -36,6 +37,7 @@ case class VectorParams(
 
   useSegmentedIMul: Boolean = false,
   useScalarFPUFMAPipe: Boolean = false,
+  useScalarFPUParallelFMA: Boolean = false,
   fmaPipeDepth: Int = 3,
 
   doubleBufferSegments: Boolean = false,
