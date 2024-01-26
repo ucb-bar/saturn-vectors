@@ -40,8 +40,7 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
   val ctrl_swap12 = io.pipe(0).bits.opff6.isOneOf(OPFFunct6.frdiv)
 
   // Functional unit is ready if not currently running and the scalar FPU is available
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched //&& io_fp_req.ready
-  //io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.pipe(0).bits.rvs2_eew, io.pipe(0).bits.rvd_eew)
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && io_fp_req.ready
   io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.vd_eew)
 
   // Create FPInput 
@@ -126,7 +125,6 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
   io_fp_req.valid := io.pipe(0).valid 
   io_fp_resp.ready := true.B
 
-  //io.write.valid := io_fp_resp.fire()
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
@@ -190,7 +188,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U && valid
 
   // Functional unit is ready if not currently running and the scalar FPU is available
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && (!valid || last) && io_fp_req.ready
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready
   io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl_funary0 && ctrl_narrow, io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
@@ -271,8 +269,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.in3 := 0.U
 
   io_fp_req.bits := req
-  io_fp_req.valid := io.iss.valid && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN 
-  //io_fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN 
+  io_fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN 
 
   io_fp_resp.ready := io.write.ready
 
@@ -311,7 +308,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   val mask_bit = Mux(op.vd_eew64, op.wmask(0), Mux(op.eidx(0), op.wmask(4), op.wmask(0)))
 
   io.write.valid := (io_fp_resp.fire() || vfrsqrt7_inst || vfrec7_inst || mgt_NaN_reg) && valid
-  //io.write.valid := io_fp_resp.fire() || ((vfrsqrt7_inst || vfrec7_inst || mgt_NaN_reg) && valid)
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), ((1.U(dLen.W) & mask_bit) << (op.eidx % dLen.U)), FillInterleaved(8, op.wmask))
   io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io_fp_resp.fire()),

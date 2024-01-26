@@ -125,31 +125,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val fpFUs = if (vParams.useScalarFPUFMAPipe) {
     val shared_fma = Module(new ElementwiseFPUFMA(5)).suggestName("fpfma") 
-    //val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
-  
-    io.fp_req <> shared_fma.io_fp_req
+    val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
+
+    val fpArb = Module(new Arbiter(new FPInput(), 2))
+    io.fp_req <> fpArb.io.out
+
+    fpArb.io.in(0) <> shared_fma.io_fp_req
     shared_fma.io_fp_resp <> io.fp_resp
-    
-    //val fpArb = Module(new Arbiter(new FPInput(), 2))
-    //val fpArb = Module(new InOrderArbiter(new FPInput(), new FPResult(), 2))
+    fpArb.io.in(1) <> shared_fpu.io_fp_req
+    shared_fpu.io_fp_resp <> io.fp_resp
 
-    //io.fp_req <> fpArb.io.out
-    //fpArb.io.in(0) <> shared_fma.io_fp_req
-    //shared_fma.io_fp_resp <> io.fp_resp
-    //fpArb.io.in(1) <> shared_fpu.io_fp_req
-    //shared_fpu.io_fp_resp <> io.fp_resp
-
-    //io.fp_req <> fpArb.io.out_req
-    //fpArb.io.out_resp <> io.fp_resp
-
-    //fpArb.io.in_req(0) <> shared_fma.io_fp_req
-    //shared_fma.io_fp_resp <> fpArb.io.in_resp(0)
-
-    //fpArb.io.in_req(1) <> shared_fpu.io_fp_req
-    //shared_fpu.io_fp_resp <> fpArb.io.in_resp(1)
-
-    //Seq(shared_fma, shared_fpu)
-    Seq(shared_fma)
+    Seq(shared_fma, shared_fpu)
   } else {
     io.fp_req.valid := false.B
     io.fp_req.bits := DontCare
