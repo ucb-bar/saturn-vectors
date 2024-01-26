@@ -31,6 +31,8 @@ class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO
   val write = Decoupled(new VectorWrite(dLen))
   val vat = Output(Valid(UInt(vParams.vatSz.W)))
   val hazard = Output(Valid(new PipeHazard))
+  val acc = Output(Bool())
+  val tail = Output(Bool())
 
   val busy = Output(Bool())
 }

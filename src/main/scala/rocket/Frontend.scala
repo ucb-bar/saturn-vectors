@@ -20,8 +20,8 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
   atlNode := tl_if.node
 
   override lazy val module = new SaturnRocketImpl
-
   class SaturnRocketImpl extends RocketVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
+
     require(dLen == vMemDataBits)
 
     val trap_check = Module(new FrontendTrapCheck)
@@ -41,6 +41,8 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     io.core.set_vxsat      := vu.io.set_vxsat
     io.core.set_fflags     := vu.io.set_fflags
     io.core.resp           <> vu.io.scalar_resp
+    io.fp_req <> vu.io.fp_req
+    vu.io.fp_resp <> io.fp_resp
 
     io.dmem <> hella_if.io.dmem
     hella_if.io.vec_busy := vu.io.backend_busy

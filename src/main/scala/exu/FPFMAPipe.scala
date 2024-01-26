@@ -32,13 +32,14 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val mask_pipe = Pipe(io.valid, io.mask, depth-1)
 
   val sfma = Module(new MulAddRecFNPipe(depth-1, 8, 24))
-  sfma.io.validin := io.valid && (io.out_eew === 2.U) && io.mask(1)
-  sfma.io.op := io.op
-  sfma.io.roundingMode := io.frm
+  val sfma_validin = io.valid && (io.out_eew === 2.U) && io.mask(1)
+  sfma.io.validin := sfma_validin
+  sfma.io.op := Mux(sfma_validin, io.op, 0.U)
+  sfma.io.roundingMode := Mux(sfma_validin, io.frm, 0.U)
   sfma.io.detectTininess := hardfloat.consts.tininess_afterRounding
-  sfma.io.a := FType.S.recode(io.a(63,32))
-  sfma.io.b := FType.S.recode(io.b(63,32))
-  sfma.io.c := FType.S.recode(io.c(63,32))
+  sfma.io.a := FType.S.recode(Mux(sfma_validin, io.a(63,32), 0.U))
+  sfma.io.b := FType.S.recode(Mux(sfma_validin, io.b(63,32), 0.U))
+  sfma.io.c := FType.S.recode(Mux(sfma_validin, io.c(63,32), 0.U))
 
   val widen = Seq(io.a, io.b, io.c).zip(Seq.fill(3)(Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53)))).map { case(input, upconvert) =>
     upconvert.io.in := FType.S.recode(input(31,0))
@@ -101,7 +102,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
 
   val nTandemFMA = dLenB / 8
 
-  val eidx = io.pipe(0).bits.eidx
+  val eidx = Mux(io.pipe(0).bits.acc, 0.U, io.pipe(0).bits.eidx)
   val one_bits = Mux(vd_eew === 3.U, "h3FF0000000000000".U, "h3F8000003F800000".U)
   val fmaCmd = ctrl.uint(FPFMACmd)
 

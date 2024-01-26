@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import vector.common._
 
-class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
+class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
   val supported_insns = fus.map(_.supported_insns).flatten
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
@@ -127,10 +127,16 @@ class ExecutionUnit(fus: FunctionalUnit*)(implicit val p: Parameters) extends Ha
     iter_write_arb.io.out.ready := !pipe_write
 
     when (!pipe_write) {
-      write.valid     := iter_write_arb.io.out.valid
+      val acc = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.acc))
+      val tail = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.tail))
+      write.valid     := iter_write_arb.io.out.valid && (!acc || tail)
       write.bits.eg   := iter_write_arb.io.out.bits.eg
       write.bits.mask := iter_write_arb.io.out.bits.mask
       write.bits.data := iter_write_arb.io.out.bits.data
+      acc_write.valid := iter_write_arb.io.out.valid && acc
+      acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.eg))
+      acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.data))
+      acc_write.bits.mask := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.mask))
       vat_release.valid := iter_write_arb.io.out.fire() && Mux1H(iter_write_arb.io.in.map(_.ready), iter_fus.map(_.io.vat.valid))
       vat_release.bits  := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat.bits))
     }

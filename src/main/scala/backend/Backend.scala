@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.tile.{CoreModule}
+import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
 import vector.exu._
@@ -28,6 +28,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
+
+    val fp_req = Decoupled(new FPInput())
+    val fp_resp = Flipped(Decoupled(new FPResult()))
   })
 
   require(vLen >= 64)
@@ -107,22 +110,38 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu.io.vat_tail := vat_tail
 
+  val integerFUs = Seq(
+    Module(new IntegerPipe).suggestName("vintfu"),
+    Module(new BitwisePipe).suggestName("vbitfu"),
+    (if (vParams.useSegmentedIMul)
+      Module(new SegmentedMultiplyPipe(4))
+    else
+      Module(new ElementwiseMultiplyPipe(4))
+    ).suggestName("vmulfu"),
+    Module(new IterativeIntegerDivider).suggestName("vdivfu"),
+    Module(new MaskUnit).suggestName("vmaskfu"),
+    Module(new PermuteUnit).suggestName("vpermfu"),
+  )
 
-  val int_unit = Module(new IntegerPipe)
-  val bw_unit = Module(new BitwisePipe)
-  val mul_unit = Module(if (vParams.useSegmentedIMul) (new SegmentedMultiplyPipe(3)) else (new ElementwiseMultiplyPipe(3)))
-  val div_unit = Module(new IterativeIntegerDivider)
-  val mask_unit = Module(new MaskUnit)
-  val perm_unit = Module(new PermuteUnit)
-  val fpfma_unit = Module(new FPFMAPipe(vParams.fmaPipeDepth))
-  val fpdiv_unit = Module(new FPDivSqrt)
-  val fpcomp_unit = Module(new FPCompPipe)
-  val fpconv_unit = Module(new FPConvPipe)
+  val fpFUs = if (vParams.useScalarFPUFMAPipe) {
+    val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
+    io.fp_req <> shared_fpu.io_fp_req
+    shared_fpu.io_fp_resp <> io.fp_resp
+    Seq(shared_fpu)
+  } else {
+    io.fp_req.valid := false.B
+    io.fp_req.bits := DontCare
+    Seq(
+      Module(new FPFMAPipe(vParams.fmaPipeDepth)).suggestName("vfpfmafu"),
+      Module(new FPDivSqrt).suggestName("vfdivfu"),
+      Module(new FPCompPipe).suggestName("vfcmpfu"),
+      Module(new FPConvPipe).suggestName("vfcvtfu")
+    )
+  }
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = new ExecutionUnit(int_unit, bw_unit, mul_unit, div_unit, mask_unit, perm_unit,
-    fpfma_unit, fpdiv_unit, fpcomp_unit, fpconv_unit)
+  val vxu = new ExecutionUnit(integerFUs ++ fpFUs)
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
