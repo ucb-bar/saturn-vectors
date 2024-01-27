@@ -40,9 +40,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     Mux(inst.renv2, vs2_eew, 0.U),
     Mux(inst.renvd, vs3_eew, 0.U),
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
-  val acc_copy = if (vParams.useScalarFPUFMAPipe) {
-    (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum, OPFFunct6.fredusum,
-      OPFFunct6.fwredusum, OPFFunct6.fredmax, OPFFunct6.fredmin)
+  val acc_copy = if (vParams.useScalarFPU && vParams.useScalarFMAPipe) {
+      (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum, 
+        OPFFunct6.fredusum, OPFFunct6.fwredusum, OPFFunct6.fredmax, OPFFunct6.fredmin)
+    } else if (vParams.useScalarFPU) {
+      (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum, 
+        OPFFunct6.fredmax, OPFFunct6.fredmin)
     } else {
       (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
     }
@@ -234,8 +237,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   }
   when (inst.reduction) {
     val acc_bits = acc.asUInt
-    val elementwise_acc = if (vParams.useScalarFPUFMAPipe) {
+    val elementwise_acc = if (vParams.useScalarFPU && vParams.useScalarFMAPipe) {
       (ctrl.bool(FPAdd) || ctrl.bool(FPComp)) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
+    } else if (vParams.useScalarFPU) {
+      ctrl.bool(FPComp) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
     } else {
       inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
     }

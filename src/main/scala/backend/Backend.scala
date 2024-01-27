@@ -123,14 +123,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     Module(new PermuteUnit).suggestName("vpermfu"),
   )
 
-  val fpFUs = if (vParams.useScalarFPUParallelFMA) {
-    val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
-    
-    io.fp_req <> shared_fpu.io_fp_req
-    shared_fpu.io_fp_resp <> io.fp_resp
-
-    Seq(shared_fpu, Module(new FPFMAPipe(vParams.fmaPipeDepth)).suggestName("vfpfmafu"))
-  } else if (vParams.useScalarFPUFMAPipe) {
+  val fpFUs = if (vParams.useScalarFMAPipe && vParams.useScalarFPU) {
     val shared_fma = Module(new ElementwiseFPUFMA(5)).suggestName("fpfma") 
     val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
 
@@ -143,6 +136,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     shared_fpu.io_fp_resp <> io.fp_resp
 
     Seq(shared_fma, shared_fpu)
+  } else if (vParams.useScalarFPU) {
+    val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
+    
+    io.fp_req <> shared_fpu.io_fp_req
+    shared_fpu.io_fp_resp <> io.fp_resp
+
+    Seq(shared_fpu, Module(new FPFMAPipe(vParams.fmaPipeDepth)).suggestName("vfpfmafu"))
   } else {
     io.fp_req.valid := false.B
     io.fp_req.bits := DontCare
