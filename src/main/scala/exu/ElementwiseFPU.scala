@@ -37,7 +37,6 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
   val vd_eew  = io.pipe(0).bits.vd_eew
   val vd_eew64 = io.pipe(0).bits.vd_eew64
   val eidx = Mux(io.pipe(0).bits.acc, 0.U, io.pipe(0).bits.eidx)
-  val ctrl_swap12 = io.pipe(0).bits.opff6.isOneOf(OPFFunct6.frdiv)
 
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && io_fp_req.ready
