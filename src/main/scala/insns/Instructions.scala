@@ -134,7 +134,7 @@ object WMACC     extends OPMInstruction    { val props = Seq(F6(OPMFunct6.wmacc)
 object WMACCU    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.wmaccu)  , ReadsVD.Y, MULSign1.N, MULSign2.N, MULAccumulate.Y, MULSub.N, Wide2VD.Y) }
 object WMACCUS   extends OPMInstruction    { val props = Seq(F6(OPMFunct6.wmaccus) , ReadsVD.Y, MULSign1.N, MULSign2.Y, MULAccumulate.Y, MULSub.N, Wide2VD.Y) }
 object WMACCSU   extends OPMInstruction    { val props = Seq(F6(OPMFunct6.wmaccsu) , ReadsVD.Y, MULSign1.Y, MULSign2.N, MULAccumulate.Y, MULSub.N, Wide2VD.Y) }
-object SMUL      extends OPIInstruction    { val props = Seq(F6(OPIFunct6.smul)    , MULSign1.Y, MULSign2.Y, MULSub.N) }
+object SMUL      extends OPIInstruction    { val props = Seq(F6(OPIFunct6.smul)    , MULHi.N, MULSign1.Y, MULSign2.Y, MULSub.N) }
 
 object DIV       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.div)) }
 object DIVU      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.divu)) }
