@@ -1,9 +1,9 @@
-package vector.backend
+package saturn.backend
 
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import vector.common._
+import saturn.common._
 
 class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreDataMicroOp)(p) {
   def accepts(inst: VectorIssueInst) = inst.vmu && inst.opcode(5)

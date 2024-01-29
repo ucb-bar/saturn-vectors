@@ -1,4 +1,4 @@
-package vector.rocket
+package saturn.rocket
 
 import chisel3._
 import chisel3.util._
@@ -9,9 +9,9 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.diplomacy._
 
-import vector.common._
-import vector.backend.{VectorBackend}
-import vector.mem.{ScalarMemOrderCheckIO, MemRequest}
+import saturn.common._
+import saturn.backend.{VectorBackend}
+import saturn.mem.{ScalarMemOrderCheckIO, MemRequest}
 
 class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {

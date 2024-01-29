@@ -1,4 +1,4 @@
-package vector.exu
+package saturn.exu
 
 import chisel3._
 import chisel3.util._
@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
-import vector.common._
+import saturn.common._
 
 class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extends HasCoreParameters with HasVectorParams {
   val supported_insns = fus.map(_.supported_insns).flatten

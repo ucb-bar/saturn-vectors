@@ -1,10 +1,10 @@
-package vector.backend
+package saturn.backend
 
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import vector.common._
-import vector.insns._
+import saturn.common._
+import saturn.insns._
 
 class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new PermuteMicroOp)(p) {
   def accepts(inst: VectorIssueInst) = inst.vmu && ((!inst.vm && inst.mop =/= mopUnit) || inst.mop(0)) || new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns.filter(_.props.contains(UsesPermuteSeq.Y)), Nil).matched

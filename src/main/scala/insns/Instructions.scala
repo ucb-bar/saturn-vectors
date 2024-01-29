@@ -1,4 +1,4 @@
-package vector.insns
+package saturn.insns
 
 import chisel3._
 import chisel3.util._
@@ -8,7 +8,7 @@ import freechips.rocketchip.subsystem._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.rocket.constants._
 import freechips.rocketchip.util._
-import vector.common.{OPIFunct6, OPMFunct6, OPFFunct6, VectorConsts}
+import saturn.common.{OPIFunct6, OPMFunct6, OPFFunct6, VectorConsts}
 
 class OPIVVInstruction(base: OPIInstruction) extends VectorInstruction {
   val props = base.props ++ Seq(F3(VectorConsts.OPIVV), ReadsVS1.Y)

@@ -1,4 +1,4 @@
-package vector.insns
+package saturn.insns
 
 import chisel3._
 import chisel3.util._

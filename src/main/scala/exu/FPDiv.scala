@@ -1,4 +1,4 @@
-package vector.exu
+package saturn.exu
 
 import chisel3._
 import chisel3.util._
@@ -7,8 +7,8 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import chisel3.util.experimental.decode._
-import vector.common._
-import vector.insns._
+import saturn.common._
+import saturn.insns._
 
 class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {

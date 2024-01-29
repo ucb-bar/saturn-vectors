@@ -1,4 +1,4 @@
-package vector.backend
+package saturn.backend
 
 import chisel3._
 import chisel3.util._
@@ -6,10 +6,10 @@ import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
-import vector.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
-import vector.exu._
-import vector.common._
-import vector.insns._
+import saturn.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
+import saturn.exu._
+import saturn.common._
+import saturn.insns._
 
 class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {

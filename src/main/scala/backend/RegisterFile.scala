@@ -1,10 +1,10 @@
-package vector.backend
+package saturn.backend
 
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{CoreModule}
-import vector.common._
+import saturn.common._
 
 class RegisterReadXbar(n: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val banks = 2

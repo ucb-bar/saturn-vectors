@@ -1,10 +1,10 @@
-package vector.common
+package saturn.common
 
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{CoreModule}
-import vector.common._
+import saturn.common._
 
 abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 

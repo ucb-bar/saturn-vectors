@@ -1,4 +1,4 @@
-package vector.exu
+package saturn.exu
 
 import chisel3._
 import chisel3.util._
@@ -6,8 +6,8 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
-import vector.common._
-import vector.insns._
+import saturn.common._
+import saturn.insns._
 
 class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID)

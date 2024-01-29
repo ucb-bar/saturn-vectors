@@ -1,4 +1,4 @@
-package vector.rocket
+package saturn.rocket
 
 import chisel3._
 import org.chipsalliance.cde.config._
@@ -6,12 +6,12 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy._
-import vector.common._
+import saturn.common._
 
 class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams = VectorParams(), cores: Option[Seq[Int]] = None) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: RocketTileAttachParams => {
-      val buildVector = cores.map(_.contains(tp.tileParams.hartId)).getOrElse(true)
+      val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
         core = tp.tileParams.core.copy(vector = Some(RocketCoreVectorParams(
           build = ((p: Parameters) => new SaturnRocketUnit()(p.alterPartial {
@@ -22,7 +22,8 @@ class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams
           decoder = ((p: Parameters) => {
             val decoder = Module(new EarlyVectorDecode()(p))
             decoder
-          })
+          }),
+          useDCache = true
         ))),
         dcache = tp.tileParams.dcache.map(_.copy(rowBits = dLen)))
       ) else tp

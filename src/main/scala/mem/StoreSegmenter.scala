@@ -1,4 +1,4 @@
-package vector.mem
+package saturn.mem
 
 import chisel3._
 import chisel3.util._
@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
-import vector.common._
+import saturn.common._
 
 class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {

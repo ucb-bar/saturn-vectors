@@ -1,4 +1,4 @@
-package vector.exu
+package saturn.exu
 
 import chisel3._
 import chisel3.util._
@@ -6,8 +6,8 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
-import vector.common._
-import vector.insns.{VectorInstruction}
+import saturn.common._
+import saturn.insns.{VectorInstruction}
 
 abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val iss = new Bundle {
