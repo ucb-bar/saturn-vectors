@@ -13,6 +13,9 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     with HasFPUParameters
     with HasSharedFPUIO {
 
+  val fp_req = Wire(Decoupled(new FPInput))
+  io_fp_req <> Queue(fp_req)
+
   val supported_insns = Seq(
     FDIV.VV, FDIV.VF,
     FRDIV.VF,
@@ -60,7 +63,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U && valid
 
   // Functional unit is ready if not currently running and the scalar FPU is available
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && fp_req.ready
   io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl_funary0 && ctrl_narrow, io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
@@ -140,8 +143,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   // Set req.in3
   req.in3 := 0.U
 
-  io_fp_req.bits := req
-  io_fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN
+  fp_req.bits := req
+  fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN
 
   io_fp_resp.ready := io.write.ready
 
