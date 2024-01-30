@@ -16,6 +16,14 @@ import saturn.mem.{ScalarMemOrderCheckIO, MemRequest}
 
 class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams with HasCoreParameters {
 
+  if (vParams.useScalarFPFMA || vParams.useScalarFPMisc) {
+    require(coreParams.fpu.isDefined)
+    if (vParams.useScalarFPFMA) {
+      require(coreParams.fpu.get.sfmaLatency == vParams.fmaPipeDepth + 1)
+      require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth + 1)
+    }
+  }
+
   val tl_if = LazyModule(new TLInterface)
   atlNode := tl_if.node
 

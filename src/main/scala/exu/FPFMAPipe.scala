@@ -31,7 +31,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val frm_pipe = Pipe(io.valid, io.frm, depth-1)
   val mask_pipe = Pipe(io.valid, io.mask, depth-1)
 
-  val sfma = Module(new MulAddRecFNPipe(depth-1, 8, 24))
+  val sfma = Module(new MulAddRecFNPipe((depth-1) min 2, 8, 24))
   val sfma_validin = io.valid && (io.out_eew === 2.U) && io.mask(1)
   sfma.io.validin := sfma_validin
   sfma.io.op := Mux(sfma_validin, io.op, 0.U)
@@ -48,7 +48,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
     upconvert
   }
 
-  val dfma = Module(new MulAddRecFNPipe(depth-1, 11, 53))
+  val dfma = Module(new MulAddRecFNPipe((depth-1) min 2, 11, 53))
   dfma.io.validin := io.valid && io.mask(0)
   dfma.io.op := io.op
   dfma.io.roundingMode := io.frm
@@ -57,13 +57,25 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   dfma.io.b := Mux(io.b_eew === 3.U, FType.D.recode(io.b), widen(1).io.out)
   dfma.io.c := Mux(io.c_eew === 3.U, FType.D.recode(io.c), widen(2).io.out)
 
+  val sfma_res = Wire(new FPResult)
+  sfma_res.data := sfma.io.out
+  sfma_res.exc := sfma.io.exceptionFlags
+  val dfma_res = Wire(new FPResult)
+  dfma_res.data := dfma.io.out
+  dfma_res.exc := dfma.io.exceptionFlags
+
+  val sfma_out = Pipe(sfma.io.validout, sfma_res, (depth-3) max 0).bits
+  val dfma_out = Pipe(dfma.io.validout, dfma_res, (depth-3) max 0).bits
+
   val narrow = Module(new hardfloat.RecFNToRecFN(11, 53, 8, 24))
   narrow.io.roundingMode := frm_pipe.bits
   narrow.io.detectTininess := hardfloat.consts.tininess_afterRounding
-  narrow.io.in := dfma.io.out
+  narrow.io.in := dfma_out.data
 
-  io.out := Mux(out_eew_pipe.bits === 3.U, FType.D.ieee(dfma.io.out), Cat(FType.S.ieee(sfma.io.out), FType.S.ieee(narrow.io.out)))
-  io.exc := (dfma.io.exceptionFlags & Fill(5, mask_pipe.bits(0))) | (sfma.io.exceptionFlags & Fill(5, mask_pipe.bits(1)))
+  io.out := Mux(out_eew_pipe.bits === 3.U,
+    FType.D.ieee(dfma_out.data),
+    Cat(FType.S.ieee(sfma_out.data), FType.S.ieee(narrow.io.out)))
+  io.exc := (dfma_res.exc & Fill(5, mask_pipe.bits(0))) | (sfma_res.exc & Fill(5, mask_pipe.bits(1)))
 }
 
 

@@ -123,41 +123,39 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     Module(new PermuteUnit).suggestName("vpermfu"),
   )
 
-  val fpFUs = if (vParams.useScalarFMAPipe && vParams.useScalarFPU) {
-    val shared_fma = Module(new ElementwiseFPUFMA(5)).suggestName("fpfma") 
-    val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
 
-    val fpArb = Module(new Arbiter(new FPInput(), 2))
-    io.fp_req <> fpArb.io.out
+  val fpFMA = Module(if (vParams.useScalarFPFMA) {
+    new SharedScalarElementwiseFPFMA(vParams.fmaPipeDepth)
+  } else {
+    new FPFMAPipe(vParams.fmaPipeDepth)
+  }).suggestName("vfpfma")
 
-    fpArb.io.in(0) <> shared_fma.io_fp_req
-    shared_fma.io_fp_resp <> io.fp_resp
-    fpArb.io.in(1) <> shared_fpu.io_fp_req
-    shared_fpu.io_fp_resp <> io.fp_resp
+  val fpMISCs = if (vParams.useScalarFPMisc) Seq(
+    Module(new SharedScalarElementwiseFPMisc).suggestName("vfpmisc")
+  ) else Seq(
+    Module(new FPDivSqrt).suggestName("vfdivfu"),
+    Module(new FPCompPipe).suggestName("vfcmpfu"),
+    Module(new FPConvPipe).suggestName("vfcvtfu")
+  )
 
-    Seq(shared_fma, shared_fpu)
-  } else if (vParams.useScalarFPU) {
-    val shared_fpu = Module(new ElementwiseFPU).suggestName("fpfu")
-    
-    io.fp_req <> shared_fpu.io_fp_req
-    shared_fpu.io_fp_resp <> io.fp_resp
+  val sharedFPUnits = (fpMISCs :+ fpFMA).collect { case fp: HasSharedFPUIO => fp }
 
-    Seq(shared_fpu, Module(new FPFMAPipe(vParams.fmaPipeDepth)).suggestName("vfpfmafu"))
+  if (sharedFPUnits.size > 0) {
+    val shared_fp_arb = Module(new Arbiter(new FPInput(), sharedFPUnits.size))
+    io.fp_req <> shared_fp_arb.io.out
+    sharedFPUnits.zipWithIndex.foreach { case (u,i) =>
+      shared_fp_arb.io.in(i) <> u.io_fp_req
+      u.io_fp_resp <> io.fp_resp
+    }
   } else {
     io.fp_req.valid := false.B
     io.fp_req.bits := DontCare
-    io.fp_resp.ready := DontCare
-    Seq(
-      Module(new FPFMAPipe(vParams.fmaPipeDepth)).suggestName("vfpfmafu"),
-      Module(new FPDivSqrt).suggestName("vfdivfu"),
-      Module(new FPCompPipe).suggestName("vfcmpfu"),
-      Module(new FPConvPipe).suggestName("vfcvtfu")
-    )
+    io.fp_resp.ready := false.B
   }
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = new ExecutionUnit(integerFUs ++ fpFUs)
+  val vxu = new ExecutionUnit(integerFUs ++ fpMISCs :+ fpFMA)
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))

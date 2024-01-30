@@ -13,18 +13,24 @@ class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams
     case tp: RocketTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
-        core = tp.tileParams.core.copy(vector = Some(RocketCoreVectorParams(
-          build = ((p: Parameters) => new SaturnRocketUnit()(p.alterPartial {
-            case VectorParamsKey => params.copy(dLen=dLen)
-          })),
-          vLen = vLen,
-          vMemDataBits = dLen,
-          decoder = ((p: Parameters) => {
-            val decoder = Module(new EarlyVectorDecode()(p))
-            decoder
-          }),
-          useDCache = true
-        ))),
+        core = tp.tileParams.core.copy(
+          vector = Some(RocketCoreVectorParams(
+            build = ((p: Parameters) => new SaturnRocketUnit()(p.alterPartial {
+              case VectorParamsKey => params.copy(dLen=dLen)
+            })),
+            vLen = vLen,
+            vMemDataBits = dLen,
+            decoder = ((p: Parameters) => {
+              val decoder = Module(new EarlyVectorDecode()(p))
+              decoder
+            }),
+            useDCache = true
+          )),
+          fpu = if (params.useScalarFPFMA) { tp.tileParams.core.fpu.map(_.copy(
+            sfmaLatency = params.fmaPipeDepth - 1,
+            dfmaLatency = params.fmaPipeDepth - 1,
+          )) } else { tp.tileParams.core.fpu }
+        ),
         dcache = tp.tileParams.dcache.map(_.copy(rowBits = dLen)))
       ) else tp
     }

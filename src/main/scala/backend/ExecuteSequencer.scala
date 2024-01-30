@@ -40,15 +40,11 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     Mux(inst.renv2, vs2_eew, 0.U),
     Mux(inst.renvd, vs3_eew, 0.U),
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
-  val acc_copy = if (vParams.useScalarFPU && vParams.useScalarFMAPipe) {
-      (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum, 
-        OPFFunct6.fredusum, OPFFunct6.fwredusum, OPFFunct6.fredmax, OPFFunct6.fredmin)
-    } else if (vParams.useScalarFPU) {
-      (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum, 
-        OPFFunct6.fredmax, OPFFunct6.fredmin)
-    } else {
-      (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
-    }
+  val acc_elementwise_opcodes = (Seq(OPFFunct6.fredosum, OPFFunct6.fredosum) ++
+    (if (vParams.useScalarFPMisc) Seq(OPFFunct6.fredmax, OPFFunct6.fredmin) else Nil) ++
+    (if (vParams.useScalarFPFMA) Seq(OPFFunct6.fredusum, OPFFunct6.fwredusum) else Nil)
+  )
+  val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(acc_elementwise_opcodes)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U) && inst.funct3 =/= OPIVV
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
@@ -237,13 +233,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   }
   when (inst.reduction) {
     val acc_bits = acc.asUInt
-    val elementwise_acc = if (vParams.useScalarFPU && vParams.useScalarFMAPipe) {
-      (ctrl.bool(FPAdd) || ctrl.bool(FPComp)) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
-    } else if (vParams.useScalarFPU) {
-      ctrl.bool(FPComp) || inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
-    } else {
-      inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum)
-    }
+    val elementwise_acc = inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum) || (
+      vParams.useScalarFPMisc.B && ctrl.bool(FPComp)
+    ) || (
+      vParams.useScalarFPFMA.B && ctrl.bool(FPAdd)
+    )
+
     when (elementwise_acc && !acc_tail) {
       io.iss.bits.rvs2_data := VecInit.tabulate(4)({sew =>
         if (sew == 3 && dLenOffBits == 3) { io.rvs2.resp } else {

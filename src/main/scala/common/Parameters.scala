@@ -8,9 +8,18 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 object VectorParams {
-  def minParams = VectorParams(useScalarFPU = true, useScalarFMAPipe = true)
-  def refParams = VectorParams(vlissqEntries = 3, vsissqEntries = 3, vxissqEntries = 3, vatSz = 5, useSegmentedIMul = true, doubleBufferSegments = true)
-
+  def minParams = VectorParams()
+  def refParams = VectorParams(
+    vlifqEntries = 8,
+    vsifqEntries = 8,
+    vlissqEntries = 3,
+    vsissqEntries = 3,
+    vxissqEntries = 3,
+    vatSz = 5,
+    useSegmentedIMul = true,
+    doubleBufferSegments = true,
+    useScalarFPFMA = false
+  )
 }
 
 case class VectorParams(
@@ -22,8 +31,8 @@ case class VectorParams(
   vsiqEntries: Int = 4,
 
   // Load store in-flight queues (in VLSU)
-  vlifqEntries: Int = 8,
-  vsifqEntries: Int = 8,
+  vlifqEntries: Int = 4,
+  vsifqEntries: Int = 4,
 
   // Load/store/execute/permute/maskindex issue queues
   vlissqEntries: Int = 0,
@@ -35,9 +44,9 @@ case class VectorParams(
   vatSz: Int = 3,
 
   useSegmentedIMul: Boolean = false,
-  useScalarFPU: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions 
-  useScalarFMAPipe: Boolean = false,  // Use shared scalar FPU for FMA instructions
-  fmaPipeDepth: Int = 3,
+  useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions 
+  useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
+  fmaPipeDepth: Int = 4,
 
   doubleBufferSegments: Boolean = false,
 )
