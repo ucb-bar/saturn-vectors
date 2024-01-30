@@ -287,7 +287,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   }
 
   when (io.iss.fire && !tail) {
-    when (next_is_new_eg(eidx, next_eidx, vd_eew, inst.writes_mask) && !(inst.reduction && !acc_tail) && !compress) {
+    when (next_is_new_eg(eidx, next_eidx, vd_eew, inst.writes_mask) && !inst.reduction && !compress) {
       val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }
