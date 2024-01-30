@@ -19,8 +19,8 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
   if (vParams.useScalarFPFMA || vParams.useScalarFPMisc) {
     require(coreParams.fpu.isDefined)
     if (vParams.useScalarFPFMA) {
-      require(coreParams.fpu.get.sfmaLatency == vParams.fmaPipeDepth + 1)
-      require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth + 1)
+      require(coreParams.fpu.get.sfmaLatency == vParams.fmaPipeDepth - 1)
+      require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth - 1)
     }
   }
 
