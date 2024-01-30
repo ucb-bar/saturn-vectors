@@ -234,9 +234,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   when (inst.reduction) {
     val acc_bits = acc.asUInt
     val elementwise_acc = inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum) || (
-      vParams.useScalarFPMisc.B && ctrl.bool(FPComp)
+      vParams.useScalarFPMisc.B && ctrl.bool(FPComp) && inst.isOpf
     ) || (
-      vParams.useScalarFPFMA.B && ctrl.bool(FPAdd)
+      vParams.useScalarFPFMA.B && ctrl.bool(FPAdd) && inst.isOpf
     )
 
     when (elementwise_acc && !acc_tail) {
