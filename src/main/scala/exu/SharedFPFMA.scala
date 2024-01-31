@@ -44,7 +44,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   val eidx = Mux(io.pipe(0).bits.acc, 0.U, io.pipe(0).bits.eidx)
 
   // Functional unit is ready if not currently running and the scalar FPU is available
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && io_fp_req.ready
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
   io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.vd_eew)
 
   // Create FPInput
@@ -127,6 +127,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
 
   io_fp_req.bits := req
   io_fp_req.valid := io.pipe(0).valid
+  io.pipe0_stall := !io_fp_req.ready
   io_fp_resp.ready := true.B
 
   when (io.pipe(depth-1).valid) { assert(io_fp_resp.valid) }

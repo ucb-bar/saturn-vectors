@@ -30,6 +30,7 @@ class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   ))
   val out = Mux(ctrl.bool(BWInvOut), ~op, op)
 
+  io.pipe0_stall     := false.B
   io.write.valid := io.pipe(0).valid
   io.write.bits.eg := io.pipe(0).bits.wvd_eg
   io.write.bits.mask := Mux(io.pipe(0).bits.isOpm && !io.pipe(0).bits.acc,

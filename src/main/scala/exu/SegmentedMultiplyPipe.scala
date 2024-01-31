@@ -106,7 +106,7 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   // val pipe_out = Pipe(io.pipe(2).valid, out, depth-3).bits
   // val pipe_vxsat = Pipe(io.pipe(2).valid, smul_sat && ctrl_smul, depth-3).bits
   val pipe_vxsat = smul_sat && ctrl_smul
-
+  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(2).valid
   io.write.bits.eg   := io.pipe(2).bits.wvd_eg
   io.write.bits.data := pipe_out

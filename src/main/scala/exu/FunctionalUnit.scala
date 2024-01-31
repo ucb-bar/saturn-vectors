@@ -25,6 +25,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
 class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends FunctionalUnitIO {
   val write = Valid(new VectorWrite(dLen))
   val pipe = Input(Vec(depth, Valid(new ExecuteMicroOp)))
+  val pipe0_stall = Output(Bool())
 }
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {

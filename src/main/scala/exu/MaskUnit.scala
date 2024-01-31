@@ -112,6 +112,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   io.scalar_write.bits.fp := scalar_wb_fp
   io.scalar_write.bits.size := scalar_wb_size
 
+  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(0).valid && (rxunary0 || rfunary0 || munary0)
   io.write.bits.eg   := op.wvd_eg
   io.write.bits.mask := Mux1H(Seq(

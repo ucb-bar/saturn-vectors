@@ -28,15 +28,16 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
   val set_vxsat = Wire(Bool())
   val set_fflags = Wire(Valid(UInt(5.W)))
   val scalar_write = Wire(Decoupled(new ScalarWrite))
+  val pipe_stall = WireInit(false.B)
 
   fus.foreach { fu =>
     fu.io.iss.op := iss.bits
-    fu.io.iss.valid := iss.valid
+    fu.io.iss.valid := iss.valid && !pipe_stall
   }
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
-  iss.ready := readies.orR && !pipe_write_hazard
+  iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
   iss_sub_dlen := Mux1H(readies, fus.map(_.io.iss.sub_dlen))
   when (iss.valid) { assert(PopCount(readies) <= 1.U) }
 
@@ -67,20 +68,23 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
     val pipe_bits      = Seq.fill(pipe_depth)(Reg(new ExecuteMicroOp))
     val pipe_latencies = Seq.fill(pipe_depth)(Reg(UInt(log2Ceil(pipe_depth).W)))
 
+    pipe_stall := Mux1H(pipe_sels.head, pipe_fus.map(_.io.pipe0_stall))
 
     pipe_write_hazard := (0 until pipe_depth).map { i =>
       pipe_valids(i) && pipe_latencies(i) === pipe_iss_depth
     }.orR
 
     val pipe_iss = iss.fire && pipe_fus.map(_.io.iss.ready).orR
-    pipe_valids.head := pipe_iss
-    when (pipe_iss) {
-      pipe_bits.head      := iss.bits
-      pipe_latencies.head := pipe_iss_depth - 1.U
-      pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
+    when (!pipe_stall) {
+      pipe_valids.head := pipe_iss
+      when (pipe_iss) {
+        pipe_bits.head      := iss.bits
+        pipe_latencies.head := pipe_iss_depth - 1.U
+        pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
+      }
     }
     for (i <- 1 until pipe_depth) {
-      val fire = pipe_valids(i-1) && pipe_latencies(i-1) =/= 0.U
+      val fire = pipe_valids(i-1) && pipe_latencies(i-1) =/= 0.U && !((i == 1).B && pipe_stall)
       pipe_valids(i) := fire
       when (fire) {
         pipe_bits(i)      := pipe_bits(i-1)
