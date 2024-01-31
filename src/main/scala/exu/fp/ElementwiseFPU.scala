@@ -133,6 +133,7 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
   io.set_vxsat := false.B
+  io.pipe0_stall := false.B
 }
 
 

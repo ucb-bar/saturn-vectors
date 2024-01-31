@@ -141,4 +141,5 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   io.set_fflags.bits := Mux(rvd_eew === 3.U, exceptions(1), exceptions(0))
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
+  io.pipe0_stall := false.B
 }
