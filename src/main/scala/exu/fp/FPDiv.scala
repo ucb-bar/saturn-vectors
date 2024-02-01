@@ -532,13 +532,20 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)
 
-  val ctrl = new VectorDecoder(
+  val accept_inst = new VectorDecoder(
     io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
+    supported_insns,
+    Seq(FPSwapVdV2))
+
+  val ctrl = new VectorDecoder(
+    op.funct3, op.funct6, op.rs1, op.rs2,
     supported_insns,
     Seq(FPSwapVdV2))
 
   val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
   val divSqrt_ready = (ctrl_isDiv && divSqrt.io.inReady_div) || (!ctrl_isDiv && divSqrt.io.inReady_sqrt)
+
+  val div_op = op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
 
   val rvs2_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
   val rvs1_bits = extract(op.rvs1_data, false.B, op.rvs1_eew, op.eidx)(63,0)
@@ -550,16 +557,16 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   val iss_fire_pipe = Reg(Bool())
   iss_fire_pipe := io.iss.valid && io.iss.ready
 
-  divSqrt.io.inValid := iss_fire_pipe && (ctrl_isDiv || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
-  divSqrt.io.sqrtOp := !ctrl_isDiv
+  divSqrt.io.inValid := iss_fire_pipe && (div_op || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
+  divSqrt.io.sqrtOp := !div_op
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
 
   when (op.rvs1_eew === 3.U) {
-    divSqrt.io.a := Mux(ctrl.bool(FPSwapVdV2) && ctrl_isDiv, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
-    divSqrt.io.b := Mux(ctrl.bool(FPSwapVdV2) || !ctrl_isDiv, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
+    divSqrt.io.a := Mux(ctrl.bool(FPSwapVdV2) && div_op, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))
+    divSqrt.io.b := Mux(ctrl.bool(FPSwapVdV2) || !div_op, FType.D.recode(rvs2_bits), FType.D.recode(rvs1_bits))
   } .otherwise {
     val narrow_rvs2_bits = rvs2_bits(31,0)
     val narrow_rvs1_bits = rvs1_bits(31,0)
@@ -571,8 +578,8 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
       upconvert
     }
 
-    divSqrt.io.a := Mux(ctrl.bool(FPSwapVdV2) && ctrl_isDiv, widen(1).io.out, widen(0).io.out)
-    divSqrt.io.b := Mux(ctrl.bool(FPSwapVdV2) || !ctrl_isDiv, widen(0).io.out, widen(1).io.out)
+    divSqrt.io.a := Mux(ctrl.bool(FPSwapVdV2) && div_op, widen(1).io.out, widen(0).io.out)
+    divSqrt.io.b := Mux(ctrl.bool(FPSwapVdV2) || !div_op, widen(0).io.out, widen(1).io.out)
   }
 
   val divSqrt_out_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
@@ -623,7 +630,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Fill(dLenB >> 3, out)
-  io.iss.ready := ctrl.matched && divSqrt_ready && (!valid || last)
+  io.iss.ready := accept_inst.matched && divSqrt_ready && (!valid || last)
   last := io.write.fire()
 
   io.set_fflags.valid := divSqrt_out_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())
