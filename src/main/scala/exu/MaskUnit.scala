@@ -23,7 +23,6 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2, supported_insns, Nil).matched && !scalar_wb_busy
 
-  io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare

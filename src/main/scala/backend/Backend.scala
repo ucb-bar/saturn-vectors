@@ -263,7 +263,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.rvd := DontCare
     seq.io.rvm := DontCare
     seq.io.perm := DontCare
-    seq.io.sub_dlen := 0.U
     seq.io.acc.valid := false.B
     seq.io.acc.bits := DontCare
 
@@ -415,7 +414,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   clearVat(vxu.vat_release.valid               , vxu.vat_release.bits)
 
   vxu.iss <> vxs.io.iss
-  vxs.io.sub_dlen := vxu.iss_sub_dlen
   vxs.io.acc := vxu.acc_write
 
 

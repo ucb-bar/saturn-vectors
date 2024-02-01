@@ -97,10 +97,6 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
-  io.iss.sub_dlen := Mux(io.iss.op.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum),
-    dLenOffBits.U - io.iss.op.vd_eew,
-    0.U)
-
   io.set_vxsat := false.B
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(

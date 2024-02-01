@@ -174,8 +174,8 @@ object FWMACC    extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwmacc
 object FWNMACC   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwnmacc)  , FPAdd.Y, FPMul.Y, FPSwapVdV2.N, FPFMACmd(3.U(2.W)), Wide2VD.Y, ReadsVD.Y) }
 object FWMSAC    extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwmsac)   , FPAdd.Y, FPMul.Y, FPSwapVdV2.N, FPFMACmd(1.U(2.W)), Wide2VD.Y, ReadsVD.Y) }
 object FWNMSAC   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwnmsac)  , FPAdd.Y, FPMul.Y, FPSwapVdV2.N, FPFMACmd(2.U(2.W)), Wide2VD.Y, ReadsVD.Y) }
-object FREDOSUM  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredosum) , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Reduction.Y, AccInitZeros.Y) }
-object FREDUSUM  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredusum) , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Reduction.Y, AccInitZeros.Y) }
+object FREDOSUM  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredosum) , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Reduction.Y, AccInitZeros.Y, Elementwise.Y) }
+object FREDUSUM  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredusum) , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Reduction.Y, AccInitZeros.Y, Elementwise.Y) }
 object FWREDOSUM extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwredosum), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Wide2VD.Y, Reduction.Y, AccInitZeros.Y) }
 object FWREDUSUM extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwredusum), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Wide2VD.Y, Reduction.Y, AccInitZeros.Y) }
 
@@ -213,7 +213,7 @@ object FSLIDE1DOWN extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fsli
 
 object RGATHER_VX  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather)    , F3(VectorConsts.OPIVX)) }
 object RGATHER_VI  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather)    , F3(VectorConsts.OPIVI)) }
-object RGATHER_VV  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather)    , F3(VectorConsts.OPIVV), UsesPermuteSeq.Y) }
-object RGATHEREI16 extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgatherei16), F3(VectorConsts.OPIVV), UsesPermuteSeq.Y) }
-object COMPRESS    extends OPMInstruction       { val props = Seq(F6(OPMFunct6.compress)   , ReadsVS1AsMask.Y) }
+object RGATHER_VV  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather)    , F3(VectorConsts.OPIVV), UsesPermuteSeq.Y, Elementwise.Y) }
+object RGATHEREI16 extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgatherei16), F3(VectorConsts.OPIVV), UsesPermuteSeq.Y, Elementwise.Y) }
+object COMPRESS    extends OPMInstruction       { val props = Seq(F6(OPMFunct6.compress)   , ReadsVS1AsMask.Y, Elementwise.Y) }
 object MVNRR       extends VectorInstruction    { val props = Seq(F6(OPIFunct6.mvnrr)      , F3(VectorConsts.OPIVI)) }

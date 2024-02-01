@@ -526,9 +526,8 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     FRSQRT7_V,
     FREC7_V,
     FCLASS_V
-  )
+  ).map(_.elementWise)
 
-  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs2_eew
   io.set_vxsat := false.B
 
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)

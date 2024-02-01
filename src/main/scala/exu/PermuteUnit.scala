@@ -18,8 +18,6 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     MVNRR
   )
 
-  io.iss.sub_dlen := Mux((io.iss.op.funct3 === OPIVV && io.iss.op.opif6.isOneOf(OPIFunct6.rgather, OPIFunct6.rgatherei16)) || (io.iss.op.funct3 === OPMVV && io.iss.op.funct6 === OPMFunct6.compress.litValue.U),
-    log2Ceil(dLenB).U - io.iss.op.vd_eew, 0.U)
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
     supported_insns, Nil).matched
 

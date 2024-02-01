@@ -60,13 +60,13 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val renvm    = inst.renvm
   val renacc   = inst.reduction
   val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
-    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp))
+    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise))
 
   val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val eff_vl    = Mux(mvnrr, ((vLen/8).U >> vd_eew) << inst.emul, Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl))
   val increments_as_mask = (!inst.renv1 || inst.reads_vs1_mask) && (!inst.renv2 || inst.reads_vs2_mask) && (!inst.wvd || inst.writes_mask)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, io.sub_dlen, increments_as_mask)
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, increments_as_mask, ctrl.bool(Elementwise))
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 

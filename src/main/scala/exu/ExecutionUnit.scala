@@ -16,7 +16,6 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
   val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
   val nHazards = pipe_depth + iter_fus.size
 
-  val iss_sub_dlen = Wire(UInt(log2Ceil(dLenB).W))
   val iss = Wire(Decoupled(new ExecuteMicroOp))
 
   val write = Wire(Valid(new VectorWrite(dLen)))
@@ -38,7 +37,6 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
   iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
-  iss_sub_dlen := Mux1H(readies, fus.map(_.io.iss.sub_dlen))
   when (iss.valid) { assert(PopCount(readies) <= 1.U) }
 
   val pipe_write = WireInit(false.B)

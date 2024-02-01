@@ -15,12 +15,12 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
     DIV.VV, DIV.VX,
     REMU.VV, REMU.VX,
     REM.VV, REM.VX
-  )
+  ).map(_.elementWise)
 
   val div = Module(new MulDiv(MulDivParams(mulUnroll = 0), 64, 1))
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && div.io.req.ready && (!valid || last)
 
-  io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
+  //io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.rvs1_eew
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare

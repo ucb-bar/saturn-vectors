@@ -18,7 +18,6 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     MFGT.VF, MFGE.VF,
     FREDMIN.VV, FREDMAX.VV)
 
-  io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,

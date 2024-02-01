@@ -19,10 +19,9 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
     MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
     WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
-    SMUL.VV, SMUL.VX)
+    SMUL.VV.elementWise, SMUL.VX.elementWise)
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
   // TODO: SMUL currently operates at 1 element/cycle
-  io.iss.sub_dlen := Mux(io.iss.op.opif6 === OPIFunct6.smul, log2Ceil(dLenB).U - io.iss.op.vd_eew, 0.U)
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare

@@ -31,6 +31,7 @@ object WritesScalar      extends NDefaultInstructionField
 object UsesPermuteSeq    extends NDefaultInstructionField
 
 // Execute Sequencer control
+object Elementwise       extends NDefaultInstructionField
 object SetsWMask         extends YDefaultInstructionField
 object AccInitZeros      extends NDefaultInstructionField
 object AccInitOnes       extends NDefaultInstructionField

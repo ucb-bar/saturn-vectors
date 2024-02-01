@@ -30,9 +30,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
     Mux(slide_up, inst.vconfig.vl - slide_offset, min(inst.vconfig.vtype.vlMax, inst.vconfig.vl + slide_offset)),
     inst.vconfig.vl
   )(log2Ceil(maxVLMax),0)
-  val next_eidx = Mux(elementwise,
-    eidx +& 1.U,
-    get_next_eidx(eff_vl, eidx, incr_eew, 0.U, false.B))
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, false.B, elementwise)
   val tail = next_eidx === eff_vl
 
   io.dis.ready := !valid || (tail && io.iss.fire)

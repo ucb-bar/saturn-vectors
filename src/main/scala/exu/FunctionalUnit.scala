@@ -13,7 +13,6 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
   val iss = new Bundle {
     val valid = Input(Bool())
     val op = Input(new ExecuteMicroOp)
-    val sub_dlen = Output(UInt(log2Ceil(dLenB).W))
     val ready = Output(Bool())
   }
 

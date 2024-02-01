@@ -27,7 +27,7 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
     FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV,
-  )
+  ).map(_.elementWise)
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, FPSpecRM, Wide2VD, Wide2VS2, Reduction))
@@ -40,7 +40,6 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
 
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && io_fp_req.ready
-  io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.vd_eew)
 
   // Create FPInput 
   val req = Wire(new FPInput)
@@ -155,7 +154,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
     MFGT.VF, MFGE.VF,
     FREDMIN.VV, FREDMAX.VV,
     FCVT_SGL, FCVT_WID, FCVT_NRW
-  )
+  ).map(_.elementWise)
 
   val ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Seq(
     FPSwapVdV2, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
@@ -189,7 +188,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready
-  io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl_funary0 && ctrl_narrow, io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat

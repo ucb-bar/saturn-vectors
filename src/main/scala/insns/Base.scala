@@ -41,7 +41,16 @@ trait VectorInstruction {
   val props: Seq[InstructionProperty]
   def lookup(field: InstructionField) = {
     val matches = props.collect { case InstructionProperty(`field`, value) => value }
-    require(matches.size <= 1, s"Field lookup for $field returned multiple results")
-    if (matches.size == 1) { matches(0) } else { field.default }
+    if (matches.size > 0) {
+      require(matches.toSet.size <= 1, s"Field lookup for $field returned multiple results")
+      matches(0)
+    } else {
+      field.default
+    }
   }
+  def elementWise: VectorInstruction = new ElementwiseVectorInstruction(props)
+}
+
+class ElementwiseVectorInstruction(_props: Seq[InstructionProperty]) extends VectorInstruction {
+  val props = _props :+ Elementwise.Y
 }
