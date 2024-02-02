@@ -149,6 +149,10 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
 
+  when (x_may_be_valid && (io.core.set_vstart.valid && io.core.set_vstart.bits === 0.U)) {
+    m_inst.vstart := 0.U
+  }
+
   when (io.tlb.s1_resp.miss && m_tlb_req_valid && x_tlb_backoff === 0.U) { x_tlb_backoff := 3.U }
 
   io.scalar_check.addr := io.tlb.s1_resp.paddr
@@ -192,6 +196,9 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   when (m_valid) {
     w_inst := m_inst
     w_inst.rs1_data := Mux(m_inst.isOpf && !m_inst.vmu, io.core.mem.frs1, m_inst.rs1_data)
+    when (io.core.set_vstart.valid && io.core.set_vstart.bits === 0.U) {
+      w_inst.vstart := 0.U
+    }
   }
 
   io.core.wb.retire := false.B
