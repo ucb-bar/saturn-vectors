@@ -71,13 +71,13 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   req.typ := 0.U
   req.fmt := 0.U
 
-  val rvs2_extract = extract(io.pipe(0).bits.rvs2_data, false.B, vs2_eew, eidx)(63,0)
-  val rvs1_extract = extract(io.pipe(0).bits.rvs1_data, false.B, vs1_eew, eidx)(63,0)
-  val rvd_extract = extract(io.pipe(0).bits.rvd_data, false.B, vd_eew, eidx)(63,0)
+  val rvs2_elem = io.pipe(0).bits.rvs2_elem
+  val rvs1_elem = io.pipe(0).bits.rvs1_elem
+  val rvd_elem  = io.pipe(0).bits.rvd_elem
 
-  val s_rvs2 = FType.S.recode(rvs2_extract(31,0))
-  val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
-  val s_rvd = FType.S.recode(rvd_extract(31,0))
+  val s_rvs2 = FType.S.recode(rvs2_elem(31,0))
+  val s_rvs1 = FType.S.recode(rvs1_elem(31,0))
+  val s_rvd = FType.S.recode(rvd_elem(31,0))
 
   // For widening operations, widen the narrow operands to compute with the scalar FPU
   val widen_rvs1 = Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53))
@@ -90,17 +90,17 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   widen_rvs2.io.roundingMode := io.pipe(0).bits.frm
   widen_rvs2.io.detectTininess := hardfloat.consts.tininess_afterRounding
 
-  val d_rvs2 = FType.D.recode(rvs2_extract)
-  val d_rvs1 = FType.D.recode(rvs1_extract)
-  val d_rvd = FType.D.recode(rvd_extract)
+  val d_rvs2 = FType.D.recode(rvs2_elem)
+  val d_rvs1 = FType.D.recode(rvs1_elem)
+  val d_rvd = FType.D.recode(rvd_elem)
 
-  val rvs2_elem = Mux(vd_eew64, d_rvs2, s_rvs2)
-  val rvs1_elem = Mux(vd_eew64, d_rvs1, s_rvs1)
-  val rvd_elem =  Mux(vd_eew64, d_rvd, s_rvd)
+  val rvs2_recoded = Mux(vd_eew64, d_rvs2, s_rvs2)
+  val rvs1_recoded = Mux(vd_eew64, d_rvs1, s_rvs1)
+  val rvd_recoded =  Mux(vd_eew64, d_rvd, s_rvd)
 
   // Set req.in1
   when (ctrl.bool(FPSwapVdV2)) {
-    req.in1 := rvd_elem
+    req.in1 := rvd_recoded
   } .elsewhen (vs2_eew === 3.U) {
     req.in1 := d_rvs2
   } .elsewhen (ctrl.bool(Wide2VD)) {
@@ -120,9 +120,9 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
 
   // Set req.in3
   when (ctrl.bool(FPSwapVdV2)) {
-    req.in3 := rvs2_elem
+    req.in3 := rvs2_recoded
   } .otherwise {
-    req.in3 := rvd_elem
+    req.in3 := rvd_recoded
   }
 
   io_fp_req.bits := req

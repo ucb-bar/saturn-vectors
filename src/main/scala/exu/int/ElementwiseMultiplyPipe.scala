@@ -36,9 +36,9 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val out_eew = io.pipe(depth-1).bits.vd_eew
   val eidx = io.pipe(depth-1).bits.eidx
 
-  val in_vs1 = extract(io.pipe(depth-1).bits.rvs1_data, ctrl.bool(MULSign1), in_eew , eidx)(64,0)
-  val in_vs2 = extract(io.pipe(depth-1).bits.rvs2_data, ctrl.bool(MULSign2), in_eew , eidx)(64,0)
-  val in_vd  = extract(io.pipe(depth-1).bits.rvd_data , false.B            , out_eew, eidx)(64,0)
+  val in_vs1 = Mux(ctrl.bool(MULSign1), sextElem(io.pipe(depth-1).bits.rvs1_elem, in_eew), io.pipe(depth-1).bits.rvs1_elem)
+  val in_vs2 = Mux(ctrl.bool(MULSign2), sextElem(io.pipe(depth-1).bits.rvs2_elem, in_eew), io.pipe(depth-1).bits.rvs2_elem)
+  val in_vd  = io.pipe(depth-1).bits.rvd_elem
 
   val prod = in_vs1.asSInt * Mux(ctrl.bool(MULSwapVdV2), in_vd, in_vs2).asSInt
   val hi = VecInit.tabulate(4)({ eew => prod >> (8 << eew) })(out_eew)(63,0)

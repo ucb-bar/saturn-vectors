@@ -32,8 +32,12 @@ class IterativeIntegerDivider(implicit p: Parameters) extends IterativeFunctiona
   val ctrl_signed = io.iss.op.funct6(0)
 
   div.io.req.bits.fn := ctrl_fn
-  div.io.req.bits.in1 := extract(io.iss.op.rvs2_data, ctrl_signed, io.iss.op.rvs1_eew, io.iss.op.eidx).asUInt
-  div.io.req.bits.in2 := extract(io.iss.op.rvs1_data, ctrl_signed, io.iss.op.rvs1_eew, io.iss.op.eidx).asUInt
+  div.io.req.bits.in1 := Mux(ctrl_signed,
+    sextElem(io.iss.op.rvs2_elem, io.iss.op.rvs2_eew),
+    io.iss.op.rvs2_elem)
+  div.io.req.bits.in2 := Mux(ctrl_signed,
+    sextElem(io.iss.op.rvs1_elem, io.iss.op.rvs1_eew),
+    io.iss.op.rvs1_elem)
   div.io.req.bits.dw  := DW_64
   div.io.req.bits.tag := DontCare
 

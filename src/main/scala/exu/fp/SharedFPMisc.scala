@@ -94,23 +94,23 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   req.typ := Mux(ctrl_funary0, Cat((ctrl_inttofp && ctrl_narrow) || (ctrl_fptoint && ctrl_widen) || (ctrl_single_wide && vd_eew64), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
-  val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, vs2_eew, eidx)(63,0)
-  val rvs1_extract = extract(io.iss.op.rvs1_data, false.B, vs1_eew, eidx)(63,0)
-  val rvd_extract = extract(io.iss.op.rvd_data, false.B, vd_eew, eidx)(63,0)
+  val rvs2_elem = io.iss.op.rvs2_elem
+  val rvs1_elem = io.iss.op.rvs1_elem
+  val rvd_elem  = io.iss.op.rvd_elem
 
-  val s_rvs2_int = rvs2_extract(31,0)
-  val s_rvs2_fp = FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0)))
+  val s_rvs2_int = rvs2_elem(31,0)
+  val s_rvs2_fp = FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(31,22) << 22, rvs2_elem(31,0)))
   val s_rvs2_unbox = unbox(box(s_rvs2_fp, FType.S), S, None)
 
-  val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
+  val s_rvs1 = FType.S.recode(rvs1_elem(31,0))
   val s_rvs1_unbox = unbox(box(s_rvs1, FType.S), S, None)
-  val s_rvd = FType.S.recode(rvd_extract(31,0))
+  val s_rvd = FType.S.recode(rvd_elem(31,0))
 
-  val d_rvs2_int = rvs2_extract
-  val d_rvs2_fp = FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(63, 51) << 51, rvs2_extract))
+  val d_rvs2_int = rvs2_elem
+  val d_rvs2_fp = FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(63, 51) << 51, rvs2_elem))
 
-  val d_rvs1 = FType.D.recode(rvs1_extract)
-  val d_rvd = FType.D.recode(rvd_extract)
+  val d_rvs1 = FType.D.recode(rvs1_elem)
+  val d_rvd = FType.D.recode(rvd_elem)
 
   val s_isNaN = FType.S.isNaN(s_rvs2_fp) || FType.S.isNaN(s_rvs1)
   val d_isNaN = FType.D.isNaN(d_rvs2_fp) || FType.D.isNaN(d_rvs1)
@@ -149,7 +149,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   io_fp_resp.ready := io.write.ready
 
   // Approximation Instructions
-  val rvs2_op_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
+  val rvs2_op_bits = op.rvs2_elem
 
   // Reciprocal Sqrt Approximation
   val recSqrt7 = Module(new VFRSQRT7)

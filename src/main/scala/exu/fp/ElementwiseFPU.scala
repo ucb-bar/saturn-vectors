@@ -65,13 +65,13 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
   req.typ := 0.U
   req.fmt := 0.U
 
-  val rvs2_extract = extract(io.pipe(0).bits.rvs2_data, false.B, vs2_eew, eidx)(63,0)
-  val rvs1_extract = extract(io.pipe(0).bits.rvs1_data, false.B, vs1_eew, eidx)(63,0) 
-  val rvd_extract = extract(io.pipe(0).bits.rvd_data, false.B, vd_eew, eidx)(63,0) 
+  val rvs2_elem = io.pipe(0).bits.rvs2_elem
+  val rvs1_elem = io.pipe(0).bits.rvs1_elem
+  val rvd_elem = io.pipe(0).bits.rvd_elem
 
-  val s_rvs2 = FType.S.recode(rvs2_extract(31,0))
-  val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
-  val s_rvd = FType.S.recode(rvd_extract(31,0))
+  val s_rvs2 = FType.S.recode(rvs2_elem(31,0))
+  val s_rvs1 = FType.S.recode(rvs1_elem(31,0))
+  val s_rvd = FType.S.recode(rvd_elem(31,0))
 
   // For widening operations, widen the narrow operands to compute with the scalar FPU 
   val widen_rvs1 = Module(new hardfloat.RecFNToRecFN(8, 24, 11, 53))
@@ -84,17 +84,17 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
   widen_rvs2.io.roundingMode := io.pipe(0).bits.frm
   widen_rvs2.io.detectTininess := hardfloat.consts.tininess_afterRounding
 
-  val d_rvs2 = FType.D.recode(rvs2_extract)
-  val d_rvs1 = FType.D.recode(rvs1_extract)
-  val d_rvd = FType.D.recode(rvd_extract)
+  val d_rvs2 = FType.D.recode(rvs2_elem)
+  val d_rvs1 = FType.D.recode(rvs1_elem)
+  val d_rvd = FType.D.recode(rvd_elem)
 
-  val rvs2_elem = Mux(vd_eew64, d_rvs2, s_rvs2)
-  val rvs1_elem = Mux(vd_eew64, d_rvs1, s_rvs1)
-  val rvd_elem =  Mux(vd_eew64, d_rvd, s_rvd)
+  val rvs2_recoded_elem = Mux(vd_eew64, d_rvs2, s_rvs2)
+  val rvs1_recoded_elem = Mux(vd_eew64, d_rvs1, s_rvs1)
+  val rvd_recoded_elem =  Mux(vd_eew64, d_rvd, s_rvd)
 
   // Set req.in1
   when (ctrl.bool(FPSwapVdV2)) {
-    req.in1 := rvd_elem
+    req.in1 := rvd_recoded_elem
   } .elsewhen (vs2_eew === 3.U) {
     req.in1 := d_rvs2 
   } .elsewhen (ctrl.bool(Wide2VD)) {
@@ -114,9 +114,9 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
   
   // Set req.in3
   when (ctrl.bool(FPSwapVdV2)) {
-    req.in3 := rvs2_elem
+    req.in3 := rvs2_recoded_elem
   } .otherwise {
-    req.in3 := rvd_elem
+    req.in3 := rvd_recoded_elem
   }
 
   io_fp_req.bits := req
@@ -217,23 +217,23 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   req.typ := Mux(ctrl_funary0, Cat((ctrl_inttofp && ctrl_narrow) || (ctrl_fptoint && ctrl_widen) || (ctrl_single_wide && vd_eew64), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
-  val rvs2_extract = extract(io.iss.op.rvs2_data, false.B, vs2_eew, eidx)(63,0)
-  val rvs1_extract = extract(io.iss.op.rvs1_data, false.B, vs1_eew, eidx)(63,0) 
-  val rvd_extract = extract(io.iss.op.rvd_data, false.B, vd_eew, eidx)(63,0) 
+  val rvs2_elem = io.iss.op.rvs2_elem
+  val rvs1_elem = io.iss.op.rvs1_elem
+  val rvd_elem = io.iss.op.rvd_elem
 
-  val s_rvs2_int = rvs2_extract(31,0)
-  val s_rvs2_fp = FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(31,22) << 22, rvs2_extract(31,0)))
+  val s_rvs2_int = rvs2_elem(31,0)
+  val s_rvs2_fp = FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(31,22) << 22, rvs2_elem(31,0)))
   val s_rvs2_unbox = unbox(box(s_rvs2_fp, FType.S), S, None) 
 
-  val s_rvs1 = FType.S.recode(rvs1_extract(31,0))
+  val s_rvs1 = FType.S.recode(rvs1_elem(31,0))
   val s_rvs1_unbox = unbox(box(s_rvs1, FType.S), S, None)
-  val s_rvd = FType.S.recode(rvd_extract(31,0))
+  val s_rvd = FType.S.recode(rvd_elem(31,0))
 
-  val d_rvs2_int = rvs2_extract
-  val d_rvs2_fp = FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_extract(63, 51) << 51, rvs2_extract))
+  val d_rvs2_int = rvs2_elem
+  val d_rvs2_fp = FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(63, 51) << 51, rvs2_elem))
 
-  val d_rvs1 = FType.D.recode(rvs1_extract)
-  val d_rvd = FType.D.recode(rvd_extract)
+  val d_rvs1 = FType.D.recode(rvs1_elem)
+  val d_rvd = FType.D.recode(rvd_elem)
 
   val s_isNaN = FType.S.isNaN(s_rvs2_fp) || FType.S.isNaN(s_rvs1)
   val d_isNaN = FType.D.isNaN(d_rvs2_fp) || FType.D.isNaN(d_rvs1)
@@ -272,7 +272,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io_fp_resp.ready := io.write.ready
 
   // Approximation Instructions
-  val rvs2_op_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
+  val rvs2_op_bits = op.rvs2_elem
 
   // Reciprocal Sqrt Approximation
   val recSqrt7 = Module(new VFRSQRT7)

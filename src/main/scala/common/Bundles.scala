@@ -138,6 +138,10 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val rvd_data  = UInt(dLen.W)
   val rvm_data  = UInt(dLen.W)
 
+  val rvs1_elem = UInt(64.W)
+  val rvs2_elem = UInt(64.W)
+  val rvd_elem  = UInt(64.W)
+
   val rvs1_eew = UInt(2.W)
   val rvs2_eew = UInt(2.W)
   val rvd_eew = UInt(2.W)

@@ -16,6 +16,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
   val head  = Reg(Bool())
+  val reduction_head = Reg(Bool())
   val wvd_mask  = Reg(UInt(egsTotal.W))
   val rvs1_mask = Reg(UInt(egsTotal.W))
   val rvs2_mask = Reg(UInt(egsTotal.W))
@@ -54,8 +55,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val rgather_v  = rgather && inst.funct3.isOneOf(OPIVV)
   val slide_offset = Mux(inst.isOpi, get_max_offset(uscalar), 1.U)
   val slide_up = !inst.funct6(0)
-  val renv1    = Mux(inst.reduction, head, inst.renv1)
-  val renv2    = Mux(rgather_ix, head, Mux(inst.reduction, !head && !acc_tail, inst.renv2))
+  val renv1    = Mux(inst.reduction, reduction_head, inst.renv1)
+  val renv2    = Mux(rgather_ix, head, Mux(inst.reduction, !reduction_head && !acc_tail, inst.renv2))
   val renvd    = inst.renvd
   val renvm    = inst.renvm
   val renacc   = inst.reduction
@@ -89,6 +90,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     rvd_mask    := Mux(iss_inst.renvd, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvm_mask    := Mux(iss_inst.renvm, ~(0.U(egsPerVReg.W)), 0.U)
     head        := true.B
+    reduction_head := true.B
     acc_tail    := false.B
     acc_tail_id := 0.U
     acc_ready   := true.B
@@ -175,11 +177,14 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     !(renacc && !acc_ready)
   )
   io.perm.req.valid := iss_valid && read_perm_buffer
-  io.iss.valid := iss_valid && !(inst.reduction && head)
+  io.iss.valid := iss_valid && !(inst.reduction && reduction_head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
   io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvd_data  := io.rvd.resp
+  io.iss.bits.rvs1_elem := extractElem(io.rvs1.resp, vs1_eew, eidx)
+  io.iss.bits.rvs2_elem := extractElem(io.rvs2.resp, vs2_eew, eidx)
+  io.iss.bits.rvd_elem  := extractElem(io.rvd.resp , vs3_eew, eidx)
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew
   io.iss.bits.rvd_eew   := vs3_eew
@@ -229,8 +234,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.bits.full_tail_mask := full_tail_mask
 
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF)) {
+    io.iss.bits.rvs1_elem := sscalar
     io.iss.bits.rvs1_data := dLenSplat(sscalar, vs1_eew)
   }
+
   when (inst.reduction) {
     val acc_bits = acc.asUInt
     val elementwise_acc = inst.opff6.isOneOf(OPFFunct6.fredosum, OPFFunct6.fwredosum) || (
@@ -240,11 +247,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     )
 
     when (elementwise_acc && !acc_tail) {
-      io.iss.bits.rvs2_data := VecInit.tabulate(4)({sew =>
-        if (sew == 3 && dLenOffBits == 3) { io.rvs2.resp } else {
-          io.rvs2.resp.asTypeOf(Vec(dLenB >> sew, UInt((8 << sew).W)))(eidx(dLenOffBits-sew-1,0))
-        }
-      })(vs2_eew)
+      io.iss.bits.rvs2_data := io.iss.bits.rvs2_elem
       val mask_bit = Mux(use_wmask, (io.rvm.resp >> eidx(log2Ceil(dLen)-1,0))(0), true.B)
       io.iss.bits.wmask := VecInit.tabulate(4)({sew => Fill(1 << sew, mask_bit)})(vd_eew)
     }
@@ -253,32 +256,35 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
         val start = dLen >> (1 + i)
         acc_bits(2*start-1,start)
       })(acc_tail_id)
+      io.iss.bits.rvs1_elem := Mux(acc_copy, acc_init, folded)
       io.iss.bits.rvs1_data := Mux(acc_copy, acc_init, folded)
       io.iss.bits.rvs1_eew := vd_eew
+      io.iss.bits.rvs2_elem := acc_bits
       io.iss.bits.rvs2_data := acc_bits
       io.iss.bits.rvs2_eew  := vd_eew
-    } .elsewhen (head) {
-      io.iss.bits.rvs1_eew := vs1_eew
-      io.iss.bits.rvs2_data := acc_init
     } .otherwise {
+      io.iss.bits.rvs1_elem := acc_bits
       io.iss.bits.rvs1_data := acc_bits
-      io.iss.bits.rvs1_eew := vd_eew
+      io.iss.bits.rvs1_eew  := vd_eew
     }
   }
   when (rgather_v || rgatherei16) {
+    io.iss.bits.rvs1_elem := rgather_eidx
     io.iss.bits.rvs1_data := rgather_eidx
   }
   when (rgather_zero && (rgather || rgatherei16)) {
+    io.iss.bits.rvs2_elem := 0.U
     io.iss.bits.rvs2_data := 0.U
   }
   when (slide) {
+    io.iss.bits.rvs2_elem := io.perm.data & slide_down_bit_mask
     io.iss.bits.rvs2_data := io.perm.data & slide_down_bit_mask
   }
 
-  when (iss_valid && inst.reduction && head) {
+  when (iss_valid && inst.reduction && reduction_head) {
     val v0_mask = eewBitMask(vd_eew)
     acc := ((acc_init & ~v0_mask.pad(dLen)) | (io.rvs1.resp & v0_mask)).asTypeOf(Vec(dLenB, UInt(8.W)))
-    head := false.B
+    reduction_head := false.B
   }
 
   when (io.iss.fire && !tail) {

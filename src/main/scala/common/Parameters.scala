@@ -85,6 +85,22 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     Mux1H(UIntToOH(eew), (0 until 4).map { i => Fill(dLenB >> i, v((8<<i)-1,0)) })
   }
 
+  def sextElem(in: UInt, in_eew: UInt): UInt = VecInit.tabulate(4)( { eew =>
+    Cat(in((8 << eew)-1), in((8 << eew)-1,0)).asSInt
+  })(in_eew)(64,0)
+
+  def extractElem(in: UInt, in_eew: UInt, eidx: UInt): UInt = {
+    val bytes = in.asTypeOf(Vec(dLenB, UInt(8.W)))
+    VecInit.tabulate(4) { eew =>
+      val elem = if (dLen == 64 && eew == 3) {
+        in
+      } else {
+        VecInit(bytes.grouped(1 << eew).map(g => VecInit(g).asUInt).toSeq)(eidx(log2Ceil(dLenB)-1-eew,0))
+      }
+      elem((8 << eew)-1,0)
+    }(in_eew)
+  }
+
   def maxPosUInt(sew: Int) = Cat(0.U, ~(0.U(((8 << sew)-1).W)))
   def minNegUInt(sew: Int) = Cat(1.U,   0.U(((8 << sew)-1).W))
   def maxPosSInt(sew: Int) = ((1 << ((8 << sew)-1))-1).S

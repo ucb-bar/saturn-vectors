@@ -547,9 +547,8 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val div_op = op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
 
-  val rvs2_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
-  val rvs1_bits = extract(op.rvs1_data, false.B, op.rvs1_eew, op.eidx)(63,0)
-  val rvs2_op_bits = extract(op.rvs2_data, false.B, op.rvs2_eew, op.eidx)(63,0)
+  val rvs2_bits = op.rvs2_elem
+  val rvs1_bits = op.rvs1_elem
 
   divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
   divSqrt.io.roundingMode := op.frm
@@ -597,17 +596,17 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   // vfclass instruction
   val gen_vfclass = Seq(FType.S, FType.D).zipWithIndex.map { case(fType, i) =>
-    Fill(2, Cat(0.U((fType.ieeeWidth-10).W), fType.classify(fType.recode(rvs2_op_bits(fType.ieeeWidth-1,0)))))
+    Fill(2, Cat(0.U((fType.ieeeWidth-10).W), fType.classify(fType.recode(rvs2_bits(fType.ieeeWidth-1,0)))))
   }
 
   // Reciprocal Sqrt Approximation
   val recSqrt7 = Module(new VFRSQRT7)
-  recSqrt7.io.rvs2_input := rvs2_op_bits
+  recSqrt7.io.rvs2_input := rvs2_bits
   recSqrt7.io.eew := op.rvs2_eew
 
   // Reciprocal Approximation
   val rec7 = Module(new VFREC7)
-  rec7.io.rvs2_input := rvs2_op_bits
+  rec7.io.rvs2_input := rvs2_bits
   rec7.io.eew := op.rvs2_eew
   rec7.io.frm := op.frm
 
