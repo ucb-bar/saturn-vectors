@@ -133,12 +133,72 @@ class CompareArray(dLenB: Int) extends Module {
   }
 }
 
+class ShiftBlock(w: Int) extends Module {
+  val io = IO(new Bundle {
+    val in = Input(UInt(w.W))
+    val shamt = Input(UInt((1+log2Ceil(w)).W))
+    val shl = Input(Bool())
+    val sign = Input(Bool())
+    val rm = Input(UInt(2.W))
+    val out = Output(UInt(w.W))
+    val round = Output(Bool())
+  })
+  val full_shifted = (Mux(io.shl,
+    Cat(false.B, Reverse(io.in), false.B),
+    Cat(io.sign, io.in, false.B)).asSInt >> io.shamt)(w,0).asUInt
+  val shifted = full_shifted(w,1)
+
+  io.out := Mux(io.shl, Reverse(shifted), shifted)
+  io.round := RoundingIncrement(io.rm, shifted(0), full_shifted(0),
+    Some(io.in & (((1.U << io.shamt) - 1.U) >> 1)(w-1,0)))
+}
+
+class ShiftUnit extends Module {
+  val io = IO(new Bundle {
+    val in_eew = Input(UInt(2.W))
+    val in     = Input(UInt(64.W))
+    val shamt  = Input(UInt(64.W))
+    val shl    = Input(Bool())
+    val signed = Input(Bool())
+    val rm     = Input(UInt(2.W))
+
+    val out = Output(UInt(64.W))
+    val round = Output(UInt(8.W))
+  })
+
+  val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
+
+  val shift_out = Seq.tabulate(4) { sew => Wire(Vec(8 >> sew, UInt((8 << sew).W))) }
+  val round_out = Seq.tabulate(4) { sew => Wire(Vec(8 >> sew, UInt((1 << sew).W))) }
+
+  def sextElem(in: UInt, sew: Int, sext: Bool): UInt = Cat(Fill(65 - (8 << sew), sext && in((8 << sew)-1)), in((8 << sew)-1,0))(63,0)
+
+  for (i <- 0 until 8) {
+    val sews = (0 until 4).filter { sew => i < (8 >> sew) }
+    val shifter = Module(new ShiftBlock(8 << (sews.max)))
+    shifter.io.in := Mux1H(sews
+      .map { sew => (io.in_eew === sew.U, sextElem(io.in((i+1)*(8<<sew)-1,i*(8<<sew)), sew, io.signed)) })
+    shifter.io.shamt := shamt_mask & Mux1H(sews
+      .map { sew => (io.in_eew === sew.U, io.shamt((i+1)*(8<<sew)-1,i*(8<<sew))) })
+    shifter.io.shl := io.shl
+    shifter.io.sign := io.signed && Mux1H(sews
+      .map { sew => (io.in_eew === sew.U, io.in((i+1)*(8<<sew)-1)) })
+    shifter.io.rm := io.rm
+    sews.foreach { sew =>
+      shift_out(sew)(i) := shifter.io.out
+      round_out(sew)(i) := shifter.io.round
+    }
+  }
+  io.out   := Mux1H(UIntToOH(io.in_eew), shift_out.map(_.asUInt))
+  io.round := Mux1H(UIntToOH(io.in_eew), round_out.map(_.asUInt))
+}
+
 class ShiftArray(dLenB: Int) extends Module {
   val dLen = dLenB * 8
   val io = IO(new Bundle {
     val in_eew    = Input(UInt(2.W))
-    val in        = Input(Vec(dLenB, UInt(8.W)))
-    val shamt     = Input(Vec(dLenB, UInt(8.W)))
+    val in        = Input(UInt(dLen.W))
+    val shamt     = Input(UInt(dLen.W))
     val shl       = Input(Bool())
     val signed    = Input(Bool())
     val scaling   = Input(Bool())
@@ -150,38 +210,25 @@ class ShiftArray(dLenB: Int) extends Module {
   })
 
   val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
-  val shifted_right = Wire(Vec(dLenB, UInt(8.W)))
-  val shifted_left  = Wire(Vec(dLenB, UInt(8.W)))
+  val shifted = Wire(Vec(dLenB, UInt(8.W)))
   val rounding_incrs = Wire(Vec(dLenB, Bool()))
 
-  for (i <- 0 until dLenB) {
-    val shamt = VecInit.tabulate(4)({ eew => io.shamt((i / (1 << eew)) << eew) })(io.in_eew) & shamt_mask
-    val shift_left_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
-      ((1 << (1 + (i % (1 << eew)))) - 1).U(8.W)
-    })(io.in_eew))
-    val shift_right_zero_mask = FillInterleaved(8, VecInit.tabulate(4)({eew =>
-      (((1 << (1 << eew)) - 1) >> (i % (1 << eew))).U(8.W)
-    })(io.in_eew))
-    val shift_hi = !io.shl & io.signed & VecInit.tabulate(4)({eew =>
-      io.in(((i/(1<<eew))+1)*(1<<eew) - 1)(7)
-    })(io.in_eew)
-    val shift_left_in = Reverse(VecInit(io.in.drop((i/8)*8).take(1+(i%8))).asUInt) & shift_left_zero_mask
-    val shift_right_in = (VecInit(io.in.drop(i).take(8-(i%8))).asUInt & shift_right_zero_mask) | Mux(shift_hi, ~shift_right_zero_mask, 0.U)
-    val shift_in = Mux(io.shl,
-      shift_left_in,
-      shift_right_in)
-
-    val full_shifted = (Cat(shift_hi, shift_in, false.B).asSInt >> shamt).asUInt
-    val shifted = full_shifted(8,1)
-    shifted_right(i) := shifted
-    shifted_left(i)  := Reverse(shifted)
-
-    rounding_incrs(i) := RoundingIncrement(io.rm, shifted(0), full_shifted(0),
-      Some(shift_right_in & (((1.U << shamt) - 1.U) >> 1)(63,0)))
+  for (i <- 0 until (dLenB >> 3)) {
+    val shifter = Module(new ShiftUnit)
+    shifter.io.in_eew := io.in_eew
+    shifter.io.in := io.in((i+1)*64-1,i*64)
+    shifter.io.shamt := io.shamt((i+1)*64-1,i*64)
+    shifter.io.shl := io.shl
+    shifter.io.signed := io.signed
+    shifter.io.rm := io.rm
+    for (j <- 0 until 8) {
+      shifted(i*8+j) := shifter.io.out((j+1)*8-1,j*8)
+      rounding_incrs(i*8+j) := shifter.io.round(j)
+    }
   }
-  
+
   val scaling_array = Module(new AdderArray(dLenB))
-  scaling_array.io.in1    := shifted_right
+  scaling_array.io.in1    := shifted
   scaling_array.io.in2.foreach(_ := 0.U)
   scaling_array.io.incr   := Mux(io.scaling, rounding_incrs, VecInit.fill(dLenB)(false.B))
   scaling_array.io.signed := DontCare
@@ -232,12 +279,7 @@ class ShiftArray(dLenB: Int) extends Module {
     .zip(narrow_clip).map ({ case ((o,s),c) => Mux(s && io.scaling, c, o) })
   val narrow_out = Fill(2, narrow_out_clipped.asUInt).asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  io.out := Mux(io.narrowing,
-    narrow_out,
-    Mux(io.scaling,
-      scaling_array.io.out,
-      Mux(io.shl, shifted_left, shifted_right))
-  )
+  io.out := Mux(io.narrowing, narrow_out, scaling_array.io.out)
   io.set_vxsat := io.narrowing && io.scaling && narrow_mask =/= 0.U
 }
 
@@ -400,8 +442,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val shift_narrowing = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.nclip, OPIFunct6.nclipu, OPIFunct6.nsra, OPIFunct6.nsrl)
   val shift_arr = Module(new ShiftArray(dLenB))
   shift_arr.io.in_eew := rvs2_eew
-  shift_arr.io.in     := rvs2_bytes
-  shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes)
+  shift_arr.io.in     := io.pipe(0).bits.rvs2_data
+  shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes).asUInt
   shift_arr.io.shl       := ctrl.bool(ShiftsLeft)
   shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
   shift_arr.io.rm        := io.pipe(0).bits.vxrm
