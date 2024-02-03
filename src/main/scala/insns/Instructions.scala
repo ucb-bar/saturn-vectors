@@ -175,8 +175,8 @@ object FWNMACC   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwnmac
 object FWMSAC    extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwmsac)   , FPAdd.Y, FPMul.Y, FPSwapVdV2.N, FPFMACmd(1.U(2.W)), Wide2VD.Y, ReadsVD.Y) }
 object FWNMSAC   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwnmsac)  , FPAdd.Y, FPMul.Y, FPSwapVdV2.N, FPFMACmd(2.U(2.W)), Wide2VD.Y, ReadsVD.Y) }
 object FREDOSUM  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredosum) , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Reduction.Y, AccInitZeros.Y, Elementwise.Y) }
-object FREDUSUM  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredusum) , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Reduction.Y, AccInitZeros.Y, Elementwise.Y) }
-object FWREDOSUM extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwredosum), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Wide2VD.Y, Reduction.Y, AccInitZeros.Y) }
+object FREDUSUM  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredusum) , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Reduction.Y, AccInitZeros.Y) }
+object FWREDOSUM extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwredosum), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Wide2VD.Y, Reduction.Y, AccInitZeros.Y, Elementwise.Y) }
 object FWREDUSUM extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwredusum), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Wide2VD.Y, Reduction.Y, AccInitZeros.Y) }
 
 object FDIV      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fdiv)     , FPSwapVdV2.N, FPAdd.N, FPMul.N) }
