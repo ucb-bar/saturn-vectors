@@ -27,7 +27,7 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   io.set_fflags.bits := DontCare
 
    val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
-    MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
+     MULSign1, MULSign2, MULSwapVdV2))
 
   val in_eew = io.pipe(0).bits.rvs1_eew
   val out_eew = io.pipe(0).bits.vd_eew
@@ -57,7 +57,7 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   val ctrl_wmul = out_eew_pipe > in_eew_pipe
   val ctrl_smul = io.pipe(2).bits.isOpi
   val ctrl_pipe = new VectorDecoder(io.pipe(2).bits.funct3, io.pipe(2).bits.funct6, 0.U, 0.U, supported_insns, Seq(
-    MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
+    MULHi, MULSwapVdV2, MULAccumulate, MULSub))
   val in_vs2_pipe = io.pipe(2).bits.rvs2_data
   val in_vd_pipe  = io.pipe(2).bits.rvd_data
 
@@ -171,25 +171,27 @@ class SegmentedMultiplyBlock extends Module {
   //////////////////////////////////////////////
   // Pipeline Stage
   //////////////////////////////////////////////
-  val active_pprodsPipe0 = Pipe(io.valid, genPProds.io.out_data)
-  val in1Pipe0 = Pipe(io.valid, io.in1)
-  val in2Pipe0 = Pipe(io.valid, io.in2)
-  val in1_signedPipe0 = Pipe(io.valid, io.in1_signed)
-  val in2_signedPipe0 = Pipe(io.valid, io.in2_signed)
+  val active_pprods_pipe0 = Pipe(io.valid, genPProds.io.out_data)
+  val in1_pipe0 = Pipe(io.valid, io.in1)
+  val in2_pipe0 = Pipe(io.valid, io.in2)
+  val in1_signed_pipe0 = Pipe(io.valid, io.in1_signed)
+  val in2_signed_pipe0 = Pipe(io.valid, io.in2_signed)
+  val eew_pipe0 = Pipe(io.valid, io.eew)
   //////////////////////////////////////////////
 
   val accPProds = Module(new accPartialProducts)
-  accPProds.io.inPProds := active_pprodsPipe0.bits
+  accPProds.io.inPProds := active_pprods_pipe0.bits
   // val sum_pprods_u = accPProds.io.out_data
   
   //////////////////////////////////////////////
   // Pipeline Stage
   //////////////////////////////////////////////
-  val sum_pprods_u = Pipe(active_pprodsPipe0.valid, accPProds.io.out_data).bits
-  val in1Pipe = Pipe(in1Pipe0).bits
-  val in2Pipe = Pipe(in2Pipe0).bits
-  val in1_signedPipe = Pipe(in1_signedPipe0).bits
-  val in2_signedPipe = Pipe(in2_signedPipe0).bits
+  val sum_pprods_u_pipe1 = Pipe(active_pprods_pipe0.valid, accPProds.io.out_data).bits
+  val in1_pipe1 = Pipe(in1_pipe0).bits
+  val in2_pipe1 = Pipe(in2_pipe0).bits
+  val in1_signed_pipe1 = Pipe(in1_signed_pipe0).bits
+  val in2_signed_pipe1 = Pipe(in2_signed_pipe0).bits
+  val eew_pipe1 = Pipe(eew_pipe0).bits
   //////////////////////////////////////////////
 
   //undo input negation if necessary
@@ -197,18 +199,17 @@ class SegmentedMultiplyBlock extends Module {
   for (vsew <- 0 until 4) {
     val eew = 8 << vsew
     val nElems = xBytes >> vsew
-    val vin1 = in1Pipe.asTypeOf(Vec(nElems, UInt(eew.W)))
-    val vin2 = in2Pipe.asTypeOf(Vec(nElems, UInt(eew.W)))
-    val v_sum_pprods_u = sum_pprods_u(2*xLen-1, 0).asTypeOf(Vec(nElems, UInt((2*eew).W)))
+    val vin1 = in1_pipe1.asTypeOf(Vec(nElems, UInt(eew.W)))
+    val vin2 = in2_pipe1.asTypeOf(Vec(nElems, UInt(eew.W)))
+    val v_sum_pprods_u = sum_pprods_u_pipe1(2*xLen-1, 0).asTypeOf(Vec(nElems, UInt((2*eew).W)))
     sum_pprods_s(vsew) := (0 until nElems).map (i => {
-      val snxsp = in1_signedPipe && in2_signedPipe &&
-      (vin1(i)(eew-1).asBool ^ vin2(i)(eew-1).asBool)
-      val snxup = ((in1_signedPipe && (~in2_signedPipe) && vin1(i)(eew-1).asBool) ||
-       ((~in1_signedPipe) && in2_signedPipe && vin2(i)(eew-1).asBool))
+      val snxsp = in1_signed_pipe1 && in2_signed_pipe1 && (vin1(i)(eew-1).asBool ^ vin2(i)(eew-1).asBool)
+      val snxup = ((in1_signed_pipe1 && (~in2_signed_pipe1) && vin1(i)(eew-1).asBool) ||
+       ((~in1_signed_pipe1) && in2_signed_pipe1 && vin2(i)(eew-1).asBool))
       Mux(snxsp || snxup, (~v_sum_pprods_u(i)) + 1.U, v_sum_pprods_u(i))
     }).asUInt
   }
-  io.out_data := Mux1H(UIntToOH(io.eew), sum_pprods_s)
+  io.out_data := Mux1H(UIntToOH(eew_pipe1), sum_pprods_s)
 }
 
 class genPartialProducts extends Module {
