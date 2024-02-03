@@ -12,7 +12,6 @@ import saturn.insns._
 class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) with HasFPUParameters {
   val supported_insns = Seq(FCVT_SGL, FCVT_NRW, FCVT_WID)
 
-  // io.iss.sub_dlen := 0.U
   io.set_vxsat := false.B
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U,

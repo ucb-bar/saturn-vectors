@@ -45,7 +45,6 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
 
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
-  // io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl.bool(Wide2VS2), io.iss.op.rvs2_eew, io.iss.op.vd_eew)
 
   // Create FPInput
   val req = Wire(new FPInput)

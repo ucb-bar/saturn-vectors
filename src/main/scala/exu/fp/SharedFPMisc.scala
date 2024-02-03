@@ -64,7 +64,6 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
 
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && fp_req.ready
-  // io.iss.sub_dlen := dLenOffBits.U - Mux(ctrl_funary0 && ctrl_narrow, io.iss.op.rvs2_eew, io.iss.op.rvd_eew)
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat

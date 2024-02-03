@@ -22,7 +22,6 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
     SMUL.VV, SMUL.VX).map(_.elementWise)
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
-  //io.iss.sub_dlen := log2Ceil(dLenB).U - io.iss.op.vd_eew
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare

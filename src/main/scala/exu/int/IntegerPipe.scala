@@ -352,8 +352,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     FMERGE.VF
   )
 
-  // io.iss.sub_dlen := 0.U
-
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
