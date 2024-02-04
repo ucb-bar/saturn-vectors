@@ -37,7 +37,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   when (io.op.seg_nf === 0.U) {
     io.compactor.valid := io.valid && !segbuf.io.busy && io.resp.ready
-    io.compactor.bits.head := eidx << mem_size
+    io.compactor.bits.head := Mux(eidx_tail, eidx << mem_size, 0.U)
     io.compactor.bits.tail := Mux(eidx_tail, io.op.vl << mem_size, 0.U)
   } .otherwise {
     io.compactor.valid := io.valid && segbuf.io.in.ready
