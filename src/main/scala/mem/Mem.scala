@@ -12,6 +12,8 @@ class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
   val op = new VectorMemMacroOp
   def base = op.base_addr
   val bound = UInt(paddrBits.W)
+  def base_cl = Cat(base >> lgCacheBlockBytes, 0.U(6.W))
+  def bound_cl = Cat(bound >> lgCacheBlockBytes, 0.U(6.W))
   def bound_all = op.mop =/= mopUnit || !op.phys
 }
 
@@ -152,13 +154,13 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     siq_sas(siq_enq_ptr) := false.B
   }
 
-  val scalar_bound = io.dmem.scalar_check.addr + (1.U << io.dmem.scalar_check.size)
+  val scalar_check_cl = Cat(io.dmem.scalar_check.addr >> lgCacheBlockBytes, 0.U(lgCacheBlockBytes.W))
   val scalar_store_conflict = (0 until vParams.vsiqEntries).map { i =>
-    val addr_conflict = siq(i).bound_all || (siq(i).base < scalar_bound && siq(i).bound > io.dmem.scalar_check.addr)
+    val addr_conflict = siq(i).bound_all || (siq(i).base_cl <= scalar_check_cl && siq(i).bound_cl > scalar_check_cl)
     siq_valids(i) && addr_conflict
   }.orR
   val scalar_load_conflict = (0 until vParams.vliqEntries).map { i =>
-    val addr_conflict = liq(i).bound_all || (liq(i).base < scalar_bound && liq(i).bound > io.dmem.scalar_check.addr)
+    val addr_conflict = liq(i).bound_all || (liq(i).base_cl < scalar_check_cl && liq(i).bound_cl > scalar_check_cl)
     liq_valids(i) && addr_conflict
   }.orR
   io.dmem.scalar_check.conflict := scalar_store_conflict || (scalar_load_conflict && io.dmem.scalar_check.store)
