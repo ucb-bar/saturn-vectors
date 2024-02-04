@@ -28,7 +28,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val sidx = RegInit(0.U(3.W))
 
   val mem_size = io.op.elem_size
-  val eidx_incr = Mux(io.op.seg_nf =/= 0.U, 1.U, dLenB.U >> mem_size)
+  val eidx_incr = Mux(io.op.seg_nf =/= 0.U, 1.U,(dLenB.U - (eidx << mem_size)(dLenOffBits-1,0)) >> mem_size)
   val next_eidx = eidx +& eidx_incr
   val next_sidx = sidx +& (dLenB.U >> mem_size)
 
@@ -75,7 +75,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.done := false.B
   when (seg_ready && io.valid) {
     r_head := eidx_tail
-    r_eidx := eidx +& (io.compactor.bits.count >> mem_size)
+    r_eidx := next_eidx
     io.done := eidx_tail
   }
 }
