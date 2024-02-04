@@ -32,8 +32,6 @@ class Compactor[T <: Data](pushN: Int, popN: Int, gen: => T, forward: Boolean) e
   val regs = Seq.fill(pushN) { Reg(gen) }
   val valid = (1.U << count) - 1.U
 
-  val may_forward = io.pop.bits.count > count
-
   io.push.ready := pushN.U +& Mux(io.pop.valid && forward.B, io.pop.bits.count, 0.U) >= count +& io.push.bits.count
   io.pop.ready := count +& Mux(io.push.valid && forward.B, io.push.bits.count, 0.U) >= io.pop.bits.count
 
