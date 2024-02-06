@@ -9,6 +9,7 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
+
 class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {
     val valid = Input(Bool())
@@ -23,7 +24,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
     val a = Input(UInt(64.W))
     val b = Input(UInt(64.W))
     val c = Input(UInt(64.W))
-    val mask = Input(UInt(2.W))
+    val mask = Input(UInt(4.W))
     val out = Output(UInt(64.W))
     val exc = Output(UInt(5.W))
   })
@@ -32,7 +33,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val frm_pipe = Pipe(io.valid, io.frm, depth-1)
   val mask_pipe = Pipe(io.valid, io.mask, depth-1)
 
-  val fTypes = Seq(FType.D, FType.S)
+  val fTypes = Seq(FType.D, FType.S, FType.H)
 
   val fma_results = fTypes.zipWithIndex.map { case(fType, j) =>
     val n = 64 / fType.ieeeWidth
@@ -45,7 +46,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
       val lsb_idx = i * fType.ieeeWidth
 
       val inputs = Seq((io.a, io.a_eew), (io.b, io.b_eew), (io.c, io.c_eew)).map { case(in, eew) =>
-        if (j == 0) {
+        if (j <= 1) {
           val widen = Module(new hardfloat.RecFNToRecFN(fTypes(j+1).exp, fTypes(j+1).sig, fType.exp, fType.sig))
           widen.io.in := fTypes(j+1).recode(Mux(validin && io.mask(i), in(fTypes(j+1).ieeeWidth-1,0), 0.U))
           widen.io.roundingMode := io.frm
@@ -112,7 +113,8 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   val nTandemFMA = dLenB / 8
 
   val eidx = Mux(io.pipe(0).bits.acc, 0.U, io.pipe(0).bits.eidx)
-  val one_bits = Mux(vd_eew === 3.U, "h3FF0000000000000".U, "h3F8000003F800000".U)
+  val one_bits = Mux1H(Seq(vd_eew === 3.U, vd_eew === 2.U, vd_eew === 1.U),
+                       Seq("h3FF0000000000000".U, "h3F8000003F800000".U, "h3C003C003C003C00".U))
   val fmaCmd = ctrl.uint(FPFMACmd)
 
   val vec_rvs1 = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(nTandemFMA, UInt(64.W)))
