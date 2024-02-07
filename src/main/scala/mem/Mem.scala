@@ -12,9 +12,14 @@ class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
   val op = new VectorMemMacroOp
   def base = op.base_addr
   val bound = UInt(paddrBits.W)
-  def base_cl = Cat(base >> lgCacheBlockBytes, 0.U(6.W))
-  def bound_cl = Cat(bound >> lgCacheBlockBytes, 0.U(6.W))
+  def base_cl = base >> lgCacheBlockBytes
+  def bound_cl = Mux(bound(lgCacheBlockBytes-1,0) === 0.U,
+    (bound >> lgCacheBlockBytes) + 1.U,
+    bound >> lgCacheBlockBytes)
   def bound_all = op.mop =/= mopUnit || !op.phys
+  def containsBlock(b: UInt) = {
+    bound_all || (base_cl <= b && (bound_cl > b || (bound(lgCacheBlockBytes-1,0) =/= 0.U && bound_cl === b)))
+  }
 }
 
 class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -154,14 +159,12 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     siq_sas(siq_enq_ptr) := false.B
   }
 
-  val scalar_check_cl = Cat(io.dmem.scalar_check.addr >> lgCacheBlockBytes, 0.U(lgCacheBlockBytes.W))
+  val scalar_check_cl = io.dmem.scalar_check.addr >> lgCacheBlockBytes
   val scalar_store_conflict = (0 until vParams.vsiqEntries).map { i =>
-    val addr_conflict = siq(i).bound_all || (siq(i).base_cl <= scalar_check_cl && siq(i).bound_cl > scalar_check_cl)
-    siq_valids(i) && addr_conflict
+    siq_valids(i) && siq(i).containsBlock(scalar_check_cl)
   }.orR
   val scalar_load_conflict = (0 until vParams.vliqEntries).map { i =>
-    val addr_conflict = liq(i).bound_all || (liq(i).base_cl < scalar_check_cl && liq(i).bound_cl > scalar_check_cl)
-    liq_valids(i) && addr_conflict
+    liq_valids(i) && liq(i).containsBlock(scalar_check_cl)
   }.orR
   io.dmem.scalar_check.conflict := scalar_store_conflict || (scalar_load_conflict && io.dmem.scalar_check.store)
 
