@@ -6,21 +6,18 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{CoreModule}
 import saturn.common._
 
-class RegisterReadXbar(n: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
-  val banks = 2
+class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val in = Vec(n, Flipped(new VectorReadIO))
     val out = Vec(banks, new VectorReadIO)
   })
-
+  
   val arbs = Seq.fill(banks) { Module(new RRArbiter(UInt(log2Ceil(egsTotal).W), n)) }
   for (i <- 0 until banks) {
-    io.out(i).req <> arbs(i).io.out
+      io.out(i).req <> arbs(i).io.out
   }
 
-  io.in.foreach(_.req.ready := false.B)
-
-  val bankOffset = 1
+  val bankOffset = log2Ceil(banks)
 
   for (i <- 0 until n) {
     val bank_sel = UIntToOH(io.in(i).req.bits(bankOffset-1,0))

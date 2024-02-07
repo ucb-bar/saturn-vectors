@@ -290,7 +290,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.older_reads := older_rintents
   }
 
-  val vrf = Seq.fill(2) { Module(new RegisterFileBank(4, 1, egsTotal/2)) }
+  val vrf = Seq.fill(vParams.vrfBanking) { Module(new RegisterFileBank(4, 1, egsTotal/vParams.vrfBanking)) }
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
   vmu.io.lresp.ready := vls.io.iss.valid && load_write.ready
@@ -310,7 +310,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   // Write ports
   // vxu/lresp/reset
-  val writes = Seq.tabulate(2) { i =>
+  val writes = Seq.tabulate(vParams.vrfBanking) { i =>
     val arb = Module(new Arbiter(new VectorWrite(dLen), 3))
     vrf(i).io.write(0).valid := arb.io.out.valid
     vrf(i).io.write(0).bits  := arb.io.out.bits
@@ -318,18 +318,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     arb.io.in
   }
 
-  for (b <- 0 until 2) {
-    writes(b)(0).valid := vxu.write.valid && vxu.write.bits.eg(0) === b.U
+  for (b <- 0 until vParams.vrfBanking) {
+    writes(b)(0).valid := vxu.write.valid && vxu.write.bits.eg(vrfBankBits-1, 0) === b.U
     writes(b)(0).bits.data  := vxu.write.bits.data
     writes(b)(0).bits.mask  := vxu.write.bits.mask
-    writes(b)(0).bits.eg    := vxu.write.bits.eg >> 1
+    writes(b)(0).bits.eg    := vxu.write.bits.eg >> vrfBankBits
     when (vxu.write.valid) { assert(writes(b)(0).ready) }
   }
 
-  load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(0)), writes.map(_(1).ready))
-  for (b <- 0 until 2) {
-    writes(b)(1).valid := load_write.valid && load_write.bits.eg(0) === b.U
-    writes(b)(1).bits.eg   := load_write.bits.eg >> 1
+  load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(vrfBankBits-1,0)), writes.map(_(1).ready))
+  for (b <- 0 until vParams.vrfBanking) {
+    writes(b)(1).valid := load_write.valid && load_write.bits.eg(vrfBankBits-1,0) === b.U
+    writes(b)(1).bits.eg   := load_write.bits.eg >> vrfBankBits
     writes(b)(1).bits.data := load_write.bits.data
     writes(b)(1).bits.mask := load_write.bits.mask
     writes(b)(2).valid := resetting
@@ -344,9 +344,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs-vrs3, vss-vrd
   // vls-mask, vss-mask, vxs-mask, vps-mask, frontend-mask
   val reads = Seq(3, 1, 2, 5).zipWithIndex.map { case (rc, i) =>
-    val arb = Module(new RegisterReadXbar(rc))
-    vrf(0).io.read(i) <> arb.io.out(0)
-    vrf(1).io.read(i) <> arb.io.out(1)
+    val arb = Module(new RegisterReadXbar(rc, vParams.vrfBanking))
+    
+    vrf.zipWithIndex.foreach { case(bank, j) =>
+      bank.io.read(i) <> arb.io.out(j)      
+    }
+
     arb.io.in
   }
 

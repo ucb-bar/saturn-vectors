@@ -49,6 +49,8 @@ case class VectorParams(
   fmaPipeDepth: Int = 4,
 
   doubleBufferSegments: Boolean = false,
+
+  vrfBanking: Int = 2
 )
 
 case object VectorParamsKey extends Field[VectorParams]
@@ -62,6 +64,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
+  def vrfBankBits = log2Ceil(vParams.vrfBanking)
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)
