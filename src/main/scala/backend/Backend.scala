@@ -290,6 +290,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     seq.io.older_reads := older_rintents
   }
 
+  // Support 1,2, and 4 banks for the VRF
+  require(vParams.vrfBanking == 1 || vParams.vrfBanking == 2 || vParams.vrfBanking == 4)
   val vrf = Seq.fill(vParams.vrfBanking) { Module(new RegisterFileBank(4, 1, egsTotal/vParams.vrfBanking)) }
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))

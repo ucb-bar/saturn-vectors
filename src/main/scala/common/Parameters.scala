@@ -18,7 +18,8 @@ object VectorParams {
     vatSz = 5,
     useSegmentedIMul = true,
     doubleBufferSegments = true,
-    useScalarFPFMA = false
+    useScalarFPFMA = false,
+    vrfBanking = 4
   )
 }
 
@@ -50,7 +51,7 @@ case class VectorParams(
 
   doubleBufferSegments: Boolean = false,
 
-  vrfBanking: Int = 4
+  vrfBanking: Int = 1
 )
 
 case object VectorParamsKey extends Field[VectorParams]
