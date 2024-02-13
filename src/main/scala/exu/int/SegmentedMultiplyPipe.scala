@@ -72,7 +72,7 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
 
   // TODO, handle SMUL > 1 elem/cycle
   val smul_prod = VecInit.tabulate(4)({sew =>
-    if (sew == 3 && dLenB == 8) { mul_out } else {
+    if (sew == 3 && dLenB == 8) { mul_out.asSInt } else {
       mul_out.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))(io.pipe(2).bits.eidx(log2Ceil(dLenB)-1-sew,0))
     }
   })(out_eew_pipe).asSInt
