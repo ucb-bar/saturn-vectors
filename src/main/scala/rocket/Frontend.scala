@@ -11,7 +11,7 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 import saturn.backend.{VectorBackend}
-import saturn.mem.{ScalarMemOrderCheckIO, MemRequest}
+import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLInterface}
 
 
 class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams with HasCoreParameters {

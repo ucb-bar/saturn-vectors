@@ -1,4 +1,4 @@
-package saturn.rocket
+package saturn.mem
 
 import chisel3._
 import chisel3.util._
@@ -10,7 +10,6 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.diplomacy._
 
 import saturn.common._
-import saturn.mem.{VectorMemIO}
 
 class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
   val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
