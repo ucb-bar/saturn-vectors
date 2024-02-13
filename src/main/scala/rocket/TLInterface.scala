@@ -44,7 +44,9 @@ class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCorePa
         Cat(0.U, io.vec.load_req.bits.tag),
         io.vec.load_req.bits.addr,
         log2Ceil(dLenB).U)._2
+      assert(io.vec.load_req.bits.phys)
     } .otherwise {
+      assert(!io.vec.store_req.valid || io.vec.store_req.bits.phys)
       tl_out.a.valid := io.vec.store_req.valid
       tl_out.a.bits := edge.Put(
         Cat(1.U, io.vec.store_req.bits.tag),
