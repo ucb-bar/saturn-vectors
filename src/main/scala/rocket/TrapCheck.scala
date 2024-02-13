@@ -135,6 +135,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val m_inst = RegEnable(x_inst, x_may_be_valid)
   val m_replay = RegEnable(x_replay, x_may_be_valid)
   val m_baseaddr = RegEnable(x_baseaddr, x_may_be_valid)
+  val m_indexaddr = RegEnable(x_indexaddr, x_may_be_valid)
   val m_addr = RegEnable(x_addr, x_may_be_valid)
   val m_stride = RegEnable(x_stride, x_may_be_valid)
   val m_eidx = RegEnable(x_eidx, x_may_be_valid)
@@ -149,8 +150,9 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
 
-  when (x_may_be_valid && (io.core.set_vstart.valid && io.core.set_vstart.bits === 0.U)) {
+  when (io.core.set_vstart.valid && io.core.set_vstart.bits === 0.U) {
     m_inst.vstart := 0.U
+    x_core_inst.vstart := 0.U  
   }
 
   when (io.tlb.s1_resp.miss && m_tlb_req_valid && x_tlb_backoff === 0.U) { x_tlb_backoff := 3.U }
@@ -198,6 +200,8 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     w_inst.rs1_data := Mux(m_inst.isOpf && !m_inst.vmu, io.core.mem.frs1, m_inst.rs1_data)
     when (io.core.set_vstart.valid && io.core.set_vstart.bits === 0.U) {
       w_inst.vstart := 0.U
+      w_addr := Mux(m_replay && m_seg_hi, nextPage(m_indexaddr),
+                Mux(m_replay, m_indexaddr, m_baseaddr + (m_inst.vstart << m_inst.mem_elem_size)))
     }
   }
 
