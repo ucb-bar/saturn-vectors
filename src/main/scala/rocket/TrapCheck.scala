@@ -32,6 +32,9 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
   val replay_kill = WireInit(false.B)
 
+  val m_valid = RegInit(false.B)
+  val w_valid = RegInit(false.B)
+
   // X stage
   val x_tlb_backoff = RegInit(0.U(2.W))
   when (x_tlb_backoff =/= 0.U) { x_tlb_backoff := x_tlb_backoff - 1.U }
@@ -55,7 +58,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       x_core_inst.vconfig.vl := (vLen.U >> (x_core_inst.mem_elem_size +& 3.U)) * (x_core_inst.nf +& 1.U)
     }
   }
-  x_core_inst.vstart := io.core.ex.vstart
+  x_core_inst.vstart := Mux(m_valid || w_valid, 0.U, io.core.ex.vstart)
   x_core_inst.rs1_data := io.core.ex.rs1
   x_core_inst.rs2_data := io.core.ex.rs2
   x_core_inst.emul := Mux(io.core.ex.vconfig.vtype.vlmul_sign, 0.U, io.core.ex.vconfig.vtype.vlmul_mag)
@@ -131,7 +134,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val x_may_be_valid = io.core.ex.valid || x_replay
 
   // M stage
-  val m_valid = RegNext((x_replay && !replay_kill && x_tlb_backoff === 0.U) || (io.core.ex.valid && io.core.ex.ready), false.B)
+  m_valid := (x_replay && !replay_kill && x_tlb_backoff === 0.U) || (io.core.ex.valid && io.core.ex.ready)
   val m_inst = RegEnable(x_inst, x_may_be_valid)
   val m_replay = RegEnable(x_replay, x_may_be_valid)
   val m_baseaddr = RegEnable(x_baseaddr, x_may_be_valid)
@@ -149,10 +152,6 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   val m_tlb_resp = WireInit(io.tlb.s1_resp)
   m_tlb_resp.miss := io.tlb.s1_resp.miss || (!m_tlb_resp_valid && m_tlb_req_valid)
 
-  when (x_may_be_valid && (io.core.set_vstart.valid && io.core.set_vstart.bits === 0.U)) {
-    m_inst.vstart := 0.U
-  }
-
   when (io.tlb.s1_resp.miss && m_tlb_req_valid && x_tlb_backoff === 0.U) { x_tlb_backoff := 3.U }
 
   io.scalar_check.addr := io.tlb.s1_resp.paddr
@@ -162,7 +161,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
 
   // W stage
   val killm = WireInit(io.core.killm)
-  val w_valid = RegNext(m_valid && !Mux(m_replay, replay_kill, killm), false.B)
+  w_valid := m_valid && !Mux(m_replay, replay_kill, killm)
   val w_replay = RegEnable(m_replay, m_valid)
   val w_inst = Reg(new VectorIssueInst)
   val w_baseaddr = RegEnable(m_baseaddr, m_valid)
@@ -196,9 +195,6 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   when (m_valid) {
     w_inst := m_inst
     w_inst.rs1_data := Mux(m_inst.isOpf && !m_inst.vmu, io.core.mem.frs1, m_inst.rs1_data)
-    when (io.core.set_vstart.valid && io.core.set_vstart.bits === 0.U) {
-      w_inst.vstart := 0.U
-    }
   }
 
   io.core.wb.retire := false.B
