@@ -11,8 +11,9 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val vat = UInt(vParams.vatSz.W)
   val phys = Bool()
 
-  val base_addr = UInt(xLen.W)
-  val stride    = UInt(xLen.W)
+  val base_addr = UInt(vaddrBitsExtended.W)
+  val hi_page   = UInt((paddrBits - pgIdxBits).W)
+  val stride    = UInt(vaddrBitsExtended.W)
 
   val vstart = UInt(log2Ceil(maxVLMax).W)
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
@@ -37,6 +38,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val vstart = UInt(log2Ceil(maxVLMax).W)
   val rs1_data = UInt(xLen.W)
   val rs2_data = UInt(xLen.W)
+  val hi_page = UInt((paddrBits - pgIdxBits).W)
   val vat = UInt(vParams.vatSz.W)
   val phys = Bool()
   val rm = UInt(3.W)

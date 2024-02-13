@@ -64,6 +64,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   x_core_inst.emul := Mux(io.core.ex.vconfig.vtype.vlmul_sign, 0.U, io.core.ex.vconfig.vtype.vlmul_mag)
   x_core_inst.vat := DontCare
   x_core_inst.phys := DontCare
+  x_core_inst.hi_page := DontCare // rocket doesn't use this
 
   def nextPage(addr: UInt) = ((addr + (1 << pgIdxBits).U) >> pgIdxBits) << pgIdxBits
 
@@ -220,6 +221,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   io.issue.bits := w_inst
   io.issue.bits.rm := Mux(w_inst.isOpf, io.core.wb.frm, io.core.wb.vxrm)
   io.issue.bits.phys := false.B
+  io.issue.bits.hi_page := w_tlb_resp.paddr >> pgIdxBits
   val consumed = ((1 << pgIdxBits).U - w_addr(pgIdxBits-1,0) >> w_inst.mem_elem_size)
   when (w_inst.vmu) {
     val phys = w_inst.seg_nf === 0.U && w_inst.mop.isOneOf(mopUnit, mopStrided)

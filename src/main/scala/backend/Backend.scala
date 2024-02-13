@@ -103,6 +103,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.enq.bits.mop := issue_inst.mop
   vmu.io.enq.bits.vm := issue_inst.vm
   vmu.io.enq.bits.nf := issue_inst.nf
+  vmu.io.enq.bits.hi_page := issue_inst.hi_page
   vmu.io.enq.bits.idx_size := issue_inst.mem_idx_size
   vmu.io.enq.bits.elem_size := Mux(issue_inst.bits(26), issue_inst.vconfig.vtype.vsew, issue_inst.bits(13,12))
   vmu.io.enq.bits.whole_reg := issue_inst.umop === lumopWhole && issue_inst.mop === mopUnit

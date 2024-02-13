@@ -26,6 +26,8 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     (dLenB.U - off(dLenOffBits-1,0)) >> eew
   }
 
+  def samePage(page1: UInt, page2: UInt) = page1(pgIdxBits) === page2(pgIdxBits)
+
   val r_eaddr = Reg(UInt(paddrBits.W))
   val r_saddr = Reg(UInt(paddrBits.W))
   val r_eidx = Reg(UInt((1+log2Ceil(8*maxVLMax)).W))
@@ -40,7 +42,6 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val eaddr = Mux(r_head, io.op.base_addr, r_eaddr) + Mux(io.op.mop(0),
     io.maskindex.bits.index & eewBitMask(io.op.idx_size), 0.U)
   val saddr = Mux(io.op.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
-
 
   val mem_size = io.op.elem_size
   val max_eidx = Mux(fast_segmented,
@@ -79,7 +80,9 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.out.bits.last := may_clear
 
   io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked && io.tag.valid
-  io.req.bits.addr := (saddr >> dLenOffBits) << dLenOffBits
+  io.req.bits.addr := (Mux(!io.op.phys || samePage(saddr, io.op.base_addr), saddr,
+    Cat(io.op.hi_page, saddr(pgIdxBits-1,0))
+  ) >> dLenOffBits) << dLenOffBits
   io.req.bits.data := DontCare
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
   io.req.bits.phys := io.op.phys
