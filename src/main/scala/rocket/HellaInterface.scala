@@ -20,8 +20,6 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
     val mem_busy = Output(Bool())
   })
 
-  io.vec.scalar_check := DontCare
-
   val hella_simple = Module(new SimpleHellaCacheIF)
   val hella_arb = Module(new HellaCacheArbiter(2))
   hella_simple.io.requestor <> hella_arb.io.mem

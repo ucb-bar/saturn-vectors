@@ -6,7 +6,7 @@ import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
-import saturn.mem.{VectorMemIO, MaskIndex, VectorMemUnit}
+import saturn.mem.{VectorMemIO, MaskIndex, VectorMemUnit, ScalarMemOrderCheckIO}
 import saturn.exu._
 import saturn.common._
 import saturn.insns._
@@ -15,7 +15,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val io = IO(new Bundle {
     val issue = Flipped(Decoupled(new VectorIssueInst))
 
-    val mem = new VectorMemIO
+    val dmem = new VectorMemIO
+    val scalar_check = new ScalarMemOrderCheckIO
 
     val backend_busy = Output(Bool())
     val mem_busy = Output(Bool())
@@ -39,7 +40,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   require(vLen % dLen == 0)
 
   val vmu = Module(new VectorMemUnit)
-  vmu.io.dmem <> io.mem
+  vmu.io.dmem <> io.dmem
+  vmu.io.scalar_check <> io.scalar_check
 
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
 

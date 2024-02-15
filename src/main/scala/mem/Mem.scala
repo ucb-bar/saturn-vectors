@@ -59,8 +59,6 @@ class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVector
   val load_resp = Input(Valid(new LoadResponse))
   val store_req = Decoupled(new MemRequest)
   val store_ack = Input(Valid(UInt(dmemTagBits.W)))
-
-  val scalar_check = new ScalarMemOrderCheckIO
 }
 
 class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -81,6 +79,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val enq = Flipped(Decoupled(new VectorMemMacroOp))
 
     val dmem = new VectorMemIO
+    val scalar_check = new ScalarMemOrderCheckIO
 
     val lresp = Decoupled(UInt(dLen.W))
     val sdata = Flipped(Decoupled(new StoreData))
@@ -159,14 +158,14 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     siq_sas(siq_enq_ptr) := false.B
   }
 
-  val scalar_check_cl = io.dmem.scalar_check.addr >> lgCacheBlockBytes
+  val scalar_check_cl = io.scalar_check.addr >> lgCacheBlockBytes
   val scalar_store_conflict = (0 until vParams.vsiqEntries).map { i =>
     siq_valids(i) && siq(i).containsBlock(scalar_check_cl)
   }.orR
   val scalar_load_conflict = (0 until vParams.vliqEntries).map { i =>
     liq_valids(i) && liq(i).containsBlock(scalar_check_cl)
   }.orR
-  io.dmem.scalar_check.conflict := scalar_store_conflict || (scalar_load_conflict && io.dmem.scalar_check.store)
+  io.scalar_check.conflict := scalar_store_conflict || (scalar_load_conflict && io.scalar_check.store)
 
   val maskindex_load = Wire(Bool())
 
@@ -178,7 +177,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     )
     siq_valids(i) && addr_conflict && vatOlder(siq(i).op.vat, liq(liq_las_ptr).op.vat)
   }.orR
-  dontTouch(las_order_block)
   las.io.valid := liq_las_valid && !las_order_block
   las.io.op := liq(liq_las_ptr).op
   io.dmem.load_req <> las.io.req
@@ -231,7 +229,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     )
     liq_valids(i) && addr_conflict && vatOlder(liq(i).op.vat, siq(siq_sas_ptr).op.vat)
   }.orR
-  dontTouch(sas_order_block)
   sas.io.valid := siq_sas_valid && !sas_order_block
   sas.io.op := siq(siq_sas_ptr).op
   sas.io.maskindex.valid := io.maskindex.valid && !maskindex_load

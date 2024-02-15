@@ -26,7 +26,6 @@ class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCorePa
     })
 
     val (tl_out, edge) = node.out(0)
-    io.vec.scalar_check := DontCare
 
     val inflights = RegInit(0.U((1+dmemTagBits).W))
     when (tl_out.a.fire || tl_out.d.fire) {
