@@ -531,6 +531,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.set_vxsat := false.B
 
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)
+  val divSqrt16 = Module(new hardfloat.DivSqrtRecFN_small(FType.H.exp, FType.H.sig, 0))
 
   val accept_inst = new VectorDecoder(
     io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
@@ -544,6 +545,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
   val divSqrt_ready = (ctrl_isDiv && divSqrt.io.inReady_div) || (!ctrl_isDiv && divSqrt.io.inReady_sqrt)
+  val divSqrt16_ready = (ctrl_isDiv && divSqrt16.io.inReady_div) || (!ctrl_isDiv && divSqrt16.io.inReady_sqrt)
 
   val div_op = op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
 
@@ -552,12 +554,16 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
   divSqrt.io.roundingMode := op.frm
+  divSqrt16.io.detectTininess := hardfloat.consts.tininess_afterRounding
+  divSqrt16.io.roundingMode := op.frm
 
   val iss_fire_pipe = Reg(Bool())
   iss_fire_pipe := io.iss.valid && io.iss.ready
 
-  divSqrt.io.inValid := iss_fire_pipe && (div_op || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
+  divSqrt.io.inValid := iss_fire_pipe && !(op.rvd_eew === 1.U) && (div_op || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
   divSqrt.io.sqrtOp := !div_op
+  divSqrt16.io.inValid := iss_fire_pipe && (op.rvd_eew === 1.U) && (div_op || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
+  divSqrt16.io.sqrtOp := !div_op
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
@@ -581,7 +587,11 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     divSqrt.io.b := Mux(ctrl.bool(FPSwapVdV2) || !div_op, widen(0).io.out, widen(1).io.out)
   }
 
+  divSqrt16.io.a := Mux(ctrl.bool(FPSwapVdV2) && div_op, FType.H.recode(rvs1_bits), FType.H.recode(rvs2_bits))
+  divSqrt16.io.b := Mux(ctrl.bool(FPSwapVdV2) || !div_op, FType.H.recode(rvs2_bits), FType.H.recode(rvs1_bits))
+
   val divSqrt_out_valid = divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt
+  val divSqrt16_out_valid = divSqrt16.io.outValid_div || divSqrt16.io.outValid_sqrt
 
   val narrow = Module(new hardfloat.RecFNToRecFN(11, 53, 8, 24))
   narrow.io.roundingMode := op.frm
@@ -594,8 +604,13 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   val out_toWrite = RegInit(false.B)
   val divSqrt_write = Mux(out_toWrite, out_buffer, divSqrt_out)
 
+  val divSqrt16_out = FType.H.ieee(divSqrt16.io.out)
+  val out16_buffer = RegEnable(divSqrt16_out, divSqrt16_out_valid)
+  val out16_toWrite = RegInit(false.B)
+  val divSqrt16_write = Mux(out16_toWrite, out16_buffer, divSqrt16_out)
+
   // vfclass instruction
-  val gen_vfclass = Seq(FType.S, FType.D).zipWithIndex.map { case(fType, i) =>
+  val gen_vfclass = Seq(FType.H, FType.S, FType.D).zipWithIndex.map { case(fType, i) =>
     Fill(2, Cat(0.U((fType.ieeeWidth-10).W), fType.classify(fType.recode(rvs2_bits(fType.ieeeWidth-1,0)))))
   }
 
@@ -613,16 +628,18 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   // Capture result in case of write port backpressure
   when (io.write.fire()) {
     out_toWrite := false.B
+    out16_toWrite := false.B
   } .elsewhen (divSqrt_out_valid) {
     out_toWrite := true.B
+    out16_toWrite := true.B
   }
 
   val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
   val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
   val out = Mux1H(
-    Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, out_toWrite || divSqrt_out_valid),
-    Seq(Mux(op.rvs2_eew === 3.U, gen_vfclass(1), gen_vfclass(0)), recSqrt7.io.out, rec7.io.out, divSqrt_write)
+    Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, out_toWrite || divSqrt_out_valid || divSqrt16_out_valid),
+    Seq(Mux1H(Seq(op.rvs2_eew === 3.U, op.rvs2_eew === 2.U, op.rvs2_eew === 1.U), Seq(gen_vfclass(2), gen_vfclass(1), gen_vfclass(0))), recSqrt7.io.out, rec7.io.out, divSqrt_write)
   )(63,0)
 
   io.write.valid := ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) && valid) || out_toWrite || divSqrt_out_valid
@@ -632,8 +649,8 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.iss.ready := accept_inst.matched && divSqrt_ready && (!valid || last)
   last := io.write.fire()
 
-  io.set_fflags.valid := divSqrt_out_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())
-  io.set_fflags.bits := (divSqrt.io.exceptionFlags & Fill(5, divSqrt_out_valid)) | (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst)) | (rec7.io.exc & Fill(5, vfrec7_inst))
+  io.set_fflags.valid := divSqrt_out_valid || divSqrt16_out_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())
+  io.set_fflags.bits := (divSqrt.io.exceptionFlags & Fill(5, divSqrt_out_valid)) | divSqrt16.io.exceptionFlags & Fill(5, divSqrt_out_valid) | (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst)) | (rec7.io.exc & Fill(5, vfrec7_inst))
 
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
