@@ -13,7 +13,7 @@ import saturn.common._
 
 class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
   val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
-    name      = "Vector Store Unit",
+    name      = s"Core ${tileId} Vector LSU",
     sourceId  = IdRange(0, (2 << dmemTagBits))
   )))))
 
