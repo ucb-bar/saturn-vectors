@@ -191,7 +191,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
   )
   val w_xcpt = w_xcpts.map(_._1).orR && w_eidx >= w_inst.vstart && !w_masked && w_tlb_req_valid
   val w_cause = PriorityMux(w_xcpts)
-  val w_ff = w_inst.umop === lumopFF && w_inst.mop === mopUnit && w_eidx =/= 0.U
+  val w_ff = w_inst.umop === lumopFF && w_inst.mop === mopUnit
 
   when (m_valid) {
     w_inst := m_inst
@@ -253,7 +253,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     } .elsewhen (w_inst.vstart >= w_vl) {
       io.core.wb.retire := true.B
       io.issue.valid := true.B
-    } .elsewhen (w_inst.vmu && (w_iterative || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
+    } .elsewhen (w_inst.vmu && (w_iterative || w_ff || (!w_tlb_resp.cacheable && !w_tlb_resp.miss))) {
       x_set_replay := true.B
       killm := true.B
     } .elsewhen (w_tlb_resp.miss) {
@@ -292,12 +292,13 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
       x_replay_addr := w_baseaddr
       x_replay_seg_hi := w_seg_hi
     } .elsewhen (w_xcpt) {
+      val ff = w_ff && w_eidx =/= 0.U
       x_replay := false.B
-      io.core.wb.retire := w_ff
-      io.core.wb.xcpt := !w_ff
-      io.core.set_vstart.valid := !w_ff
+      io.core.wb.retire := ff
+      io.core.wb.xcpt := !ff
+      io.core.set_vstart.valid := !ff
       io.core.set_vstart.bits := w_eidx
-      io.core.set_vconfig.valid := w_ff
+      io.core.set_vconfig.valid := ff
       io.core.set_vconfig.bits.vl := w_eidx
       replay_kill := true.B
     } .elsewhen (!w_xcpt && (w_eidx +& 1.U) === w_vl && (w_seg_hi || w_seg_single_page || w_inst.seg_nf === 0.U)) {
@@ -314,7 +315,7 @@ class FrontendTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Has
     io.core.mem.block_mem := true.B
   }
 
-  io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_iterative || w_replay || x_set_replay))
+  io.core.mem.block_all := x_replay || (m_valid && m_replay) || (w_valid && (w_replay || x_set_replay))
   io.core.trap_check_busy := x_replay || m_valid || w_valid
   io.tlb.s2_kill := false.B
 }
