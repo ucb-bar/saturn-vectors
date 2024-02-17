@@ -27,14 +27,23 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
 
   val rvs2_data = io.pipe(0).bits.rvs2_data
 
-  val fTypes = Seq(FType.S, FType.D)
+  val fTypes = Seq(FType.H, FType.S, FType.D)
+  
+  // This defines the ops that are valid according to the spec.  The ordering is as follows for H, S, D:
+  //                FP->FP S      W     N  FP->I S    W      N I->FP S     W      N
+  val defined_ops = Seq((true , true , false, true , true , true , true , true , false),
+                        (true , true , true , true , true , true , true , true , true),
+                        ()
 
-  val single_width_out = Wire(Vec(2, UInt(dLen.W)))
+  val eew32_ops = Seq(FType.)
+
+
+  val single_width_out = Wire(Vec(3, UInt(dLen.W)))
   val multi_width_out = Wire(UInt(dLen.W))
 
   // Single Width Type Conversions
-  for(eew <- 2 until 4) {
-    val fType = fTypes(eew - 2)
+  for(eew <- 0 until 3) {
+    val fType = fTypes(eew)
     val num_chunks = dLen / fType.ieeeWidth
     val rvs2_chunks = rvs2_data.asTypeOf(Vec(num_chunks, UInt(fType.ieeeWidth.W)))
 
@@ -63,7 +72,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
       fType.ieee(conv.out)
     }
 
-    single_width_out(eew-2) := Mux(ctrl_out, inttofp_results.asUInt, fptoint_results.asUInt) 
+    single_width_out(eew) := Mux(ctrl_out, inttofp_results.asUInt, fptoint_results.asUInt) 
   }
 
   // Widening and Narrowing Type conversions
@@ -71,6 +80,15 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
 
   //// Int to FP
   //// 01X
+
+  val inttofp_wide_outs = Wire(Vec(3, UInt(ear
+    Len.W)))
+  val inttofp_narrow_outs = Wire(Vec(2, UInt(dLen.W)))
+
+  for (eew <- 0 until 3) {
+    val inttofp_modules = 
+  }
+
   val wide_inttofp_modules = Seq.fill(num_convert_units)(Module(new hardfloat.INToRecFN(FType.S.ieeeWidth, 11, 53)))
   val narrow_inttofp_modules = Seq.fill(num_convert_units)(Module(new hardfloat.INToRecFN(FType.D.ieeeWidth, 8, 24)))
   val gen_inttofp = wide_inttofp_modules.zip(narrow_inttofp_modules).zipWithIndex.map { case((wide, narrow), idx) =>
@@ -91,6 +109,11 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
 
   //// FP to Int
   //// 00X
+  
+  // Widening
+  for (eew <- )
+
+
   val wide_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.S.exp, FType.S.sig, FType.D.ieeeWidth)))
   val narrow_fptoint_modules = Seq.fill(num_convert_units)(Module(new hardfloat.RecFNToIN(FType.D.exp, FType.D.sig, FType.S.ieeeWidth)))
 
