@@ -51,7 +51,7 @@ case class VectorParams(
 
   doubleBufferSegments: Boolean = false,
 
-  vrfBanking: Int = 1
+  vrfBanking: Int = 2
 )
 
 case object VectorParamsKey extends Field[VectorParams]

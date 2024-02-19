@@ -9,12 +9,13 @@ import freechips.rocketchip.tile._
 
 class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val vat = UInt(vParams.vatSz.W)
-  val phys = Bool()
 
-  val base_addr = UInt(vaddrBitsExtended.W)
-  val hi_page   = UInt((paddrBits - pgIdxBits).W)
-  val stride    = UInt(vaddrBitsExtended.W)
+  val base_offset = UInt(pgIdxBits.W)
+  val page        = UInt((paddrBits - pgIdxBits).W)
+  val stride      = UInt(pgIdxBits.W)
 
+  val segstart = UInt(3.W)
+  val segend = UInt(3.W)
   val vstart = UInt(log2Ceil(maxVLMax).W)
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
 
@@ -27,6 +28,7 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val whole_reg = Bool()
   val store = Bool()
 
+  def indexed = !mop.isOneOf(mopUnit, mopStrided)
   def seg_nf = Mux(whole_reg, 0.U, nf)
   def wr_nf = Mux(whole_reg, nf, 0.U)
 }
@@ -35,12 +37,14 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
 class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val bits = UInt(32.W)
   val vconfig = new VConfig
+
   val vstart = UInt(log2Ceil(maxVLMax).W)
+  val segstart = UInt(3.W)
+  val segend   = UInt(3.W)
   val rs1_data = UInt(xLen.W)
   val rs2_data = UInt(xLen.W)
-  val hi_page = UInt((paddrBits - pgIdxBits).W)
+  val page = UInt((paddrBits - pgIdxBits).W)
   val vat = UInt(vParams.vatSz.W)
-  val phys = Bool()
   val rm = UInt(3.W)
   val emul = UInt(2.W)
 

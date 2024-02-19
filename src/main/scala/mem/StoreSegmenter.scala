@@ -23,8 +23,9 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
 
   val r_eidx = Reg(UInt(log2Ceil(maxVLMax).W))
   val r_head = RegInit(true.B)
+  val r_sidx = Reg(UInt(3.W))
   val eidx = Mux(r_head, io.op.vstart, r_eidx)
-  val sidx = RegInit(0.U(3.W))
+  val sidx = Mux(r_head, 0.U, r_sidx)
 
   val mem_size = io.op.elem_size
   val sub_dlen = Mux(io.op.seg_nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& mem_size)),
@@ -34,7 +35,7 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
   val next_eidx = eidx +& eidx_incr
   val next_sidx = sidx +& 1.U
 
-  val sidx_tail = next_sidx > io.op.seg_nf
+  val sidx_tail = next_sidx > io.op.segend
   val eidx_tail = next_eidx >= io.op.vl
 
   io.stdata.ready := io.valid && Mux(io.op.seg_nf === 0.U,
@@ -48,7 +49,8 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
   segbuf.io.in.bits.nf := io.op.nf
   segbuf.io.in.bits.rows := Mux(next_eidx >= io.op.vl, (io.op.vl - eidx), eidx_incr)
   segbuf.io.in.bits.sidx := sidx
-
+  segbuf.io.in.bits.segstart := io.op.segstart
+  segbuf.io.in.bits.segend := io.op.segend
 
   io.compactor.valid := Mux(segbuf.io.busy,
     segbuf.io.out.valid,
@@ -64,11 +66,13 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
 
   io.done := false.B
   when (io.stdata.fire) {
+    r_head := false.B
     when (io.op.seg_nf =/= 0.U && !sidx_tail) {
-      sidx := next_sidx
+      when (r_head) { r_eidx := io.op.vstart }
+      r_sidx := next_sidx
     } .otherwise {
       r_eidx := next_eidx
-      sidx := 0.U
+      r_sidx := 0.U
       io.done := eidx_tail
       r_head := eidx_tail
     }

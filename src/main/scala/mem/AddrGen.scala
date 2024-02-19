@@ -26,29 +26,31 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     (dLenB.U - off(dLenOffBits-1,0)) >> eew
   }
 
-  def samePage(page1: UInt, page2: UInt) = page1(pgIdxBits) === page2(pgIdxBits)
-
   val r_eaddr = Reg(UInt(paddrBits.W))
   val r_saddr = Reg(UInt(paddrBits.W))
   val r_eidx = Reg(UInt((1+log2Ceil(8*maxVLMax)).W))
   val r_sidx = Reg(UInt(3.W))
   val r_head = RegInit(true.B)
 
-  val fast_segmented = io.op.mop === mopUnit
+  val fast_segmented = io.op.mop === mopUnit && io.op.segend === io.op.nf && io.op.segstart === 0.U
   val eidx = Mux(r_head,
     io.op.vstart * (Mux(fast_segmented, io.op.seg_nf, 0.U) +& 1.U),
     r_eidx)
-  val sidx = Mux(r_head, 0.U             , r_sidx)
-  val eaddr = Mux(r_head, io.op.base_addr, r_eaddr) + Mux(io.op.mop(0),
-    io.maskindex.bits.index & eewBitMask(io.op.idx_size), 0.U)
-  val saddr = Mux(io.op.nf =/= 0.U, Mux(r_head, eaddr, r_saddr), eaddr)
+  val sidx = Mux(r_head, io.op.segstart             , r_sidx)
+  val start_offset = (io.op.vstart * Mux(io.op.mop === mopStrided,
+    io.op.stride,
+    (io.op.seg_nf +& 1.U) << io.op.elem_size))(pgIdxBits-1,0)
+  val start_addr = io.op.base_offset + start_offset + (io.op.segstart << io.op.elem_size)
+  val index_offset = io.maskindex.bits.index & eewBitMask(io.op.idx_size)
+  val eaddr = Mux(io.op.indexed,
+    io.op.base_offset + index_offset + Mux(r_head, io.op.segstart << io.op.elem_size, 0.U),
+    Mux(r_head, start_addr, r_eaddr))
+  val saddr = Mux(io.op.nf =/= 0.U && !fast_segmented, Mux(r_head, eaddr, r_saddr), eaddr)
 
   val mem_size = io.op.elem_size
   val max_eidx = Mux(fast_segmented,
     io.op.vl * (io.op.seg_nf +& 1.U),
     io.op.vl)
-  val stride = Mux(io.op.mop === mopStrided, io.op.stride,
-    Mux(io.op.mop === mopUnit, dLenB.U, 0.U))
 
   val next_max_elems = getElems(saddr, mem_size)
   val next_contig_elems = Mux(fast_segmented,
@@ -67,7 +69,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val needs_index = io.op.mop(0)
   val block_maskindex = (needs_mask || needs_index) && !io.maskindex.valid
 
-  val masked = needs_mask && !io.maskindex.bits.mask
+  val masked = (needs_mask && !io.maskindex.bits.mask) || (io.op.seg_nf > 0.U && sidx > io.op.segend)
   val may_clear = (fast_segmented || next_sidx > io.op.nf) && next_eidx >= max_eidx
 
 
@@ -80,12 +82,9 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.out.bits.last := may_clear
 
   io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked && io.tag.valid
-  io.req.bits.addr := (Mux(!io.op.phys || samePage(saddr, io.op.base_addr), saddr,
-    Cat(io.op.hi_page, saddr(pgIdxBits-1,0))
-  ) >> dLenOffBits) << dLenOffBits
+  io.req.bits.addr := Cat(io.op.page, saddr(pgIdxBits-1,0))
   io.req.bits.data := DontCare
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
-  io.req.bits.phys := io.op.phys
   io.req.bits.tag := io.tag.bits
 
   io.tag.ready := io.valid && io.req.ready && io.out.ready && !block_maskindex && !masked
@@ -98,7 +97,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
       r_sidx := 0.U
       io.maskindex.ready := needs_mask || needs_index
     } .otherwise {
-      r_eaddr := io.op.base_addr
+      r_eaddr := eaddr
       r_saddr := next_saddr
       r_eidx := io.op.vstart
       r_sidx := next_sidx

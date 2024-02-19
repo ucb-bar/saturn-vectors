@@ -27,7 +27,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
     valid := true.B
     inst  := iss_inst
     eidx  := iss_inst.vstart
-    sidx  := 0.U
+    sidx  := iss_inst.segstart
 
     val wvd_arch_mask = Wire(Vec(32, Bool()))
     for (i <- 0 until 32) {

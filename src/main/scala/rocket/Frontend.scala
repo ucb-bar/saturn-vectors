@@ -69,8 +69,8 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     val store_use_tl_reg = RegInit(true.B)
 
     // virtually-addressed requests must go through L1
-    val load_use_tl = load_use_tl_reg && vu.io.dmem.load_req.bits.phys
-    val store_use_tl = store_use_tl_reg && vu.io.dmem.store_req.bits.phys
+    val load_use_tl = load_use_tl_reg
+    val store_use_tl = store_use_tl_reg
 
     vu.io.dmem.load_resp.valid := tl_if.module.io.vec.load_resp.valid || hella_if.io.vec.load_resp.valid
     vu.io.dmem.load_resp.bits := Mux1H(

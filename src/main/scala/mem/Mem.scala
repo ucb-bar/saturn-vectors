@@ -10,15 +10,21 @@ import saturn.common._
 
 class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val op = new VectorMemMacroOp
-  def base = op.base_addr
-  val bound = UInt(paddrBits.W)
-  def base_cl = base >> lgCacheBlockBytes
-  def bound_cl = Mux(bound(lgCacheBlockBytes-1,0) === 0.U,
-    (bound >> lgCacheBlockBytes) + 1.U,
-    bound >> lgCacheBlockBytes)
-  def bound_all = op.mop =/= mopUnit || !op.phys
-  def containsBlock(b: UInt) = {
-    bound_all || (base_cl <= b && (bound_cl > b || (bound(lgCacheBlockBytes-1,0) =/= 0.U && bound_cl === b)))
+  def bound_all = op.mop =/= mopUnit
+  val bound_offset = UInt(pgIdxBits.W)
+
+  def containsBlock(addr: UInt) = {
+    val cl = addr(pgIdxBits-1,lgCacheBlockBytes)
+    val base_cl = op.base_offset >> lgCacheBlockBytes
+    val bound_cl = bound_offset >> lgCacheBlockBytes
+    ((addr >> pgIdxBits) === op.page) && (bound_all || (
+      (base_cl <= cl && bound_cl >= cl)
+    ))
+  }
+  def overlaps(other: LSIQEntry) = {
+    (op.page === other.op.page) && (bound_all || other.bound_all || (
+      (op.base_offset <= other.bound_offset && bound_offset >= other.op.base_offset)
+    ))
   }
 }
 
@@ -31,7 +37,6 @@ class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPar
 
 class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val addr = UInt(coreMaxAddrBits.W)
-  val phys = Bool()
   val data = UInt(dLen.W)
   val mask = UInt(dLenB.W)
   val tag = UInt(dmemTagBits.W)
@@ -144,26 +149,26 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   liq_enq_fire := io.enq.valid && liq_enq_ready && !io.enq.bits.store
   siq_enq_fire := io.enq.valid && siq_enq_ready &&  io.enq.bits.store
 
-  val enq_bound = (((io.enq.bits.nf +& 1.U) * io.enq.bits.vl) << io.enq.bits.elem_size) + io.enq.bits.base_addr
+  val enq_bound_max = (((io.enq.bits.nf +& 1.U) * io.enq.bits.vl) << io.enq.bits.elem_size) + io.enq.bits.base_offset - 1.U
+  val enq_bound = Mux((enq_bound_max >> pgIdxBits) =/= 0.U, ~(0.U(pgIdxBits.W)), enq_bound_max)
 
   when (liq_enq_fire) {
     liq(liq_enq_ptr).op := io.enq.bits
-    liq(liq_enq_ptr).bound := enq_bound
+    liq(liq_enq_ptr).bound_offset := enq_bound
     liq_las(liq_enq_ptr) := false.B
   }
   when (siq_enq_fire) {
     siq(siq_enq_ptr).op := io.enq.bits
-    siq(siq_enq_ptr).bound := enq_bound
+    siq(siq_enq_ptr).bound_offset := enq_bound
     siq_sss(siq_enq_ptr) := false.B
     siq_sas(siq_enq_ptr) := false.B
   }
 
-  val scalar_check_cl = io.scalar_check.addr >> lgCacheBlockBytes
   val scalar_store_conflict = (0 until vParams.vsiqEntries).map { i =>
-    siq_valids(i) && siq(i).containsBlock(scalar_check_cl)
+    siq_valids(i) && siq(i).containsBlock(io.scalar_check.addr)
   }.orR
   val scalar_load_conflict = (0 until vParams.vliqEntries).map { i =>
-    liq_valids(i) && liq(i).containsBlock(scalar_check_cl)
+    liq_valids(i) && liq(i).containsBlock(io.scalar_check.addr)
   }.orR
   io.scalar_check.conflict := scalar_store_conflict || (scalar_load_conflict && io.scalar_check.store)
 
@@ -172,9 +177,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Load Addr Sequencing
   val las = Module(new AddrGen)
   val las_order_block = (0 until vParams.vsiqEntries).map { i =>
-    val addr_conflict = (siq(i).bound_all || liq(liq_las_ptr).bound_all ||
-      (siq(i).base < liq(liq_las_ptr).bound && siq(i).bound > liq(liq_las_ptr).base)
-    )
+    val addr_conflict = siq(i).overlaps(liq(liq_las_ptr))
     siq_valids(i) && addr_conflict && vatOlder(siq(i).op.vat, liq(liq_las_ptr).op.vat)
   }.orR
   las.io.valid := liq_las_valid && !las_order_block
@@ -224,9 +227,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Store address sequencing
   val sas = Module(new AddrGen)
   val sas_order_block = (0 until vParams.vliqEntries).map { i =>
-    val addr_conflict = (liq(i).bound_all || siq(siq_sas_ptr).bound_all ||
-      (liq(i).base < siq(siq_sas_ptr).bound && liq(i).bound > siq(siq_sas_ptr).base)
-    )
+    val addr_conflict = liq(i).overlaps(siq(siq_sas_ptr))
     liq_valids(i) && addr_conflict && vatOlder(liq(i).op.vat, siq(siq_sas_ptr).op.vat)
   }.orR
   sas.io.valid := siq_sas_valid && !sas_order_block
