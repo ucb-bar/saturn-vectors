@@ -111,6 +111,7 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   val s1_masked      = RegEnable(masked, valid)
   val s1_seg_hi      = RegEnable(seg_hi, valid)
   val s1_base        = RegEnable(base, valid)
+  val s1_tlb_valid   = RegEnable(tlb_valid, valid)
   val s1_tlb_addr    = RegEnable(tlb_addr, valid)
   val s1_seg_nf_consumed = RegEnable(seg_nf_consumed, valid)
   val s1_seg_single_page = RegEnable(seg_single_page, valid)
@@ -118,7 +119,7 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   when (io.tlb_resp.miss && s1_valid && tlb_backoff === 0.U) { tlb_backoff := 3.U }
 
   val tlb_resp = WireInit(io.tlb_resp)
-  when (s1_masked) {
+  when (!s1_tlb_valid) {
     tlb_resp.miss := false.B
   }
 

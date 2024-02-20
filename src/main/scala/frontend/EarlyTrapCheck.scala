@@ -32,6 +32,7 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
       val inst = Output(new VectorIssueInst)
       val rs1 = Input(Valid(UInt(xLen.W)))
       val kill = Input(Bool())
+      val tlb_req = Valid(new TLBReq(3))
       val tlb_resp = Input(new TLBResp)
     }
 
@@ -111,6 +112,8 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
     s1_tlb_resp.cacheable := true.B
   }
   io.s1.inst := s1_inst
+  io.s1.tlb_req.valid := RegNext(io.s0.tlb_req.valid, false.B)
+  io.s1.tlb_req.bits  := RegEnable(io.s0.tlb_req.bits, s0_tlb_valid)
 
   // s2 stage
   s2_valid := s1_valid && !io.s1.kill
@@ -172,12 +175,12 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
     } .elsewhen (s2_inst.vstart >= s2_inst.vconfig.vl) {
       io.s2.retire := true.B
       io.s2.vstart.valid := true.B
-    } .elsewhen (s2_inst.vmu && (s2_iterative || (!s2_tlb_resp.cacheable && !s2_tlb_resp.miss))) {
-      io.s2.internal_replay.valid := true.B
     } .elsewhen (s2_tlb_resp.miss) {
       io.s2.replay := true.B
     } .elsewhen (s2_xcpt) {
       io.s2.xcpt.valid := true.B
+    } .elsewhen (s2_inst.vmu && (s2_iterative || !s2_tlb_resp.cacheable)) {
+      io.s2.internal_replay.valid := true.B
     } .elsewhen (s2_replay_next_page) {
       io.s2.replay := true.B
       io.s2.issue.valid := true.B
