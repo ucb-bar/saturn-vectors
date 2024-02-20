@@ -52,12 +52,12 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     io.core.mem.block_all    := icu.io.busy || ecu.io.s2.internal_replay.valid
     io.core.mem.block_mem    := (ecu.io.s2.inst.valid && ecu.io.s2.inst.bits.vmu) || vu.io.scalar_check.conflict
 
-    io.tlb.req.valid := Mux(icu.io.busy, icu.io.tlb_req.valid, ecu.io.s0.tlb_req.valid)
-    io.tlb.req.bits  := Mux(icu.io.busy, icu.io.tlb_req.bits , ecu.io.s0.tlb_req.bits)
+    io.tlb.req.valid := Mux(icu.io.busy, icu.io.s0_tlb_req.valid, ecu.io.s0.tlb_req.valid)
+    io.tlb.req.bits  := Mux(icu.io.busy, icu.io.s0_tlb_req.bits , ecu.io.s0.tlb_req.bits)
     ecu.io.s1.tlb_resp := io.tlb.s1_resp
     when (RegEnable(icu.io.busy || !io.tlb.req.ready, ecu.io.s0.tlb_req.valid)) { ecu.io.s1.tlb_resp.miss := true.B }
     icu.io.tlb_resp := io.tlb.s1_resp
-    when (RegEnable(!io.tlb.req.ready, icu.io.tlb_req.valid)) { icu.io.tlb_resp.miss := true.B }
+    when (RegEnable(!io.tlb.req.ready, icu.io.s0_tlb_req.valid)) { icu.io.tlb_resp.miss := true.B }
     io.tlb.s2_kill := false.B
 
     io.core.wb.replay := ecu.io.s2.replay

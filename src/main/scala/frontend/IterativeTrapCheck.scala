@@ -16,7 +16,8 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
     val status = Input(new MStatus)
     val in         = Input(Valid(new VectorIssueInst))
     val busy       = Output(Bool())
-    val tlb_req    = Valid(new TLBReq(3))
+    val s0_tlb_req = Valid(new TLBReq(3))
+    val s1_tlb_req = Valid(new TLBReq(3))
     val tlb_resp   = Input(new TLBResp)
     val retire     = Output(Bool())
     val pc         = Output(UInt(vaddrBitsExtended.W))
@@ -87,13 +88,16 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   }
 
 
-  io.tlb_req.valid            := tlb_valid && tlb_backoff === 0.U && mask_ready && index_ready
-  io.tlb_req.bits.vaddr       := tlb_addr
-  io.tlb_req.bits.passthrough := false.B
-  io.tlb_req.bits.size        := inst.mem_elem_size
-  io.tlb_req.bits.cmd         := Mux(inst.opcode(5), M_XWR, M_XRD)
-  io.tlb_req.bits.prv         := io.status.prv
-  io.tlb_req.bits.v           := io.status.v
+  io.s0_tlb_req.valid            := tlb_valid && tlb_backoff === 0.U && mask_ready && index_ready
+  io.s0_tlb_req.bits.vaddr       := tlb_addr
+  io.s0_tlb_req.bits.passthrough := false.B
+  io.s0_tlb_req.bits.size        := inst.mem_elem_size
+  io.s0_tlb_req.bits.cmd         := Mux(inst.opcode(5), M_XWR, M_XRD)
+  io.s0_tlb_req.bits.prv         := io.status.prv
+  io.s0_tlb_req.bits.v           := io.status.v
+
+  io.s1_tlb_req.valid := RegEnable(io.s0_tlb_req.valid, false.B, valid)
+  io.s1_tlb_req.bits  := RegEnable(io.s0_tlb_req.bits, valid)
 
   val replay_fire = valid && eidx < inst.vconfig.vl && tlb_backoff === 0.U && index_ready && mask_ready
   when (replay_fire) {
