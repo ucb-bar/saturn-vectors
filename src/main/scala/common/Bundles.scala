@@ -35,6 +35,7 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
 
 
 class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val pc = UInt(vaddrBitsExtended.W)
   val bits = UInt(32.W)
   val vconfig = new VConfig
 
@@ -68,6 +69,8 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def imm5 = bits(19,15)
   def imm5_sext = Cat(Fill(59, imm5(4)), imm5)
   def funct6 = bits(31,26)
+  def writes_xrf = (funct3 === OPMVV && opmf6 === OPMFunct6.wrxunary0) || (funct3 === OPFVV && opff6 === OPFFunct6.wrfunary0)
+  def writes_frf = funct3 === OPFVV
 
   def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)
   def isOpm = funct3.isOneOf(OPMVV, OPMVX)

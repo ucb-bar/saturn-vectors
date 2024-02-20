@@ -20,7 +20,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     val backend_busy = Output(Bool())
     val mem_busy = Output(Bool())
-    val vm_busy = Output(Bool())
 
     val index_access = new VectorIndexAccessIO
     val mask_access = new VectorMaskAccessIO
@@ -351,9 +350,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vls-mask, vss-mask, vxs-mask, vps-mask, frontend-mask
   val reads = Seq(3, 1, 2, 5).zipWithIndex.map { case (rc, i) =>
     val arb = Module(new RegisterReadXbar(rc, vParams.vrfBanking))
-    
+
     vrf.zipWithIndex.foreach { case(bank, j) =>
-      bank.io.read(i) <> arb.io.out(j)      
+      bank.io.read(i) <> arb.io.out(j)
     }
 
     arb.io.in
@@ -362,8 +361,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(0)(1) <> vps.io.rvs2
   vps.io.rvs1.req.ready := true.B
 
-  reads(0)(2).req.valid := io.index_access.valid
-  io.index_access.ready := reads(0)(2).req.ready
+  reads(0)(2).req.valid := io.index_access.valid && !io.backend_busy
+  io.index_access.ready := reads(0)(2).req.ready && !io.backend_busy
   reads(0)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
   io.index_access.idx   := reads(0)(2).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
@@ -381,9 +380,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(3)(1) <> vss.io.rvm
   reads(3)(2) <> vxs.io.rvm
   reads(3)(3) <> vps.io.rvm
-  reads(3)(4).req.valid := io.mask_access.valid
+  val vm_busy = Wire(Bool())
+  reads(3)(4).req.valid := io.mask_access.valid && !vm_busy
   reads(3)(4).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
-  io.mask_access.ready  := reads(3)(4).req.ready
+  io.mask_access.ready  := reads(3)(4).req.ready && !vm_busy
   io.mask_access.mask   := reads(3)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
@@ -439,7 +439,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }.orR
 
   io.mem_busy := vmu.io.busy
-  io.vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
+  vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
   io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.busy || resetting
   io.set_vxsat := vxu.set_vxsat
   io.set_fflags := vxu.set_fflags
