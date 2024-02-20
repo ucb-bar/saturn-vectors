@@ -96,7 +96,6 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
       wide.io.out
     }.asUInt
 
-
     Mux1H(Seq(!rs1(2) && rs1(1), rs1(2) && !rs1(1), (!rs1(2) && !rs1(1)) || (rs1(2) && rs1(1))),
           Seq(gen_inttofp      , gen_fptofp       , gen_fptoint))
   }
