@@ -178,7 +178,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     !(read_perm_buffer && !io.perm.req.ready) &&
     !(renacc && !acc_ready)
   )
-  io.perm.req.valid := iss_valid && read_perm_buffer
+  io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready
   io.iss.valid := iss_valid && !(inst.reduction && reduction_head)
 
   io.iss.bits.rvs1_data := io.rvs1.resp
