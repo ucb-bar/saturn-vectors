@@ -174,6 +174,7 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
       io.s2.xcpt.bits.tval := s2_inst.pc
     } .elsewhen (s2_inst.vstart >= s2_inst.vconfig.vl) {
       io.s2.retire := true.B
+      io.s2.issue.valid := true.B
       io.s2.vstart.valid := true.B
     } .elsewhen (s2_tlb_resp.miss) {
       io.s2.replay := true.B

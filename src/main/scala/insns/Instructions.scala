@@ -180,7 +180,7 @@ object FWREDOSUM extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwredo
 object FWREDUSUM extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fwredusum), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W)), Wide2VD.Y, Reduction.Y, AccInitZeros.Y) }
 
 object FDIV      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fdiv)     , FPSwapVdV2.N, FPAdd.N, FPMul.N) }
-object FRDIV     extends OPFInstruction    { val props = Seq(F6(OPFFunct6.frdiv)    , FPSwapVdV2.N, FPAdd.N, FPMul.N) }
+object FRDIV     extends OPFInstruction    { val props = Seq(F6(OPFFunct6.frdiv)    , FPSwapVdV2.Y, FPAdd.N, FPMul.N) }
 object FSQRT_V   extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary1)  , F3(VectorConsts.OPFVV), RS1( 0.U(5.W)), FPSwapVdV2.N, FPAdd.N, FPMul.N) }
 object FRSQRT7_V extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary1)  , F3(VectorConsts.OPFVV), RS1( 4.U(5.W)), FPSwapVdV2.N) }
 object FREC7_V   extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary1)  , F3(VectorConsts.OPFVV), RS1( 5.U(5.W)), FPSwapVdV2.N) }
