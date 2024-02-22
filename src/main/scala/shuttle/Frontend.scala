@@ -32,7 +32,9 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     val icu = Module(new IterativeTrapCheck)
     val vu = Module(new VectorBackend)
 
-    ecu.io.s0.in.valid        := io.ex.valid
+    val replayed = RegInit(false.B)
+
+    ecu.io.s0.in.valid        := io.ex.valid && !icu.io.busy && !(replayed && !vu.io.issue.ready)
     ecu.io.s0.in.bits.inst    := io.ex.uop.inst
     ecu.io.s0.in.bits.pc      := io.ex.uop.pc
     ecu.io.s0.in.bits.status  := io.status
@@ -40,7 +42,7 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     ecu.io.s0.in.bits.vstart  := io.ex.vstart
     ecu.io.s0.in.bits.rs1     := io.ex.uop.rs1_data
     ecu.io.s0.in.bits.rs2     := io.ex.uop.rs2_data
-    io.ex.ready          := !icu.io.busy
+    io.ex.ready               := !icu.io.busy && !(replayed && !vu.io.issue.ready)
 
     ecu.io.s1.rs1.valid := ecu.io.s1.inst.isOpf && !ecu.io.s1.inst.vmu
     ecu.io.s1.rs1.bits := io.mem.frs1
@@ -68,6 +70,9 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     ecu.io.s2.vxrm := io.wb.vxrm
     ecu.io.s2.frm := io.wb.frm
     icu.io.in := ecu.io.s2.internal_replay
+
+    when (!vu.io.issue.ready && ecu.io.s2.inst.valid) { replayed := true.B }
+    when (vu.io.issue.ready) { replayed := false.B }
 
     vu.io.issue.valid := Mux(icu.io.busy, icu.io.issue.valid, ecu.io.s2.issue.valid)
     vu.io.issue.bits  := Mux(icu.io.busy, icu.io.issue.bits , ecu.io.s2.issue.bits)
