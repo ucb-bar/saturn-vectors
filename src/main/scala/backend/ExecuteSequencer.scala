@@ -53,7 +53,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val rgather    = inst.opif6 === OPIFunct6.rgather
   val rgather_ix = rgather && inst.funct3.isOneOf(OPIVX, OPIVI)
   val rgather_v  = rgather && inst.funct3.isOneOf(OPIVV)
-  val slide_offset = Mux(inst.isOpi, get_max_offset(uscalar), 1.U)
+  val slide1     = !inst.isOpi
+  val slide_offset = Mux(!slide1, get_max_offset(uscalar), 1.U)
   val slide_up = !inst.funct6(0)
   val renv1    = Mux(inst.reduction, reduction_head, inst.renv1)
   val renv2    = Mux(rgather_ix, head, Mux(inst.reduction, !reduction_head && !acc_tail, inst.renv2))
@@ -159,7 +160,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.perm.req.bits.tail := Mux(slide,
     Mux(slide_up,
       Mux(tail, eff_vl << vs2_eew, 0.U),
-      Mux(next_eidx + slide_offset < inst.vconfig.vtype.vlMax, 0.U, ((next_eidx - slide_offset) << vs2_eew)(dLenOffBits-1,0))),
+      (Mux(next_eidx + slide_offset <= inst.vconfig.vtype.vlMax, next_eidx, slide_offset) << vs2_eew)(dLenOffBits-1,0)
+    ),
     1.U << vs1_eew)
   val slide_down_byte_mask = Mux(slide && !slide_up && next_eidx + slide_offset > inst.vconfig.vtype.vlMax,
     Mux(eidx +& slide_offset >= inst.vconfig.vtype.vlMax,
