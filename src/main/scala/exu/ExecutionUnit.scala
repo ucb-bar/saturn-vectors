@@ -30,13 +30,16 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
   val set_vxsat = Wire(Bool())
   val set_fflags = Wire(Valid(UInt(5.W)))
   val scalar_write = Wire(Decoupled(new ScalarWrite))
-  val pipe_stall = WireInit(false.B)
+  val pipe_stall = WireInit(Vec(2, Bool(false.B))
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
   //iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
   when (iss(0).valid || iss(1).valid) { assert(PopCount(readies) <= 1.U) }
-  
+
+  val vxs_0_readies = fu_arbs.map(_.io.in(0).ready)
+  val vxs_1_readies = fu_arbs.map(_.io.in(1).ready)
+
   fus.zip(fu_arbs).foreach { case(fu, arb) =>
     arb.io.in(0) <> iss(0)
     arb.io.in(1) <> iss(1)
@@ -66,19 +69,36 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
 
   // TODO fix the pipeline stall logic for multi-VXS for potential hazards
   // Give priority to older instruction based on vat
-  if (pipe_fus.size > 0) {
-    
-    val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
+  // Stall only if there is a write bank conflict
+
+  if (pipe_fus.size > 0) {    
+
+    val write_bank_conflict = iss(0).op.eg(vrfBankBits-1, 0) === iss(1).op.eg(vrfBankBits-1, 0) 
+    // need to know which FU each VXS is issuing to
+    // have a separate set of bits for each iss to track which FU is matched to which VXS
+
+    //val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
+    val pipe_ready_idx_0 = PriorityEncoder(pipe_fus.map(_.io.iss.ready).asUInt)
+    val pipe_ready_idx_1 = PriorityEncoder(Reverse(pipe_fus.map(_.io.iss.ready).asUInt))
+
+    val pipe_iss_depth_0 = Mux1H(UIntToOH(pipe_ready_idx_0, pipe_fus.map(_.depth.U)))
+    val pipe_iss_depth_1 = Mux1H(UIntToOH((pipe_fus.length-1).U - pipe_ready_idx_1), pipe_fus.mapt(_.depth.U))
+
+    val pipe_depth_conflict = (pipe_iss_depth_0 === pipe_iss_depth_1) && (pipe_ready_idx_0 =/= (pipe_fus.length-1).U - pipe_ready_idx_1)
+    val vxs_issue_conflict = write_bank_conflict && pipe_depth_conflict
 
     val pipe_valids    = Seq.fill(pipe_depth)(RegInit(false.B))
+
     val pipe_sels      = Seq.fill(pipe_depth)(Reg(UInt(pipe_fus.size.W)))
     val pipe_bits      = Seq.fill(pipe_depth)(Reg(new ExecuteMicroOp))
     val pipe_latencies = Seq.fill(pipe_depth)(Reg(UInt(log2Ceil(pipe_depth).W)))
 
     pipe_stall := Mux1H(pipe_sels.head, pipe_fus.map(_.io.pipe0_stall))
 
+    pipe_stall(0) := 
+
     pipe_write_hazard := (0 until pipe_depth).map { i =>
-      pipe_valids(i) && pipe_latencies(i) === pipe_iss_depth
+      pipe_valids(i) && (pipe_latencies(i) === pipe_iss_depth_0 || pipe_latencies(i) === pipe_iss_depth_1)
     }.orR
 
     val pipe_iss = (iss(0).fire || iss(1).fire) && pipe_fus.map(_.io.iss.ready).orR
