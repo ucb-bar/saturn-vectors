@@ -292,7 +292,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
 
     // Give priority to the earliest index ready sequencer
-    val multi_seq_ready_priority = PriorityEncoder(Reverse(seq_seq.map(_.io.dis.ready).asUInt))
+    val multi_seq_ready_priority = PriorityEncoder(seq_seq.map(_.io.dis.ready).asUInt)
+
+    val debug_multi_seq = Reg(UInt(2.W))
+    debug_multi_seq := multi_seq_ready_priority
+    chisel3.dontTouch(debug_multi_seq)
 
     seq_seq.zipWithIndex.foreach{ case(s, j) =>
       s.io.dis.valid := issq.io.deq.valid && (j.U === multi_seq_ready_priority)
@@ -358,7 +362,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs-vrs2
   // vxs-vrs3, vss-vrd
   // vls-mask, vss-mask, vxs-mask, vps-mask, frontend-mask
-  val reads = Seq(3, 1, 2, 5).zipWithIndex.map { case (rc, i) =>
+  val reads = Seq(4, 2, 3, 6).zipWithIndex.map { case (rc, i) =>
     val arb = Module(new RegisterReadXbar(rc, vParams.vrfBanking))
 
     vrf.zipWithIndex.foreach { case(bank, j) =>
@@ -380,6 +384,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(1)(0) <> vxs(0).io.rvs2
   reads(2)(0) <> vxs(0).io.rvd
 
+  reads(0)(3) <> vxs(1).io.rvs1
+  reads(1)(1) <> vxs(1).io.rvs2
+  reads(2)(2) <> vxs(1).io.rvd
+
   reads(2)(1) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
   vmu.io.sdata.bits.data := vss.io.iss.bits.stdata
@@ -395,6 +403,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(3)(4).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
   io.mask_access.ready  := reads(3)(4).req.ready && !vm_busy
   io.mask_access.mask   := reads(3)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
+  reads(3)(5) <> vxs(1).io.rvm
 
 
   val maskindex_q = Module(new DCEQueue(new MaskIndex, 2))
@@ -422,6 +431,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   perm_buffer.io.pop <> vxs(0).io.perm.req
   vxs(0).io.perm.data := perm_buffer.io.pop_data.asUInt
 
+  // TODO Add support for multi-VXS permute ops
+  vxs(1).io.perm.data := 0.U
+  vxs(1).io.perm.req.ready := false.B
+
   // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {
     assert(vat_valids(tag))
@@ -432,10 +445,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
   clearVat(vxu.vat_release.valid               , vxu.vat_release.bits)
 
-  vxu.iss <> vxs(0).io.iss
+  vxu.iss(0) <> vxs(0).io.iss
+  vxu.iss(1) <> vxs(1).io.iss
+  // TODO add support for multi-VXS acc
   vxs(0).io.acc := vxu.acc_write
-
-  vxs(1).io.iss.ready := false.B
 
 
   // Signalling to frontend
