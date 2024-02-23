@@ -9,3 +9,5 @@ target/
 *#
 *.o
 *.#*
+*.dump
+*.riscv
