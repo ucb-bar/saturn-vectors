@@ -12,11 +12,14 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
   val supported_insns = fus.map(_.supported_insns).flatten
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
+  // TODO for multi-VXS, differentiate between interleavable and non-interleavable FUs
+
+  val fu_arbs = Seq.fill(fus.length)(Module(new RRArbiter(new ExecuteMicroOp, 2)))
 
   val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
   val nHazards = pipe_depth + iter_fus.size
 
-  val iss = Wire(Decoupled(new ExecuteMicroOp))
+  val iss = Wire(Vec(2, Decoupled(new ExecuteMicroOp)))
 
   val write = Wire(Valid(new VectorWrite(dLen)))
   val acc_write = Wire(Valid(new VectorWrite(dLen)))
@@ -29,15 +32,18 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
   val scalar_write = Wire(Decoupled(new ScalarWrite))
   val pipe_stall = WireInit(false.B)
 
-  fus.foreach { fu =>
-    fu.io.iss.op := iss.bits
-    fu.io.iss.valid := iss.valid && !pipe_stall
-  }
-
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
-  iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
-  when (iss.valid) { assert(PopCount(readies) <= 1.U) }
+  //iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
+  when (iss(0).valid || iss(1).valid) { assert(PopCount(readies) <= 1.U) }
+  
+  fus.zip(fu_arbs).foreach { case(fu, arb) =>
+    arb.io.in(0) <> iss(0)
+    arb.io.in(1) <> iss(1)
+    arb.io.out.ready := readies.orR && !pipe_write_hazard && !pipe_stall 
+    fu.io.iss.op := arb.io.out.bits
+    fu.io.iss.valid := arb.io.out.valid && !pipe_stall
+  }
 
   val pipe_write = WireInit(false.B)
 
@@ -58,7 +64,10 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
   scalar_write_arb.io.in.zip(fus.map(_.io.scalar_write)).foreach { case (l, r) => l <> r }
   scalar_write <> scalar_write_arb.io.out
 
+  // TODO fix the pipeline stall logic for multi-VXS for potential hazards
+  // Give priority to older instruction based on vat
   if (pipe_fus.size > 0) {
+    
     val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
 
     val pipe_valids    = Seq.fill(pipe_depth)(RegInit(false.B))
@@ -72,11 +81,12 @@ class ExecutionUnit(fus: Seq[FunctionalUnit])(implicit val p: Parameters) extend
       pipe_valids(i) && pipe_latencies(i) === pipe_iss_depth
     }.orR
 
-    val pipe_iss = iss.fire && pipe_fus.map(_.io.iss.ready).orR
+    val pipe_iss = (iss(0).fire || iss(1).fire) && pipe_fus.map(_.io.iss.ready).orR
     when (!pipe_stall) {
       pipe_valids.head := pipe_iss
       when (pipe_iss) {
-        pipe_bits.head      := iss.bits
+        pipe_bits.head      := Mux(iss(0).fire(), iss(0).bits, iss(1).bits)
+        //pipe_bits.head      := iss.bits
         pipe_latencies.head := pipe_iss_depth - 1.U
         pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
       }
