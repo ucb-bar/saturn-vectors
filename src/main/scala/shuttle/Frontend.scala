@@ -50,10 +50,22 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
 
     io.mem.tlb_req.valid := Mux(icu.io.busy, icu.io.s1_tlb_req.valid, ecu.io.s1.tlb_req.valid)
     io.mem.tlb_req.bits  := Mux(icu.io.busy, icu.io.s1_tlb_req.bits,  ecu.io.s1.tlb_req.bits)
-    ecu.io.s1.tlb_resp := io.mem.tlb_resp
-    when (!io.mem.tlb_req.ready) { ecu.io.s1.tlb_resp.miss := true.B }
-    icu.io.tlb_resp := io.mem.tlb_resp
-    when (!io.mem.tlb_req.ready) { icu.io.tlb_resp.miss := true.B }
+    val mem_tlb_resp = Wire(new TLBResp)
+    mem_tlb_resp.miss := io.mem.tlb_resp.miss || !io.mem.tlb_req.ready
+    mem_tlb_resp.paddr := io.mem.tlb_resp.paddr
+    mem_tlb_resp.pf    := io.mem.tlb_resp.pf
+    mem_tlb_resp.ae    := io.mem.tlb_resp.ae
+    mem_tlb_resp.ma    := io.mem.tlb_resp.ma
+    mem_tlb_resp.gpa        := DontCare
+    mem_tlb_resp.gpa_is_pte := DontCare
+    mem_tlb_resp.gf         := 0.U.asTypeOf(new TLBExceptions)
+    mem_tlb_resp.cacheable  := DontCare
+    mem_tlb_resp.must_alloc := DontCare
+    mem_tlb_resp.prefetchable := DontCare
+    mem_tlb_resp.size         := DontCare
+    mem_tlb_resp.cmd          := DontCare
+    ecu.io.s1.tlb_resp := mem_tlb_resp
+    icu.io.tlb_resp    := mem_tlb_resp
 
     io.wb.retire_late  := icu.io.retire
     io.wb.inst         := Mux(icu.io.busy, icu.io.inst.bits      , ecu.io.s2.inst.bits.bits)
