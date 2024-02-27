@@ -24,7 +24,7 @@ class ExecutionUnit(num_vxs: Int, vxs_supported_insns: Seq[VectorInstruction], f
 
   val iss = Wire(Vec(num_vxs, Decoupled(new ExecuteMicroOp)))
 
-  val write = Wire(Vec(num_vxs, Valid(new VectorWrite(dLen))))
+  val writes = Wire(Vec(num_vxs, Valid(new VectorWrite(dLen))))
   val acc_write = Wire(Vec(num_vxs, Valid(new VectorWrite(dLen))))
   val vat_release = Wire(Vec(num_vxs, Valid(UInt(vParams.vatSz.W))))
   val hazards = Wire(Vec(nHazards, Valid(new PipeHazard)))
@@ -72,7 +72,7 @@ class ExecutionUnit(num_vxs: Int, vxs_supported_insns: Seq[VectorInstruction], f
     fu.io.iss.valid := arb.io.out.valid && !fu_hazard && !fu_backpressure
   }
 
-  val pipe_write = WireInit(false.B)
+  val pipe_writes = WireInit(Vec(num_vxs, Bool(false.B)))
 
   vat_release.valid := false.B
   vat_release.bits := DontCare
@@ -154,23 +154,40 @@ class ExecutionUnit(num_vxs: Int, vxs_supported_insns: Seq[VectorInstruction], f
       }
     }
 
-    val write_sel = pipe_valids.zip(pipe_latencies).map { case (v,l) => v && l === 0.U }
-    val fu_sel = Mux1H(write_sel, pipe_sels)
-    pipe_write := write_sel.orR
-    when (write_sel.orR) {
-      val acc = Mux1H(write_sel, pipe_bits.map(_.acc))
-      val tail = Mux1H(write_sel, pipe_bits.map(_.tail))
-      write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
-      write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
-      acc_write.valid := acc && !tail
-      acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
-      vat_release.valid := Mux1H(write_sel, pipe_bits.map(_.tail))
-      vat_release.bits := Mux1H(write_sel, pipe_bits.map(_.vat))
+    writes.zipWithIndex.foreach { case(write, i) =>
+      val write_sel = pipe_valids(i).zip(pipe_latencies(i)).map { case(v, l) => v && l === 0.U }
+      val fu_sel = Mux1H(write_sel, pipe_sels(i))
+      pipe_writes(i) := write_sel.orR
+      when (write_sel.orR) {
+        val acc = Mux1H(write_sel, pipe_bits(i).map(_.acc))
+        val tail = Mux1H(write_sel, pipe_bits(i).map(_.tail))
+        write(i).valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
+        write(i).bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+        acc_write(i).valid := acc && !tail
+        acc_write(i).bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+        vat_release(i).valid := Mux1H(write_sel, pipe_bits(i).map(_.tail))
+        vat_release(i).bits := Mux1H(write_sel, pipe_bits(i).map(_.vat))
+      }
     }
 
-    when (pipe_valids.orR) { busy := true.B }
+
+    //val write_sel = pipe_valids.zip(pipe_latencies).map { case (v,l) => v && l === 0.U }
+    //val fu_sel = Mux1H(write_sel, pipe_sels)
+    //pipe_write := write_sel.orR
+    //when (write_sel.orR) {
+    //  val acc = Mux1H(write_sel, pipe_bits.map(_.acc))
+    //  val tail = Mux1H(write_sel, pipe_bits.map(_.tail))
+    //  write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
+    //  write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+    //  acc_write.valid := acc && !tail
+    //  acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+    //  vat_release.valid := Mux1H(write_sel, pipe_bits.map(_.tail))
+    //  vat_release.bits := Mux1H(write_sel, pipe_bits.map(_.vat))
+    //}
+
+    when (pipe_valids.map(_.orR).reduce(_ || _)) { busy := true.B }
     for (i <- 0 until pipe_depth) {
-      hazards(i).valid       := pipe_valids(i)
+      hazards(i).valid       := pipe_valids.map(_(i)).reduce(_ || _)
       hazards(i).bits.vat    := pipe_bits(i).vat
       hazards(i).bits.eg     := pipe_bits(i).wvd_eg
       when (pipe_latencies(i) === 0.U) { // hack to deal with compress unit
