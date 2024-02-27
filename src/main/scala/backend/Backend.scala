@@ -156,7 +156,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = new ExecutionUnit(integerFUs ++ fpMISCs :+ fpFMA)
+  val vxu = new ExecutionUnit(2, integerFUs ++ fpMISCs :+ fpFMA)
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -294,10 +294,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     // Give priority to the earliest index ready sequencer
     val multi_seq_ready_priority = PriorityEncoder(seq_seq.map(_.io.dis.ready).asUInt)
 
-    val debug_multi_seq = Reg(UInt(2.W))
-    debug_multi_seq := multi_seq_ready_priority
-    chisel3.dontTouch(debug_multi_seq)
-
     seq_seq.zipWithIndex.foreach{ case(s, j) =>
       s.io.dis.valid := issq.io.deq.valid && (j.U === multi_seq_ready_priority)
       s.io.dis.bits := issq.io.deq.bits
@@ -337,12 +333,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     arb.io.in
   }
 
+  // Old VXU write code
+  //for (b <- 0 until vParams.vrfBanking) {
+  //  writes(b)(0).valid := vxu.write.valid && vxu.write.bits.eg(vrfBankBits-1, 0) === b.U
+  //  writes(b)(0).bits.data  := vxu.write.bits.data
+  //  writes(b)(0).bits.mask  := vxu.write.bits.mask
+  //  writes(b)(0).bits.eg    := vxu.write.bits.eg >> vrfBankBits
+  //  when (vxu.write.valid) { assert(writes(b)(0).ready) }
+  //}
+
   for (b <- 0 until vParams.vrfBanking) {
-    writes(b)(0).valid := vxu.write.valid && vxu.write.bits.bankId === b.U
-    writes(b)(0).bits.data  := vxu.write.bits.data
-    writes(b)(0).bits.mask  := vxu.write.bits.mask
-    writes(b)(0).bits.eg    := vxu.write.bits.eg >> vrfBankBits
-    when (vxu.write.valid) { assert(writes(b)(0).ready) }
+    val bank_match = vxu.write.map(_.bits.bankId === b.U)
+    val bank_write_bits = Mux1H(bank_match, vxu.write.map(_.bits.data))
+    val bank_write_mask = Mux1H(bank_match, vxu.write.map(_.bits.mask))
+    val bank_writes_eg = Mux1H(bank_match, vxu.write.map(_.bits.eg) >> vrfBankBits)
+    writes(b)(0).valid := bank_match.orR
+    writes(b)(0).bits.data := bank_write_bits
+    writes(b)(0).bits.mask := bank_write_mask
+    writes(b)(0).bits.eg := bank_writes_eg
+    when(bank_match) { assert(writes(b)(0).ready) }
   }
 
   load_write.ready := Mux1H(UIntToOH(load_write.bits.bankId), writes.map(_(1).ready))
