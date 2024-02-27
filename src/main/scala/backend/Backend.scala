@@ -165,13 +165,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vxs = Seq.fill(2)(Module(new ExecuteSequencer(vxu.supported_insns)))
+  val vxs_0 = Module(new ExecuteSequencer(fpFMA))
+  val vxs_1 = Module(new ExecuteSequencer(integerFUs ++ fpMISCs))
+  //val vxs = Seq.fill(2)(Module(new ExecuteSequencer(vxu.supported_insns)))
   val vps = Module(new PermuteSequencer(vxu.supported_insns))
 
   val issGroups = Seq(
     (vlissq, Seq(vls)),
     (vsissq, Seq(vss)),
-    (vxissq, vxs),
+    (vxissq, Seq(vxs_0, vxs_1)),
     (vpissq, Seq(vps))
   )
   val issqs = issGroups.map(_._1)
@@ -333,20 +335,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     arb.io.in
   }
 
-  // Old VXU write code
-  //for (b <- 0 until vParams.vrfBanking) {
-  //  writes(b)(0).valid := vxu.write.valid && vxu.write.bits.eg(vrfBankBits-1, 0) === b.U
-  //  writes(b)(0).bits.data  := vxu.write.bits.data
-  //  writes(b)(0).bits.mask  := vxu.write.bits.mask
-  //  writes(b)(0).bits.eg    := vxu.write.bits.eg >> vrfBankBits
-  //  when (vxu.write.valid) { assert(writes(b)(0).ready) }
-  //}
-
   for (b <- 0 until vParams.vrfBanking) {
-    val bank_match = vxu.write.map(_.bits.bankId === b.U)
-    val bank_write_bits = Mux1H(bank_match, vxu.write.map(_.bits.data))
-    val bank_write_mask = Mux1H(bank_match, vxu.write.map(_.bits.mask))
-    val bank_writes_eg = Mux1H(bank_match, vxu.write.map(_.bits.eg) >> vrfBankBits)
+    val bank_match = vxu.writes.map(_.bits.bankId) === b.U
+    val bank_write_bits = Mux1H(bank_match, vxu.writes.map(_.bits.data))
+    val bank_write_mask = Mux1H(bank_match, vxu.writes.map(_.bits.mask))
+    val bank_writes_eg = Mux1H(bank_match, vxu.writes.map(_.bits.eg) >> vrfBankBits)
     writes(b)(0).valid := bank_match.orR
     writes(b)(0).bits.data := bank_write_bits
     writes(b)(0).bits.mask := bank_write_mask
@@ -452,12 +445,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  clearVat(vxu.vat_release.valid               , vxu.vat_release.bits)
+  vxu.vat_release.foreach{ clearVat(_.valid, _.bits) }
+  //clearVat(vxu.vat_release.valid                  , vxu.vat_release.bits)
 
   vxu.iss(0) <> vxs(0).io.iss
   vxu.iss(1) <> vxs(1).io.iss
   // TODO add support for multi-VXS acc
-  vxs(0).io.acc := vxu.acc_write
+  vxs(0).io.acc := vxu.acc_write(0)
+  vxs(1).io.acc := vxu.acc_write(1)
 
 
   // Signalling to frontend
