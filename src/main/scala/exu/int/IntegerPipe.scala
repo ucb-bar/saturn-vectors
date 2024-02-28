@@ -465,7 +465,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     val w = dLen >> m
     val in = Wire(UInt(w.W))
     val in_mul = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(1 << m, UInt(w.W)))
-    in := in_mul(io.pipe(0).bits.wvd_eg(m-1,0))
+    val sel = (io.pipe(0).bits.eidx >> (dLenOffBits - m))(m-1,0)
+    in := in_mul(sel)
     in
   }
   val xunary0_out = Mux1H((1 until 4).map { vd_eew => (0 until vd_eew).map { vs2_eew =>
