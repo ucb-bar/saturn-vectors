@@ -72,7 +72,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 
-  io.dis.ready := !valid || (tail && io.iss.fire)
+  io.dis.ready := (!valid || (tail && io.iss.fire)) && new VectorDecoder(io.dis.bits.funct3, io.dis.bits.funct6, io.dis.bits.rs1, io.dis.bits.rs2, supported_insns, Nil).matched
 
   when (io.dis.fire) {
     val iss_inst = io.dis.bits
