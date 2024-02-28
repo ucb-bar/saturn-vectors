@@ -160,7 +160,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.perm.req.bits.tail := Mux(slide,
     Mux(slide_up,
       Mux(tail, eff_vl << vs2_eew, 0.U),
-      (Mux(next_eidx + slide_offset <= inst.vconfig.vtype.vlMax, next_eidx, slide_offset) << vs2_eew)(dLenOffBits-1,0)
+      (Mux(next_eidx + slide_offset <= inst.vconfig.vtype.vlMax, next_eidx, inst.vconfig.vtype.vlMax - slide_offset) << vs2_eew)(dLenOffBits-1,0)
     ),
     1.U << vs1_eew)
   val slide_down_byte_mask = Mux(slide && !slide_up && next_eidx + slide_offset > inst.vconfig.vtype.vlMax,
