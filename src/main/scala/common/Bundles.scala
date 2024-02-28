@@ -216,8 +216,9 @@ class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val tail = Bool()
 }
 
-class PipeHazard(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class PipeHazard(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val vat = UInt(vParams.vatSz.W)
+  val latency = UInt(log2Ceil(pipe_depth).W)  
   val eg = UInt(log2Ceil(egsTotal).W)
   def eg_oh = UIntToOH(eg)
 }
