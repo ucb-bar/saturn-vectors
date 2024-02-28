@@ -39,7 +39,7 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   val mul_in1 = in_vs1
   val mul_in2 = Mux(ctrl.bool(MULSwapVdV2), in_vd, in_vs2)
 
-  val multipliers = Seq.fill(dLenB >> 3)(Module(new SegmentedMultiplyBlock))
+  val multipliers = Seq.fill(dLenB >> 3)(Module(new MultiplyBlock(2)))
   for (i <- 0 until (dLenB >> 3)) {
     multipliers(i).io.in1_signed := ctrl.bool(MULSign1)
     multipliers(i).io.in2_signed := ctrl.bool(MULSign2)
@@ -70,7 +70,7 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   val half_sel = (io.pipe(2).bits.eidx >> (dLenOffBits.U - out_eew_pipe))(0)
   val wide = Mux(half_sel, mul_out >> dLen, mul_out)(dLen-1,0)
 
-  // TODO, handle SMUL > 1 elem/cycle
+  // TODO, handlcd e SMUL > 1 elem/cycle
   val smul_prod = VecInit.tabulate(4)({sew =>
     if (sew == 3 && dLenB == 8) { mul_out.asSInt } else {
       mul_out.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))(io.pipe(2).bits.eidx(log2Ceil(dLenB)-1-sew,0))
