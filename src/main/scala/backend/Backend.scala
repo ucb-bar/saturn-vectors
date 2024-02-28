@@ -156,7 +156,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = new ExecutionUnit(2, integerFUs ++ fpMISCs :+ fpFMA)
+  val vxs_0_supported_insns = fpFMA.supported_insns
+  val vxs_1_supported_insns = (integerFUs ++ fpMISCs).map(_.supported_insns).flatten
+
+  val vxu = new ExecutionUnit(2, Seq(vxs_0_supported_insns, vxs_1_supported_insns),
+                                  integerFUs ++ fpMISCs :+ fpFMA)
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -165,9 +169,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vxs_0 = Module(new ExecuteSequencer(fpFMA))
-  val vxs_1 = Module(new ExecuteSequencer(integerFUs ++ fpMISCs))
-  //val vxs = Seq.fill(2)(Module(new ExecuteSequencer(vxu.supported_insns)))
+  val vxs_0 = Module(new ExecuteSequencer(fpFMA.supported_insns))
+  val vxs_1 = Module(new ExecuteSequencer((integerFUs ++ fpMISCs).map(_.supported_insns).flatten))
   val vps = Module(new PermuteSequencer(vxu.supported_insns))
 
   val issGroups = Seq(
@@ -339,12 +342,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val bank_match = vxu.writes.map(_.bits.bankId) === b.U
     val bank_write_bits = Mux1H(bank_match, vxu.writes.map(_.bits.data))
     val bank_write_mask = Mux1H(bank_match, vxu.writes.map(_.bits.mask))
-    val bank_writes_eg = Mux1H(bank_match, vxu.writes.map(_.bits.eg) >> vrfBankBits)
+    val bank_writes_eg = Mux1H(bank_match, vxu.writes.map(_.bits.eg >> vrfBankBits))
     writes(b)(0).valid := bank_match.orR
     writes(b)(0).bits.data := bank_write_bits
     writes(b)(0).bits.mask := bank_write_mask
     writes(b)(0).bits.eg := bank_writes_eg
-    when(bank_match) { assert(writes(b)(0).ready) }
+    when(bank_match.reduce(_ || _)) { assert(writes(b)(0).ready) }
   }
 
   load_write.ready := Mux1H(UIntToOH(load_write.bits.bankId), writes.map(_(1).ready))
@@ -382,13 +385,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(0)(2).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
   io.index_access.idx   := reads(0)(2).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
-  reads(0)(0) <> vxs(0).io.rvs1
-  reads(1)(0) <> vxs(0).io.rvs2
-  reads(2)(0) <> vxs(0).io.rvd
+  reads(0)(0) <> vxs_0.io.rvs1
+  reads(1)(0) <> vxs_0.io.rvs2
+  reads(2)(0) <> vxs_0.io.rvd
 
-  reads(0)(3) <> vxs(1).io.rvs1
-  reads(1)(1) <> vxs(1).io.rvs2
-  reads(2)(2) <> vxs(1).io.rvd
+  reads(0)(3) <> vxs_1.io.rvs1
+  reads(1)(1) <> vxs_1.io.rvs2
+  reads(2)(2) <> vxs_1.io.rvd
 
   reads(2)(1) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
@@ -398,14 +401,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   reads(3)(0) <> vls.io.rvm
   reads(3)(1) <> vss.io.rvm
-  reads(3)(2) <> vxs(0).io.rvm
+  reads(3)(2) <> vxs_0.io.rvm
   reads(3)(3) <> vps.io.rvm
   val vm_busy = Wire(Bool())
   reads(3)(4).req.valid := io.mask_access.valid && !vm_busy
   reads(3)(4).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
   io.mask_access.ready  := reads(3)(4).req.ready && !vm_busy
   io.mask_access.mask   := reads(3)(4).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
-  reads(3)(5) <> vxs(1).io.rvm
+  reads(3)(5) <> vxs_1.io.rvm
 
 
   val maskindex_q = Module(new DCEQueue(new MaskIndex, 2))
@@ -430,12 +433,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     0.U)
   perm_buffer.io.push_data := perm_q.io.deq.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  perm_buffer.io.pop <> vxs(0).io.perm.req
-  vxs(0).io.perm.data := perm_buffer.io.pop_data.asUInt
+  perm_buffer.io.pop <> vxs_0.io.perm.req
+  vxs_0.io.perm.data := perm_buffer.io.pop_data.asUInt
 
-  // TODO Add support for multi-VXS permute ops
-  vxs(1).io.perm.data := 0.U
-  vxs(1).io.perm.req.ready := false.B
+  vxs_1.io.perm.data := 0.U
+  vxs_1.io.perm.req.ready := false.B
 
   // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {
@@ -445,15 +447,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  vxu.vat_release.foreach{ clearVat(_.valid, _.bits) }
-  //clearVat(vxu.vat_release.valid                  , vxu.vat_release.bits)
+  vxu.vat_releases.foreach{ rel =>  clearVat(rel.valid, rel.bits) }
 
-  vxu.iss(0) <> vxs(0).io.iss
-  vxu.iss(1) <> vxs(1).io.iss
-  // TODO add support for multi-VXS acc
-  vxs(0).io.acc := vxu.acc_write(0)
-  vxs(1).io.acc := vxu.acc_write(1)
+  vxu.iss(0) <> vxs_0.io.iss
+  vxu.iss(1) <> vxs_1.io.iss
 
+  vxs_0.io.acc := vxu.acc_writes(0)
+  vxs_1.io.acc := vxu.acc_writes(1)
+
+  vxu.vat_tail_vxu := vat_tail
 
   // Signalling to frontend
   val seq_inflight_wv0 = (seqs.flatten.map(_.io.seq_hazard).map { h =>
