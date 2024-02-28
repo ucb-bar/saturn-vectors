@@ -324,16 +324,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   for (b <- 0 until vParams.vrfBanking) {
-    writes(b)(0).valid := vxu.write.valid && vxu.write.bits.eg(vrfBankBits-1, 0) === b.U
+    writes(b)(0).valid := vxu.write.valid && vxu.write.bits.bankId === b.U
     writes(b)(0).bits.data  := vxu.write.bits.data
     writes(b)(0).bits.mask  := vxu.write.bits.mask
     writes(b)(0).bits.eg    := vxu.write.bits.eg >> vrfBankBits
     when (vxu.write.valid) { assert(writes(b)(0).ready) }
   }
 
-  load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(vrfBankBits-1,0)), writes.map(_(1).ready))
+  load_write.ready := Mux1H(UIntToOH(load_write.bits.bankId), writes.map(_(1).ready))
   for (b <- 0 until vParams.vrfBanking) {
-    writes(b)(1).valid := load_write.valid && load_write.bits.eg(vrfBankBits-1,0) === b.U
+    writes(b)(1).valid := load_write.valid && load_write.bits.bankId === b.U
     writes(b)(1).bits.eg   := load_write.bits.eg >> vrfBankBits
     writes(b)(1).bits.data := load_write.bits.data
     writes(b)(1).bits.mask := load_write.bits.mask
