@@ -206,7 +206,7 @@ class ShiftArray(dLenB: Int) extends Module {
     val narrowing = Input(Bool())
 
     val out = Output(Vec(dLenB, UInt(8.W)))
-    val set_vxsat = Output(Bool())
+    val set_vxsat = Output(UInt(dLenB.W))
   })
 
   val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
@@ -280,7 +280,7 @@ class ShiftArray(dLenB: Int) extends Module {
   val narrow_out = Fill(2, narrow_out_clipped.asUInt).asTypeOf(Vec(dLenB, UInt(8.W)))
 
   io.out := Mux(io.narrowing, narrow_out, scaling_array.io.out)
-  io.set_vxsat := io.narrowing && io.scaling && narrow_mask =/= 0.U
+  io.set_vxsat := Mux(io.narrowing && io.scaling, narrow_mask, 0.U)
 }
 
 class SaturatedSumArray(dLenB: Int) extends Module {
@@ -294,7 +294,7 @@ class SaturatedSumArray(dLenB: Int) extends Module {
     val eew      = Input(UInt(2.W))
     val signed   = Input(Bool())
 
-    val set_vxsat = Output(Bool())
+    val set_vxsat = Output(UInt(dLenB.W))
     val out       = Output(Vec(dLenB, UInt(8.W)))
   })
 
@@ -321,7 +321,7 @@ class SaturatedSumArray(dLenB: Int) extends Module {
   val mask = Mux(io.signed, signed_mask, unsigned_mask)
   val clip = Mux(io.signed, signed_clip, unsigned_clip)
   io.out := io.sum.zipWithIndex.map { case (o,i) => Mux(mask(i), clip(i), o) }
-  io.set_vxsat := mask.orR
+  io.set_vxsat := mask
 }
 
 class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
@@ -504,7 +504,9 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
   io.write.bits.data := out
 
-  io.set_vxsat := io.pipe(0).valid && ((ctrl.bool(UsesSat) && sat_arr.io.set_vxsat) || (ctrl.bool(UsesShift) && shift_arr.io.set_vxsat))
+  val sat_vxsat   = Mux(ctrl.bool(UsesSat)  , sat_arr.io.set_vxsat  , 0.U) & io.pipe(0).bits.wmask
+  val shift_vxsat = Mux(ctrl.bool(UsesShift), shift_arr.io.set_vxsat, 0.U) & io.pipe(0).bits.wmask
+  io.set_vxsat := io.pipe(0).valid && ((sat_vxsat | shift_vxsat) =/= 0.U)
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
