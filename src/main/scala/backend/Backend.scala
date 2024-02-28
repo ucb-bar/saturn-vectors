@@ -169,8 +169,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vxs_0 = Module(new ExecuteSequencer(fpFMA.supported_insns))
-  val vxs_1 = Module(new ExecuteSequencer((integerFUs ++ fpMISCs).map(_.supported_insns).flatten))
+  val vxs_0 = Module(new ExecuteSequencer(vxs_0_supported_insns))
+  val vxs_1 = Module(new ExecuteSequencer(vxs_1_supported_insns))
   val vps = Module(new PermuteSequencer(vxu.supported_insns))
 
   val issGroups = Seq(
@@ -343,7 +343,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val bank_write_bits = Mux1H(bank_match, vxu.writes.map(_.bits.data))
     val bank_write_mask = Mux1H(bank_match, vxu.writes.map(_.bits.mask))
     val bank_writes_eg = Mux1H(bank_match, vxu.writes.map(_.bits.eg >> vrfBankBits))
-    writes(b)(0).valid := bank_match.orR
+    val bank_match_valid = Mux1H(bank_match, vxu.writes.map(_.valid))
+    writes(b)(0).valid := bank_match.orR && bank_match_valid
     writes(b)(0).bits.data := bank_write_bits
     writes(b)(0).bits.mask := bank_write_mask
     writes(b)(0).bits.eg := bank_writes_eg
@@ -447,7 +448,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  vxu.vat_releases.foreach{ rel =>  clearVat(rel.valid, rel.bits) }
+  vxu.vat_releases.foreach{ rel => clearVat(rel.valid, rel.bits) }
 
   vxu.iss(0) <> vxs_0.io.iss
   vxu.iss(1) <> vxs_1.io.iss
