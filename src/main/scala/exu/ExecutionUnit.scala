@@ -155,8 +155,8 @@ class ExecutionUnit(num_vxs: Int, vxs_supported_insns: Seq[Seq[VectorInstruction
       val matching_vxs = matching_vxs_seq(0)
 
       for (j <- 0 until fu.depth) {
-        fu.io.pipe(j).valid := pipe_valids(matching_vxs)(j) && pipe_sels(matching_vxs)(i)(j)
-        fu.io.pipe(j).bits  := Mux(pipe_valids(matching_vxs)(j) && pipe_sels(matching_vxs)(i)(j),
+        fu.io.pipe(j).valid := pipe_valids(matching_vxs)(j) && pipe_sels(matching_vxs)(j)(i)
+        fu.io.pipe(j).bits  := Mux(pipe_valids(matching_vxs)(j) && pipe_sels(matching_vxs)(j)(i),
                                    pipe_bits(matching_vxs)(j), 0.U.asTypeOf(new ExecuteMicroOp))
       }
     }
@@ -180,9 +180,9 @@ class ExecutionUnit(num_vxs: Int, vxs_supported_insns: Seq[Seq[VectorInstruction
     when (pipe_valids.map(_.orR).reduce(_ || _)) { busy := true.B }
     for (i <- 0 until num_vxs) {
       for (j <- 0 until pipe_depth) {
-        hazards((i*pipe_depth)+j)     := pipe_valids(i)(j)
-        hazards((i*pipe_depth)+j)     := pipe_bits(i)(j).vat
-        hazards((i*pipe_depth)+j)     := pipe_bits(i)(j).wvd_eg
+        hazards((i*pipe_depth)+j).valid     := pipe_valids(i)(j)
+        hazards((i*pipe_depth)+j).bits.vat  := pipe_bits(i)(j).vat
+        hazards((i*pipe_depth)+j).bits.eg   := pipe_bits(i)(j).wvd_eg
         when(pipe_latencies(i)(j) === 0.U) { // hack to deal with compress unit
           hazards((i*pipe_depth)+j).bits.eg   := Mux1H(pipe_sels(i)(j), pipe_fus.map(_.io.write.bits.eg))
         }
