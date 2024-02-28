@@ -465,7 +465,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     val w = dLen >> m
     val in = Wire(UInt(w.W))
     val in_mul = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(1 << m, UInt(w.W)))
-    val sel = (io.pipe(0).bits.eidx >> (dLenOffBits - m))(m-1,0)
+    val sel = (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(m-1,0)
     in := in_mul(sel)
     in
   }
