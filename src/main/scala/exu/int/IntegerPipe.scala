@@ -280,7 +280,7 @@ class ShiftArray(dLenB: Int) extends Module {
   val narrow_out = Fill(2, narrow_out_clipped.asUInt).asTypeOf(Vec(dLenB, UInt(8.W)))
 
   io.out := Mux(io.narrowing, narrow_out, scaling_array.io.out)
-  io.set_vxsat := Mux(io.narrowing && io.scaling, narrow_mask, 0.U)
+  io.set_vxsat := Mux(io.narrowing && io.scaling, Fill(2, narrow_mask), 0.U)
 }
 
 class SaturatedSumArray(dLenB: Int) extends Module {
