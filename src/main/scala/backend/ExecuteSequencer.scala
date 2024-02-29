@@ -41,7 +41,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     Mux(inst.renv2, vs2_eew, 0.U),
     Mux(inst.renvd, vs3_eew, 0.U),
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
-  val acc_elementwise_opcodes = (Seq(OPFFunct6.fredosum, OPFFunct6.fredosum) ++
+  val acc_elementwise_opcodes = (Seq(OPFFunct6.fredosum, OPFFunct6.fwredosum) ++
     (if (vParams.useScalarFPMisc) Seq(OPFFunct6.fredmax, OPFFunct6.fredmin) else Nil) ++
     (if (vParams.useScalarFPFMA) Seq(OPFFunct6.fredusum, OPFFunct6.fwredusum) else Nil)
   )
