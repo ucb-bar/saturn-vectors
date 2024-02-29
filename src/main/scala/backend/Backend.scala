@@ -461,9 +461,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   perm_buffer.io.pop <> vxs(1).io.perm.req
   vxs(1).io.perm.data := perm_buffer.io.pop_data.asUInt
 
-  vxs(1).io.perm.data := 0.U
-  vxs(1).io.perm.req.ready := false.B
-
   // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {
     assert(vat_valids(tag))
