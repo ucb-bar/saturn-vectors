@@ -61,13 +61,6 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
   s0_inst.pc      := io.s0.in.bits.pc
   s0_inst.bits    := io.s0.in.bits.inst
   s0_inst.vconfig := io.s0.in.bits.vconfig
-  when (s0_inst.vmu && s0_inst.mop === mopUnit) {
-    val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
-    val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) * (s0_inst.nf +& 1.U)
-    s0_inst.vconfig.vl := MuxLookup(s0_inst.umop, io.s0.in.bits.vconfig.vl)(Seq(
-      (lumopWhole -> whole_vl), (lumopMask -> mask_vl)
-    ))
-  }
   s0_inst.vstart   := Mux(s1_valid || s2_valid, 0.U, io.s0.in.bits.vstart)
   s0_inst.segstart := 0.U
   s0_inst.segend   := s0_inst.seg_nf
@@ -77,6 +70,16 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
   s0_inst.page     := DontCare
   s0_inst.vat      := DontCare
   s0_inst.rm       := DontCare
+  when (s0_inst.vmu && s0_inst.mop === mopUnit) {
+    val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
+    val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) * (s0_inst.nf +& 1.U)
+    s0_inst.vconfig.vl := MuxLookup(s0_inst.umop, io.s0.in.bits.vconfig.vl)(Seq(
+      (lumopWhole -> whole_vl), (lumopMask -> mask_vl)
+    ))
+    when (s0_inst.umop === lumopWhole) {
+      s0_inst.emul := VecInit.tabulate(8)(nf => log2Ceil(nf+1).U)(s0_inst.nf)
+    }
+  }
 
   val s0_stride = MuxLookup(s0_inst.mop, 0.U)(Seq(
     (mopUnit    -> ((s0_inst.nf +& 1.U) << s0_inst.mem_elem_size)),
