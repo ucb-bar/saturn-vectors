@@ -57,7 +57,7 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
 
 
   val stride = MuxLookup(inst.mop, 0.U)(Seq(
-    (mopUnit    -> ((inst.nf +& 1.U) << inst.mem_elem_size)),
+    (mopUnit    -> ((inst.seg_nf +& 1.U) << inst.mem_elem_size)),
     (mopStrided -> inst.rs2_data)
   ))
   val indexed = inst.mop.isOneOf(mopOrdered, mopUnordered)
@@ -68,7 +68,7 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   val indexaddr = base + index
   val tlb_addr = Mux(seg_hi, nextPage(indexaddr), indexaddr)
   val seg_nf_consumed = ((1 << pgIdxBits).U - Mux(seg_hi, indexaddr, tlb_addr)(pgIdxBits-1,0)) >> inst.mem_elem_size
-  val seg_single_page = seg_nf_consumed >= (inst.nf +& 1.U)
+  val seg_single_page = seg_nf_consumed >= (inst.seg_nf +& 1.U)
   val masked = !io.mask_access.mask && !inst.vm
   val tlb_valid = eidx < inst.vconfig.vl && eidx >= inst.vstart && !masked
   val ff = inst.umop === lumopFF && inst.mop === mopUnit

@@ -70,7 +70,7 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
   }
   s0_inst.vstart   := Mux(s1_valid || s2_valid, 0.U, io.s0.in.bits.vstart)
   s0_inst.segstart := 0.U
-  s0_inst.segend   := s0_inst.nf
+  s0_inst.segend   := s0_inst.seg_nf
   s0_inst.rs1_data := io.s0.in.bits.rs1
   s0_inst.rs2_data := io.s0.in.bits.rs2
   s0_inst.emul     := Mux(io.s0.in.bits.vconfig.vtype.vlmul_sign, 0.U, io.s0.in.bits.vconfig.vtype.vlmul_mag)
@@ -83,8 +83,8 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
     (mopStrided -> io.s0.in.bits.rs2)
   ))
   val s0_indexed = s0_inst.mop.isOneOf(mopOrdered, mopUnordered)
-  val s0_base  = io.s0.in.bits.rs1 + (((s0_inst.nf +& 1.U) * s0_inst.vstart    ) << s0_inst.mem_elem_size)
-  val s0_bound = io.s0.in.bits.rs1 + (((s0_inst.nf +& 1.U) * s0_inst.vconfig.vl) << s0_inst.mem_elem_size) - 1.U
+  val s0_base  = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vstart    ) << s0_inst.mem_elem_size)
+  val s0_bound = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vconfig.vl) << s0_inst.mem_elem_size) - 1.U
   val s0_single_page = (s0_base >> pgIdxBits) === (s0_bound >> pgIdxBits)
   val s0_replay_next_page = s0_inst.vmu && s0_inst.mop === mopUnit && s0_inst.nf === 0.U && !s0_single_page
   val s0_iterative = (!s0_single_page || (s0_inst.mop =/= mopUnit) || s0_inst.umop === lumopFF) && !s0_replay_next_page
@@ -156,7 +156,7 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
   io.s2.issue.valid         := false.B
   io.s2.issue.bits          := s2_inst
   io.s2.issue.bits.segstart := 0.U
-  io.s2.issue.bits.segend   := s2_inst.nf
+  io.s2.issue.bits.segend   := s2_inst.seg_nf
   io.s2.issue.bits.rm       := Mux(s2_inst.isOpf, io.s2.frm, io.s2.vxrm)
   io.s2.issue.bits.page     := s2_tlb_resp.paddr >> pgIdxBits
 
