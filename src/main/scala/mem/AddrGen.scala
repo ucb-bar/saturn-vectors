@@ -48,7 +48,9 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val saddr = Mux(io.op.seg_nf =/= 0.U && !fast_segmented, Mux(r_head, eaddr, r_saddr), eaddr)
 
   val mem_size = io.op.elem_size
-  val max_eidx = io.op.vl
+  val max_eidx = Mux(fast_segmented,
+    io.op.vl * (io.op.seg_nf +& 1.U),
+    io.op.vl)
 
   val next_max_elems = getElems(saddr, mem_size)
   val next_contig_elems = Mux(fast_segmented,
