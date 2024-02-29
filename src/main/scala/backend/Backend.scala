@@ -116,16 +116,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val integerFUs = Seq(
     Module(new IntegerPipe).suggestName("vintfu"),
     Module(new BitwisePipe).suggestName("vbitfu"),
-    (if (vParams.useSegmentedIMul)
-      Module(new SegmentedMultiplyPipe)
-    else
-      Module(new ElementwiseMultiplyPipe(4))
-    ).suggestName("vmulfu"),
-    Module(new IterativeIntegerDivider).suggestName("vdivfu"),
+    Module(new IterativeIntegerDivider(vParams.useIterativeIMul)).suggestName("vdivfu"),
     Module(new MaskUnit).suggestName("vmaskfu"),
     Module(new PermuteUnit).suggestName("vpermfu"),
-  )
-
+  ) ++ (!vParams.useIterativeIMul).option((if (vParams.useSegmentedIMul)
+    Module(new SegmentedMultiplyPipe)
+  else
+    Module(new ElementwiseMultiplyPipe(4))
+  ).suggestName("vmulfu"))
 
   val fpFMA = Module(if (vParams.useScalarFPFMA) {
     new SharedScalarElementwiseFPFMA(vParams.fmaPipeDepth)

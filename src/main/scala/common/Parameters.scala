@@ -29,7 +29,8 @@ object VectorParams {
     vsifqEntries = 12,
     vlissqEntries = 1,
     vsissqEntries = 1,
-    vrfBanking = 1
+    vrfBanking = 1,
+    useIterativeIMul = true
   )
 }
 
@@ -57,6 +58,7 @@ case class VectorParams(
   useSegmentedIMul: Boolean = false,
   useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions
   useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
+  useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
 
   doubleBufferSegments: Boolean = false,
