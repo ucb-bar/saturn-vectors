@@ -32,53 +32,42 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val frm_pipe = Pipe(io.valid, io.frm, depth-1)
   val mask_pipe = Pipe(io.valid, io.mask, depth-1)
 
-  val sfma = Seq.fill(2)(Module(new MulAddRecFNPipe((depth-1) min 2, 8, 24)))
-  val sfma_validin = io.valid && (io.out_eew === 2.U)
-  sfma.foreach { fma =>
-    fma.io.validin := sfma_validin
-    fma.io.op := Mux(sfma_validin, io.op, 0.U)
-    fma.io.roundingMode := Mux(sfma_validin, io.frm, 0.U)
-    fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
+  val fTypes = Seq(FType.D, FType.S)
+
+  val fma_results = fTypes.map { fType =>
+    val n = 64 / fType.ieeeWidth
+    val fma_eew = log2Ceil(fType.ieeeWidth >> 3)
+
+    val results = (0 until n).map { i =>
+      val fma = Module(new MulAddRecFNPipe((depth-1) min 2, fType.exp, fType.sig))
+      val validin = io.valid && (io.out_eew === fma_eew.U)
+      val msb_idx = ((i + 1) * fType.ieeeWidth) - 1
+      val lsb_idx = i * fType.ieeeWidth
+
+      val a_input = fType.recode(Mux(validin && io.mask(i), io.a(msb_idx, lsb_idx), 0.U))
+      val b_input = fType.recode(Mux(validin && io.mask(i), io.b(msb_idx, lsb_idx), 0.U))
+      val c_input = fType.recode(Mux(validin && io.mask(i), io.c(msb_idx, lsb_idx), 0.U)) 
+
+      fma.io.validin := validin 
+      fma.io.op := Mux(validin, io.op, 0.U)
+      fma.io.roundingMode := Mux(validin, io.frm, 0.U)
+      fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
+      fma.io.a := a_input 
+      fma.io.b := Mux(io.addsub, 1.U << (fType.ieeeWidth - 1), b_input)
+      fma.io.c := Mux(io.mul, (a_input ^ b_input) & (1.U << fType.ieeeWidth), c_input)
+
+      val out = Pipe(fma.io.validout, fType.ieee(fma.io.out), (depth-3) max 0).bits
+      val exc = Pipe(fma.io.validout, fma.io.exceptionFlags, (depth-3) max 0).bits
+      (out, exc)
+    }
+    val out = results.map(_._1).asUInt
+    val exc = results.map(_._2).zipWithIndex.map{ case(e, i) => e & Fill(5, mask_pipe.bits(i)) }.reduce(_ | _) 
+    (out, exc)
   }
-  val rec_s_a = Seq(FType.S.recode(Mux(sfma_validin && io.mask(0), io.a(31,0), 0.U)), FType.S.recode(Mux(sfma_validin && io.mask(1), io.a(63,32), 0.U)))
-  val rec_s_b = Seq(FType.S.recode(Mux(sfma_validin && io.mask(0), io.b(31,0), 0.U)), FType.S.recode(Mux(sfma_validin && io.mask(1), io.b(63,32), 0.U)))
-  val rec_s_c = Seq(FType.S.recode(Mux(sfma_validin && io.mask(0), io.c(31,0), 0.U)), FType.S.recode(Mux(sfma_validin && io.mask(1), io.c(63,32), 0.U)))
 
-  sfma.zip(Seq(rec_s_a, rec_s_b, rec_s_c).transpose).foreach{ case(fma, inputs) =>
-    fma.io.a := inputs(0)
-    fma.io.b := Mux(io.addsub, 1.U << 31, inputs(1))
-    fma.io.c := Mux(io.mul, (inputs(0) ^ inputs(1)) & (1.U << 32), inputs(2))
-  }
-
-  val dfma = Module(new MulAddRecFNPipe((depth-1) min 2, 11, 53))
-  val dfma_validin = io.valid && (io.out_eew === 3.U) && io.mask(0)
-  dfma.io.validin := dfma_validin
-  dfma.io.op := io.op
-  dfma.io.roundingMode := io.frm
-  dfma.io.detectTininess := hardfloat.consts.tininess_afterRounding
-  val rec_d_a = FType.D.recode(Mux(dfma_validin, io.a, 0.U))
-  val rec_d_b = FType.D.recode(Mux(dfma_validin, io.b, 0.U))
-  val rec_d_c = FType.D.recode(Mux(dfma_validin, io.c, 0.U))
-  dfma.io.a := rec_d_a
-  dfma.io.b := Mux(io.addsub, 1.U << 63, rec_d_b)
-  dfma.io.c := Mux(io.mul, (rec_d_a ^ rec_d_b) & (1.U << 64), rec_d_c)
-
-  val sfma_res = Seq.fill(2)(Wire(new FPResult))
-  sfma.zip(sfma_res).foreach{ case(fma, res) => 
-    res.data := fma.io.out
-    res.exc  := fma.io.exceptionFlags
-  }
-  val dfma_res = Wire(new FPResult)
-  dfma_res.data := dfma.io.out
-  dfma_res.exc := dfma.io.exceptionFlags
-
-  val sfma_out = sfma_res.zip(sfma).map{ case(res, fma) => Pipe(fma.io.validout, res, (depth-3) max 0).bits }
-  val dfma_out = Pipe(dfma.io.validout, dfma_res, (depth-3) max 0).bits
-
-  io.out := Mux(out_eew_pipe.bits === 3.U,
-    FType.D.ieee(dfma_out.data),
-    Cat(FType.S.ieee(sfma_out(1).data), FType.S.ieee(sfma_out(0).data)))
-  io.exc := (dfma_res.exc & Fill(5, mask_pipe.bits(0))) | sfma_res.zipWithIndex.map{ case(res, i) => res.exc & Fill(5, mask_pipe.bits(i)) }.reduce(_ | _) 
+  val out_sel_oh = fTypes.map{ fType => log2Ceil(fType.ieeeWidth >> 3).U === out_eew_pipe.bits}
+  io.out := Mux1H(out_sel_oh, fma_results.map(_._1))
+  io.exc := Mux1H(out_sel_oh, fma_results.map(_._2))
 }
 
 
@@ -191,5 +180,4 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
   io.pipe0_stall := false.B
-
 }
