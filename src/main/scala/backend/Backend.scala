@@ -360,16 +360,19 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   for (b <- 0 until vParams.vrfBanking) {
-    val bank_match = vxu.map(_.write.bits.bankId === b.U)
+    val bank_match = vxu.map{ xu => (xu.write.bits.bankId === b.U) && xu.write.valid }
     val bank_write_bits = Mux1H(bank_match, vxu.map(_.write.bits.data))
     val bank_write_mask = Mux1H(bank_match, vxu.map(_.write.bits.mask))
-    val bank_writes_eg = Mux1H(bank_match, vxu.map(_.write.bits.eg >> vrfBankBits))
-    val bank_match_valid = Mux1H(bank_match, vxu.map(_.write.valid))
-    writes(b)(0).valid := bank_match.asUInt.orR && bank_match_valid
+    val bank_writes_eg = Mux1H(bank_match, vxu.map(_.write.bits.eg))
+    val bank_match_valid = bank_match.asUInt.orR
+    writes(b)(0).valid := bank_match_valid
     writes(b)(0).bits.data := bank_write_bits
     writes(b)(0).bits.mask := bank_write_mask
-    writes(b)(0).bits.eg := bank_writes_eg
-    when(bank_match.asUInt.orR) { assert(writes(b)(0).ready) }
+    writes(b)(0).bits.eg := bank_writes_eg >> vrfBankBits
+    when(bank_match_valid) { 
+      assert(writes(b)(0).ready) 
+      assert(PopCount(bank_match.asUInt) === 1.U)
+    }
   }
 
   load_write.ready := Mux1H(UIntToOH(load_write.bits.bankId), writes.map(_(1).ready))
