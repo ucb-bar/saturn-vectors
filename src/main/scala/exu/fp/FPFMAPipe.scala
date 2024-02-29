@@ -34,7 +34,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
 
   val fTypes = Seq(FType.D, FType.S)
 
-  val fma_results = fTypes.map { fType =>
+  val fma_results = fTypes.zipWithIndex.map { case(fType, j) =>
     val n = 64 / fType.ieeeWidth
     val fma_eew = log2Ceil(fType.ieeeWidth >> 3)
 
@@ -44,17 +44,26 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
       val msb_idx = ((i + 1) * fType.ieeeWidth) - 1
       val lsb_idx = i * fType.ieeeWidth
 
-      val a_input = fType.recode(Mux(validin && io.mask(i), io.a(msb_idx, lsb_idx), 0.U))
-      val b_input = fType.recode(Mux(validin && io.mask(i), io.b(msb_idx, lsb_idx), 0.U))
-      val c_input = fType.recode(Mux(validin && io.mask(i), io.c(msb_idx, lsb_idx), 0.U)) 
+      val inputs = Seq((io.a, io.a_eew), (io.b, io.b_eew), (io.c, io.c_eew)).map { case(in, eew) =>
+        if (j == 0) {
+          val widen = Module(new hardfloat.RecFNToRecFN(fTypes(j+1).exp, fTypes(j+1).sig, fType.exp, fType.sig))
+          widen.io.in := fTypes(j+1).recode(Mux(validin && io.mask(i), in(fTypes(j+1).ieeeWidth-1,0), 0.U))
+          widen.io.roundingMode := io.frm
+          widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
+
+          Mux(eew =/= fma_eew.U, widen.io.out, fType.recode(Mux(validin && io.mask(i), in(msb_idx, lsb_idx), 0.U)))
+        } else {
+          fType.recode(Mux(validin && io.mask(i), in(msb_idx, lsb_idx), 0.U))
+        }
+      }
 
       fma.io.validin := validin 
       fma.io.op := Mux(validin, io.op, 0.U)
       fma.io.roundingMode := Mux(validin, io.frm, 0.U)
       fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
-      fma.io.a := a_input 
-      fma.io.b := Mux(io.addsub, 1.U << (fType.ieeeWidth - 1), b_input)
-      fma.io.c := Mux(io.mul, (a_input ^ b_input) & (1.U << fType.ieeeWidth), c_input)
+      fma.io.a := inputs(0) 
+      fma.io.b := Mux(io.addsub, 1.U << (fType.ieeeWidth - 1), inputs(1))
+      fma.io.c := Mux(io.mul, (inputs(0) ^ inputs(1)) & (1.U << fType.ieeeWidth), inputs(2))
 
       val out = Pipe(fma.io.validout, fType.ieee(fma.io.out), (depth-3) max 0).bits
       val exc = Pipe(fma.io.validout, fma.io.exceptionFlags, (depth-3) max 0).bits
