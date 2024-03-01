@@ -12,7 +12,12 @@ import freechips.rocketchip.diplomacy._
 import saturn.common._
 import saturn.backend.{VectorBackend}
 
-class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+
+  val unified_addresses = AddressSet.unify(edge.manager.managers.map(_.address).flatten)
+  require(unified_addresses.forall(_.alignment >= (1 << pgIdxBits)),
+    "Memory devices on this system must be at least page-aligned")
+
   val io = IO(new Bundle {
     val busy = Output(Bool())
     val s0 = new Bundle {
@@ -112,7 +117,6 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
 
   when (!s1_tlb_valid) {
     s1_tlb_resp := 0.U.asTypeOf(new TLBResp)
-    s1_tlb_resp.cacheable := true.B
   }
   io.s1.inst := s1_inst
   io.s1.tlb_req.valid := RegNext(io.s0.tlb_req.valid, false.B)
@@ -183,7 +187,7 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
       io.s2.replay := true.B
     } .elsewhen (s2_xcpt) {
       io.s2.xcpt.valid := true.B
-    } .elsewhen (s2_inst.vmu && (s2_iterative || !s2_tlb_resp.cacheable)) {
+    } .elsewhen (s2_inst.vmu && s2_iterative) {
       io.s2.internal_replay.valid := true.B
     } .elsewhen (s2_replay_next_page) {
       io.s2.replay := true.B
