@@ -14,7 +14,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     with HasSharedFPUIO {
 
   val fp_req = Wire(Decoupled(new FPInput))
-  io_fp_req <> Queue(fp_req)
+  io_fp_req <> fp_req
 
   val supported_insns = Seq(
     FDIV.VV, FDIV.VF,
@@ -32,22 +32,29 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     FCVT_SGL, FCVT_WID, FCVT_NRW
   ).map(_.elementWise)
 
-  val ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Seq(
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid
+
+  val ctrl = new VectorDecoder(op.funct3, op.funct6, 0.U, 0.U, supported_insns, Seq(
     FPSwapVdV2, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
 
-  val vs1_eew = io.iss.op.rvs1_eew
-  val vs2_eew = io.iss.op.rvs2_eew
-  val vd_eew  = io.iss.op.vd_eew
-  val vd_eew64 = io.iss.op.vd_eew64
-  val eidx = Mux(io.iss.op.acc, 0.U, io.iss.op.eidx)
+  val issued = Reg(Bool())
+  when (io.iss.valid && io.iss.ready) {
+    issued := false.B
+  }
 
-  val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
-  val ctrl_funary0 = io.iss.op.opff6.isOneOf(OPFFunct6.funary0)
-  val ctrl_funary1 = io.iss.op.opff6.isOneOf(OPFFunct6.funary1)
-  val ctrl_vfclass = ctrl_funary1 && (io.iss.op.rs1 === 16.U)
-  val ctrl_swap12 = io.iss.op.opff6.isOneOf(OPFFunct6.frdiv)
+  val vs1_eew = op.rvs1_eew
+  val vs2_eew = op.rvs2_eew
+  val vd_eew  = op.vd_eew
+  val vd_eew64 = op.vd_eew64
+  val eidx = Mux(op.acc, 0.U, op.eidx)
 
-  val rs1 = io.iss.op.rs1
+  val ctrl_isDiv = op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
+  val ctrl_funary0 = op.opff6.isOneOf(OPFFunct6.funary0)
+  val ctrl_funary1 = op.opff6.isOneOf(OPFFunct6.funary1)
+  val ctrl_vfclass = ctrl_funary1 && (op.rs1 === 16.U)
+  val ctrl_swap12 = op.opff6.isOneOf(OPFFunct6.frdiv)
+
+  val rs1 = op.rs1
   val ctrl_widen = ctrl_funary0 && rs1(3)
   val ctrl_narrow = rs1(4)
   val ctrl_single_wide = ctrl_funary0 && !ctrl_widen && !ctrl_narrow
@@ -61,9 +68,6 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U && valid
   val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U && valid
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U && valid
-
-  // Functional unit is ready if not currently running and the scalar FPU is available
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && fp_req.ready
 
   io.hazard.valid := valid
   io.hazard.bits.vat := op.vat
@@ -88,14 +92,14 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   req.sqrt := ctrl_funary1 && (rs1 === 0.U)
   req.wflags := !ctrl_vfclass && !ctrl.bool(FPSgnj)
   req.vec := true.B
-  req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), io.iss.op.frm))
+  req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), op.frm))
   req.fmaCmd := 0.U
   req.typ := Mux(ctrl_funary0, Cat((ctrl_inttofp && ctrl_narrow) || (ctrl_fptoint && ctrl_widen) || (ctrl_single_wide && vd_eew64), !ctrl_signed), 0.U)
   req.fmt := 0.U
 
-  val rvs2_elem = io.iss.op.rvs2_elem
-  val rvs1_elem = io.iss.op.rvs1_elem
-  val rvd_elem  = io.iss.op.rvd_elem
+  val rvs2_elem = op.rvs2_elem
+  val rvs1_elem = op.rvs1_elem
+  val rvd_elem  = op.rvd_elem
 
   val s_rvs2_int = rvs2_elem(31,0)
   val s_rvs2_fp = FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(31,22) << 22, rvs2_elem(31,0)))
@@ -114,14 +118,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val s_isNaN = FType.S.isNaN(s_rvs2_fp) || FType.S.isNaN(s_rvs1)
   val d_isNaN = FType.D.isNaN(d_rvs2_fp) || FType.D.isNaN(d_rvs1)
 
-  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (io.iss.op.vd_eew32 && s_isNaN))
-  val mgt_NaN_reg = RegInit(false.B)
-
-  when (io.iss.ready && io.iss.valid && mgt_NaN) {
-    mgt_NaN_reg := true.B
-  } .elsewhen (io.write.fire()) {
-    mgt_NaN_reg := false.B
-  }
+  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (op.vd_eew32 && s_isNaN))
 
   // Set req.in1
   when (ctrl_swap12) {
@@ -143,7 +140,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   req.in3 := 0.U
 
   fp_req.bits := req
-  fp_req.valid := (io.iss.valid && io.iss.ready) && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN
+  fp_req.valid := valid && !issued && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN
+  when (fp_req.fire) { issued := true.B }
 
   io_fp_resp.ready := io.write.ready
 
@@ -164,9 +162,9 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val write_bits = Wire(UInt(64.W))
 
   when (ctrl.bool(WritesAsMask)) {
-    when (ctrl.bool(FPMNE) || (ctrl.bool(FPMGT) && !mgt_NaN_reg)) {
+    when (ctrl.bool(FPMNE) || (ctrl.bool(FPMGT) && !mgt_NaN)) {
       write_bits := Fill(dLen, !io_fp_resp.bits.data(0))
-    } .elsewhen (ctrl.bool(FPMGT) && mgt_NaN_reg) {
+    } .elsewhen (ctrl.bool(FPMGT) && mgt_NaN) {
       write_bits := Fill(dLen, 0.U)
     } .otherwise {
       write_bits := Fill(dLen, io_fp_resp.bits.data(0))
@@ -186,7 +184,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     VecInit(op.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
   })(op.vd_eew) << mask_write_offset)(dLen-1,0)
 
-  io.write.valid := (io_fp_resp.fire() || vfrsqrt7_inst || vfrec7_inst || mgt_NaN_reg) && valid
+  io.write.valid := (io_fp_resp.fire() || vfrsqrt7_inst || vfrec7_inst || mgt_NaN) && valid
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, op.wmask))
   io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io_fp_resp.fire()),
@@ -199,6 +197,6 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   io.scalar_write.bits := DontCare
   io.set_vxsat := false.B
 
-  io.acc := io.iss.op.acc
-  io.tail := io.iss.op.tail
+  io.acc := op.acc
+  io.tail := op.tail
 }
