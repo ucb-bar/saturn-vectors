@@ -183,7 +183,7 @@ class EarlyTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVec
       io.s2.replay := true.B
     } .elsewhen (s2_xcpt) {
       io.s2.xcpt.valid := true.B
-    } .elsewhen (s2_inst.vmu && (s2_iterative || !s2_tlb_resp.cacheable)) {
+    } .elsewhen (s2_inst.vmu && (s2_iterative)) { // || !s2_tlb_resp.cacheable)) {
       io.s2.internal_replay.valid := true.B
     } .elsewhen (s2_replay_next_page) {
       io.s2.replay := true.B
