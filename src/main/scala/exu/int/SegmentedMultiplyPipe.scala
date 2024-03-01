@@ -111,7 +111,7 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   io.write.bits.data := pipe_out
   io.write.bits.mask := FillInterleaved(8, io.pipe(2).bits.wmask)
 
-  io.set_vxsat := io.pipe(2).valid && pipe_vxsat
+  io.set_vxsat := io.pipe(2).valid && pipe_vxsat && io.pipe(2).bits.wmask =/= 0.U
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
 }
