@@ -46,6 +46,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val vs2_eew = op.rvs2_eew
   val vd_eew  = op.vd_eew
   val vd_eew64 = op.vd_eew64
+  val vd_eew32 = op.vd_eew32
+  val vd_eew16 = op.vd_eew16
   val eidx = Mux(op.acc, 0.U, op.eidx)
 
   val ctrl_isDiv = op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
@@ -127,7 +129,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val s_isNaN = FType.S.isNaN(s_rvs2_fp) || FType.S.isNaN(s_rvs1)
   val d_isNaN = FType.D.isNaN(d_rvs2_fp) || FType.D.isNaN(d_rvs1)
 
-  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (op.vd_eew32 && s_isNaN) || (op.vd_eew16 && h_isNaN))
+  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (vd_eew32 && s_isNaN) || (vd_eew16 && h_isNaN))
   val mgt_NaN_reg = RegInit(false.B)
 
   // Set req.in1

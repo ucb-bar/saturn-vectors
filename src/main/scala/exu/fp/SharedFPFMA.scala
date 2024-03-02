@@ -78,7 +78,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
 
   val h_rvs2 = FType.H.recode(rvs2_elem(15,0))
   val h_rvs1 = FType.H.recode(rvs1_elem(15,0))
-  val h_rvd = FType.H.recode(rvs_elem(15,0))
+  val h_rvd = FType.H.recode(rvd_elem(15,0))
 
   // For widening operations, widen the narrow operands to compute with the scalar FPU
   val h_widen_rvs1 = Module(new hardfloat.RecFNToRecFN(5, 11, 8, 24))
@@ -87,7 +87,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   h_widen_rvs1.io.detectTininess := hardfloat.consts.tininess_afterRounding
 
   val h_widen_rvs2 = Module(new hardfloat.RecFNToRecFN(5, 11, 8, 24))
-  h_widen_rvs2.io.in := h_s_rvs2
+  h_widen_rvs2.io.in := h_rvs2
   h_widen_rvs2.io.roundingMode := io.pipe(0).bits.frm
   h_widen_rvs2.io.detectTininess := hardfloat.consts.tininess_afterRounding
 
@@ -138,7 +138,6 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
     req.in2 := h_widen_rvs1.io.out
   } .elsewhen (vs1_eew === 2.U) {
     req.in2 := s_rvs1
-  }
   } .otherwise {
     req.in2 := h_rvs1
   }

@@ -545,7 +545,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val ctrl_isDiv = io.iss.op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
   val divSqrt_ready = (ctrl_isDiv && divSqrt.io.inReady_div) || (!ctrl_isDiv && divSqrt.io.inReady_sqrt)
-  val divSqrt16_ready = (ctrl_isDiv && divSqrt16.io.inReady_div) || (!ctrl_isDiv && divSqrt16.io.inReady_sqrt)
+  val divSqrt16_ready = divSqrt16.io.inReady
 
   val div_op = op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
 
@@ -646,7 +646,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Fill(dLenB >> 3, out)
-  io.iss.ready := accept_inst.matched && divSqrt_ready && (!valid || last)
+  io.iss.ready := accept_inst.matched && ((divSqrt_ready && io.iss.op.vd_eew >= 2.U) || (divSqrt16_ready && io.iss.op.vd_eew === 1.U)) && (!valid || last)
   last := io.write.fire()
 
   io.set_fflags.valid := divSqrt_out_valid || divSqrt16_out_valid || (vfrsqrt7_inst && io.write.fire()) || (vfrec7_inst && io.write.fire())
