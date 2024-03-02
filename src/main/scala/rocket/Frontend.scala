@@ -32,7 +32,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     require(dLen == vMemDataBits)
 
-    val ecu = Module(new EarlyTrapCheck)
+    val ecu = Module(new EarlyTrapCheck(tl_if.node.edges.out(0)))
     val icu = Module(new IterativeTrapCheck)
     val vu = Module(new VectorBackend)
 
