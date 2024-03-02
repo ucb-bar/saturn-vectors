@@ -141,7 +141,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = Seq(new ExecutionUnit(Seq(fpFMA)), new ExecutionUnit(integerFUs ++ fpMISCs))
+  val vxu = Seq(Module(new ExecutionUnit(Seq(fpFMA))), Module(new ExecutionUnit(integerFUs ++ fpMISCs)))
 
   vxu.foreach { xu => 
     xu.io.shared_fp_req.ready := false.B
@@ -354,7 +354,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   for (b <- 0 until vParams.vrfBanking) {
-    val bank_match = vxu.map{ xu => (xu.io.write.bits.bankId === b.U) && xu.write.valid }
+    val bank_match = vxu.map{ xu => (xu.io.write.bits.bankId === b.U) && xu.io.write.valid }
     val bank_write_bits = Mux1H(bank_match, vxu.map(_.io.write.bits.data))
     val bank_write_mask = Mux1H(bank_match, vxu.map(_.io.write.bits.mask))
     val bank_writes_eg = Mux1H(bank_match, vxu.map(_.io.write.bits.eg))
@@ -487,7 +487,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.backend_busy := vdq.io.deq.valid || seqs.flatten.map(_.io.busy).orR || vxu.map(_.io.busy).asUInt.orR || resetting
   io.set_vxsat := vxu.map(_.io.set_vxsat).asUInt.orR
   io.set_fflags.valid := vxu.map(_.io.set_fflags.valid).asUInt.orR
-  io.set_fflags.bits  := vxu.map( xu => Mux(xu.io.set_fflags.valid, xu.set_fflags.bits, 0.U)).reduce(_|_)
+  io.set_fflags.bits  := vxu.map( xu => Mux(xu.io.set_fflags.valid, xu.io.set_fflags.bits, 0.U)).reduce(_|_)
   scalar_resp_arb.io.in(0) <> vxu(1).io.scalar_write
   vxu(0).io.scalar_write.ready := false.B
 }

@@ -20,7 +20,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new ExecuteMicroOp))
-    val hazards = Output(Vec(nHazards, Valid(new PipeHazard))) 
+    val hazards = Output(Vec(nHazards, Valid(new PipeHazard(pipe_depth)))) 
     val write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
     val scalar_write = Decoupled(new ScalarWrite)
@@ -63,7 +63,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
-  io.iss.ready := readies.orR && !io.pipe_write_hazard && !pipe_stall && !io.inflight_hazard_stall && !io.issue_hazard_stall
+  io.iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall && !io.inflight_hazard_stall && !io.issue_hazard_stall
   when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
 
   io.issue_pipe_hazard.valid         := readies.orR && io.iss.valid && !io.inflight_hazard_stall
