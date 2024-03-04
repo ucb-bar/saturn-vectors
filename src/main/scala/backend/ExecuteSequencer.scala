@@ -22,6 +22,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val rvs2_mask = Reg(UInt(egsTotal.W))
   val rvd_mask  = Reg(UInt(egsTotal.W))
   val rvm_mask  = Reg(UInt(egsPerVReg.W))
+  val slide     = Reg(Bool())
+  val slide_up  = Reg(Bool())
+  val slide1    = Reg(Bool())
+  val slide_offset = Reg(UInt((1+log2Ceil(maxVLMax)).W))
+  val perm_head = Reg(UInt(dLenOffBits.W))
+  val perm_tail = Reg(UInt(dLenOffBits.W))
 
   val acc       = Reg(Vec(dLenB, UInt(8.W)))
   val acc_ready = Reg(Bool())
@@ -47,15 +53,11 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   )
   val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || inst.opff6.isOneOf(acc_elementwise_opcodes)
   val acc_last = acc_tail_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
-  val slide    = inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U) && inst.funct3 =/= OPIVV
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
   val sscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5_sext)
   val rgather    = inst.opif6 === OPIFunct6.rgather
   val rgather_ix = rgather && inst.funct3.isOneOf(OPIVX, OPIVI)
   val rgather_v  = rgather && inst.funct3.isOneOf(OPIVV)
-  val slide1     = !inst.isOpi
-  val slide_offset = Mux(!slide1, get_max_offset(uscalar), 1.U)
-  val slide_up = !inst.funct6(0)
   val renv1    = Mux(inst.reduction, reduction_head, inst.renv1)
   val renv2    = Mux(rgather_ix, head, Mux(inst.reduction, !reduction_head && !acc_tail, inst.renv2))
   val renvd    = inst.renvd
@@ -75,26 +77,53 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.dis.ready := !valid || (tail && io.iss.fire)
 
   when (io.dis.fire) {
-    val iss_inst = io.dis.bits
+    val dis_inst = io.dis.bits
     valid := true.B
     inst := io.dis.bits
-    assert(iss_inst.vstart === 0.U)
+    assert(dis_inst.vstart === 0.U)
     eidx := 0.U
 
-    val vd_arch_mask  = get_arch_mask(iss_inst.rd , iss_inst.emul +& iss_inst.wide_vd)
-    val vs1_arch_mask = get_arch_mask(iss_inst.rs1, Mux(iss_inst.reads_vs1_mask, 0.U, iss_inst.emul))
-    val vs2_arch_mask = get_arch_mask(iss_inst.rs2, Mux(iss_inst.reads_vs2_mask, 0.U, iss_inst.emul +& iss_inst.wide_vs2))
+    val vd_arch_mask  = get_arch_mask(dis_inst.rd , dis_inst.emul +& dis_inst.wide_vd)
+    val vs1_arch_mask = get_arch_mask(dis_inst.rs1, Mux(dis_inst.reads_vs1_mask, 0.U, dis_inst.emul))
+    val vs2_arch_mask = get_arch_mask(dis_inst.rs2, Mux(dis_inst.reads_vs2_mask, 0.U, dis_inst.emul +& dis_inst.wide_vs2))
 
-    wvd_mask    := Mux(iss_inst.wvd  , FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
-    rvs1_mask   := Mux(iss_inst.renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
-    rvs2_mask   := Mux(iss_inst.renv2, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
-    rvd_mask    := Mux(iss_inst.renvd, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
-    rvm_mask    := Mux(iss_inst.renvm, ~(0.U(egsPerVReg.W)), 0.U)
+    wvd_mask    := Mux(dis_inst.wvd  , FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
+    rvs1_mask   := Mux(dis_inst.renv1, FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
+    rvs2_mask   := Mux(dis_inst.renv2, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
+    rvd_mask    := Mux(dis_inst.renvd, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
+    rvm_mask    := Mux(dis_inst.renvm, ~(0.U(egsPerVReg.W)), 0.U)
     head        := true.B
     reduction_head := true.B
     acc_tail    := false.B
     acc_tail_id := 0.U
     acc_ready   := true.B
+
+    val dis_slide = (dis_inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
+      && dis_inst.funct3 =/= OPIVV)
+    val dis_slide_up     = !dis_inst.funct6(0)
+    val dis_vl           = dis_inst.vconfig.vl
+    val dis_sew          = dis_inst.vconfig.vtype.vsew
+    val dis_vlmax        = dis_inst.vconfig.vtype.vlMax
+    val dis_next_eidx    = get_next_eidx(dis_vl, 0.U, dis_sew, 0.U, false.B, false.B)
+    val dis_slide1       = !dis_inst.isOpi
+    val dis_uscalar      = Mux(dis_inst.funct3(2), dis_inst.rs1_data, dis_inst.imm5)
+    val dis_slide_offset = Mux(!dis_slide1, get_max_offset(dis_uscalar), 1.U)
+    val dis_tail         = dis_next_eidx === dis_vl
+    slide        := dis_slide
+    when (dis_slide) {
+      slide_up     := dis_slide_up
+      slide1       := dis_slide1
+      slide_offset := dis_slide_offset
+    }
+    perm_head    := Mux(dis_slide && dis_slide_up,
+      (dis_slide_offset << dis_sew)(dLenOffBits-1,0),
+      0.U)
+    perm_tail   := Mux(dis_slide,
+      Mux(dis_slide_up,
+        Mux(dis_tail, dis_vl << dis_sew, 0.U),
+        (Mux(dis_next_eidx + dis_slide_offset <= dis_vlmax, dis_next_eidx, dis_vlmax - dis_slide_offset) << dis_sew)(dLenOffBits-1,0)
+      ),
+      1.U << dis_sew)
   } .elsewhen (io.iss.fire) {
     valid := !tail
     head := false.B
@@ -152,17 +181,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val read_perm_buffer = ctrl.bool(UsesPermuteSeq) && (!slide || Mux(slide_up,
     next_eidx > slide_offset,
     eidx +& slide_offset < inst.vconfig.vtype.vlMax))
-  io.perm.req.bits.head := Mux(slide,
-    Mux(slide_up,
-      Mux(eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U),
-      eidx << vs2_eew),
-    0.U)
-  io.perm.req.bits.tail := Mux(slide,
-    Mux(slide_up,
-      Mux(tail, eff_vl << vs2_eew, 0.U),
-      (Mux(next_eidx + slide_offset <= inst.vconfig.vtype.vlMax, next_eidx, inst.vconfig.vtype.vlMax - slide_offset) << vs2_eew)(dLenOffBits-1,0)
-    ),
-    1.U << vs1_eew)
+
+  io.perm.req.bits.head := perm_head
+  io.perm.req.bits.tail := perm_tail
+
   val slide_down_byte_mask = Mux(slide && !slide_up && next_eidx + slide_offset > inst.vconfig.vtype.vlMax,
     Mux(eidx +& slide_offset >= inst.vconfig.vtype.vlMax,
       0.U,
@@ -313,6 +335,17 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     when (eidx_tail) { acc_tail := true.B }
     when (acc_tail) { acc_tail_id := acc_tail_id + 1.U }
     eidx := next_eidx
+
+    when (ctrl.bool(UsesPermuteSeq) && slide) {
+      val next_next_eidx = get_next_eidx(eff_vl, next_eidx, incr_eew, 0.U, increments_as_mask, ctrl.bool(Elementwise))
+      val next_tail = next_next_eidx === eff_vl
+      perm_head := Mux(slide_up,
+        Mux(next_eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U),
+        next_eidx << vs2_eew)
+      perm_tail := Mux(slide_up,
+        Mux(next_tail, eff_vl << vs2_eew, 0.U),
+        (Mux(next_next_eidx + slide_offset <= inst.vconfig.vtype.vlMax, next_next_eidx, inst.vconfig.vtype.vlMax - slide_offset) << vs2_eew)(dLenOffBits-1,0))
+    }
   }
 
   io.busy := valid
