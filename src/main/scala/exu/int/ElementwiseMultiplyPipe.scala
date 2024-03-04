@@ -41,15 +41,16 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val prod_pipe = Pipe(io.pipe(0).valid, prod, depth-2).bits
   val in_vs2_pipe = Pipe(io.pipe(0).valid, in_vs2, depth-2).bits
   val in_vd_pipe = Pipe(io.pipe(0).valid, in_vd, depth-2).bits
-  val out_eew = io.pipe(depth-2).bits.vd_eew
+  val ctrl_MULSub = Pipe(io.pipe(0).valid, ctrl.bool(MULSub), depth-2).bits
+  val ctrl_MULSwapVdV2 = Pipe(io.pipe(0).valid, ctrl.bool(MULSwapVdV2), depth-2).bits
+  val ctrl_MULAccumulate = Pipe(io.pipe(0).valid, ctrl.bool(MULAccumulate), depth-2).bits
+  val ctrl_MULHi = Pipe(io.pipe(0).valid, ctrl.bool(MULHi), depth-2).bits 
   val ctrl_smul = io.pipe(depth-2).bits.isOpi
-
-  val ctrl_pipe = new VectorDecoder(io.pipe(depth-2).bits.funct3, io.pipe(depth-2).bits.funct6, 0.U, 0.U, supported_insns, Seq(
-    MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
-
+  val out_eew = io.pipe(depth-2).bits.vd_eew
+  
   val hi = VecInit.tabulate(4)({ eew => prod_pipe >> (8 << eew) })(out_eew)(63,0)
   val lo = VecInit.tabulate(4)({ eew => prod_pipe((8 << eew)-1,0)})(out_eew)(63,0)
-  val madd = Mux(ctrl_pipe.bool(MULSub), ~lo, lo) + ctrl_pipe.bool(MULSub) + Mux(ctrl_pipe.bool(MULSwapVdV2), in_vs2_pipe, in_vd_pipe)
+  val madd = Mux(ctrl_MULSub, ~lo, lo) + ctrl_MULSub + Mux(ctrl_MULSwapVdV2, in_vs2_pipe, in_vd_pipe)
   val rounding_incr = VecInit.tabulate(4)({ eew => RoundingIncrement(io.pipe(depth-2).bits.vxrm, prod_pipe((8 << eew)-1,0)) })(out_eew)
   val smul = VecInit.tabulate(4)({ eew => prod_pipe >> ((8 << eew) - 1) })(out_eew) + Cat(0.U(1.W), rounding_incr).asSInt
   val smul_clip_neg = VecInit.tabulate(4)({ eew => (-1 << ((8 << eew)-1)).S })(out_eew)
@@ -58,7 +59,7 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val smul_clip_lo = smul < smul_clip_neg
   val smul_clipped = Mux(smul_clip_hi, smul_clip_pos, 0.S) | Mux(smul_clip_lo, smul_clip_neg, 0.S) | Mux(!smul_clip_hi && !smul_clip_lo, smul, 0.S)
   val smul_sat = smul_clip_hi || smul_clip_lo
-  val out = Mux(ctrl_pipe.bool(MULAccumulate), madd, 0.U) | Mux(ctrl_smul, smul_clipped.asUInt, 0.U) | Mux(!ctrl_pipe.bool(MULAccumulate) && !ctrl_smul, Mux(ctrl_pipe.bool(MULHi), hi, lo), 0.U)
+  val out = Mux(ctrl_MULAccumulate, madd, 0.U) | Mux(ctrl_smul, smul_clipped.asUInt, 0.U) | Mux(!ctrl_MULAccumulate && !ctrl_smul, Mux(ctrl_MULHi, hi, lo), 0.U)
 
   ///////////////// pipe
   val pipe_out = Pipe(io.pipe(depth-2).valid, out(63,0), 1).bits
