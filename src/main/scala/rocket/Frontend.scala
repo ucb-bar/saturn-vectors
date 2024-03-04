@@ -50,7 +50,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     ecu.io.s1.rs1.bits  := io.core.mem.frs1
     ecu.io.s1.kill      := io.core.killm
     io.core.mem.block_all    := icu.io.busy || ecu.io.s2.internal_replay.valid
-    io.core.mem.block_mem    := (ecu.io.s2.inst.valid && ecu.io.s2.inst.bits.vmu) || vu.io.scalar_check.conflict
+    io.core.mem.block_mem    := (ecu.io.s2.inst.valid && ecu.io.s2.inst.bits.vmu && ecu.io.s2.inst.bits.store) || vu.io.scalar_check.conflict
 
     io.tlb.req.valid := Mux(icu.io.busy, icu.io.s0_tlb_req.valid, ecu.io.s0.tlb_req.valid)
     io.tlb.req.bits  := Mux(icu.io.busy, icu.io.s0_tlb_req.bits , ecu.io.s0.tlb_req.bits)
