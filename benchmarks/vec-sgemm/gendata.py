@@ -57,8 +57,7 @@ typedef float data_t;
 ''')
 
 def print_array(name, data, data_size, data_type='float', data_fmt='{}', fold=10):
-    print(f"{name} [{data_size}] =")
-    #print('{} {}[{}] = {{'.format(data_type, name, data_size))
+    print(f"{name} [{data_size}] = {{")
     for i in range(0, len(data), fold):
         print('  ', ', '.join(data_fmt.format(x) for x in data[i:i+fold]), ',', sep='')
     print('};')
