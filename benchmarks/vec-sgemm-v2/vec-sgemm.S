@@ -125,8 +125,7 @@ c_col_loop:  # Loop across columns of C
     flw a23, (amp); add amp, amp, astride;
     flw a33, (amp); add akp, akp, 4
 
-    # Inner loop scheduled assuming 4-clock occupancy of vfmacc instruction and single-issue pipeline
-    # Software pipeline loads
+    addi kt, kt, -4
 
 k_loop:
     # Compute current block of FMAs
@@ -256,6 +255,8 @@ m_remainder_n_loop:
     flw a02, (akp); addi akp, akp, 4
     flw a03, (akp); addi akp, akp, 4
 
+    addi kt, kt, -4
+
 m_remainder_k_loop:
     vfmacc.vf v0, a00, v16
     vfmacc.vf v0, a01, v20
@@ -282,10 +283,9 @@ m_remainder_k_loop_remainder:
     beqz kt, 1f
 
 m_remainder_k_loop_remainder_loop:
-
     addi kt, kt, -1
     vle32.v v16, (bkp)
-    flw a00, (akp); add amp, akp, astride;
+    flw a00, (akp)
 
     vfmacc.vf v0, a00, v16 
 

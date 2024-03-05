@@ -35,8 +35,8 @@ c_array_size = m_dim * n_dim
 
 info = np.finfo(np.float32)
 maxmant = 1 << 5
-minexp = -10
-maxexp = 10
+minexp = -5
+maxexp = 5
 
 # Generate floating-point values with exact mantissa and exponent
 randf = lambda n: np.ldexp(

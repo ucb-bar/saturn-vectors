@@ -21,19 +21,19 @@ void *vec_sgemm_nn (size_t, size_t, size_t, const float*, size_t, const float*, 
 
 int main( int argc, char* argv[] )
 {
-  float results_data[ARRAY_SIZE] = {0};
+  float results_data[M_DIM*N_DIM] = {0};
 
 #if PREALLOCATE
   // If needed we preallocate everything in the caches
-  vec_sgemm_nn(DIM_SIZE, DIM_SIZE, DIM_SIZE, input1_data, DIM_SIZE, input2_data, DIM_SIZE, results_data, DIM_SIZE);
+  vec_sgemm_nn(N_DIM, M_DIM, K_DIM, a_matrix, K_DIM, b_matrix, N_DIM, results_data, N_DIM);
   memset(results_data, 0, sizeof(results_data));
 #endif
 
   // Do the sgemm
   setStats(1);
-  vec_sgemm_nn(DIM_SIZE, DIM_SIZE, DIM_SIZE, input1_data, DIM_SIZE, input2_data, DIM_SIZE, results_data, DIM_SIZE);
+  vec_sgemm_nn(N_DIM, M_DIM, K_DIM, a_matrix, K_DIM, b_matrix, N_DIM, results_data, N_DIM);
   setStats(0);
 
   // Check the results
-  return verifyFloat( ARRAY_SIZE, results_data, verify_data );
+  return verifyFloat(M_DIM*N_DIM, results_data, verify_data);
 }
