@@ -109,6 +109,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     val dis_uscalar      = Mux(dis_inst.funct3(2), dis_inst.rs1_data, dis_inst.imm5)
     val dis_slide_offset = Mux(!dis_slide1, get_max_offset(dis_uscalar), 1.U)
     val dis_tail         = dis_next_eidx === dis_vl
+    val dis_rgather_eew  = Mux(dis_inst.opif6 === OPIFunct6.rgatherei16, 1.U, dis_sew)
     slide        := dis_slide
     when (dis_slide) {
       slide_up     := dis_slide_up
@@ -123,7 +124,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
         Mux(dis_tail, dis_vl << dis_sew, 0.U),
         (Mux(dis_next_eidx + dis_slide_offset <= dis_vlmax, dis_next_eidx, dis_vlmax - dis_slide_offset) << dis_sew)(dLenOffBits-1,0)
       ),
-      1.U << dis_sew)
+      1.U << dis_rgather_eew)
   } .elsewhen (io.iss.fire) {
     valid := !tail
     head := false.B
