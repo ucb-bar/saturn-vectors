@@ -13,7 +13,7 @@ import saturn.insns._
 class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {
     val rvs2_input = Input(UInt(64.W))
-    val eew = Input(UInt(3.W))
+    val eew = Input(UInt(2.W))
     val frm = Input(UInt(3.W))
     val out = Output(UInt(64.W))
     val exc = Output(UInt(5.W))
@@ -155,39 +155,36 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   }
 
   val rvs2_bits = io.rvs2_input
-  val fTypes = Seq(FType.S, FType.D)
-  val is_negative = Wire(Vec(2, Bool()))
-  val is_pos_zero = Wire(Vec(2, Bool()))
-  val is_neg_zero = Wire(Vec(2, Bool()))
-  val is_pos_inf = Wire(Vec(2, Bool()))
-  val is_neg_inf = Wire(Vec(2, Bool()))
-  val is_sNaN = Wire(Vec(2, Bool()))
-  val is_qNaN = Wire(Vec(2, Bool()))
-  val is_subnormal = Wire(Vec(2, Bool()))
-  val more_than_1_leading_sign_zero = Wire(Vec(2, Bool()))
-  val output_sign = Wire(Vec(2, UInt(1.W)))
-  val output_significand_index = Wire(Vec(2, UInt(7.W)))
+  val ftypes = Seq(FType.H, FType.S, FType.D)
+  val is_negative = Wire(Vec(3, Bool()))
+  val is_pos_zero = Wire(Vec(3, Bool()))
+  val is_neg_zero = Wire(Vec(3, Bool()))
+  val is_pos_inf = Wire(Vec(3, Bool()))
+  val is_neg_inf = Wire(Vec(3, Bool()))
+  val is_sNaN = Wire(Vec(3, Bool()))
+  val is_qNaN = Wire(Vec(3, Bool()))
+  val is_subnormal = Wire(Vec(3, Bool()))
+  val more_than_1_leading_sign_zero = Wire(Vec(3, Bool()))
+  val output_sign = Wire(Vec(3, UInt(1.W)))
+  val output_significand_index = Wire(Vec(3, UInt(7.W)))
+  val output_exponent = Wire(Vec(UInt(11.W)))
+  val is_subnormal_output = Wire(Vec(3, Bool()))
 
-  val is_subnormal_output = Wire(Vec(2, Bool()))
+  val mux_select = (1 to 3).map(_.U) === io.eew
 
-  val output_exponent_s = Wire(UInt(8.W))
-  val output_exponent_d = Wire(UInt(11.W))
-
-  for (eew <- 2 until 4) {
-    val fType = fTypes(eew - 2)
-
+  fTypes.zipWithIndex.foreach { case(fType, i) =>
     val rvs2_classify = fType.classify(fType.recode(rvs2_bits(fType.ieeeWidth-1, 0)))
-    is_negative(eew - 2) := rvs2_classify(2,0).orR
-    is_pos_zero(eew - 2) := rvs2_classify(4)
-    is_neg_zero(eew - 2) := rvs2_classify(3)
-    is_pos_inf(eew - 2) := rvs2_classify(7)
-    is_neg_inf(eew - 2) := rvs2_classify(0)
-    is_sNaN(eew - 2) := rvs2_classify(8)
-    is_qNaN(eew - 2) := rvs2_classify(9)
-    is_subnormal(eew - 2) := rvs2_classify(2) || rvs2_classify(5)
+    is_negative(i) := rvs2_classify(2,0).orR
+    is_pos_zero(i) := rvs2_classify(4)
+    is_neg_zero(i) := rvs2_classify(3)
+    is_pos_inf(i) := rvs2_classify(7)
+    is_neg_inf(i) := rvs2_classify(0)
+    is_sNaN(i) := rvs2_classify(8)
+    is_qNaN(i) := rvs2_classify(9)
+    is_subnormal(eew) := rvs2_classify(2) || rvs2_classify(5)
 
-    val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-2, 0), fType.sig)
-    more_than_1_leading_sign_zero(eew - 2) := num_leading_significand_zeros > 1.U
+    val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-1, 0), fType.sig)
+    more_than_1_leading_sign_zero(eew) := num_leading_significand_zeros > 1.U
 
     val is_normal = rvs2_classify(1) || rvs2_classify(6)
 
@@ -200,20 +197,15 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
                                   rvs2_bits(fType.sig-2, 0),
                                   rvs2_bits(fType.sig-2, 0) << (1.U - normalized_exponent))
 
-    val output_exponent_val = (2.U * ((1 << (fType.exp - 1)) - 1).U) - 1.U - normalized_exponent
-    if (eew == 3) {
-      output_exponent_d := output_exponent_val
-    } else {
-      output_exponent_s := output_exponent_val
-    }
+    output_exponent(i) = Cat(0.U((fType.exp - 11).W), (2.U * ((1 << (fType.exp - 1)) - 1).U) - 1.U - normalized_exponent)
 
-    is_subnormal_output(eew - 2) := output_exponent_val === 0.U || output_exponent_val.asSInt === -1.S
-    output_significand_index(eew-2) := normalized_significand(fType.sig - 2, fType.sig - 8)
-    output_sign(eew-2) := rvs2_bits(fType.ieeeWidth - 1)
+    is_subnormal_output(i) := output_exponent_val === 0.U || output_exponent_val.asSInt === -1.S
+    output_significand_index(i) := normalized_significand(fType.sig - 2, fType.sig - 8)
+    output_sign(i) := rvs2_bits(fType.ieeeWidth - 1)
   }
 
   val truthTable = TruthTable(vfrec7_table, default_bits)
-  val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux(io.eew === 3.U, output_significand_index(1), output_significand_index(0)), truthTable)
+  val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux1H(mux_select, output_significand_index), truthTable)
 
   val s_out = Wire(UInt(32.W))
   val d_out = Wire(UInt(64.W))
@@ -223,76 +215,56 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   val s_out_significand = Wire(UInt(23.W))
   val d_out_significand = Wire(UInt(52.W))
 
-  // Special case where the normalized output exponent is 0 or -1
-  // This means the output will be subnormal and special changes are required
-  when (is_subnormal_output(0)) {
-    s_out_exponent := 0.U
-    when (output_exponent_s(0) === 0.U) {
-      s_out_significand := Cat(Cat(1.U, significand_bits), 0.U(15.W))
-    } .otherwise {
-      s_out_significand := Cat(Cat(1.U, significand_bits), 0.U(15.W)) >> 1
+  val out_bits = fType.zipWithIndex.map{ case(fType, i) =>
+    val out_exponent = Wire(UInt(fType.exp.W))
+    val out_significand = Wire(UInt((fType.sig - 1).W))
+
+    when (is_subnormal_output(i)) {
+      out_exponent := 0.U
+      when (output_exponent(i) === 0.U) {
+        out_significand := 1.U ## significand_bits ## 0.U((fType.sig - 9).W) 
+      } .otherwise {
+        out_significand := Cat(Cat(1.U, significand_bits), 0.U((fType.sig - 9).W)) >> 1
+      }
     }
-  }
-  // Special case where the input is a very small subnormal and the output depends on the rounding mode
-  .elsewhen (is_subnormal(0) && more_than_1_leading_sign_zero(0)) {
-    when ((output_sign(0).asBool && (io.frm === 3.U || io.frm === 1.U)) || (!output_sign(0) && (io.frm === 2.U || io.frm === 1.U))) {
-      s_out_exponent := "b11111110".U
-      s_out_significand := "b11111111111111111111111".U
-    } .otherwise {
-      s_out_exponent := "b11111111".U
-      s_out_significand := 0.U
+    // special case where the input is a very small subnormal and the output depends on the rounding mode
+    .elsewhen (is_subnormal(i) && more_than_1_leading_sign_zero(i)) {
+      when ((output_sign(i).asbool && (io.frm === 3.U || io.frm === 1.U)) || (!output_sign(i) && (io.frm === 2.U || io.frm === 1.U))) {
+        out_exponent := ~(1.U(fType.exp.W))
+        out_significand := ~(0.U(fType.sig.W))
+      } .otherwise {
+        out_exponent := ~(0.U(fType.exp.W))
+        out_significand := 0.U
+      }
     }
-  }
-  .otherwise {
-    s_out_exponent := output_exponent_s
-    s_out_significand := Cat(significand_bits, 0.U(16.W))
+    .otherwise {
+      out_exponent := output_exponent(i)
+      out_significand := Cat(significand_bits, 0.U((fType.sig - 8).W))
+    }
+
+    Fill(64 / fType.ieeeWidth, output_sign(i) ## out_exponent ## out_significand)
   }
 
-  when (is_subnormal_output(1)) {
-    d_out_exponent := 0.U
-    when (output_exponent_d(1) === 0.U) {
-      d_out_significand := Cat(Cat(1.U, significand_bits), 0.U(44.W))
-    } .otherwise {
-      d_out_significand := Cat(Cat(1.U, significand_bits), 0.U(44.W)) >> 1
-    }
-  }
-  .elsewhen (is_subnormal(1) && more_than_1_leading_sign_zero(1)) {
-    when ((output_sign(1).asBool && (io.frm === 3.U || io.frm === 1.U)) || (!output_sign(1) && (io.frm === 2.U || io.frm === 1.U))) {
-      d_out_exponent := "b11111111110".U
-      d_out_significand := "b1111111111111111111111111111111111111111111111111111".U
-    } .otherwise {
-      d_out_exponent := "b11111111".U
-      d_out_significand := 0.U
-    }
-  }
-  .otherwise {
-    d_out_exponent := output_exponent_d
-    d_out_significand := Cat(significand_bits, 0.U(45.W))
-  }
+  val eew_sel = io.eew - 1.U
 
-  s_out := Cat(output_sign(0), Cat(s_out_exponent, s_out_significand))
-  d_out := Cat(output_sign(1), Cat(d_out_exponent, d_out_significand))
-
-  val sel = io.eew === 3.U
-
-  when (is_sNaN(sel) || is_qNaN(sel)) {
-    io.out := Mux(sel, FType.D.ieeeQNaN, Fill(2, FType.S.ieeeQNaN))
-  } .elsewhen (is_pos_inf(sel)) {
+  when (is_sNaN(eew_sel) || is_qNaN(eew_sel)) {
+    io.out := Mux1H(mux_sel, fTypes.map{ fType => Fill(64 / fType.ieeeWidth, fType.ieeeQNaN) })
+  } .elsewhen (is_pos_inf(eew_sel)) {
     io.out := 0.U
-  } .elsewhen (is_neg_inf(sel)) {
-    io.out := Mux(sel, "h8000000000000000".U, "h8000000080000000".U)
-  } .elsewhen (is_pos_zero(sel)) {
-    io.out := Mux(sel, "h7FF0000000000000".U, "h7F8000007F800000".U)
-  } .elsewhen (is_neg_zero(sel)) {
-    io.out := Mux(sel, "hFFF0000000000000".U, "hFF800000FF800000".U)
+  } .elsewhen (is_neg_inf(eew_sel)) {
+    io.out := Mux1H(mux_sel, "h8000800080008000".U, "h8000000080000000".U, "h8000000000000000".U) 
+  } .elsewhen (is_pos_zero(eew_sel)) {
+    io.out := Mux1H(mux_sel, "h7C007C007C007C00", "h7F8000007F800000".U, "h7FF0000000000000".U)
+  } .elsewhen (is_neg_zero(eew_sel)) {
+    io.out := Mux1H(mux_sel, "hFC00FC00FC00FC00", "hFF800000FF800000".U, "hFFF0000000000000".U)
   } .otherwise {
-    io.out := Mux(sel, d_out, Fill(2, s_out))
+    io.out := Mux1H(mux_sel, out_bits)
   }
 
-  val NV = is_negative(sel) || is_sNaN(sel)
-  val DZ = is_pos_zero(sel) || is_neg_zero(sel)
-  val OF = is_subnormal(sel) && more_than_1_leading_sign_zero(sel)
-  val NX = is_subnormal(sel) && more_than_1_leading_sign_zero(sel)
+  val NV = is_negative(eew_sel) || is_sNaN(eew_sel)
+  val DZ = is_pos_zero(eew_sel) || is_neg_zero(eew_sel)
+  val OF = is_subnormal(eew_sel) && more_than_1_leading_sign_zero(eew_sel)
+  val NX = is_subnormal(eew_sel) && more_than_1_leading_sign_zero(eew_sel)
 
   io.exc := Seq(NV, DZ, OF, false.B, NX).asUInt
 }
@@ -301,7 +273,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
 class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {
     val rvs2_input = Input(UInt(64.W))
-    val eew = Input(UInt(3.W))
+    val eew = Input(UInt(2.W))
     val out = Output(UInt(64.W))
     val exc = Output(UInt(5.W))
   })
@@ -442,31 +414,31 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
   }
 
   val rvs2_bits = io.rvs2_input
-  val fTypes = Seq(FType.S, FType.D)
-  val is_negative = Wire(Vec(2, Bool()))
-  val is_pos_zero = Wire(Vec(2, Bool()))
-  val is_neg_zero = Wire(Vec(2, Bool()))
-  val is_pos_inf = Wire(Vec(2, Bool()))
-  val is_sNaN = Wire(Vec(2, Bool()))
-  val is_qNaN = Wire(Vec(2, Bool()))
-  val output_sign = Wire(Vec(2, UInt(1.W)))
-  val output_significand_index = Wire(Vec(2, UInt(7.W)))
+  val fTypes = Seq(FType.H, FType.S, FType.D)
+  val is_negative = Wire(Vec(3, Bool()))
+  val is_pos_zero = Wire(Vec(3, Bool()))
+  val is_neg_zero = Wire(Vec(3, Bool()))
+  val is_pos_inf = Wire(Vec(3, Bool()))
+  val is_sNaN = Wire(Vec(3, Bool()))
+  val is_qNaN = Wire(Vec(3, Bool()))
+  val output_sign = Wire(Vec(3, UInt(1.W)))
+  val output_significand_index = Wire(Vec(3, UInt(7.W)))
+  val output_exponent = Wire(Vec(3, UInt(11.W)))
+  val out_bits = Wire(Vec(3, UInt(64.W)))
 
-  val output_exponent_s = Wire(UInt(8.W))
-  val output_exponent_d = Wire(UInt(11.W))
+  val mux_select = (1 to 3).map(_.U) === io.eew
 
-  for (eew <- 2 until 4) {
-    val fType = fTypes(eew - 2)
+  fTypes.zipWithIndex.foreach { case(fType, i) =>
     val rvs2_rec = fType.recode(rvs2_bits(fType.ieeeWidth-1, 0))
 
     val rvs2_classify = fType.classify(rvs2_rec)
 
-    is_negative(eew - 2) := rvs2_classify(2,0).orR
-    is_pos_zero(eew - 2) := rvs2_classify(4)
-    is_neg_zero(eew - 2) := rvs2_classify(3)
-    is_pos_inf(eew - 2) := rvs2_classify(7)
-    is_sNaN(eew - 2) := rvs2_classify(8)
-    is_qNaN(eew - 2) := rvs2_classify(9)
+    is_negative(i) := rvs2_classify(2,0).orR
+    is_pos_zero(i) := rvs2_classify(4)
+    is_neg_zero(i) := rvs2_classify(3)
+    is_pos_inf(i) := rvs2_classify(7)
+    is_sNaN(i) := rvs2_classify(8)
+    is_qNaN(i) := rvs2_classify(9)
 
     val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-2, 0), fType.sig)
     val is_pos_normal = rvs2_classify(6)
@@ -479,40 +451,34 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
                                   rvs2_bits(fType.sig-2, 0),
                                   rvs2_bits(fType.sig-2, 0) << (1.U - normalized_exponent))
 
-    val output_exponent_val = (((3.U * ((1 << (fType.exp - 1)) - 1).U) - normalized_exponent) >> 1)
-    if (eew == 3) {
-      output_exponent_d := output_exponent_val
-    } else {
-      output_exponent_s := output_exponent_val
-    }
-    output_significand_index(eew-2) := Cat(normalized_exponent(0), normalized_significand(fType.sig - 2, fType.sig - 7))
-    output_sign(eew-2) := rvs2_bits(fType.ieeeWidth - 1)
+    output_exponent(i) := Cat(0.U((fType.exp - 11).W), (((3.U * ((1 << (fType.exp - 1)) - 1).U) - normalized_exponent) >> 1))
+    output_significand_index(i) := Cat(normalized_exponent(0), normalized_significand(fType.sig - 2, fType.sig - 7))
+    output_sign(i) := rvs2_bits(fType.ieeeWidth - 1)
   }
 
   val truthTable = TruthTable(vfrsqrt7_table, default_bits)
-  val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux(io.eew === 3.U, output_significand_index(1), output_significand_index(0)), truthTable)
+  val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux1H(mux_select, output_significand_index), truthTable)
 
-  val s_out = Wire(UInt(32.W))
-  val d_out = Wire(UInt(64.W))
-  s_out := Cat(output_sign(0), Cat(output_exponent_s, Cat(significand_bits, 0.U(16.W))))
-  d_out := Cat(output_sign(1), Cat(output_exponent_d, Cat(significand_bits, 0.U(45.W))))
-
-  val sel = io.eew === 3.U
-
-  when (is_negative(sel) || is_sNaN(sel) || is_qNaN(sel)) {
-    io.out := Mux(sel, FType.D.ieeeQNaN, Fill(2, FType.S.ieeeQNaN))
-  } .elsewhen (is_pos_inf(sel)) {
-    io.out := 0.U
-  } .elsewhen (is_pos_zero(sel)) {
-    io.out := Mux(sel, "h7FF0000000000000".U, "h7F8000007F800000".U)
-  } .elsewhen (is_neg_zero(sel)) {
-    io.out := Mux(sel, "hFFF0000000000000".U, "hFF800000FF800000".U)
-  } .otherwise {
-    io.out := Mux(sel, d_out, Fill(2, s_out))
+  val out_bits = fTypes.zipWithIndex.map{ case(fType, i) =>
+    Fill(64 / fType.ieeeWidth, output_sign(i) ## output_exponent(i) ## significand_bits(i) ## 0.U((fType.sig - 8).W)) 
   }
 
-  val NV = is_negative(sel) || is_sNaN(sel)
-  val DZ = is_pos_zero(sel) || is_neg_zero(sel)
+  val eew_sel = io.eew - 1.U
+
+  when (is_negative(eew_sel) || is_sNaN(eew_sel) || is_qNaN(eew_sel)) {
+    io.out := Mux1H(mux_sel, fTypes.map{ fType => Fill(64 / fType.ieeeWidth, fType.ieeeQNaN) })
+  } .elsewhen (is_pos_inf(eew_sel)) {
+    io.out := 0.U
+  } .elsewhen (is_pos_zero(eew_sel)) {
+    io.out := Mux1H(mux_sel, "h7C007C007C007C00", "h7F8000007F800000".U, "h7FF0000000000000".U)
+  } .elsewhen (is_neg_zero(eew_sel)) {
+    io.out := Mux1H(mux_sel, "hFC00FC00FC00FC00", "hFF800000FF800000".U, "hFFF0000000000000".U)
+  } .otherwise {
+    io.out := Mux1H(mux_sel, out_bits)
+  }
+
+  val NV = is_negative(eew_sel) || is_sNaN(eew_sel)
+  val DZ = is_pos_zero(eew_sel) || is_neg_zero(eew_sel)
 
   io.exc := Cat(NV, Cat(DZ, 0.U(3.W)))
 }
