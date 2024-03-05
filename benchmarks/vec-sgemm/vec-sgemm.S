@@ -149,7 +149,47 @@ k_loop:
     # Handle end of matrix with fewer than 4 rows.
     # Can use smaller versions of above decreasing in powers-of-2 depending on code-size concerns.
 end_rows:
-    # Not done.
+    beqz m, exit
+
+end_rows_row_loop:
+    mv nt, n  # Initialize n counter for next row of C blocks
+    mv bnp, bp # Initialize B n-loop pointer to start
+    mv cnp, cp # Initialize C n-loop pointer
+
+end_rows_col_loop:
+    vsetvli nvl, nt, e32, m4, ta, ma  # 32-bit vectors, LMUL=4
+    vle32.v  v0, (cnp)
+    mv akp, ap   # reset pointer into A to beginning
+    mv bkp, bnp  # step to next column in B matrix
+    vle32.v v16, (bkp)
+    flw ft0, (akp)
+    mv kt, k # Initialize inner loop counter
+
+end_rows_k_loop:
+    vfmacc.vf v0, ft0, v16
+    addi akp, akp, 4
+    addi kt, kt, -1
+    add bkp, bkp, bstride
+
+    beqz kt, 1f
+
+    flw ft0, (akp)
+    vle32.v v16, (bkp)
+    j end_rows_k_loop
+
+1:  vse32.v v0, (cnp)  
+    slli t6, nvl, 2
+    add cnp, cnp, t6
+    add bnp, bnp, t6
+    sub nt, nt, nvl
+    
+    bnez nt, end_rows_col_loop
+    
+    addi m, m, -1
+    add ap, ap, astride
+    add cp, cp, cstride
+    
+    bnez m, end_rows_row_loop
 
 exit:
     ld s0, 0(sp)
