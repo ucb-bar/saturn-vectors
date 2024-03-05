@@ -117,7 +117,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     Module(new IntegerPipe).suggestName("vintfu"),
     Module(new BitwisePipe).suggestName("vbitfu"),
     (if (vParams.useSegmentedIMul)
-      Module(new SegmentedMultiplyPipe)
+      Module(new SegmentedMultiplyPipe(3))
     else
       Module(new ElementwiseMultiplyPipe(4))
     ).suggestName("vmulfu"),
