@@ -27,7 +27,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   io.set_fflags.bits := DontCare
 
    val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
-     MULSign1, MULSign2, MULSwapVdV2))
+     MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
 
   val in_eew = io.pipe(0).bits.rvs1_eew
   val out_eew = io.pipe(0).bits.vd_eew
@@ -50,17 +50,21 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   }
   val mul_out_comb = VecInit(multipliers.map(_.io.out_data)).asUInt
   val mul_out = Pipe(io.pipe(0).valid, mul_out_comb, 2).bits
-  //////////////////////////////////////////////
-  // 2 Pipeline Stages in multipliers
-  //////////////////////////////////////////////
+
+  ////////////////////////////////////////////////////////////////////////////////////////////
+  // Pipeline Stages Before Adder Array
+  ////////////////////////////////////////////////////////////////////////////////////////////
   val in_eew_pipe = io.pipe(depth-2).bits.rvs1_eew
   val out_eew_pipe = io.pipe(depth-2).bits.vd_eew
   val ctrl_wmul = out_eew_pipe > in_eew_pipe
   val ctrl_smul = io.pipe(depth-2).bits.isOpi
-  val ctrl_pipe = new VectorDecoder(io.pipe(depth-2).bits.funct3, io.pipe(depth-2).bits.funct6, 0.U, 0.U, supported_insns, Seq(
-    MULHi, MULSwapVdV2, MULAccumulate, MULSub))
+  val ctrl_MULSub = Pipe(io.pipe(0).valid, ctrl.bool(MULSub), depth-2).bits
+  val ctrl_MULSwapVdV2 = Pipe(io.pipe(0).valid, ctrl.bool(MULSwapVdV2), depth-2).bits
+  val ctrl_MULAccumulate = Pipe(io.pipe(0).valid, ctrl.bool(MULAccumulate), depth-2).bits
+  val ctrl_MULHi = Pipe(io.pipe(0).valid, ctrl.bool(MULHi), depth-2).bits 
   val in_vs2_pipe = io.pipe(depth-2).bits.rvs2_data
   val in_vd_pipe  = io.pipe(depth-2).bits.rvd_data
+  ////////////////////////////////////////////////////////////////////////////////////////////
 
   val hi = VecInit.tabulate(4)({sew =>
     VecInit(mul_out.asTypeOf(Vec((2*dLenB) >> sew, UInt((8 << sew).W))).grouped(2).map(_.last).toSeq).asUInt
@@ -90,19 +94,19 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
 
   val adder_arr = Module(new AdderArray(dLenB))
   adder_arr.io.in1 := Mux(ctrl_wmul, wide, lo).asTypeOf(Vec(dLenB, UInt(8.W)))
-  adder_arr.io.in2 := Mux(ctrl_pipe.bool(MULAccumulate), Mux(ctrl_pipe.bool(MULSwapVdV2), in_vs2_pipe, in_vd_pipe), 0.U(dLen.W)).asTypeOf(Vec(dLenB, UInt(8.W)))
+  adder_arr.io.in2 := Mux(ctrl_MULAccumulate, Mux(ctrl_MULSwapVdV2, in_vs2_pipe, in_vd_pipe), 0.U(dLen.W)).asTypeOf(Vec(dLenB, UInt(8.W)))
   adder_arr.io.incr := VecInit.fill(dLenB)(false.B)
   adder_arr.io.mask_carry := 0.U
   adder_arr.io.signed := DontCare
   adder_arr.io.eew := out_eew_pipe
   adder_arr.io.avg := false.B
   adder_arr.io.rm := DontCare
-  adder_arr.io.sub := ctrl_pipe.bool(MULSub)
+  adder_arr.io.sub := ctrl_MULSub
   adder_arr.io.cmask := false.B
 
   val add_out = adder_arr.io.out
 
-  val out = Mux(ctrl_smul, smul_splat, 0.U) | Mux(ctrl_pipe.bool(MULHi), hi, 0.U) | Mux(!ctrl_smul && !ctrl_pipe.bool(MULHi), add_out.asUInt, 0.U)
+  val out = Mux(ctrl_smul, smul_splat, 0.U) | Mux(ctrl_MULHi, hi, 0.U) | Mux(!ctrl_smul && !ctrl_MULHi, add_out.asUInt, 0.U)
   val pipe_out = Pipe(io.pipe(depth-2).valid, out, 1).bits
   val pipe_vxsat = Pipe(io.pipe(depth-2).valid, smul_sat && ctrl_smul, 1).bits
 
