@@ -6,6 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+import freechips.rocketchip.diplomacy.{BufferParams}
 
 object VectorParams {
   def minParams = VectorParams()
@@ -63,7 +64,8 @@ case class VectorParams(
 
   doubleBufferSegments: Boolean = false,
 
-  vrfBanking: Int = 2
+  vrfBanking: Int = 2,
+  tlBuffer: BufferParams = BufferParams.default
 )
 
 case object VectorParamsKey extends Field[VectorParams]
