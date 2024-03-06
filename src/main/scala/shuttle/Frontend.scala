@@ -23,7 +23,7 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
   }
 
   val tl_if = LazyModule(new TLInterface)
-  atlNode := TLWidthWidget(dLenB) := tl_if.node
+  atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLenB) := tl_if.node
 
   override lazy val module = new SaturnShuttleImpl
   class SaturnShuttleImpl extends ShuttleVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
