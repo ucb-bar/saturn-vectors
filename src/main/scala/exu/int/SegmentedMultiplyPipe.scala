@@ -9,7 +9,7 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) {
+class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
   val supported_insns = Seq(
     MUL.VV, MUL.VX, MULH.VV, MULH.VX,
     MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
@@ -53,14 +53,14 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   //////////////////////////////////////////////
   // 2 Pipeline Stages in multipliers
   //////////////////////////////////////////////
-  val in_eew_pipe = io.pipe(2).bits.rvs1_eew
-  val out_eew_pipe = io.pipe(2).bits.vd_eew
+  val in_eew_pipe = io.pipe(depth-2).bits.rvs1_eew
+  val out_eew_pipe = io.pipe(depth-2).bits.vd_eew
   val ctrl_wmul = out_eew_pipe > in_eew_pipe
-  val ctrl_smul = io.pipe(2).bits.isOpi
-  val ctrl_pipe = new VectorDecoder(io.pipe(2).bits.funct3, io.pipe(2).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+  val ctrl_smul = io.pipe(depth-2).bits.isOpi
+  val ctrl_pipe = new VectorDecoder(io.pipe(depth-2).bits.funct3, io.pipe(depth-2).bits.funct6, 0.U, 0.U, supported_insns, Seq(
     MULHi, MULSwapVdV2, MULAccumulate, MULSub))
-  val in_vs2_pipe = io.pipe(2).bits.rvs2_data
-  val in_vd_pipe  = io.pipe(2).bits.rvd_data
+  val in_vs2_pipe = io.pipe(depth-2).bits.rvs2_data
+  val in_vd_pipe  = io.pipe(depth-2).bits.rvd_data
 
   val hi = VecInit.tabulate(4)({sew =>
     VecInit(mul_out.asTypeOf(Vec((2*dLenB) >> sew, UInt((8 << sew).W))).grouped(2).map(_.last).toSeq).asUInt
@@ -68,17 +68,17 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
   val lo = VecInit.tabulate(4)({sew =>
     VecInit(mul_out.asTypeOf(Vec((2*dLenB) >> sew, UInt((8 << sew).W))).grouped(2).map(_.head).toSeq).asUInt
   })(in_eew_pipe)
-  val half_sel = (io.pipe(2).bits.eidx >> (dLenOffBits.U - out_eew_pipe))(0)
+  val half_sel = (io.pipe(depth-2).bits.eidx >> (dLenOffBits.U - out_eew_pipe))(0)
   val wide = Mux(half_sel, mul_out >> dLen, mul_out)(dLen-1,0)
 
   // TODO, handle SMUL > 1 elem/cycle
   val smul_prod = VecInit.tabulate(4)({sew =>
     if (sew == 3 && dLenB == 8) { mul_out.asSInt } else {
-      mul_out.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))(io.pipe(2).bits.eidx(log2Ceil(dLenB)-1-sew,0))
+      mul_out.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))(io.pipe(depth-2).bits.eidx(log2Ceil(dLenB)-1-sew,0))
     }
   })(out_eew_pipe).asSInt
 
-  val rounding_incr = VecInit.tabulate(4)({ sew => RoundingIncrement(io.pipe(2).bits.vxrm, smul_prod((8 << sew)-1,0)) })(out_eew_pipe)
+  val rounding_incr = VecInit.tabulate(4)({ sew => RoundingIncrement(io.pipe(depth-2).bits.vxrm, smul_prod((8 << sew)-1,0)) })(out_eew_pipe)
   val smul = VecInit.tabulate(4)({ sew => smul_prod >> ((8 << sew) - 1) })(out_eew_pipe) + Cat(0.U(1.W), rounding_incr).asSInt
   val smul_clip_neg = VecInit.tabulate(4)({ sew => (-1 << ((8 << sew)-1)).S })(out_eew_pipe)
   val smul_clip_pos = VecInit.tabulate(4)({ sew => ((1 << ((8 << sew)-1)) - 1).S })(out_eew_pipe)
@@ -102,17 +102,17 @@ class SegmentedMultiplyPipe(implicit p: Parameters) extends PipelinedFunctionalU
 
   val add_out = adder_arr.io.out
 
-  val pipe_out = Mux(ctrl_smul, smul_splat, 0.U) | Mux(ctrl_pipe.bool(MULHi), hi, 0.U) | Mux(!ctrl_smul && !ctrl_pipe.bool(MULHi), add_out.asUInt, 0.U)
-  // val pipe_out = Pipe(io.pipe(2).valid, out, depth-3).bits
-  // val pipe_vxsat = Pipe(io.pipe(2).valid, smul_sat && ctrl_smul, depth-3).bits
-  val pipe_vxsat = smul_sat && ctrl_smul
-  io.pipe0_stall     := false.B
-  io.write.valid     := io.pipe(2).valid
-  io.write.bits.eg   := io.pipe(2).bits.wvd_eg
-  io.write.bits.data := pipe_out
-  io.write.bits.mask := FillInterleaved(8, io.pipe(2).bits.wmask)
+  val out = Mux(ctrl_smul, smul_splat, 0.U) | Mux(ctrl_pipe.bool(MULHi), hi, 0.U) | Mux(!ctrl_smul && !ctrl_pipe.bool(MULHi), add_out.asUInt, 0.U)
+  val pipe_out = Pipe(io.pipe(depth-2).valid, out, 1).bits
+  val pipe_vxsat = Pipe(io.pipe(depth-2).valid, smul_sat && ctrl_smul, 1).bits
 
-  io.set_vxsat := io.pipe(2).valid && pipe_vxsat && io.pipe(2).bits.wmask =/= 0.U
+  io.pipe0_stall     := false.B
+  io.write.valid     := io.pipe(depth-1).valid
+  io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
+  io.write.bits.data := pipe_out
+  io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
+
+  io.set_vxsat := io.pipe(depth-1).valid && pipe_vxsat && io.pipe(depth-1).bits.wmask =/= 0.U
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
 }
