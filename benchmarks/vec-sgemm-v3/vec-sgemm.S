@@ -101,13 +101,13 @@ c_col_loop:  # Loop across columns of C
     flw a10, (amp); add amp, amp, astride;
     vle32.v  v4, (ccp); add ccp, ccp, cstride;
     flw a20, (amp); add amp, amp, astride;
-    flw a30, (amp); add akp, akp, 4
+    flw a30, (amp); addi akp, akp, 4
     vle32.v  v8, (ccp); add ccp, ccp, cstride;
     flw a01, (akp); add amp, akp, astride;
     flw a11, (amp); add amp, amp, astride;
     vle32.v  v12, (ccp);
     flw a21, (amp); add amp, amp, astride;
-    flw a31, (amp); add akp, akp, 4
+    flw a31, (amp); addi akp, akp, 4
 
     # Get vector from B matrix
     vle32.v v16, (bkp); add bkp, bkp, bstride
@@ -115,13 +115,13 @@ c_col_loop:  # Loop across columns of C
     flw a12, (amp); add amp, amp, astride;
     vle32.v v20, (bkp); add bkp, bkp, bstride
     flw a22, (amp); add amp, amp, astride;
-    flw a32, (amp); add akp, akp, 4
+    flw a32, (amp); addi akp, akp, 4
     vle32.v v24, (bkp); add bkp, bkp, bstride
     flw a03, (akp); add amp, akp, astride;
     flw a13, (amp); add amp, amp, astride;
     vle32.v v28, (bkp); add bkp, bkp, bstride
     flw a23, (amp); add amp, amp, astride;
-    flw a33, (amp); add akp, akp, 4
+    flw a33, (amp); addi akp, akp, 4
 
     # Inner loop scheduled assuming 4-clock occupancy of vfmacc instruction and single-issue pipeline
     # Software pipeline loads
@@ -175,10 +175,6 @@ k_loop:
     vle32.v v28, (bkp); add bkp, bkp, bstride
 
     addi kt, kt, -4
-    //blez kt, k_loop_remainder
-
-    # Load values from A for the next iteration
-
     
     j k_loop
 
@@ -192,16 +188,15 @@ k_loop_remainder:
     vfmacc.vf v8, a21, v20 
     vfmacc.vf v12, a31, v20 
     vfmacc.vf v0, a02, v24 
-    vfmacc.vf v4, a13, v28 
+    vfmacc.vf v4, a12, v24 
     vfmacc.vf v8, a22, v24 
     vfmacc.vf v12, a32, v24 
     vfmacc.vf v0, a03, v28
-    vfmacc.vf v4, a12, v24 
+    vfmacc.vf v4, a13, v28 
     vfmacc.vf v8, a23, v28 
     vfmacc.vf v12, a33, v28 
 
     beqz kt, 1f
-    addi kt, kt, 4
 
 k_loop_remainder_loop:
     # Proceed at one k element per loop
@@ -276,6 +271,8 @@ m_remainder_n_loop:
     flw a01, (akp); addi akp, akp, 4
     flw a02, (akp); addi akp, akp, 4
     flw a03, (akp); addi akp, akp, 4
+
+    addi kt, kt, -4
 
 m_remainder_k_loop:
     vfmacc.vf v0, a00, v16
