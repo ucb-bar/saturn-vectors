@@ -45,9 +45,10 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
     Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
   }
   def get_next_eidx(vl: UInt, eidx: UInt, eew: UInt, sub_dlen: UInt, reads_mask: Bool, elementwise: Bool) = {
-    val next = Mux(elementwise, eidx +& 1.U, Mux(reads_mask,
+    val next = Wire(UInt((1+log2Ceil(maxVLMax)).W))
+    next := Mux(elementwise, eidx +& 1.U, Mux(reads_mask,
       eidx +& dLen.U,
-      (((eidx >> (dLenOffBits.U - eew - sub_dlen)) +& 1.U) << (dLenOffBits.U - eew - sub_dlen))(log2Ceil(maxVLMax)+1,0)
+      (((eidx >> (dLenOffBits.U - eew - sub_dlen)) +& 1.U) << (dLenOffBits.U - eew - sub_dlen))
     ))
     min(vl, next)
   }
