@@ -19,7 +19,8 @@ object VectorParams {
     useSegmentedIMul = true,
     doubleBufferSegments = true,
     useScalarFPFMA = false,
-    vrfBanking = 4
+    vrfBanking = 4,
+    splitVXS = true
   )
   def dmaParams = VectorParams(
     vdqEntries = 2,
@@ -63,7 +64,9 @@ case class VectorParams(
 
   doubleBufferSegments: Boolean = false,
 
-  vrfBanking: Int = 2
+  vrfBanking: Int = 2,
+
+  splitVXS: Boolean = false
 )
 
 case object VectorParamsKey extends Field[VectorParams]

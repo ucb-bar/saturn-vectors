@@ -119,7 +119,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     (() => new IterativeIntegerDivider(vParams.useIterativeIMul), "vdivfu"),
     (() => new MaskUnit, "vmaskfu"),
     (() => new PermuteUnit, "vpermfu"),
-  ) ++ (!vParams.useIterativeIMul).option((if (vParams.useSegmentedIMul)
+  ) 
+
+  val integerMul = (!vParams.useIterativeIMul).option((if (vParams.useSegmentedIMul)
     (() => new SegmentedMultiplyPipe, "vsegmulfu")
   else
     (() => new ElementwiseMultiplyPipe(4), "velemmulfu"))
@@ -141,18 +143,21 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = Seq(Module(new ExecutionUnit(Seq(fpFMA))), Module(new ExecutionUnit(integerFUs ++ fpMISCs)))
-
-  vxu.foreach { xu => 
-    xu.io.shared_fp_req.ready := false.B
-    xu.io.shared_fp_resp.valid := false.B
-    xu.io.shared_fp_resp.bits := DontCare
+  if (splitVXS) {
+    val vxu = Seq(Module(new ExecutionUnit(Seq(fpFMA, integerMul))), Module(new ExecutionUnit(integerFUs ++ fpMISCs)))
+  } else {
+    val vxu = Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA, integerMul))))
   }
-  io.fp_req.valid := false.B
-  io.fp_req.bits := DontCare
-  io.fp_resp.ready := false.B
-  //io.fp_req <> vxu.io.shared_fp_req
-  //vxu.io.shared_fp_resp <> io.fp_resp
+
+  val fp_req_arb = Module(new Arbiter(new FPInput(), vxu.length))
+
+  // Precedence is given to the SharedFPFMA unit since that is a pipelined FU
+  vxu.zipWithIndex.foreach { case(xu, i) => 
+    fp_req_arb.io.in(i) <> xu.io.shared_fp_req
+    xu.io.shared_fp_resp <> io.shared_fp_resp
+  }
+
+  io.fp_req <> fp_req_arb.io.out
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -161,8 +166,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vxs = Seq(Module(new ExecuteSequencer(vxu(0).supported_insns)), Module(new ExecuteSequencer(vxu(1).supported_insns)))
-  require(vxs.length == vxu.length)
+  val vxs = vxu.map { xu => Module(new ExecuteSequencer(xu.supported_insns)) }
   val vps = Module(new PermuteSequencer(vxu(1).supported_insns))
 
   val issGroups = Seq(
