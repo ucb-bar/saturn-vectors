@@ -114,51 +114,37 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu.io.vat_tail := vat_tail
 
   val integerFUs = Seq(
-    Module(new IntegerPipe).suggestName("vintfu"),
-    Module(new BitwisePipe).suggestName("vbitfu"),
-    (if (vParams.useSegmentedIMul)
-      Module(new SegmentedMultiplyPipe)
-    else
-      Module(new ElementwiseMultiplyPipe(4))
-    ).suggestName("vmulfu"),
-    Module(new IterativeIntegerDivider).suggestName("vdivfu"),
-    Module(new MaskUnit).suggestName("vmaskfu"),
-    Module(new PermuteUnit).suggestName("vpermfu"),
+    (() => new IntegerPipe, "vintfu"),
+    (() => new BitwisePipe, "vbitfu"),
+    (() => new IterativeIntegerDivider(vParams.useIterativeIMul), "vdivfu"),
+    (() => new MaskUnit, "vmaskfu"),
+    (() => new PermuteUnit, "vpermfu"),
+  ) ++ (!vParams.useIterativeIMul).option((if (vParams.useSegmentedIMul)
+    (() => new SegmentedMultiplyPipe, "vsegmulfu")
+  else
+    (() => new ElementwiseMultiplyPipe(4), "velemmulfu"))
   )
 
-
-  val fpFMA = Module(if (vParams.useScalarFPFMA) {
-    new SharedScalarElementwiseFPFMA(vParams.fmaPipeDepth)
+  val fpFMA = if (vParams.useScalarFPFMA) {
+    (() => new SharedScalarElementwiseFPFMA(vParams.fmaPipeDepth), "vsharedfpfma")
   } else {
-    new FPFMAPipe(vParams.fmaPipeDepth)
-  }).suggestName("vfpfma")
+    (() => new FPFMAPipe(vParams.fmaPipeDepth), "vfpfma")
+  }
 
   val fpMISCs = if (vParams.useScalarFPMisc) Seq(
-    Module(new SharedScalarElementwiseFPMisc).suggestName("vfpmisc")
+    (() => new SharedScalarElementwiseFPMisc, "vsharedfpmisc")
   ) else Seq(
-    Module(new FPDivSqrt).suggestName("vfdivfu"),
-    Module(new FPCompPipe).suggestName("vfcmpfu"),
-    Module(new FPConvPipe).suggestName("vfcvtfu")
+    (() => new FPDivSqrt, "vfdivfu"),
+    (() => new FPCompPipe, "vfcmpfu"),
+    (() => new FPConvPipe, "vfcvtfu")
   )
-
-  val sharedFPUnits = (fpMISCs :+ fpFMA).collect { case fp: HasSharedFPUIO => fp }
-
-  if (sharedFPUnits.size > 0) {
-    val shared_fp_arb = Module(new Arbiter(new FPInput(), sharedFPUnits.size))
-    io.fp_req <> shared_fp_arb.io.out
-    sharedFPUnits.zipWithIndex.foreach { case (u,i) =>
-      shared_fp_arb.io.in(i) <> u.io_fp_req
-      u.io_fp_resp <> io.fp_resp
-    }
-  } else {
-    io.fp_req.valid := false.B
-    io.fp_req.bits := DontCare
-    io.fp_resp.ready := false.B
-  }
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = new ExecutionUnit(integerFUs ++ fpMISCs :+ fpFMA)
+  val vxu = Module(new ExecutionUnit(integerFUs ++ fpMISCs :+ fpFMA))
+
+  io.fp_req <> vxu.io.shared_fp_req
+  vxu.io.shared_fp_resp <> io.fp_resp
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -285,7 +271,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }.reduce(_|_)
     val older_rintents = older_issq_rintents | older_seq_rintents
 
-    val older_pipe_writes = vxu.hazards.map { h =>
+    val older_pipe_writes = vxu.io.hazards.map { h =>
       Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.eg_oh, 0.U)
     }.reduce(_|_)
 
@@ -324,16 +310,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   for (b <- 0 until vParams.vrfBanking) {
-    writes(b)(0).valid := vxu.write.valid && vxu.write.bits.eg(vrfBankBits-1, 0) === b.U
-    writes(b)(0).bits.data  := vxu.write.bits.data
-    writes(b)(0).bits.mask  := vxu.write.bits.mask
-    writes(b)(0).bits.eg    := vxu.write.bits.eg >> vrfBankBits
-    when (vxu.write.valid) { assert(writes(b)(0).ready) }
+    writes(b)(0).valid := vxu.io.write.valid && vxu.io.write.bits.bankId === b.U
+    writes(b)(0).bits.data  := vxu.io.write.bits.data
+    writes(b)(0).bits.mask  := vxu.io.write.bits.mask
+    writes(b)(0).bits.eg    := vxu.io.write.bits.eg >> vrfBankBits
+    when (vxu.io.write.valid) { assert(writes(b)(0).ready) }
   }
 
-  load_write.ready := Mux1H(UIntToOH(load_write.bits.eg(vrfBankBits-1,0)), writes.map(_(1).ready))
+  load_write.ready := Mux1H(UIntToOH(load_write.bits.bankId), writes.map(_(1).ready))
   for (b <- 0 until vParams.vrfBanking) {
-    writes(b)(1).valid := load_write.valid && load_write.bits.eg(vrfBankBits-1,0) === b.U
+    writes(b)(1).valid := load_write.valid && load_write.bits.bankId === b.U
     writes(b)(1).bits.eg   := load_write.bits.eg >> vrfBankBits
     writes(b)(1).bits.data := load_write.bits.data
     writes(b)(1).bits.mask := load_write.bits.mask
@@ -420,10 +406,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
-  clearVat(vxu.vat_release.valid               , vxu.vat_release.bits)
+  clearVat(vxu.io.vat_release.valid               , vxu.io.vat_release.bits)
 
-  vxu.iss <> vxs.io.iss
-  vxs.io.acc := vxu.acc_write
+  vxu.io.iss <> vxs.io.iss
+  vxs.io.acc := vxu.io.acc_write
 
 
   // Signalling to frontend
@@ -431,7 +417,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     h.valid && ((h.bits.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ issqs.map(_.io.hazards).flatten.map { h =>
     h.valid && h.bits.wintent(0)
-  } ++ vxu.hazards.map { h =>
+  } ++ vxu.io.hazards.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>
@@ -440,8 +426,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.mem_busy := vmu.io.busy
   vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.busy || resetting
-  io.set_vxsat := vxu.set_vxsat
-  io.set_fflags := vxu.set_fflags
-  scalar_resp_arb.io.in(0) <> vxu.scalar_write
+  io.backend_busy := vdq.io.deq.valid || seqs.map(_.io.busy).orR || vxu.io.busy || resetting
+  io.set_vxsat := vxu.io.set_vxsat
+  io.set_fflags := vxu.io.set_fflags
+  scalar_resp_arb.io.in(0) <> vxu.io.scalar_write
 }

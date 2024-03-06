@@ -21,6 +21,17 @@ object VectorParams {
     useScalarFPFMA = false,
     vrfBanking = 4
   )
+  def dmaParams = VectorParams(
+    vdqEntries = 2,
+    vliqEntries = 2,
+    vsiqEntries = 2,
+    vlifqEntries = 12,
+    vsifqEntries = 12,
+    vlissqEntries = 1,
+    vsissqEntries = 1,
+    vrfBanking = 1,
+    useIterativeIMul = true
+  )
 }
 
 case class VectorParams(
@@ -45,8 +56,9 @@ case class VectorParams(
   vatSz: Int = 3,
 
   useSegmentedIMul: Boolean = false,
-  useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions 
+  useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions
   useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
+  useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
 
   doubleBufferSegments: Boolean = false,

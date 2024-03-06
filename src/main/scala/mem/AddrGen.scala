@@ -32,7 +32,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val r_sidx = Reg(UInt(3.W))
   val r_head = RegInit(true.B)
 
-  val fast_segmented = io.op.mop === mopUnit && io.op.segend === io.op.nf && io.op.segstart === 0.U
+  val fast_segmented = io.op.mop === mopUnit && io.op.segend === io.op.seg_nf && io.op.segstart === 0.U
   val eidx = Mux(r_head,
     io.op.vstart * (Mux(fast_segmented, io.op.seg_nf, 0.U) +& 1.U),
     r_eidx)
@@ -45,7 +45,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val eaddr = Mux(io.op.indexed,
     io.op.base_offset + index_offset + Mux(r_head, io.op.segstart << io.op.elem_size, 0.U),
     Mux(r_head, start_addr, r_eaddr))
-  val saddr = Mux(io.op.nf =/= 0.U && !fast_segmented, Mux(r_head, eaddr, r_saddr), eaddr)
+  val saddr = Mux(io.op.seg_nf =/= 0.U && !fast_segmented, Mux(r_head, eaddr, r_saddr), eaddr)
 
   val mem_size = io.op.elem_size
   val max_eidx = Mux(fast_segmented,
@@ -55,7 +55,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val next_max_elems = getElems(saddr, mem_size)
   val next_contig_elems = Mux(fast_segmented,
     max_eidx - eidx,
-    io.op.nf +& 1.U - sidx)
+    io.op.seg_nf +& 1.U - sidx)
   val next_act_elems = min(next_contig_elems, next_max_elems)(dLenOffBits,0)
   val next_act_bytes = next_act_elems << mem_size
 
@@ -70,7 +70,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val block_maskindex = (needs_mask || needs_index) && !io.maskindex.valid
 
   val masked = (needs_mask && !io.maskindex.bits.mask) || (io.op.seg_nf > 0.U && sidx > io.op.segend)
-  val may_clear = (fast_segmented || next_sidx > io.op.nf) && next_eidx >= max_eidx
+  val may_clear = (fast_segmented || next_sidx > io.op.seg_nf) && next_eidx >= max_eidx
 
 
   io.done := false.B
@@ -90,7 +90,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.tag.ready := io.valid && io.req.ready && io.out.ready && !block_maskindex && !masked
 
   when (io.out.fire) {
-    when (next_sidx > io.op.nf || fast_segmented) {
+    when (next_sidx > io.op.seg_nf || fast_segmented) {
       r_eaddr := next_eaddr
       r_saddr := next_eaddr
       r_eidx := next_eidx

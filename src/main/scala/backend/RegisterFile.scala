@@ -11,7 +11,7 @@ class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreM
     val in = Vec(n, Flipped(new VectorReadIO))
     val out = Vec(banks, new VectorReadIO)
   })
-  
+
   val arbs = Seq.fill(banks) { Module(new RRArbiter(UInt(log2Ceil(egsTotal).W), n)) }
   for (i <- 0 until banks) {
       io.out(i).req <> arbs(i).io.out
@@ -20,7 +20,7 @@ class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreM
   val bankOffset = log2Ceil(banks)
 
   for (i <- 0 until n) {
-    val bank_sel = UIntToOH(io.in(i).req.bits(bankOffset-1,0))
+    val bank_sel = if (bankOffset == 0) true.B else UIntToOH(io.in(i).req.bits(bankOffset-1,0))
     for (j <- 0 until banks) {
       arbs(j).io.in(i).valid := io.in(i).req.valid && bank_sel(j)
       arbs(j).io.in(i).bits := io.in(i).req.bits >> bankOffset
