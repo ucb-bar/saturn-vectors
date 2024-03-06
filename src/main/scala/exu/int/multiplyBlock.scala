@@ -81,6 +81,15 @@ class MultiplyBlock extends Module {
         mul
     }
     when (io.eew === 0.U) {
+        mul16(1).io.in1 := Cat(Fill(8, io.in1_signed && io.in1(55)), io.in1(55, 48))
+        mul16(1).io.in2 := Cat(Fill(8, io.in2_signed && io.in2(55)), io.in2(55, 48))
+        mul32.io.in1 := Cat(Fill(8, io.in1_signed && io.in1(39)), io.in1(39, 32))
+        mul32.io.in2 := Cat(Fill(8, io.in2_signed && io.in2(39)), io.in2(39, 32))
+        mul16(0).io.in1 := Cat(Fill(8, io.in1_signed && io.in1(23)), io.in1(23, 16))
+        mul16(0).io.in2 := Cat(Fill(8, io.in2_signed && io.in2(23)), io.in2(23, 16))
+        mul64.io.in1 := Cat(Fill(8, io.in1_signed && io.in1(7)), io.in1(7,0))
+        mul64.io.in2 := Cat(Fill(8, io.in2_signed && io.in2(7)), io.in2(7,0))
+
         io.out_data := Cat(mul8(3).io.out_data, 
                             mul16(1).io.out_data(15,0),
                             mul8(2).io.out_data,
@@ -89,17 +98,30 @@ class MultiplyBlock extends Module {
                             mul16(0).io.out_data(15,0),
                             mul8(0).io.out_data,
                             mul64.io.out_data(15,0))
-    }.elsewhen (io.eew === 1.U) {
+      }
+    .elsewhen (io.eew === 1.U) {
+        mul32.io.in1 := Cat(Fill(16, io.in1_signed && io.in1(47)), io.in1(47, 32))
+        mul32.io.in2 := Cat(Fill(16, io.in2_signed && io.in2(47)), io.in2(47, 32))
+        mul64.io.in1 := Cat(Fill(16, io.in1_signed && io.in1(15)), io.in1(15,0))
+        mul64.io.in2 := Cat(Fill(16, io.in2_signed && io.in2(15)), io.in2(15,0))
+    
         io.out_data := Cat(mul16(1).io.out_data,
                             mul32.io.out_data(31,0), 
                             mul16(0).io.out_data, 
                             mul64.io.out_data(31,0))
-    }.elsewhen (io.eew === 2.U) {
+    }
+    .elsewhen (io.eew === 2.U) {
+        mul64.io.in1 := Cat(Fill(32, io.in1_signed && io.in1(31)), io.in1(31,0))
+        mul64.io.in2 := Cat(Fill(32, io.in2_signed && io.in2(31)), io.in2(31,0))
+    
         io.out_data := Cat(mul32.io.out_data, 
                             mul64.io.out_data(63,0))
-    }.otherwise {
+    }
+    .otherwise {
         io.out_data := mul64.io.out_data
     }
     print(s"mul8(3): ${mul8(3).io.out_data}\n")
     print(s"mul16(1) lsbs: ${mul16(1).io.out_data(15,0)}\n")
+
+    // val results = (0 until 4).map { eew => ...
 }
