@@ -67,7 +67,7 @@ case class VectorParams(
 
   vrfBanking: Int = 2,
 
-  splitVXS: Boolean = false
+  splitVXS: Boolean = false,
 
   tlBuffer: BufferParams = BufferParams.default
 )
