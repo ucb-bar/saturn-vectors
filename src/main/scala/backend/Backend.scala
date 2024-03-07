@@ -143,10 +143,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  if (splitVXS) {
-    val vxu = Seq(Module(new ExecutionUnit(Seq(fpFMA, integerMul))), Module(new ExecutionUnit(integerFUs ++ fpMISCs)))
+  val vxu = if (vParams.splitVXS) {
+    Seq(Module(new ExecutionUnit(Seq(fpFMA) ++ integerMul)), Module(new ExecutionUnit(integerFUs ++ fpMISCs)))
   } else {
-    val vxu = Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA, integerMul))))
+    Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))
   }
 
   val fp_req_arb = Module(new Arbiter(new FPInput(), vxu.length))
@@ -154,7 +154,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Precedence is given to the SharedFPFMA unit since that is a pipelined FU
   vxu.zipWithIndex.foreach { case(xu, i) => 
     fp_req_arb.io.in(i) <> xu.io.shared_fp_req
-    xu.io.shared_fp_resp <> io.shared_fp_resp
+    xu.io.shared_fp_resp <> io.fp_resp
   }
 
   io.fp_req <> fp_req_arb.io.out

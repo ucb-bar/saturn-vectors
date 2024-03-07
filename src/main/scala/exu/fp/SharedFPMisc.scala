@@ -143,7 +143,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   fp_req.valid := valid && !issued && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN
   when (fp_req.fire) { issued := true.B }
 
-  io_fp_resp.ready := io.write.ready
+  io_fp_resp.ready := io.write.ready && valid
 
   // Approximation Instructions
   val rvs2_op_bits = op.rvs2_elem
