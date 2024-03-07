@@ -32,7 +32,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     FCVT_SGL, FCVT_WID, FCVT_NRW
   ).map(_.elementWise)
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready 
 
   val ctrl = new VectorDecoder(op.funct3, op.funct6, 0.U, 0.U, supported_insns, Seq(
     FPSwapVdV2, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
@@ -92,7 +92,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   req.sqrt := ctrl_funary1 && (rs1 === 0.U)
   req.wflags := !ctrl_vfclass && !ctrl.bool(FPSgnj)
   req.vec := true.B
-  req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux((!ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), op.frm))
+  req.rm := Mux(ctrl_fptofp && ctrl_round_to_odd, "b110".U, Mux(ctrl_fptoint && ctrl_truncating, 1.U, Mux((!ctrl_isDiv && !ctrl_funary1 && !ctrl_funary0) || ctrl_vfclass, ctrl.uint(FPSpecRM), op.frm)))
   req.fmaCmd := 0.U
   req.typ := Mux(ctrl_funary0, Cat((ctrl_inttofp && ctrl_narrow) || (ctrl_fptoint && ctrl_widen) || (ctrl_single_wide && vd_eew64), !ctrl_signed), 0.U)
   req.fmt := 0.U
@@ -102,7 +102,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val rvd_elem  = op.rvd_elem
 
   val s_rvs2_int = rvs2_elem(31,0)
-  val s_rvs2_fp = FType.S.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(31,22) << 22, rvs2_elem(31,0)))
+  val s_rvs2_fp = FType.S.recode(rvs2_elem(31,0))
   val s_rvs2_unbox = unbox(box(s_rvs2_fp, FType.S), S, None)
 
   val s_rvs1 = FType.S.recode(rvs1_elem(31,0))
@@ -110,7 +110,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val s_rvd = FType.S.recode(rvd_elem(31,0))
 
   val d_rvs2_int = rvs2_elem
-  val d_rvs2_fp = FType.D.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(63, 51) << 51, rvs2_elem))
+  val d_rvs2_fp = FType.D.recode(rvs2_elem)
 
   val d_rvs1 = FType.D.recode(rvs1_elem)
   val d_rvd = FType.D.recode(rvd_elem)
@@ -146,16 +146,15 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   io_fp_resp.ready := io.write.ready && valid
 
   // Approximation Instructions
-  val rvs2_op_bits = op.rvs2_elem
 
   // Reciprocal Sqrt Approximation
   val recSqrt7 = Module(new VFRSQRT7)
-  recSqrt7.io.rvs2_input := rvs2_op_bits
+  recSqrt7.io.rvs2_input := rvs2_elem
   recSqrt7.io.eew := op.rvs2_eew
 
   // Reciprocal Approximation
   val rec7 = Module(new VFREC7)
-  rec7.io.rvs2_input := rvs2_op_bits
+  rec7.io.rvs2_input := rvs2_elem
   rec7.io.eew := op.rvs2_eew
   rec7.io.frm := op.frm
 
