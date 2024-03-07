@@ -44,7 +44,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
   if (sharedFPUnits.size > 0) {
     val shared_fp_arb = Module(new Arbiter(new FPInput(), sharedFPUnits.size))
     io.shared_fp_req <> shared_fp_arb.io.out
-    sharedFPUnits.zipWithIndex.foreach { case (u,i) =>
+    sharedFPUnits.zipWithIndex.foreach { case(u, i) =>
       shared_fp_arb.io.in(i) <> u.io_fp_req
       u.io_fp_resp <> io.shared_fp_resp
     }

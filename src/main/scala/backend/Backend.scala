@@ -413,14 +413,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(0)(vxs.length+1).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
   io.index_access.idx   := reads(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
-  //reads(0)(0) <> vxs(0).io.rvs1
-  //reads(1)(0) <> vxs(0).io.rvs2
-  //reads(2)(0) <> vxs(0).io.rvd
-
-  //reads(0)(3) <> vxs(1).io.rvs1
-  //reads(1)(1) <> vxs(1).io.rvs2
-  //reads(2)(2) <> vxs(1).io.rvd
-
   reads(2)(vxs.length) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
   vmu.io.sdata.bits.data := vss.io.iss.bits.stdata
@@ -429,8 +421,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   reads(3)(vxs.length) <> vls.io.rvm
   reads(3)(vxs.length+1) <> vss.io.rvm
-  //reads(3)(2) <> vxs(0).io.rvm
-  //reads(3)(3) <> vxs(1).io.rvm
   reads(3)(vxs.length+2) <> vps.io.rvm
   val vm_busy = Wire(Bool())
   reads(3)(vxs.length+3).req.valid := io.mask_access.valid && !vm_busy
@@ -498,5 +488,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.set_fflags.valid := vxu.map(_.io.set_fflags.valid).asUInt.orR
   io.set_fflags.bits  := vxu.map( xu => Mux(xu.io.set_fflags.valid, xu.io.set_fflags.bits, 0.U)).reduce(_|_)
   scalar_resp_arb.io.in(0) <> vxu(0).io.scalar_write
-  if (vxu.length > 1) (vxu(1).io.scalar_write.ready := false.B)
+  if (vxu.length > 1) {
+    for (i <- 1 until vxu.length) {
+      vxu(i).io.scalar_write.ready := false.B
+    }
+  }
 }
