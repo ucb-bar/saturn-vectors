@@ -190,23 +190,22 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   las.io.maskindex.bits := io.maskindex.bits
   liq_las_fire := las.io.done
 
-  val load_rob = Module(new ReorderBuffer(UInt(dLen.W), vParams.vlifqEntries))
-  las.io.tag <> load_rob.io.reserve
-  load_rob.io.push.valid := io.dmem.load_resp.valid
-  load_rob.io.push.bits.data := io.dmem.load_resp.bits.data
-  load_rob.io.push.bits.tag := io.dmem.load_resp.bits.tag
+  val lifq = Module(new LoadOrderBuffer(vParams.vlifqEntries))
+  las.io.tag <> lifq.io.reserve
+  las.io.out.ready := lifq.io.reserve.valid
+  lifq.io.entry := las.io.out.bits
 
-  val lifq = Module(new DCEQueue(new IFQEntry, vParams.vlifqEntries))
-  lifq.io.enq <> las.io.out
+  lifq.io.push.valid := io.dmem.load_resp.valid
+  lifq.io.push.bits.data := io.dmem.load_resp.bits.data
+  lifq.io.push.bits.tag := io.dmem.load_resp.bits.tag
 
   // Load compacting
   val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
-  lcu.io.push.valid := lifq.io.deq.valid && (load_rob.io.deq.valid || lifq.io.deq.bits.masked)
+  lcu.io.push.valid := lifq.io.deq.valid
   lcu.io.push.bits.head := lifq.io.deq.bits.head
   lcu.io.push.bits.tail := lifq.io.deq.bits.tail
-  lcu.io.push_data := load_rob.io.deq.bits.asTypeOf(Vec(dLenB, UInt(8.W)))
-  lifq.io.deq.ready := lcu.io.push.ready && (load_rob.io.deq.valid || lifq.io.deq.bits.masked)
-  load_rob.io.deq.ready := lcu.io.push.ready && !lifq.io.deq.bits.masked
+  lcu.io.push_data := lifq.io.deq_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  lifq.io.deq.ready := lcu.io.push.ready
 
   // Load segment sequencing
   val lss = Module(new LoadSegmenter)
