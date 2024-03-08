@@ -33,6 +33,7 @@ class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPar
   val tail   = UInt(log2Ceil(dLenB).W)
   val masked = Bool()
   val last   = Bool()
+  val lsiq_id = UInt(lsiqIdBits.W)
 }
 
 class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -181,6 +182,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     siq_valids(i) && addr_conflict && vatOlder(siq(i).op.vat, liq(liq_las_ptr).op.vat)
   }.orR
   las.io.valid := liq_las_valid && !las_order_block
+  las.io.lsiq_id := liq_las_ptr
   las.io.op := liq(liq_las_ptr).op
   io.dmem.load_req <> las.io.req
   las.io.maskindex.valid := io.maskindex.valid && maskindex_load
@@ -231,6 +233,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     liq_valids(i) && addr_conflict && vatOlder(liq(i).op.vat, siq(siq_sas_ptr).op.vat)
   }.orR
   sas.io.valid := siq_sas_valid && !sas_order_block
+  sas.io.lsiq_id := siq_sas_ptr
   sas.io.op := siq(siq_sas_ptr).op
   sas.io.maskindex.valid := io.maskindex.valid && !maskindex_load
   sas.io.maskindex.bits := io.maskindex.bits

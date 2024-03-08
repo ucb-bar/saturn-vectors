@@ -11,6 +11,7 @@ import saturn.common._
 class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val valid = Input(Bool())
+    val lsiq_id = Input(UInt(lsiqIdBits.W))
     val done = Output(Bool())
     val tag = Flipped(Decoupled(UInt(dmemTagBits.W)))
     val op = Input(new VectorMemMacroOp)
@@ -80,6 +81,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.out.bits.tail := saddr + next_act_bytes
   io.out.bits.masked := masked
   io.out.bits.last := may_clear
+  io.out.bits.lsiq_id := io.lsiq_id
 
   io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked && io.tag.valid
   io.req.bits.addr := Cat(io.op.page, saddr(pgIdxBits-1,0))
