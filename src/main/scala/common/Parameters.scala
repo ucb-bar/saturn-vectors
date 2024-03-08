@@ -24,11 +24,11 @@ object VectorParams {
   )
   def dmaParams = VectorParams(
     vdqEntries = 2,
-    vliqEntries = 2,
-    vsiqEntries = 2,
-    vlifqEntries = 12,
+    vliqEntries = 4,
+    vsiqEntries = 4,
+    vlifqEntries = 16,
     vsifqEntries = 12,
-    vlissqEntries = 1,
+    vlissqEntries = 2,
     vsissqEntries = 1,
     vrfBanking = 1,
     useIterativeIMul = true
