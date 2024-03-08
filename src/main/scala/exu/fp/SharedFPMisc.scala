@@ -110,7 +110,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
 
   val h_rvs2_int = rvs2_elem(15,0)
   val h_rvs2_fp = FType.H.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(15,9) << 9, rvs2_elem(15,0)))
-  val h_rvs2_unbox = unbox(box(h_rvs2_fp, FType.S), H, None)
+  val h_rvs2_unbox = unbox(box(h_rvs2_fp, FType.H), H, None)
 
   val h_rvs1 = FType.H.recode(rvs1_elem(15,0))
   val h_rvs1_unbox = unbox(box(h_rvs1, FType.H), H, None)
