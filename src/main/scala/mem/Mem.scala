@@ -33,7 +33,8 @@ class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPar
   val tail   = UInt(log2Ceil(dLenB).W)
   val masked = Bool()
   val last   = Bool()
-  val lsiq_id = UInt(lsiqIdBits.W)
+  val lsiq_id  = UInt(lsiqIdBits.W)
+  val page_offset = UInt(pgIdxBits.W)
 }
 
 class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

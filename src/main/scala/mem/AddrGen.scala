@@ -82,6 +82,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.out.bits.masked := masked
   io.out.bits.last := may_clear
   io.out.bits.lsiq_id := io.lsiq_id
+  io.out.bits.page_offset := saddr(pgIdxBits-1,0)
 
   io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked && io.tag.valid
   io.req.bits.addr := Cat(io.op.page, saddr(pgIdxBits-1,0))
