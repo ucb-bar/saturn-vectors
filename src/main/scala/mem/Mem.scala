@@ -185,12 +185,11 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   las.io.valid := liq_las_valid && !las_order_block
   las.io.lsiq_id := liq_las_ptr
   las.io.op := liq(liq_las_ptr).op
-  io.dmem.load_req <> las.io.req
   las.io.maskindex.valid := io.maskindex.valid && maskindex_load
   las.io.maskindex.bits := io.maskindex.bits
   liq_las_fire := las.io.done
 
-  val lifq = Module(new LoadOrderBuffer(vParams.vlifqEntries))
+  val lifq = Module(new LoadOrderBuffer(vParams.vlifqEntries, vParams.vlrobEntries))
   las.io.tag <> lifq.io.reserve
   las.io.out.ready := lifq.io.reserve.valid
   lifq.io.entry := las.io.out.bits
@@ -198,6 +197,13 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   lifq.io.push.valid := io.dmem.load_resp.valid
   lifq.io.push.bits.data := io.dmem.load_resp.bits.data
   lifq.io.push.bits.tag := io.dmem.load_resp.bits.tag
+
+  val load_arb = Module(new Arbiter(new MemRequest, 2))
+  load_arb.io.in(1) <> las.io.req
+  load_arb.io.in(0) <> lifq.io.replay
+  load_arb.io.in(0).bits.addr := Cat(liq(lifq.io.replay_liq_id).op.page, lifq.io.replay.bits.addr(pgIdxBits-1,0))
+  io.dmem.load_req <> load_arb.io.out
+  io.dmem.load_req.bits.mask := ~(0.U(dLenB.W))
 
   // Load compacting
   val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))

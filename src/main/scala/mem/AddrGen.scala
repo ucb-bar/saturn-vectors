@@ -76,7 +76,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
 
   io.done := false.B
   io.maskindex.ready := false.B
-  io.out.valid := io.valid && !block_maskindex && (masked || (io.req.ready && io.tag.valid))
+  io.out.valid := io.valid && !block_maskindex && (masked || io.req.ready) && io.tag.valid
   io.out.bits.head := saddr
   io.out.bits.tail := saddr + next_act_bytes
   io.out.bits.masked := masked
@@ -90,7 +90,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
   io.req.bits.tag := io.tag.bits
 
-  io.tag.ready := io.valid && io.req.ready && io.out.ready && !block_maskindex && !masked
+  io.tag.ready := io.valid && io.req.ready && io.out.ready && !block_maskindex
 
   when (io.out.fire) {
     when (next_sidx > io.op.seg_nf || fast_segmented) {
