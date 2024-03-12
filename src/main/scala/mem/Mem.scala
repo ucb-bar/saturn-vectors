@@ -202,6 +202,10 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   load_arb.io.in(1) <> las.io.req
   load_arb.io.in(0) <> lifq.io.replay
   load_arb.io.in(0).bits.addr := Cat(liq(lifq.io.replay_liq_id).op.page, lifq.io.replay.bits.addr(pgIdxBits-1,0))
+  when (io.dmem.store_req.valid) {
+    load_arb.io.in(0).valid := false.B
+    lifq.io.replay.ready := false.B
+  }
   io.dmem.load_req <> load_arb.io.out
   io.dmem.load_req.bits.mask := ~(0.U(dLenB.W))
 
