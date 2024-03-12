@@ -7,6 +7,18 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import saturn.common._
 
+object AgePriorityEncoder
+{
+  def apply(in: Seq[Bool], head: UInt): UInt = {
+    val n = in.size
+    val width = log2Ceil(in.size)
+    val n_padded = 1 << width
+    val temp_vec = (0 until n_padded).map(i => if (i < n) in(i) && i.U >= head else false.B) ++ in
+    val idx = PriorityEncoder(temp_vec)
+    idx(width-1, 0) //discard msb
+  }
+}
+
 class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   require(nEntries > 0, "Queue must have non-negative number of entries")
 
@@ -73,7 +85,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
   }
 
   val replay_valid = must_replay.orR
-  val next_replay = PriorityEncoder(must_replay)
+  val next_replay = AgePriorityEncoder(must_replay, deq_ptr.value)
   io.replay_liq_id := entries(next_replay).lsiq_id
   io.replay.valid := replay_valid
   io.replay.bits.addr := entries(next_replay).page_offset
