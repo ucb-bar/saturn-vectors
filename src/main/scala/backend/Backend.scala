@@ -149,9 +149,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))
   }
 
-  require(vParams.separateFpVxs ^ useScalarFPFMA)
-  io.fp_req <> vxu(0).shared_fp_req
-  vxu(0).shared_fp_resp <> io.fp_resp
+  require(vParams.separateFpVxs ^ vParams.useScalarFPFMA)
+  io.fp_req <> vxu(0).io.shared_fp_req
+  vxu(0).io.shared_fp_resp <> io.fp_resp
+
+  // Second VXU shouldn't have a shared FP unit in it
+  vxu(1).io.shared_fp_req.ready := false.B
+  vxu(1).io.shared_fp_resp.valid := false.B
+  vxu(1).io.shared_fp_resp.bits := DontCare
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -274,11 +279,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       }.reduce(_|_)
       val older_rintents = older_issq_rintents | older_seq_rintents
 
-      val older_pipe_writes = vxu.map(_.io.hazards.toSeq).flatten.map { h =>
+      val older_pipe_writes = vxu.map(_.io.pipe_hazards.toSeq).flatten.map { h =>
         Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.eg_oh, 0.U)
       }.reduce(_|_)
 
-      seq.io.older_writes := older_pipe_writes | older_wintents
+      val older_iter_writes = vxu.map(_.io.iter_hazards.toSeq).flatten.map { h =>
+        Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.eg_oh, 0.U)
+      }.reduce(_|_)
+
+      seq.io.older_writes := older_pipe_writes | older_iter_writes | older_wintents
       seq.io.older_reads := older_rintents
     }
 
@@ -286,12 +295,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && seqs.map(_.accepts(vdq.io.deq.bits)).orR
     issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
 
-    // Give priority to the earliest index ready sequencer
-    //val multi_seq_ready_priority = PriorityEncoder(seqs.map(_.io.dis.ready).asUInt)
-
     seqs.zipWithIndex.foreach{ case(s, j) =>
       s.io.dis.valid := issq.io.deq.valid
-      //s.io.dis.valid := issq.io.deq.valid && (j.U === multi_seq_ready_priority)
       s.io.dis.bits := issq.io.deq.bits
     }
 
