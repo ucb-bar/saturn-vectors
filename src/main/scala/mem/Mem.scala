@@ -33,6 +33,8 @@ class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPar
   val tail   = UInt(log2Ceil(dLenB).W)
   val masked = Bool()
   val last   = Bool()
+  val lsiq_id  = UInt(lsiqIdBits.W)
+  val page_offset = UInt(pgIdxBits.W)
 }
 
 class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -181,29 +183,39 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     siq_valids(i) && addr_conflict && vatOlder(siq(i).op.vat, liq(liq_las_ptr).op.vat)
   }.orR
   las.io.valid := liq_las_valid && !las_order_block
+  las.io.lsiq_id := liq_las_ptr
   las.io.op := liq(liq_las_ptr).op
-  io.dmem.load_req <> las.io.req
   las.io.maskindex.valid := io.maskindex.valid && maskindex_load
   las.io.maskindex.bits := io.maskindex.bits
   liq_las_fire := las.io.done
 
-  val load_rob = Module(new ReorderBuffer(UInt(dLen.W), vParams.vlifqEntries))
-  las.io.tag <> load_rob.io.reserve
-  load_rob.io.push.valid := io.dmem.load_resp.valid
-  load_rob.io.push.bits.data := io.dmem.load_resp.bits.data
-  load_rob.io.push.bits.tag := io.dmem.load_resp.bits.tag
+  val lifq = Module(new LoadOrderBuffer(vParams.vlifqEntries, vParams.vlrobEntries))
+  las.io.tag <> lifq.io.reserve
+  las.io.out.ready := lifq.io.reserve.valid
+  lifq.io.entry := las.io.out.bits
 
-  val lifq = Module(new DCEQueue(new IFQEntry, vParams.vlifqEntries))
-  lifq.io.enq <> las.io.out
+  lifq.io.push.valid := io.dmem.load_resp.valid
+  lifq.io.push.bits.data := io.dmem.load_resp.bits.data
+  lifq.io.push.bits.tag := io.dmem.load_resp.bits.tag
+
+  val load_arb = Module(new Arbiter(new MemRequest, 2))
+  load_arb.io.in(1) <> las.io.req
+  load_arb.io.in(0) <> lifq.io.replay
+  load_arb.io.in(0).bits.addr := Cat(liq(lifq.io.replay_liq_id).op.page, lifq.io.replay.bits.addr(pgIdxBits-1,0))
+  when (io.dmem.store_req.valid) {
+    load_arb.io.in(0).valid := false.B
+    lifq.io.replay.ready := false.B
+  }
+  io.dmem.load_req <> load_arb.io.out
+  io.dmem.load_req.bits.mask := ~(0.U(dLenB.W))
 
   // Load compacting
   val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
-  lcu.io.push.valid := lifq.io.deq.valid && (load_rob.io.deq.valid || lifq.io.deq.bits.masked)
+  lcu.io.push.valid := lifq.io.deq.valid
   lcu.io.push.bits.head := lifq.io.deq.bits.head
   lcu.io.push.bits.tail := lifq.io.deq.bits.tail
-  lcu.io.push_data := load_rob.io.deq.bits.asTypeOf(Vec(dLenB, UInt(8.W)))
-  lifq.io.deq.ready := lcu.io.push.ready && (load_rob.io.deq.valid || lifq.io.deq.bits.masked)
-  load_rob.io.deq.ready := lcu.io.push.ready && !lifq.io.deq.bits.masked
+  lcu.io.push_data := lifq.io.deq_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  lifq.io.deq.ready := lcu.io.push.ready
 
   // Load segment sequencing
   val lss = Module(new LoadSegmenter)
@@ -231,6 +243,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     liq_valids(i) && addr_conflict && vatOlder(liq(i).op.vat, siq(siq_sas_ptr).op.vat)
   }.orR
   sas.io.valid := siq_sas_valid && !sas_order_block
+  sas.io.lsiq_id := siq_sas_ptr
   sas.io.op := siq(siq_sas_ptr).op
   sas.io.maskindex.valid := io.maskindex.valid && !maskindex_load
   sas.io.maskindex.bits := io.maskindex.bits

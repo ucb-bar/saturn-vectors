@@ -54,6 +54,7 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
   hella_load_q.io.enq.bits.data   := DontCare
   hella_load_q.io.enq.bits.mask   := DontCare
   hella_load_q.io.enq.bits.phys   := false.B
+  hella_load_q.io.enq.bits.no_resp := false.B
   hella_load_q.io.enq.bits.no_alloc := false.B
   hella_load_q.io.enq.bits.no_xcpt := true.B
 
@@ -73,6 +74,7 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
   hella_store_q.io.enq.bits.data   := io.vec.store_req.bits.data
   hella_store_q.io.enq.bits.mask   := io.vec.store_req.bits.mask
   hella_store_q.io.enq.bits.phys   := false.B
+  hella_store_q.io.enq.bits.no_resp := false.B
   hella_store_q.io.enq.bits.no_alloc := false.B
   hella_store_q.io.enq.bits.no_xcpt := true.B
 

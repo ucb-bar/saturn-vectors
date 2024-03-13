@@ -102,7 +102,7 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     vu.io.scalar_check.store := io.wb.scalar_check.bits.store
     io.wb.scalar_check.ready := !vu.io.scalar_check.conflict && !(ecu.io.s2.inst.valid && ecu.io.s2.inst.bits.vmu)
 
-    io.backend_busy   := vu.io.backend_busy
+    io.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy
     io.set_vxsat      := vu.io.set_vxsat
     io.set_fflags     := vu.io.set_fflags
     io.resp           <> vu.io.scalar_resp

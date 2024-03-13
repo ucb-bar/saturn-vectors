@@ -30,7 +30,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
   override lazy val module = new SaturnRocketImpl
   class SaturnRocketImpl extends RocketVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
 
-    require(dLen == vMemDataBits)
+    val useL1DCache = dLen == vMemDataBits
 
     val ecu = Module(new EarlyTrapCheck(tl_if.node.edges.out(0)))
     val icu = Module(new IterativeTrapCheck)
@@ -91,7 +91,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     val hella_if = Module(new HellaCacheInterface)
 
-    io.core.backend_busy   := vu.io.backend_busy
+    io.core.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy || hella_if.io.mem_busy
     io.core.set_vxsat      := vu.io.set_vxsat
     io.core.set_fflags     := vu.io.set_fflags
     io.core.resp           <> vu.io.scalar_resp
@@ -115,8 +115,8 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     val store_use_tl_reg = RegInit(true.B)
 
     // virtually-addressed requests must go through L1
-    val load_use_tl = load_use_tl_reg
-    val store_use_tl = store_use_tl_reg
+    val load_use_tl = load_use_tl_reg || !useL1DCache.B
+    val store_use_tl = store_use_tl_reg || !useL1DCache.B
 
     vu.io.dmem.load_resp.valid := tl_if.module.io.vec.load_resp.valid || hella_if.io.vec.load_resp.valid
     vu.io.dmem.load_resp.bits := Mux1H(

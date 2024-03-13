@@ -13,6 +13,7 @@ object VectorParams {
   def refParams = VectorParams(
     vlifqEntries = 8,
     vsifqEntries = 8,
+    vlrobEntries = 4,
     vlissqEntries = 3,
     vsissqEntries = 3,
     vxissqEntries = 3,
@@ -25,11 +26,12 @@ object VectorParams {
   )
   def dmaParams = VectorParams(
     vdqEntries = 2,
-    vliqEntries = 2,
-    vsiqEntries = 2,
-    vlifqEntries = 12,
-    vsifqEntries = 12,
-    vlissqEntries = 1,
+    vliqEntries = 4,
+    vsiqEntries = 4,
+    vlifqEntries = 32,
+    vlrobEntries = 4,
+    vsifqEntries = 32,
+    vlissqEntries = 2,
     vsissqEntries = 1,
     vrfBanking = 1,
     useIterativeIMul = true
@@ -47,6 +49,7 @@ case class VectorParams(
   // Load store in-flight queues (in VLSU)
   vlifqEntries: Int = 4,
   vsifqEntries: Int = 4,
+  vlrobEntries: Int = 2,
 
   // Load/store/execute/permute/maskindex issue queues
   vlissqEntries: Int = 0,
@@ -84,6 +87,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
   def vrfBankBits = log2Ceil(vParams.vrfBanking)
+  def lsiqIdBits = log2Ceil(vParams.vliqEntries.max(vParams.vsiqEntries))
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)

@@ -11,6 +11,7 @@ import saturn.common._
 class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val valid = Input(Bool())
+    val lsiq_id = Input(UInt(lsiqIdBits.W))
     val done = Output(Bool())
     val tag = Flipped(Decoupled(UInt(dmemTagBits.W)))
     val op = Input(new VectorMemMacroOp)
@@ -75,11 +76,13 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
 
   io.done := false.B
   io.maskindex.ready := false.B
-  io.out.valid := io.valid && !block_maskindex && (masked || (io.req.ready && io.tag.valid))
+  io.out.valid := io.valid && !block_maskindex && (masked || io.req.ready) && io.tag.valid
   io.out.bits.head := saddr
   io.out.bits.tail := saddr + next_act_bytes
   io.out.bits.masked := masked
   io.out.bits.last := may_clear
+  io.out.bits.lsiq_id := io.lsiq_id
+  io.out.bits.page_offset := saddr(pgIdxBits-1,0)
 
   io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked && io.tag.valid
   io.req.bits.addr := Cat(io.op.page, saddr(pgIdxBits-1,0))
@@ -87,7 +90,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
   io.req.bits.tag := io.tag.bits
 
-  io.tag.ready := io.valid && io.req.ready && io.out.ready && !block_maskindex && !masked
+  io.tag.ready := io.valid && io.req.ready && io.out.ready && !block_maskindex
 
   when (io.out.fire) {
     when (next_sidx > io.op.seg_nf || fast_segmented) {
