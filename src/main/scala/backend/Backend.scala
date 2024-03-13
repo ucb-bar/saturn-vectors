@@ -143,7 +143,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxu = if (vParams.splitVXS) {
+  val vxu = if (vParams.separateFpVxs) {
     Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs)), Module(new ExecutionUnit(Seq(fpFMA) ++ integerMul)))
   } else {
     Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))

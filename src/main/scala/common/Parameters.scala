@@ -21,7 +21,7 @@ object VectorParams {
     doubleBufferSegments = true,
     useScalarFPFMA = false,
     vrfBanking = 4,
-    splitVXS = true
+    separateFpVxs = true
   )
   def dmaParams = VectorParams(
     vdqEntries = 2,
@@ -67,7 +67,7 @@ case class VectorParams(
 
   vrfBanking: Int = 2,
 
-  splitVXS: Boolean = false,
+  separateFpVxs: Boolean = false,
 
   tlBuffer: BufferParams = BufferParams.default
 )
