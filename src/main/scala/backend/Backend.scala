@@ -149,13 +149,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))
   }
 
-  // Precedence is given to the SharedFPFMA unit since that is a pipelined FU
-  val fp_req_arb = Module(new Arbiter(new FPInput(), vxu.length))
-  vxu.reverse.zipWithIndex.foreach { case(xu, i) => 
-    fp_req_arb.io.in(i) <> xu.io.shared_fp_req
-    xu.io.shared_fp_resp <> io.fp_resp
-  }
-  io.fp_req <> fp_req_arb.io.out
+  require(vParams.separateFpVxs ^ useScalarFPFMA)
+  io.fp_req <> vxu(0).shared_fp_req
+  vxu(0).shared_fp_resp <> io.fp_resp
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -243,13 +239,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR
-  for (((issq, seq_seq), i) <- issGroups.zipWithIndex) {
+  for (((issq, seqs), i) <- issGroups.zipWithIndex) {
     val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
     val otherIssqs = otherIssGroups.map(_._1)
     val otherIssqSeqs = otherIssGroups.map(_._2).flatten
 
-    for ((seq, j) <- seq_seq.zipWithIndex) {
-      val otherSameIssqSeqs = seq_seq.zipWithIndex.filter(_._2 != j).map(_._1)
+    for ((seq, j) <- seqs.zipWithIndex) {
+      val otherSameIssqSeqs = seqs.zipWithIndex.filter(_._2 != j).map(_._1)
       val otherSeqs = otherIssqSeqs ++ otherSameIssqSeqs
 
       val vat = seq.io.vat
@@ -286,19 +282,19 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       seq.io.older_reads := older_rintents
     }
 
-    issq_stall(i) := seq_seq.map(_.accepts(vdq.io.deq.bits)).reduce(_ || _) && !issq.io.enq.ready
-    issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && seq_seq.map(_.accepts(vdq.io.deq.bits)).orR
+    issq_stall(i) := seqs.map(_.accepts(vdq.io.deq.bits)).reduce(_ || _) && !issq.io.enq.ready
+    issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && seqs.map(_.accepts(vdq.io.deq.bits)).orR
     issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
 
     // Give priority to the earliest index ready sequencer
-    val multi_seq_ready_priority = PriorityEncoder(seq_seq.map(_.io.dis.ready).asUInt)
+    val multi_seq_ready_priority = PriorityEncoder(seqs.map(_.io.dis.ready).asUInt)
 
-    seq_seq.zipWithIndex.foreach{ case(s, j) =>
+    seqs.zipWithIndex.foreach{ case(s, j) =>
       s.io.dis.valid := issq.io.deq.valid && (j.U === multi_seq_ready_priority)
       s.io.dis.bits := issq.io.deq.bits
     }
 
-    issq.io.deq.ready := seq_seq.map(_.io.dis.ready).reduce(_ || _)
+    issq.io.deq.ready := seqs.map(_.io.dis.ready).reduce(_ || _)
   }
 
   // Hazard checking for multi-VXS
