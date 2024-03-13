@@ -16,17 +16,16 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
 
   val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
-  val nHazards = pipe_depth + iter_fus.size
 
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new ExecuteMicroOp))
-    val hazards = Output(Vec(nHazards, Valid(new PipeHazard(pipe_depth)))) 
+    val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(pipe_depth)))) 
     val write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
     val scalar_write = Decoupled(new ScalarWrite)
     val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
 
-    val vrf_write_hazards = Output(Vec(pipe_depth, Valid(new PipeHazard(pipe_depth))))
+    val pipe_hazards = Output(Vec(pipe_depth, Valid(new PipeHazard(pipe_depth))))
     val issue_pipe_hazard = Output(Valid(new PipeHazard(pipe_depth)))
     val inflight_hazard_stall = Input(Bool())
     val issue_hazard_stall = Input(Bool())
@@ -146,20 +145,13 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
     when (pipe_valids.orR) { io.busy := true.B }
     for (i <- 0 until pipe_depth) {
-      io.hazards(i).valid       := pipe_valids(i)
-      io.hazards(i).bits.vat    := pipe_bits(i).vat
-      io.hazards(i).bits.eg     := pipe_bits(i).wvd_eg
+      io.pipe_hazards(i).valid       := pipe_valids(i)
+      io.pipe_hazards(i).bits.vat    := pipe_bits(i).vat
+      io.pipe_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
       when (pipe_latencies(i) === 0.U) { // hack to deal with compress unit
-        io.hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
+        io.pipe_hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
       }
-      io.hazards(i).bits.latency := DontCare
-      io.vrf_write_hazards(i).valid       := pipe_valids(i)
-      io.vrf_write_hazards(i).bits.vat    := pipe_bits(i).vat
-      io.vrf_write_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
-      when (pipe_latencies(i) === 0.U) { // hack to deal with compress unit
-        io.vrf_write_hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
-      }
-      io.vrf_write_hazards(i).bits.latency := pipe_latencies(i)
+      io.pipe_hazards(i).bits.latency := pipe_latencies(i)
     }
   }
 
@@ -184,7 +176,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
     }
     when (iter_fus.map(_.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {
-      io.hazards(i+pipe_depth) := iter_fus(i).io.hazard
+      io.iter_hazards(i) := iter_fus(i).io.hazard
     }
   }
 }

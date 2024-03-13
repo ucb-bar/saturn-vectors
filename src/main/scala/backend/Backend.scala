@@ -287,10 +287,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
 
     // Give priority to the earliest index ready sequencer
-    val multi_seq_ready_priority = PriorityEncoder(seqs.map(_.io.dis.ready).asUInt)
+    //val multi_seq_ready_priority = PriorityEncoder(seqs.map(_.io.dis.ready).asUInt)
 
     seqs.zipWithIndex.foreach{ case(s, j) =>
-      s.io.dis.valid := issq.io.deq.valid && (j.U === multi_seq_ready_priority)
+      s.io.dis.valid := issq.io.deq.valid
+      //s.io.dis.valid := issq.io.deq.valid && (j.U === multi_seq_ready_priority)
       s.io.dis.bits := issq.io.deq.bits
     }
 
@@ -303,7 +304,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   //  from another VXS (check that it's actually a valid hazard)
   for (i <- 0 until vxs.length) {
     val other_vxu_idx = (0 until vxs.length).filter(_ != i)
-    val inflight_hazard = other_vxu_idx.map(vxu(_).io.vrf_write_hazards).flatten.map { hazard =>
+    val inflight_hazard = other_vxu_idx.map(vxu(_).io.pipe_hazards).flatten.map { hazard =>
       hazard.valid && 
       (hazard.bits.latency === vxu(i).io.issue_pipe_hazard.bits.latency) &&
       (hazard.bits.eg(vrfBankBits-1,0) === vxu(i).io.issue_pipe_hazard.bits.eg(vrfBankBits-1,0)) 
@@ -384,8 +385,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs0-vrs2, vxs1-vrs1
   // vxs0-vrs3, vxs1-vrs1, vss-vrd
   // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
-  val reads = Seq(2, 0, 1, 4).zipWithIndex.map { case (rc, i) =>
-    val arb = Module(new RegisterReadXbar(rc + vxs.length, vParams.vrfBanking))
+  val reads = Seq(2 + vxs.length, vxs.length, 1 + vxs.length, 4 + vxs.length).zipWithIndex.map { case (rc, i) =>
+    val arb = Module(new RegisterReadXbar(rc, vParams.vrfBanking))
 
     vrf.zipWithIndex.foreach { case(bank, j) =>
       bank.io.read(i) <> arb.io.out(j)
@@ -470,7 +471,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     h.valid && ((h.bits.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ issqs.map(_.io.hazards).flatten.map { h =>
     h.valid && h.bits.wintent(0)
-  } ++ vxu.map(_.io.hazards).flatten.map { h =>
+  } ++ vxu.map(_.io.pipe_hazards).flatten.map { h =>
+    h.valid && (h.bits.eg < egsPerVReg.U)
+  } ++ vxu.map(_.io.iter_hazards).flatten.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>
