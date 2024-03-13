@@ -91,7 +91,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     val hella_if = Module(new HellaCacheInterface)
 
-    io.core.backend_busy   := vu.io.backend_busy
+    io.core.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy || hella_if.io.mem_busy
     io.core.set_vxsat      := vu.io.set_vxsat
     io.core.set_fflags     := vu.io.set_fflags
     io.core.resp           <> vu.io.scalar_resp
