@@ -26,9 +26,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
     val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
 
     val pipe_hazards = Output(Vec(pipe_depth, Valid(new PipeHazard(pipe_depth))))
-    val issue_pipe_hazard = Output(Valid(new PipeHazard(pipe_depth)))
-    val inflight_hazard_stall = Input(Bool())
-    val issue_hazard_stall = Input(Bool())
+    val issue_pipe_latency = Output(UInt(log2Ceil(pipe_depth).W))
 
     val shared_fp_req = Decoupled(new FPInput())
     val shared_fp_resp = Flipped(Decoupled(new FPResult()))
@@ -57,18 +55,15 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
   fus.foreach { fu =>
     fu.io.iss.op := io.iss.bits
-    fu.io.iss.valid := io.iss.valid && !pipe_stall && !io.inflight_hazard_stall && !io.issue_hazard_stall
+    fu.io.iss.valid := io.iss.valid && !pipe_stall
   }
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
-  io.iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall && !io.inflight_hazard_stall && !io.issue_hazard_stall
+  io.iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
   when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
 
-  io.issue_pipe_hazard.valid         := readies.orR && io.iss.valid && !io.inflight_hazard_stall
-  io.issue_pipe_hazard.bits.vat      := io.iss.bits.vat
-  io.issue_pipe_hazard.bits.latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U)) 
-  io.issue_pipe_hazard.bits.eg       := io.iss.bits.wvd_eg
+  io.issue_pipe_latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U)) 
 
   val pipe_write = WireInit(false.B)
 

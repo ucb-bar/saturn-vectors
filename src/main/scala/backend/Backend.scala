@@ -311,25 +311,33 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Check if there is a VRF write port hazard against the in-flight insns in other VXUs
   // Check if there is a VRF write port hazard against a simultaneously issuing insn
   //  from another VXS (check that it's actually a valid hazard)
+  val inflight_hazards = WireInit(VecInit(Seq.fill(vxs.length)(false.B)))
+
   for (i <- 0 until vxs.length) {
     val other_vxu_idx = (0 until vxs.length).filter(_ != i)
+
     val inflight_hazard = other_vxu_idx.map(vxus(_).io.pipe_hazards).flatten.map { hazard =>
-      hazard.valid && 
-      (hazard.bits.latency === vxus(i).io.issue_pipe_hazard.bits.latency) &&
-      (hazard.bits.eg(vrfBankBits-1,0) === vxus(i).io.issue_pipe_hazard.bits.eg(vrfBankBits-1,0)) 
-    }.reduceOption(_ || _)
+      hazard.valid &&
+      (hazard.bits.latency === vxus(i).io.issue_pipe_latency) &&
+      (hazard.bits.eg(vrfBankBits-1,0) === vxs(i).io.iss.bits.wvd_eg(vrfBankBits-1,0))
+    }.reduceOption(_ || _).getOrElse(false.B)
 
-    val issue_hazard = other_vxu_idx.map(vxus(_)).map { other_iss =>
-      (vxus(i).io.issue_pipe_hazard.bits.eg(vrfBankBits-1,0) === other_iss.io.issue_pipe_hazard.bits.eg(vrfBankBits-1,0)) && 
-      (vxus(i).io.issue_pipe_hazard.valid && other_iss.io.issue_pipe_hazard.valid) && 
-      (vxus(i).io.issue_pipe_hazard.bits.latency === other_iss.io.issue_pipe_hazard.bits.latency) && 
-      vatOlder(other_iss.io.issue_pipe_hazard.bits.vat, vxus(i).io.issue_pipe_hazard.bits.vat) 
-    }.reduceOption(_ || _)
+    inflight_hazards(i) := inflight_hazard
 
-    vxus(i).io.inflight_hazard_stall := inflight_hazard.getOrElse(false.B)
-    vxus(i).io.issue_hazard_stall := issue_hazard.getOrElse(false.B)   
+    val issue_hazard = other_vxu_idx.map { other_iss =>
+      (vxus(other_iss).io.issue_pipe_latency === vxus(i).io.issue_pipe_latency) &&
+      (vxs(other_iss).io.iss.bits.wvd_eg(vrfBankBits-1,0) === vxs(i).io.iss.bits.wvd_eg(vrfBankBits-1,0)) &&
+      vatOlder(vxs(other_iss).io.iss.bits.vat, vxs(i).io.iss.bits.vat)
+      !inflight_hazards(other_iss) &&
+      vxs(other_iss).io.iss.valid &&
+      vxus(other_iss).io.iss.ready
+    }.reduceOption(_ || _).getOrElse(false.B)
+
+    vxus(i).io.iss.valid := vxs(i).io.iss.valid && !inflight_hazard && !issue_hazard 
+    vxs(i).io.iss.ready := vxus(i).io.iss.ready && !inflight_hazard && !issue_hazard
+    vxus(i).io.iss.bits := vxs(i).io.iss.bits
+    vxs(i).io.acc := vxus(i).io.acc_write
   }
-
 
   // Support 1,2, and 4 banks for the VRF
   require(vParams.vrfBanking == 1 || vParams.vrfBanking == 2 || vParams.vrfBanking == 4)
@@ -469,11 +477,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
   vxus.map(_.io.vat_release).foreach{ rel => clearVat(rel.valid, rel.bits) }
-
-  vxus.zip(vxs).foreach { case(xu, xs) =>
-    xu.io.iss <> xs.io.iss
-    xs.io.acc := xu.io.acc_write
-  }
 
   // Signalling to frontend
   val seq_inflight_wv0 = (seqs.flatten.map(_.io.seq_hazard).map { h =>
