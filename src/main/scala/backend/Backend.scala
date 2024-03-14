@@ -327,7 +327,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val issue_hazard = other_vxu_idx.map { other_iss =>
       (vxus(other_iss).io.issue_pipe_latency === vxus(i).io.issue_pipe_latency) &&
       (vxs(other_iss).io.iss.bits.wvd_eg(vrfBankBits-1,0) === vxs(i).io.iss.bits.wvd_eg(vrfBankBits-1,0)) &&
-      vatOlder(vxs(other_iss).io.iss.bits.vat, vxs(i).io.iss.bits.vat)
+      vatOlder(vxs(other_iss).io.iss.bits.vat, vxs(i).io.iss.bits.vat) &&
       !inflight_hazards(other_iss) &&
       vxs(other_iss).io.iss.valid &&
       vxus(other_iss).io.iss.ready

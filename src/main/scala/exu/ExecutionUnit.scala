@@ -26,7 +26,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
     val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
 
     val pipe_hazards = Output(Vec(pipe_depth, Valid(new PipeHazard(pipe_depth))))
-    val issue_pipe_latency = Output(UInt(log2Ceil(pipe_depth).W))
+    val issue_pipe_latency = Output(UInt((log2Ceil(pipe_depth) + 1).W))
 
     val shared_fp_req = Decoupled(new FPInput())
     val shared_fp_resp = Flipped(Decoupled(new FPResult()))
