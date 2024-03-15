@@ -149,7 +149,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))
   }
 
-  require(vParams.separateFpVxs ^ vParams.useScalarFPFMA)
+  require(!(vParams.separateFpVxs & vParams.useScalarFPFMA))
   io.fp_req <> vxus.head.io.shared_fp_req
   vxus.head.io.shared_fp_resp <> io.fp_resp
 
