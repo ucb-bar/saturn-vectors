@@ -172,14 +172,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     assert(vxs.last.io.perm.req.valid === false.B) 
   }
 
+  case class IssueGroup(
+    issq: IssueQueue,
+    seqs: Seq[PipeSequencer[_]])
+
   val issGroups = Seq(
-    (vlissq, Seq(vls)),
-    (vsissq, Seq(vss)),
-    (vxissq, vxs),
-    (vpissq, Seq(vps))
+    IssueGroup(vlissq, Seq(vls)),
+    IssueGroup(vsissq, Seq(vss)),
+    IssueGroup(vxissq, vxs),
+    IssueGroup(vpissq, Seq(vps))
   )
-  val issqs = issGroups.map(_._1)
-  val seqs = issGroups.map(_._2)
+  val issqs = issGroups.map(_.issq)
+  val allSeqs = issGroups.map(_.seqs).flatten
 
   vlissq.io.enq.bits.reduction := false.B
   vlissq.io.enq.bits.wide_vd := false.B
@@ -248,13 +252,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR
-  for (((issq, seqs), i) <- issGroups.zipWithIndex) {
-    val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
-    val otherIssqs = otherIssGroups.map(_._1)
-    val otherIssqSeqs = otherIssGroups.map(_._2).flatten
 
-    for ((seq, j) <- seqs.zipWithIndex) {
-      val otherSameIssqSeqs = seqs.zipWithIndex.filter(_._2 != j).map(_._1)
+  for ((group, i) <- issGroups.zipWithIndex) {
+    val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
+    val otherIssqs = otherIssGroups.map(_.issq)
+    val otherIssqSeqs = otherIssGroups.map(_.seqs).flatten
+
+    for ((seq, j) <- group.seqs.zipWithIndex) {
+      val otherSameIssqSeqs = group.seqs.zipWithIndex.filter(_._2 != j).map(_._1)
       val otherSeqs = otherIssqSeqs ++ otherSameIssqSeqs
 
       val vat = seq.io.vat
@@ -295,16 +300,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       seq.io.older_reads := older_rintents
     }
 
-    issq_stall(i) := seqs.map(_.accepts(vdq.io.deq.bits)).reduce(_ || _) && !issq.io.enq.ready
-    issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && seqs.map(_.accepts(vdq.io.deq.bits)).orR
-    issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
+    issq_stall(i) := group.seqs.map(_.accepts(vdq.io.deq.bits)).reduce(_ || _) && !group.issq.io.enq.ready
+    group.issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && group.seqs.map(_.accepts(vdq.io.deq.bits)).orR
+    group.issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
 
-    seqs.zipWithIndex.foreach{ case(s, j) =>
-      s.io.dis.valid := issq.io.deq.valid
-      s.io.dis.bits := issq.io.deq.bits
+    group.seqs.zipWithIndex.foreach{ case(s, j) =>
+      s.io.dis.valid := group.issq.io.deq.valid
+      s.io.dis.bits := group.issq.io.deq.bits
     }
 
-    issq.io.deq.ready := seqs.map(_.io.dis.ready).reduce(_ || _)
+    group.issq.io.deq.ready := group.seqs.map(_.io.dis.ready).reduce(_ || _)
   }
 
   // Hazard checking for multi-VXS
@@ -333,7 +338,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       vxus(other_iss).io.iss.ready
     }.reduceOption(_ || _).getOrElse(false.B)
 
-    vxus(i).io.iss.valid := vxs(i).io.iss.valid && !inflight_hazard && !issue_hazard 
+    vxus(i).io.iss.valid := vxs(i).io.iss.valid && !inflight_hazard && !issue_hazard
     vxs(i).io.iss.ready := vxus(i).io.iss.ready && !inflight_hazard && !issue_hazard
     vxus(i).io.iss.bits := vxs(i).io.iss.bits
     vxs(i).io.acc := vxus(i).io.acc_write
@@ -479,7 +484,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vxus.map(_.io.vat_release).foreach{ rel => clearVat(rel.valid, rel.bits) }
 
   // Signalling to frontend
-  val seq_inflight_wv0 = (seqs.flatten.map(_.io.seq_hazard).map { h =>
+  val seq_inflight_wv0 = (allSeqs.map(_.io.seq_hazard).map { h =>
     h.valid && ((h.bits.wintent & ~(0.U(egsPerVReg.W))) =/= 0.U)
   } ++ issqs.map(_.io.hazards).flatten.map { h =>
     h.valid && h.bits.wintent(0)
@@ -494,7 +499,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.mem_busy := vmu.io.busy
   vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.backend_busy := vdq.io.deq.valid || seqs.flatten.map(_.io.busy).orR || vxus.map(_.io.busy).asUInt.orR || resetting
+  io.backend_busy := vdq.io.deq.valid || allSeqs.map(_.io.busy).orR || vxus.map(_.io.busy).asUInt.orR || resetting
   io.set_vxsat := vxus.map(_.io.set_vxsat).asUInt.orR
   io.set_fflags.valid := vxus.map(_.io.set_fflags.valid).asUInt.orR
   io.set_fflags.bits  := vxus.map( xu => Mux(xu.io.set_fflags.valid, xu.io.set_fflags.bits, 0.U)).reduce(_|_)
