@@ -21,7 +21,21 @@ object VectorParams {
     useSegmentedIMul = true,
     doubleBufferSegments = true,
     useScalarFPFMA = false,
-    vrfBanking = 4
+    vrfBanking = 4,
+  )
+  def dspParams = VectorParams(
+    vlifqEntries = 8,
+    vsifqEntries = 8,
+    vlrobEntries = 4,
+    vlissqEntries = 3,
+    vsissqEntries = 3,
+    vxissqEntries = 3,
+    vatSz = 5,
+    useSegmentedIMul = true,
+    doubleBufferSegments = true,
+    useScalarFPFMA = false,
+    vrfBanking = 4,
+    separateFpVxs = true
   )
   def dmaParams = VectorParams(
     vdqEntries = 2,
@@ -68,6 +82,9 @@ case class VectorParams(
   doubleBufferSegments: Boolean = false,
 
   vrfBanking: Int = 2,
+
+  separateFpVxs: Boolean = false,
+
   tlBuffer: BufferParams = BufferParams.default
 )
 
