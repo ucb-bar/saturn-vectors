@@ -26,6 +26,10 @@ bmarks = \
 	vec-slide-conv \
 	vec-transpose-store \
 	vec-transpose-load \
+	vec-conditional \
+	vec-div-approx \
+	vec-mixed_width_mask \
+	vec-square-root-approx \
 
 cpp_bmarks = \
 	vec-tasks
