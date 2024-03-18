@@ -16,15 +16,17 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
 
   val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
-  val nHazards = pipe_depth + iter_fus.size
 
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new ExecuteMicroOp))
-    val hazards = Output(Vec(nHazards, Valid(new PipeHazard))) 
+    val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(pipe_depth)))) 
     val write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
     val scalar_write = Decoupled(new ScalarWrite)
     val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
+
+    val pipe_hazards = Output(Vec(pipe_depth, Valid(new PipeHazard(pipe_depth))))
+    val issue_pipe_latency = Output(UInt((log2Ceil(pipe_depth) + 1).W))
 
     val shared_fp_req = Decoupled(new FPInput())
     val shared_fp_resp = Flipped(Decoupled(new FPResult()))
@@ -39,7 +41,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
   if (sharedFPUnits.size > 0) {
     val shared_fp_arb = Module(new Arbiter(new FPInput(), sharedFPUnits.size))
     io.shared_fp_req <> shared_fp_arb.io.out
-    sharedFPUnits.zipWithIndex.foreach { case (u,i) =>
+    sharedFPUnits.zipWithIndex.foreach { case(u, i) =>
       shared_fp_arb.io.in(i) <> u.io_fp_req
       u.io_fp_resp <> io.shared_fp_resp
     }
@@ -60,6 +62,8 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
   val readies = fus.map(_.io.iss.ready)
   io.iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
   when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
+
+  io.issue_pipe_latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U)) 
 
   val pipe_write = WireInit(false.B)
 
@@ -114,7 +118,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
     }
     for ((fu, j) <- pipe_fus.zipWithIndex) {
       for (i <- 0 until fu.depth) {
-        fu.io.pipe(i).valid := pipe_valids(i) && pipe_sels(i)(j)
+        fu.io.pipe(i).valid := pipe_valids(i) && pipe_sels(i)(j) 
         fu.io.pipe(i).bits  := Mux(pipe_valids(i) && pipe_sels(i)(j),
           pipe_bits(i), 0.U.asTypeOf(new ExecuteMicroOp))
       }
@@ -136,12 +140,13 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
     when (pipe_valids.orR) { io.busy := true.B }
     for (i <- 0 until pipe_depth) {
-      io.hazards(i).valid       := pipe_valids(i)
-      io.hazards(i).bits.vat    := pipe_bits(i).vat
-      io.hazards(i).bits.eg     := pipe_bits(i).wvd_eg
+      io.pipe_hazards(i).valid       := pipe_valids(i)
+      io.pipe_hazards(i).bits.vat    := pipe_bits(i).vat
+      io.pipe_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
       when (pipe_latencies(i) === 0.U) { // hack to deal with compress unit
-        io.hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
+        io.pipe_hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
       }
+      io.pipe_hazards(i).bits.latency := pipe_latencies(i)
     }
   }
 
@@ -166,7 +171,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
     }
     when (iter_fus.map(_.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {
-      io.hazards(i+pipe_depth) := iter_fus(i).io.hazard
+      io.iter_hazards(i) := iter_fus(i).io.hazard
     }
   }
 }

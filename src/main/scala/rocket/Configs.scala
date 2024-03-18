@@ -8,7 +8,12 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy._
 import saturn.common._
 
-class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams = VectorParams(), cores: Option[Seq[Int]] = None) extends Config((site, here, up) => {
+class WithRocketVectorUnit(
+  vLen: Int = 128,
+  dLen: Int = 64,
+  params: VectorParams = VectorParams(),
+  cores: Option[Seq[Int]] = None,
+  useL1DCache: Boolean = true) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: RocketTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
@@ -19,7 +24,7 @@ class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams
               case VectorParamsKey => params.copy(dLen=dLen)
             })),
             vLen = vLen,
-            vMemDataBits = dLen,
+            vMemDataBits = if (useL1DCache) dLen else 0,
             decoder = ((p: Parameters) => {
               val decoder = Module(new EarlyVectorDecode()(p))
               decoder
@@ -31,8 +36,8 @@ class WithRocketVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams
             dfmaLatency = params.fmaPipeDepth - 1,
           )) } else { tp.tileParams.core.fpu }
         ),
-        dcache = tp.tileParams.dcache.map(_.copy(rowBits = dLen)))
-      ) else tp
+        dcache = if (useL1DCache) tp.tileParams.dcache.map(_.copy(rowBits = dLen)) else tp.tileParams.dcache
+      )) else tp
     }
     case other => other
   }

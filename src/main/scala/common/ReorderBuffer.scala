@@ -42,12 +42,12 @@ class ReorderBuffer[T <: Data](
 
   when (io.push.fire) {
     assert(!valids(io.push.bits.tag))
-    valids(io.push.bits.tag) := true.B
+    valids(io.push.bits.tag) := !(io.deq.ready && deq_ptr.value === io.push.bits.tag)
     ram(io.push.bits.tag) := io.push.bits.data
   }
 
-  io.deq.valid := !empty && valids(deq_ptr.value)
-  io.deq.bits := ram(deq_ptr.value)
+  io.deq.valid := !empty && (valids(deq_ptr.value) || (io.push.fire && io.push.bits.tag === deq_ptr.value))
+  io.deq.bits := Mux(valids(deq_ptr.value), ram(deq_ptr.value), io.push.bits.data)
 
   when (io.deq.fire) {
     deq_ptr.inc()
