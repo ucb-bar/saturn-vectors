@@ -8,6 +8,8 @@
 #include <cassert>
 #include <stdio.h>
 #include <atomic>
+#include "util.h"
+
 
 class runner_t;
 
@@ -28,6 +30,7 @@ mutex_t printf_lock;
 
 #define PRINTF(...) ({							\
       printf_lock.lock();						\
+      printf("hart %ld: ", read_csr(mhartid));                          \
       printf(__VA_ARGS__);						\
       printf_lock.unlock();						\
 })
@@ -85,6 +88,7 @@ public:
   void set_may_finish() { may_finish = true; }
   bool __attribute__ ((noinline)) is_finished() { return may_finish && !has_work(); }
   void wait_for_finished() { while (!this->is_finished()) { }; }
+  virtual void propagate_finished() = 0;
   virtual void assign_runner(runner_t* runner) { };
 
 private:
@@ -94,11 +98,18 @@ protected:
   bool may_finish;
 };
 
+class circular_buffer_pointers_t {
+public:
+  circular_buffer_pointers_t() : head_wide(0), tail_wide(0), size(0) { }
+  size_t head_wide;
+  size_t tail_wide;
+  size_t size;
+};
+
 template <typename T>
 class alignas(64) circular_buffer_t {
 public:
-  circular_buffer_t(size_t capacity, void* buffer) : buffer((T*)buffer), capacity(capacity), head_wide(0), tail_wide(0), size(0)  {
-    //PRINTF("this head tail %p %p %p\n", this, &this->head, &this->tail);
+  circular_buffer_t(size_t capacity, void* buffer, circular_buffer_pointers_t* pointers) : buffer((T*)buffer), capacity(capacity), pointers(pointers) {
     if (capacity < 4 || (capacity & (capacity-1)) != 0) {
       PRINTF("Illegal capacity %ld\n", capacity);
       exit(1);
@@ -109,50 +120,88 @@ public:
     delete[] buffer;
   }
 
-  size_t get_head() { return head_wide & mask; }
-  size_t get_tail() { return tail_wide & mask; }
-
-  T* push_allocate(size_t &n) {
-    size_t s = size;
-    size_t tail = get_tail();
-    T* r = buffer + tail;
-    size_t head = get_head();
-    n = (n > capacity - s) ? capacity - s : n;
+  std::pair<T*, size_t> push(size_t n) {
+    size_t tail_wide_read, size_read;
+    size_t mask = this->mask;
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(tail_wide_read) : [incr]"r"(n), [addr]"r"(&pointers->tail_wide));
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(size_read)      : [incr]"r"(n), [addr]"r"(&pointers->size));
+    tail_wide_read += n;
+    size_read += n;
+    size_t tail = tail_wide_read & mask;
+    size_t head = pointers->head_wide & mask;
+    size_t remaining_capacity = capacity - size_read;
     size_t limit = ((head > tail) ? head : capacity) - tail;
-    n = (n > limit) ? limit : n;
-    return r;
-  }
-  void push_complete(size_t n) {
-    asm volatile("amoadd.d zero, %0, (%1)\n" : : "r"(n), "r"(&tail_wide));
-    asm volatile("amoadd.d zero, %0, (%1)\n" : : "r"(n), "r"(&size));
-  }
-  T* pop_allocate(size_t &n) {
-    size_t s = size;
-    size_t head = get_head();
-    T* r = buffer + head;
-    size_t tail = get_tail();
-    n = (n > s) ? s : n;
-    size_t limit = ((tail > head) ? tail : capacity) - head;
-    n = (n > limit) ? limit : n;
-    return r;
-  }
-  void pop_complete(size_t n) {
-    asm volatile("amoadd.d zero, %0, (%1)\n" : : "r"(n), "r"(&head_wide));
-    asm volatile("amoadd.d zero, %0, (%1)\n" : : "r"((~n)+1), "r"(&size));
+    size_t r = (remaining_capacity > limit) ? limit : remaining_capacity;
+    return std::make_pair(buffer + tail, r);
   }
 
-  bool busy() {
-    size_t s = size;
-    return s > 0;
+  std::pair<T*, size_t> pop(size_t n) {
+    size_t head_wide_read, size_read;
+    size_t mask = this->mask;
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(head_wide_read) : [incr]"r"(n)     , [addr]"r"(&pointers->head_wide));
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(size_read)      : [incr]"r"((~n)+1), [addr]"r"(&pointers->size));
+    head_wide_read += n;
+    size_read -= n;
+    size_t head = head_wide_read & mask;
+    size_t tail = pointers->tail_wide & mask;
+    size_t limit = ((tail > head) ? tail : capacity) - head;
+    size_t r = (size_read > limit) ? limit : size_read;
+    return std::make_pair(buffer + head, r);
   }
-private:
+
+  bool busy() { return pointers->size != 0; }
+
   T* buffer;
   size_t mask;
   size_t capacity;
-  size_t head_wide;
-  size_t tail_wide;
+  circular_buffer_pointers_t* pointers;
+};
+
+template <typename T, typename U>
+class circular_buffer_helper_t {
 public:
-  size_t size;
+  static std::tuple<T*, U*, size_t> push_pop(
+                                             circular_buffer_t<T>* const source,
+                                             circular_buffer_pointers_t* source_pointers,
+                                             circular_buffer_t<U>* const sink,
+                                             circular_buffer_pointers_t* sink_pointers,
+                                             size_t n) {
+    size_t sink_tail_wide_read, sink_size_read;
+    size_t source_head_wide_read, source_size_read;
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(sink_tail_wide_read)   : [incr]"r"(n)     , [addr]"r"(&sink_pointers->tail_wide));
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(source_head_wide_read) : [incr]"r"(n)     , [addr]"r"(&source_pointers->head_wide));
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(sink_size_read)        : [incr]"r"(n)     , [addr]"r"(&sink_pointers->size));
+    asm volatile("amoadd.d %[rd], %[incr], (%[addr])\n" : [rd]"=r"(source_size_read)      : [incr]"r"((~n)+1), [addr]"r"(&source_pointers->size));
+    size_t sink_head_wide = sink_pointers->head_wide;
+    size_t source_tail_wide = source_pointers->tail_wide;
+
+    asm volatile ("\n");
+    size_t sink_mask = sink->mask;
+    size_t source_mask = source->mask;
+    size_t sink_capacity = sink->capacity;
+    size_t source_capacity = source->capacity;
+
+    asm volatile ("add %[rd], %[src], %[incr]\n" : [rd]"=r"(sink_tail_wide_read)   : [src]"r"(sink_tail_wide_read)  , [incr]"r"(n));
+    asm volatile ("add %[rd], %[src], %[incr]\n" : [rd]"=r"(source_head_wide_read) : [src]"r"(source_head_wide_read), [incr]"r"(n));
+    asm volatile ("add %[rd], %[src], %[incr]\n" : [rd]"=r"(sink_size_read)        : [src]"r"(sink_size_read)       , [incr]"r"(n));
+    asm volatile ("sub %[rd], %[src], %[incr]\n" : [rd]"=r"(source_size_read)      : [src]"r"(source_size_read)     , [incr]"r"(n));
+
+    T* source_buffer = source->buffer;
+    U* sink_buffer = sink->buffer;
+    size_t remaining_capacity = sink_capacity - sink_size_read;
+    size_t sink_tail = sink_tail_wide_read & sink_mask;
+    size_t sink_head = sink_head_wide & sink_mask;
+    size_t sink_limit = ((sink_head > sink_tail) ? sink_head : sink_capacity) - sink_tail;
+    size_t sink_r = (remaining_capacity > sink_limit) ? sink_limit : remaining_capacity;
+
+    size_t source_head = source_head_wide_read & source_mask;
+    size_t source_tail = source_tail_wide & source_mask;
+    size_t source_limit = ((source_tail > source_head) ? source_tail : source_capacity) - source_head;
+    size_t source_r = (source_size_read > source_limit) ? source_limit : source_size_read;
+
+    size_t r = (sink_r > source_r) ? source_r : sink_r;
+    return std::make_tuple(source_buffer + source_head, sink_buffer + sink_tail, r);
+  }
 };
 
 template <typename T> class sink_t;
@@ -162,7 +211,6 @@ class runner_t {
 public:
   runner_t(size_t id, allocator_t* allocator) : id(id), task_count(0), allocator(allocator) { };
   void run() {
-    PRINTF("Starting runner %ld\n", id);
     while (1) {
       task_t* scheduled_task = schedule_task();
       if (scheduled_task) {
@@ -172,9 +220,9 @@ public:
   }
 
   void add_task(task_t* task) {
+    task->assign_runner(this);
     task_lock.lock();
     tasks.push_back(task);
-    task->assign_runner(this);
     task_count++;
     task_lock.unlock();
   }
@@ -195,6 +243,7 @@ private:
     std::list<task_t*>::iterator it = tasks.begin();
     while (it != tasks.end()) {
       if ((*it)->is_finished()) {
+        (*it)->propagate_finished();
 	it = tasks.erase(it);
 	task_count--;
       }
@@ -223,12 +272,13 @@ public:
   }
   void assign_runner(runner_t* runner) {
     this->runner = runner;
-    void* buff = runner->get_allocator()->allocate(sizeof(circular_buffer_t<T>));
+    void* pointers_buff = runner->get_allocator()->allocate(sizeof(circular_buffer_pointers_t));
+    circular_buffer_pointers_t* pointers = new (pointers_buff) circular_buffer_pointers_t;
     buffer_data = runner->get_allocator()->allocate(buffer_size * sizeof(T));
-    buffer = new (buff) circular_buffer_t<T>(buffer_size, buffer_data);
+    buffer = new circular_buffer_t<T>(buffer_size, buffer_data, pointers);
   }
   size_t buffer_size;
-  circular_buffer_t<T>* buffer;
+  alignas(64) circular_buffer_t<T>* buffer;
 private:
   runner_t* runner;
   void* buffer_data;
@@ -237,6 +287,7 @@ private:
 template <typename T>
 class source_t : virtual public task_t {
 public:
+  source_t() : next(nullptr), output(nullptr) { }
   void chain(sink_t<T>* next) {
     if (this->next) {
       PRINTF("Failed chain\n");
@@ -251,6 +302,9 @@ public:
     }
     output = out;
   }
+  void propagate_finished() {
+    if (this->next) { this->next->set_may_finish(); }
+  }
 protected:
   sink_t<T>* next;
   alignas(64) T* output;
@@ -260,11 +314,9 @@ protected:
 template <typename T, typename U>
 class pipe_task_t : public source_t<U>, public sink_t<T> {
 public:
-  pipe_task_t(size_t buffer_size, size_t max_chunk) : max_chunk(max_chunk), sink_t<T>(buffer_size) {
-    //PRINTF("%p %p %p %p %p\n", &this->next, &this->output, &this->max_chunk, &this->buffer, &this->may_finish);
-  }
+  pipe_task_t(size_t buffer_size, size_t max_chunk) : max_chunk(max_chunk), sink_t<T>(buffer_size) { }
   bool has_work() { return this->buffer->busy(); }
-  virtual void kernel(T* in, U* out, size_t& n) = 0;
+  virtual size_t kernel(T* in, U* out, size_t n) = 0;
 private:
   void run() {
     bool has_next = this->next != nullptr;
@@ -272,26 +324,50 @@ private:
     size_t max_chunk = this->max_chunk;
     circular_buffer_t<T>* buffer = this->buffer;
     if (has_next) {
-      while (1) {
-	size_t n = max_chunk;
-	T* input = buffer->pop_allocate(n);
-	U* output = next_buffer->push_allocate(n);
-	if (n == 0) break;
-	kernel(input, output, n);
-	buffer->pop_complete(n);
-        asm volatile("fence");
-	next_buffer->push_complete(n);
+      circular_buffer_pointers_t* source_pointers = buffer->pointers;
+      circular_buffer_pointers_t* next_pointers = next_buffer->pointers;
+      std::tuple<T*, T*, size_t> r = circular_buffer_helper_t<T, U>::push_pop(buffer, source_pointers,
+                                                                              next_buffer, next_pointers,
+                                                                              0);
+      T* input = std::get<0>(r);
+      T* output = std::get<1>(r);
+      size_t n = std::get<2>(r);
+      while (n > 0) {
+        size_t completed = 0;
+        while (completed < max_chunk && n > 0) {
+          size_t finished = kernel(input, output, n);
+          n -= finished;
+          completed += finished;
+          input += finished;
+          output += finished;
+        }
+	asm volatile("fence");
+	r = circular_buffer_helper_t<T, U>::push_pop(buffer, source_pointers,
+                                                     next_buffer, next_pointers,
+                                                     completed);
+	input = std::get<0>(r);
+	output = std::get<1>(r);
+	n = std::get<2>(r);
+	if (completed == 0) break;
       }
-      if (this->is_finished()) { this->next->set_may_finish(); }
     } else {
-      while (1) {
-	size_t n = max_chunk;
-	T* input = buffer->pop_allocate(n);
-	U* output = this->output;
-	if (n == 0) break;
-	kernel(input, output, n);
-	buffer->pop_complete(n);
-	this->output += n;
+      std::pair<T*, size_t> pop = buffer->pop(0);
+      T* input = pop.first;
+      size_t n = pop.second;
+      while (n > 0) {
+        size_t completed = 0;
+        while (completed < max_chunk && n > 0) {
+          size_t finished = kernel(input, this->output, n);
+          n -= finished;
+          completed += finished;
+          input += finished;
+          this->output += finished;
+        }
+	asm volatile("fence");
+	pop = buffer->pop(completed);
+        input = pop.first;
+	n = pop.second;
+	if (completed == 0) break;
       }
     }
   }
@@ -302,29 +378,32 @@ template <typename T>
 class source_task_t : public source_t<T> {
 public:
   source_task_t(size_t max_chunk) : max_chunk(max_chunk) { }
-  virtual void kernel(T* out, size_t& n) = 0;
+  virtual size_t kernel(T* out, size_t n) = 0;
   virtual bool has_work() = 0;
 private:
   void run() {
     bool has_next = this->next != nullptr;
+    assert(has_next);
     circular_buffer_t<T>* next_buffer = has_next ? this->next->buffer : nullptr;
     size_t max_chunk = this->max_chunk;
-    if (has_next) {
-      while (has_work()) {
-	size_t n = max_chunk;
-	T* output = next_buffer->push_allocate(n);
-	kernel(output, n);
-        asm volatile("fence");
-	next_buffer->push_complete(n);
+
+    std::pair<T*, size_t> push = next_buffer->push(0);
+    T* output = push.first;
+    size_t n = push.second;
+    while (n > 0) {
+      size_t completed = 0;
+      while (completed < max_chunk && n > 0) {
+        size_t finished = kernel(output, n);
+        n -= finished;
+        completed += finished;
+        output += finished;
+        if (finished == 0) break;
       }
-      if (this->is_finished()) { this->next->set_may_finish(); }
-    } else {
-      while (has_work()) {
-	size_t n = max_chunk;
-	T* output = this->output;
-	kernel(output, n);
-	this->output += n;
-      }
+      asm volatile("fence");
+      push = next_buffer->push(completed);
+      output = push.first;
+      n = push.second;
+      if (completed == 0) break;
     }
   }
   size_t max_chunk;
@@ -335,15 +414,27 @@ class sink_task_t : public sink_t<T> {
 public:
   sink_task_t(size_t buffer_size, size_t max_chunk) : max_chunk(max_chunk), sink_t<T>(buffer_size) { }
   bool has_work() { return this->buffer->busy(); }
-  virtual void kernel(T* in, size_t& n) = 0;
+  virtual size_t kernel(T* in, size_t n) = 0;
 private:
   void run() {
-    while (has_work()) {
-      size_t n = this->max_chunk;
-      T* input = this->buffer->pop_allocate(n);
-      if (n == 0) return;
-      kernel(input, n);
-      this->buffer->pop_complete(n);
+    size_t max_chunk = this->max_chunk;
+    circular_buffer_t<T*> buffer = this->buffer;
+    std::pair<T*, size_t> pop = buffer->pop(0);
+    T* input = pop.first;
+    size_t n = pop.second;
+    while (n > 0) {
+      size_t completed = 0;
+      while (completed < max_chunk && n > 0) {
+        size_t finished = kernel(input, n);
+        n -= finished;
+        completed += finished;
+        input += finished;
+      }
+      asm volatile("fence");
+      pop = buffer->pop(completed);
+      input = pop.first;
+      n = pop.second;
+      if (completed == 0) break;
     }
   }
   size_t max_chunk;

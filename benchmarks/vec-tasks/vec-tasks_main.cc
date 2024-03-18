@@ -33,7 +33,7 @@ extern "C" void __main(void) {
       size_t base = 0x70000000 + 0x10000 * mhartid;
       runners[runner_id] = new runner_t(runner_id, new region_allocator_t((void*)base, 0x10000));
     }
-
+    PRINTF("Initialized runner %ld\n", runner_id);
     initialized_runners++;
     runner_lock.unlock();
 
@@ -47,9 +47,6 @@ extern "C" void __main(void) {
     stream_task_t<uint32_t>* stream_task = new stream_task_t<uint32_t>(512);
     uint32_scale_task_t* scale_task = new uint32_scale_task_t(2, 2048, 512);
     uint32_add_task_t* add_task = new uint32_add_task_t(3, 2048, 512);
-
-    // PRINTF("%p %p %p %ld\n", &printf_lock, runners[0], runners[1], sizeof(runner_t));
-    // PRINTF("%p %p %ld %ld\n", stream_task, scale_task, sizeof(stream_task_t<uint32_t>), sizeof(uint32_scale_task_t));
 
     // construct the task graph
     stream_task->chain(scale_task);
