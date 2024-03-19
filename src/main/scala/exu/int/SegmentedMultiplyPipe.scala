@@ -152,7 +152,6 @@ class MultiplyBlock extends Module {
         val indl = 32*i + 16
         val in1 = io.in1(indh, indl)
         val in2 = io.in2(indh, indl)
-        println(s"i: $i, indh: $indh, indl: $indl")
         val mul = Module(new Multiplier(16))
         mul.io.in1_signed := io.in1_signed
         mul.io.in2_signed := io.in2_signed
@@ -165,7 +164,6 @@ class MultiplyBlock extends Module {
         val indl = 16*i + 8
         val in1 = io.in1(indh, indl)
         val in2 = io.in2(indh, indl)
-        println(s"i: $i, indh: $indh, indl: $indl")
         val mul = Module(new Multiplier(8))
         mul.io.in1_signed := io.in1_signed
         mul.io.in2_signed := io.in2_signed
