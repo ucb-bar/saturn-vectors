@@ -19,6 +19,7 @@ object VectorParams {
     vxissqEntries = 3,
     vatSz = 5,
     useSegmentedIMul = true,
+    useVectorSMul = true,
     doubleBufferSegments = true,
     useScalarFPFMA = false,
     vrfBanking = 4,
@@ -32,6 +33,7 @@ object VectorParams {
     vxissqEntries = 3,
     vatSz = 5,
     useSegmentedIMul = true,
+    useVectorSMul = true,
     doubleBufferSegments = true,
     useScalarFPFMA = false,
     vrfBanking = 4,
@@ -73,6 +75,7 @@ case class VectorParams(
   dLen: Int = 64,
   vatSz: Int = 3,
 
+  useVectorSMul: Boolean = false,
   useSegmentedIMul: Boolean = false,
   useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions
   useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
