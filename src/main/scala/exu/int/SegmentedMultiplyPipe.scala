@@ -49,11 +49,12 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     multipliers(i).io.in2        := mul_in2.asTypeOf(Vec(dLenB >> 3, UInt(64.W)))(i)
   }
   val mul_out_comb = VecInit(multipliers.map(_.io.out_data)).asUInt
-  val mul_out = Pipe(io.pipe(0).valid, mul_out_comb, 2).bits
 
   ////////////////////////////////////////////////////////////////////////////////////////////
   // Pipeline Stages Before Adder Array
   ////////////////////////////////////////////////////////////////////////////////////////////
+  val mul_out = Pipe(io.pipe(0).valid, mul_out_comb, depth-2).bits
+  
   val in_eew_pipe = io.pipe(depth-2).bits.rvs1_eew
   val out_eew_pipe = io.pipe(depth-2).bits.vd_eew
   val ctrl_wmul = out_eew_pipe > in_eew_pipe
