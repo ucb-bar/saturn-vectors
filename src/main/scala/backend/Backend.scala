@@ -122,9 +122,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   ) 
 
   val integerMul = (!vParams.useIterativeIMul).option((if (vParams.useSegmentedIMul)
-    (() => new SegmentedMultiplyPipe(3), "vsegmulfu")
+    (() => new SegmentedMultiplyPipe(vParams.imaPipeDepth), "vsegmulfu")
   else
-    (() => new ElementwiseMultiplyPipe(4), "velemmulfu"))
+    (() => new ElementwiseMultiplyPipe(vParams.imaPipeDepth), "velemmulfu"))
   )
 
   val fpFMA = if (vParams.useScalarFPFMA) {
