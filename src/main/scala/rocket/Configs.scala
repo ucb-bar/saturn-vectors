@@ -29,7 +29,8 @@ class WithRocketVectorUnit(
               val decoder = Module(new EarlyVectorDecode()(p))
               decoder
             }),
-            useDCache = true
+            useDCache = true,
+            issueVConfig = false
           )),
           fpu = if (params.useScalarFPFMA) { tp.tileParams.core.fpu.map(_.copy(
             sfmaLatency = params.fmaPipeDepth - 1,
