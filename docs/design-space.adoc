@@ -1,0 +1,12 @@
+[[design-space]]
+== Design Space
+
+=== Parameterization Space
+
+=== "vMIN" Minimal Configuration
+
+=== "vREF" Reference Configuration
+
+=== "vDSP" DSP Configuration
+
+=== "vDMA" DMA Configuration

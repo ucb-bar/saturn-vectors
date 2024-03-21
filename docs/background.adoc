@@ -1,0 +1,21 @@
+[[background]]
+== Background
+
+In this section we will provide necessary background of vector implementations
+
+=== The RISC-V Vector ISA
+
+=== Prior Vector Implementations
+
+==== Hwacha
+
+==== Ara
+
+==== LEM
+
+==== Maven
+
+==== Scale
+
+==== Torrent-0
+

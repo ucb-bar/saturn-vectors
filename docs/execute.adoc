@@ -1,0 +1,28 @@
+[[execute]]
+== Vector Execution
+
+=== Issue Queues
+
+=== Hazard Management
+
+==== Chaining
+
+=== Operation Sequencers
+
+==== Load/Store Sequencers
+
+==== Execute Sequencer
+
+==== Permute Sequencer
+
+=== Register File
+
+=== Functional Units
+
+==== Iterative Functional Units
+
+==== Pipelined Functional Units
+
+==== Shared-scalar Functional Units
+
+

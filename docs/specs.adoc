@@ -1,0 +1,76 @@
+= The Saturn Micro-architecture Manual
+Authors: Jerry Zhao, Daniel Grubb, Miles Rusch, Borivoje Nikolic, Krste Asanovic
+:docgroup: University of California, Berkeley Technical Report
+:description: Micro-architecture of the Saturn Vector Unit
+:company: University of California, Berkeley
+:revdate: 3/2024
+:revnumber: 1.0
+:revremark: This document is under development. Expect potential changes.
+:revinfo:
+:doctype: book
+:preface-title: Preamble
+:colophon:
+:appendix-caption: Appendix
+// https://docs.asciidoctor.org/asciidoc/latest/macros/images-directory/
+:imagesdir: images
+//:title-logo-image: image:risc-v_logo.png["RISC-V International Logo",pdfwidth=3.25in,align=center]
+// Settings:
+:experimental:
+:reproducible:
+//:WaveDromEditorApp: app/wavedrom-editor.app
+:imagesoutdir: ../build/images
+:srcdir: ./
+:bibtex-file: {srcdir}/example.bib
+:bibtex-order: alphabetical
+:bibtex-style: apa
+:icons: font
+:lang: en
+:listing-caption: Listing
+:sectnums:
+:toc: left
+:toclevels: 4
+:source-highlighter: pygments
+ifdef::backend-pdf[]
+:source-highlighter: coderay
+endif::[]
+:data-uri:
+:hide-uri-scheme:
+:stem: latexmath
+:footnote:
+:xrefstyle: short
+
+// [WARNING]
+// .This document is in the link:http://riscv.org/spec-state[Development state]
+// ====
+// Expect potential changes. This draft specification is likely to evolve before
+// it is accepted as a standard. Implementations based on this draft
+// may not conform to the future standard.
+// ====
+
+[preface]
+// == Copyright and license information
+// This specification is licensed under the Creative Commons
+// Attribution 4.0 International License (CC-BY 4.0). The full
+// license text is available at
+// https://creativecommons.org/licenses/by/4.0/.
+
+// Copyright 2023 by RISC-V International.
+
+[preface]
+//include::contributors.adoc[]
+
+include::intro.adoc[]
+include::objectives.adoc[]
+include::background.adoc[]
+include::system.adoc[]
+include::frontend.adoc[]
+include::memory.adoc[]
+include::execute.adoc[]
+include::design-space.adoc[]
+include::eval-pd.adoc[]
+include::eval-perf.adoc[]
+include::history.adoc[]
+
+// The index must precede the bibliography
+include::index.adoc[]
+include::bibliography.adoc[]
