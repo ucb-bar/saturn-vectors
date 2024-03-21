@@ -79,6 +79,8 @@ case class VectorParams(
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
 
+  imaPipeDepth: Int = 4,
+
   doubleBufferSegments: Boolean = false,
 
   vrfBanking: Int = 2,
