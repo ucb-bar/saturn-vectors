@@ -1,4 +1,4 @@
-= The Saturn Micro-architecture Manual
+= The Saturn Microarchitecture Manual
 Authors: Jerry Zhao, Daniel Grubb, Miles Rusch, Borivoje Nikolic, Krste Asanovic
 :docgroup: University of California, Berkeley Technical Report
 :description: Micro-architecture of the Saturn Vector Unit
