@@ -1,0 +1,9 @@
+[[background]]
+== Background
+
+In this section we will provide necessary background of vector implementations
+
+=== Data-parallel Architectures and Accelerators
+
+
+=== The RISC-V Vector ISA

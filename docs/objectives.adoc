@@ -1,0 +1,10 @@
+[[objectives]]
+== Objectives
+
+In this section we will outline Saturn objectives
+
+=== Short-vector Machines
+
+=== Domain-specific Processors
+
+=== Vector Extensions

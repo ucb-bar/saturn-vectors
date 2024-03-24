@@ -1,0 +1,41 @@
+[[execute]]
+== Vector Execution
+
+=== Issue Queues
+
+=== Hazard Management
+
+==== Chaining
+
+=== Operation Sequencers
+
+==== Load/Store Sequencers
+
+==== Execute Sequencer
+
+==== Permute Sequencer
+
+=== Register File
+
+=== Functional Units
+
+==== Taxonomy
+
+===== Iterative/Pipelined
+
+===== Elementwise/Parallel
+
+===== Shared-scalar/Dedicated
+
+==== Implementations
+
+===== Integer Arithmetic
+
+===== Integer Multiply/Divider
+
+===== Floating Point
+
+===== Permutations
+
+=== EVA (Extended Vector Architecture) Port
+

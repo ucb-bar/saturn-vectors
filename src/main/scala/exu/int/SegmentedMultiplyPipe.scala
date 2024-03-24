@@ -21,7 +21,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
     SMUL.VV.elementWise, SMUL.VX.elementWise)
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
-  // TODO: SMUL currently operates at 1 element/cycle
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
@@ -43,7 +42,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   for (i <- 0 until (dLenB >> 3)) {
     multipliers(i).io.in1_signed := ctrl.bool(MULSign1)
     multipliers(i).io.in2_signed := ctrl.bool(MULSign2)
-    // multipliers(i).io.valid      := io.pipe(0).valid
     multipliers(i).io.eew        := io.pipe(0).bits.rvs1_eew
     multipliers(i).io.in1        := mul_in1.asTypeOf(Vec(dLenB >> 3, UInt(64.W)))(i)
     multipliers(i).io.in2        := mul_in2.asTypeOf(Vec(dLenB >> 3, UInt(64.W)))(i)
