@@ -137,8 +137,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
 
   io.vat := inst.vat
   io.seq_hazard.valid := valid
-  io.seq_hazard.bits.rintent := rvs1_mask | rvs2_mask | rvd_mask | rvm_mask
-  io.seq_hazard.bits.wintent := wvd_mask
+  io.seq_hazard.bits.rintent := hazardMultiply(rvs1_mask | rvs2_mask | rvd_mask | rvm_mask)
+  io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
   io.seq_hazard.bits.vat := inst.vat
 
   val vs1_read_oh = Mux(renv1   , UIntToOH(io.rvs1.req.bits), 0.U)

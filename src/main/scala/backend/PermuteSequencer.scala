@@ -62,7 +62,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
 
   io.vat := inst.vat
   io.seq_hazard.valid := valid
-  io.seq_hazard.bits.rintent := rvs2_mask | rvm_mask
+  io.seq_hazard.bits.rintent := hazardMultiply(rvs2_mask | rvm_mask)
   io.seq_hazard.bits.wintent := false.B
   io.seq_hazard.bits.vat := inst.vat
 

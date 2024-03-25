@@ -45,8 +45,8 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
 
   io.vat := inst.vat
   io.seq_hazard.valid := valid
-  io.seq_hazard.bits.rintent := rvm_mask
-  io.seq_hazard.bits.wintent := wvd_mask
+  io.seq_hazard.bits.rintent := hazardMultiply(rvm_mask)
+  io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
   io.seq_hazard.bits.vat     := inst.vat
 
   val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)

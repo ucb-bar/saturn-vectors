@@ -78,8 +78,8 @@ case class VectorParams(
   useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
-
   imaPipeDepth: Int = 4,
+  hazardingMultiplier: Int = 0,
 
   doubleBufferSegments: Boolean = false,
 
@@ -160,4 +160,11 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     FillInterleaved(1 << lmul, UIntToOH(reg >> lmul)((32>>lmul)-1,0))
   })(emul)
   def log2_up(f: UInt, max: Int) = VecInit.tabulate(max)({nf => log2Ceil(nf+1).U})(f)
+
+  def hazardMultiply(mask: UInt): UInt = if (vParams.hazardingMultiplier == 0) { mask } else {
+    require((1 << vParams.hazardingMultiplier) <= egsTotal)
+    VecInit(mask.asBools.grouped(1 << vParams.hazardingMultiplier).map { g =>
+      Fill(1 << vParams.hazardingMultiplier, g.orR)
+    }.toSeq).asUInt
+  }
 }

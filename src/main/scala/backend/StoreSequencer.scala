@@ -49,7 +49,7 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
 
   io.vat := inst.vat
   io.seq_hazard.valid := valid
-  io.seq_hazard.bits.rintent := rvd_mask | rvm_mask
+  io.seq_hazard.bits.rintent := hazardMultiply(rvd_mask | rvm_mask)
   io.seq_hazard.bits.wintent := 0.U
   io.seq_hazard.bits.vat := inst.vat
 
