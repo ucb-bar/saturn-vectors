@@ -427,9 +427,21 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   reads(0)(vxs.length) <> vps.io.rvs2
   vps.io.rvs1.req.ready := true.B
 
-  reads(0)(vxs.length+1).req.valid := io.index_access.valid && !io.backend_busy
-  io.index_access.ready := reads(0)(vxs.length+1).req.ready && !io.backend_busy
-  reads(0)(vxs.length+1).req.bits  := getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
+  val index_access_eg = getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
+  val index_access_eg_oh = UIntToOH(index_access_eg)
+  val index_access_hazard = (allSeqs.map(_.io.seq_hazard).map { h =>
+    h.valid && ((h.bits.wintent & index_access_eg_oh) =/= 0.U)
+  } ++ issqs.map(_.io.hazards).flatten.map { h =>
+    h.valid && h.bits.wintent(io.index_access.vrs)
+  } ++ vxus.map(_.io.pipe_hazards).flatten.map { h =>
+    h.valid && h.bits.eg === index_access_eg
+  } ++ vxus.map(_.io.iter_hazards).flatten.map { h =>
+    h.valid && h.bits.eg === index_access_eg
+  }).orR
+
+  reads(0)(vxs.length+1).req.valid := io.index_access.valid && !index_access_hazard
+  io.index_access.ready := reads(0)(vxs.length+1).req.ready && !index_access_hazard
+  reads(0)(vxs.length+1).req.bits  := index_access_eg
   io.index_access.idx   := reads(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
   reads(2)(vxs.length) <> vss.io.rvd
