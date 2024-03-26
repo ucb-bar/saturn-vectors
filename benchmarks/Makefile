@@ -29,11 +29,12 @@ bmarks = \
 	vec-conditional \
 	vec-div-approx \
 	vec-mixed_width_mask \
-	vec-square-root-approx
+	vec-square-root-approx \
+	vec-conjugate-gradient
 
 cpp_bmarks = \
 	vec-tasks \
-	vec-daxpy
+	vec-daxpy 
 
 #--------------------------------------------------------------------
 # Build rules
@@ -53,9 +54,11 @@ RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh -p4 -m0x70020000:0x20000,0x80000000:0x
 incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks))
 objs  :=
 
+COMMON_SRCS = $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S) $(wildcard $(src_dir)/common/ara/*.c)
+
 define compile_template
 $(1).riscv: $(wildcard $(src_dir)/$(1)/*) $(wildcard $(src_dir)/common/*)
-	$$(RISCV_GCC) $$(incs) $$(RISCV_GCC_OPTS) -o $$@ $(wildcard $(src_dir)/$(1)/*.c) $(wildcard $(src_dir)/$(1)/*.S) $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S) $$(RISCV_LINK_OPTS)
+	$$(RISCV_GCC) $$(incs) $$(RISCV_GCC_OPTS) -o $$@ $(wildcard $(src_dir)/$(1)/*.c) $(wildcard $(src_dir)/$(1)/*.S) $(COMMON_SRCS) $$(RISCV_LINK_OPTS)
 endef
 
 define compile_cpp_template
