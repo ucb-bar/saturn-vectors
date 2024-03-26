@@ -23,98 +23,66 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-
-#define SLICE_SIZE 128
-#define DATA_BYTE 8 // double type has 8 bytes
+#include <stdlib.h>
+#include <riscv_vector.h>
 
 void spmv_csr_idx32(int32_t N_ROW, int32_t *CSR_PROW, int32_t *CSR_INDEX,
                     double *CSR_DATA, double *IN_VEC, double *OUT_VEC) {
+  /* printf("Do spmv\n"); */
   for (int i = 0; i < N_ROW; ++i) {
     int32_t len = CSR_PROW[i + 1] - CSR_PROW[i];
     double *data = CSR_DATA + CSR_PROW[i];
     int32_t *index = CSR_INDEX + CSR_PROW[i];
-    double *_dst_ = OUT_VEC + i - 1;
 
-    if (i % 2 == 0) {
-      // clear register file
-      asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(1));
-      asm volatile("vmv.v.i v16,  0");
-      asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(SLICE_SIZE));
-      asm volatile("vmv.v.i v12,  0");
+    // clear register file
 
-      // SpVV
-      while (len > SLICE_SIZE) {
-        asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(SLICE_SIZE));
-        asm volatile("vle64.v v4, (%0)" ::"r"(data));          // fetch entries
-        asm volatile("vle32.v v8, (%0)" ::"r"(index));         // fetch indices
-        asm volatile("vloxei32.v v0, (%0), v8" ::"r"(IN_VEC)); // load data
-        asm volatile("vfmul.vv v12, v4, v0");      // vector multiply
-        asm volatile("vfredsum.vs v16, v12, v16"); // reduction
-        len = len - SLICE_SIZE;
-        data = data + SLICE_SIZE;
-        index = index + SLICE_SIZE;
-      }
-      if (len > 0) {
-        asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(len));
-        asm volatile("vle64.v v4, (%0)" ::"r"(data));          // fetch entries
-        asm volatile("vle32.v v8, (%0)" ::"r"(index));         // fetch indices
-        asm volatile("vloxei32.v v0, (%0), v8" ::"r"(IN_VEC)); // load data
-        asm volatile("vfmul.vv v12, v4, v0");      // vector multiply
-        asm volatile("vfredsum.vs v16, v12, v16"); // reduction
-      }
-      // store previous data
-      if (i != 0) {
-        double tmp;
-        asm volatile("vfmv.f.s %0, v24" : "=f"(tmp));
-        *_dst_ = tmp;
-      }
+    volatile size_t maxvl = __riscv_vsetvl_e64m8(len);
+    asm volatile("vmv.v.i v24,  0");
 
-    } else {
-      // clear register file
-      asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(1));
-      asm volatile("vmv.v.i v24,  0");
-      asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(SLICE_SIZE));
-      asm volatile("vmv.v.i v12,  0");
+    double dbg = 0;
+    while (len) {
+      volatile size_t slice_size = __riscv_vsetvl_e64m8(len);
+      asm volatile("vle64.v v8, (%0)" ::"r"(data));          // fetch entries
+      asm volatile("vle32.v v16, (%0)" ::"r"(index));         // fetch indices
+      asm volatile("vloxei32.v v0, (%0), v16" ::"r"(IN_VEC)); // load data
+      asm volatile("vfmacc.vv v24, v8, v0");      // vector multiply
+      /* if (i == 0) { */
+      /* 	printf("slice=%ld\n", slice_size); */
+      /* 	for (size_t j = 0; j < slice_size; j++) { */
+      /* 	  double t, u, v; */
+      /* 	  asm volatile("vrgather.vx v16, v12, %0" :: "r"(j)); */
+      /* 	  asm volatile("vfmv.f.s %0, v16" : "=f"(t)); */
 
-      // SpVV
-      while (len > SLICE_SIZE) {
-        asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(SLICE_SIZE));
-        asm volatile("vle64.v v4, (%0)" ::"r"(data));          // fetch entries
-        asm volatile("vle32.v v8, (%0)" ::"r"(index));         // fetch indices
-        asm volatile("vloxei32.v v0, (%0), v8" ::"r"(IN_VEC)); // load data
-        asm volatile("vfmul.vv v12, v4, v0");      // vector multiply
-        asm volatile("vfredsum.vs v24, v12, v24"); // reduction
-        len = len - SLICE_SIZE;
-        data = data + SLICE_SIZE;
-        index = index + SLICE_SIZE;
-      }
-      if (len > 0) {
-        asm volatile("vsetvli zero, %0, e64, m2, ta, ma" ::"r"(len));
-        asm volatile("vle64.v v4, (%0)" ::"r"(data));          // fetch entries
-        asm volatile("vle32.v v8, (%0)" ::"r"(index));         // fetch indices
-        asm volatile("vloxei32.v v0, (%0), v8" ::"r"(IN_VEC)); // load data
-        asm volatile("vfmul.vv v12, v4, v0");      // vector multiply
-        asm volatile("vfredsum.vs v24, v12, v24"); // reduction
-      }
-      // store previous data
-      double tmp;
-      asm volatile("vfmv.f.s %0, v16" : "=f"(tmp));
-      *_dst_ = tmp;
+      /* 	  asm volatile("vrgather.vx v16, v4, %0" :: "r"(j)); */
+      /* 	  asm volatile("vfmv.f.s %0, v16" : "=f"(u)); */
+
+      /* 	  asm volatile("vrgather.vx v16, v0, %0" :: "r"(j)); */
+      /* 	  asm volatile("vfmv.f.s %0, v16" : "=f"(v)); */
+      /* 	  dbg += data[j] * IN_VEC[index[j]/sizeof(double)]; */
+      /* 	  printf("i=%ld j=%ld id=%ld data=%lx vec=%lx out=%lx vdata=\"%lx\" vvec=\"%lx\" vout=\"%lx\"\n", */
+      /* 		 i, j, index[j] / sizeof(double), */
+      /* 		 *(uint64_t*)(&data[j]), *(uint64_t*)(&IN_VEC[index[j]/sizeof(double)]), */
+      /* 		 *(uint64_t*)(&dbg), */
+      /* 		 *(uint64_t*)(&u), *(uint64_t*)(&v), *(uint64_t*)(&t) */
+      /* 		 ); */
+
+      /* 	} */
+      /* } */
+
+      len = len - slice_size;
+      data = data + slice_size;
+      index = index + slice_size;
     }
-  }
 
-  // store the last value
-  double *_dst_ = OUT_VEC + N_ROW - 1;
-  if (N_ROW % 2 == 0) // even
-  {
     double tmp;
+    asm volatile("vsetvli x0, %0, e64, m8, ta, ma"::"r"(maxvl));
+    asm volatile("vmv.v.i v8, 0");
+    asm volatile("vfredusum.vs v24, v24, v8"); // reduction
     asm volatile("vfmv.f.s %0, v24" : "=f"(tmp));
-    *_dst_ = tmp;
-  } else { // odd
-    double tmp;
-    asm volatile("vfmv.f.s %0, v16" : "=f"(tmp));
-    *_dst_ = tmp;
+    OUT_VEC[i] = tmp;
   }
+  /* printf("Verifying\n"); */
+  //spmv_verify(N_ROW, CSR_PROW, CSR_INDEX, CSR_DATA, IN_VEC, OUT_VEC);
 }
 
 int spmv_verify(int32_t N_ROW, int32_t *CSR_PROW, int32_t *CSR_INDEX,
@@ -128,13 +96,17 @@ int spmv_verify(int32_t N_ROW, int32_t *CSR_PROW, int32_t *CSR_INDEX,
 
     double golden = 0;
     for (int32_t j = 0; j < len; ++j) {
-      int32_t idx = index[j] / DATA_BYTE;
-      golden = golden + data[j] * IN_VEC[idx];
-      // printf("index:%d, data: %f, vec: %f\n", idx, data[j], IN_VEC[idx]);
+      int32_t idx = index[j] / sizeof(double);
+      double next = golden + data[j] * IN_VEC[idx];
+      /* printf("index:%d, data: %lx, vec: %lx %lx\n", idx, *(uint64_t*)(&data[j]), *(uint64_t*)(&IN_VEC[idx]), */
+      /* 	     *(uint64_t*)(&next)); */
+      golden = next;
+
     }
     if ((float)golden != (float)res) {
-      printf("Sorry, wrong value! at index %d, result = %f, golden = %f \n", i,
-             res, golden);
+      printf("Sorry, wrong value! at index %d, result = %lx, golden = %lx \n", i,
+             *(uint64_t*)(&res), *(uint64_t*)(&golden));
+      exit(1);
       return i;
     }
   }

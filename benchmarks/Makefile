@@ -43,7 +43,7 @@ cpp_bmarks = \
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
 RISCV_GCC ?= $(RISCV_PREFIX)gcc
 RISCV_GXX ?= $(RISCV_PREFIX)g++
-RISCV_COMMON_OPTS ?= -DPREALLOCATE=1 -mcmodel=medany -static -O2 -g -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv$(XLEN)gcv_zfh -mabi=lp64d
+RISCV_COMMON_OPTS ?= -DPREALLOCATE=1 -mcmodel=medany -static -O2 -g -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv$(XLEN)gcv_zfh_zvfh -mabi=lp64d
 RISCV_GCC_OPTS ?= $(RISCV_COMMON_OPTS) -std=gnu99
 RISCV_GXX_OPTS ?= $(RISCV_COMMON_OPTS) -std=c++17 -specs=htif_nano.specs
 RISCV_LINK ?= $(RISCV_GCC) -T $(src_dir)/common/test.ld $(incs)

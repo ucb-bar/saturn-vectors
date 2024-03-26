@@ -17,13 +17,13 @@
 // Author: Matteo Perotti <mperotti@iis.ee.ethz.ch>
 
 #include "fdotproduct.h"
-
+#define INTRINSICS
 // 64-bit dot-product: a * b
 double fdotp_v64b(const double *a, const double *b, size_t avl) {
 #ifdef INTRINSICS
 
   size_t orig_avl = avl;
-  size_t vl = vsetvl_e64m8(avl);
+  size_t vl = __riscv_vsetvlmax_e64m8();
 
   vfloat64m8_t acc, buf_a, buf_b;
   vfloat64m1_t red;
@@ -32,27 +32,25 @@ double fdotp_v64b(const double *a, const double *b, size_t avl) {
   double *b_ = (double *)b;
 
   // Clean the accumulator
-  red = vfmv_s_f_f64m1(red, 0, vl);
+  acc = __riscv_vfmv_s_f_f64m8(0, vl);
+  red = __riscv_vfmv_s_f_f64m1(0, vl);
   // Stripmine and accumulate a partial reduced vector
   for (; avl > 0; avl -= vl) {
-    vl = vsetvl_e64m8(avl);
+    vl = __riscv_vsetvl_e64m8(avl);
     // Load chunk a and b
-    buf_a = vle64_v_f64m8(a_, vl);
-    buf_b = vle64_v_f64m8(b_, vl);
+    buf_a = __riscv_vle64_v_f64m8(a_, vl);
+    buf_b = __riscv_vle64_v_f64m8(b_, vl);
     // Multiply and accumulate
-    if (avl == orig_avl) {
-      acc = vfmul_vv_f64m8(buf_a, buf_b, vl);
-    } else {
-      acc = vfmacc_vv_f64m8(acc, buf_a, buf_b, vl);
-    }
+    acc = __riscv_vfmacc_vv_f64m8(acc, buf_a, buf_b, vl);
     // Bump pointers
     a_ += vl;
     b_ += vl;
   }
 
   // Reduce and return
-  red = vfredusum_vs_f64m8_f64m1(red, acc, red, vl);
-  return vfmv_f_s_f64m1_f64(red);
+  vl = __riscv_vsetvlmax_e64m8();
+  red = __riscv_vfredusum_vs_f64m8_f64m1(acc, red, vl);
+  return __riscv_vfmv_f_s_f64m1_f64(red);
 
 #else
 
@@ -97,7 +95,7 @@ float fdotp_v32b(const float *a, const float *b, size_t avl) {
 #ifdef INTRINSICS
 
   size_t orig_avl = avl;
-  size_t vl = vsetvl_e32m8(avl);
+  size_t vl = __riscv_vsetvl_e32m8(avl);
 
   vfloat32m8_t acc, buf_a, buf_b;
   vfloat32m1_t red;
@@ -106,27 +104,26 @@ float fdotp_v32b(const float *a, const float *b, size_t avl) {
   float *b_ = (float *)b;
 
   // Clean the accumulator
-  red = vfmv_s_f_f32m1(red, 0, vl);
+  acc = __riscv_vfmv_s_f_f32m8(0, vl);
+  red = __riscv_vfmv_s_f_f32m1(0, vl);
   // Stripmine and accumulate a partial reduced vector
   for (; avl > 0; avl -= vl) {
-    vl = vsetvl_e32m8(avl);
+    vl = __riscv_vsetvl_e32m8(avl);
     // Load chunk a and b
-    buf_a = vle32_v_f32m8(a_, vl);
-    buf_b = vle32_v_f32m8(b_, vl);
+    buf_a = __riscv_vle32_v_f32m8(a_, vl);
+    buf_b = __riscv_vle32_v_f32m8(b_, vl);
     // Multiply and accumulate
-    if (avl == orig_avl) {
-      acc = vfmul_vv_f32m8(buf_a, buf_b, vl);
-    } else {
-      acc = vfmacc_vv_f32m8(acc, buf_a, buf_b, vl);
-    }
+    acc = __riscv_vfmacc_vv_f32m8(acc, buf_a, buf_b, vl);
+
     // Bump pointers
     a_ += vl;
     b_ += vl;
   }
 
   // Reduce and return
-  red = vfredusum_vs_f32m8_f32m1(red, acc, red, vl);
-  return vfmv_f_s_f32m1_f32(red);
+  vl = __riscv_vsetvlmax_e64m8();
+  red = __riscv_vfredusum_vs_f32m8_f32m1(acc, red, vl);
+  return __riscv_vfmv_f_s_f32m1_f32(red);
 
 #else
 
@@ -168,41 +165,41 @@ float fdotp_v32b(const float *a, const float *b, size_t avl) {
 
 // 16-bit dot-product: a * b
 _Float16 fdotp_v16b(const _Float16 *a, const _Float16 *b, size_t avl) {
-#ifdef INTRINSICS
+/* #ifdef INTRINSICS */
 
-  size_t orig_avl = avl;
-  size_t vl = vsetvl_e16m8(avl);
+/*   size_t orig_avl = avl; */
+/*   size_t vl = __riscv_vsetvl_e16m8(avl); */
 
-  vfloat16m8_t acc, buf_a, buf_b;
-  vfloat16m1_t red;
+/*   vfloat16m8_t acc, buf_a, buf_b; */
+/*   vfloat16m1_t red; */
 
-  _Float16 *a_ = (_Float16 *)a;
-  _Float16 *b_ = (_Float16 *)b;
+/*   _Float16 *a_ = (_Float16 *)a; */
+/*   _Float16 *b_ = (_Float16 *)b; */
 
-  // Clean the accumulator
-  red = vfmv_s_f_f16m1(red, 0, vl);
-  // Stripmine and accumulate a partial reduced vector
-  for (; avl > 0; avl -= vl) {
-    vl = vsetvl_e16m8(avl);
-    // Load chunk a and b
-    buf_a = vle16_v_f16m8(a_, vl);
-    buf_b = vle16_v_f16m8(b_, vl);
-    // Multiply and accumulate
-    if (avl == orig_avl) {
-      acc = vfmul_vv_f16m8(buf_a, buf_b, vl);
-    } else {
-      acc = vfmacc_vv_f16m8(acc, buf_a, buf_b, vl);
-    }
-    // Bump pointers
-    a_ += vl;
-    b_ += vl;
-  }
+/*   // Clean the accumulator */
+/*   red = __riscv_vfmv_s_f_f16m1(0, vl); */
+/*   // Stripmine and accumulate a partial reduced vector */
+/*   for (; avl > 0; avl -= vl) { */
+/*     vl = __riscv_vsetvl_e16m8(avl); */
+/*     // Load chunk a and b */
+/*     buf_a = __riscv_vle16_v_f16m8(a_, vl); */
+/*     buf_b = __riscv_vle16_v_f16m8(b_, vl); */
+/*     // Multiply and accumulate */
+/*     if (avl == orig_avl) { */
+/*       acc = __riscv_vfmul_vv_f16m8(buf_a, buf_b, vl); */
+/*     } else { */
+/*       acc = __riscv_vfmacc_vv_f16m8(acc, buf_a, buf_b, vl); */
+/*     } */
+/*     // Bump pointers */
+/*     a_ += vl; */
+/*     b_ += vl; */
+/*   } */
 
-  // Reduce and store
-  red = vfredusum_vs_f16m8_f16m1(red, acc, red, vl);
-  return vfmv_f_s_f16m1_f16(red);
+/*   // Reduce and store */
+/*   red = __riscv_vfredusum_vs_f16m8_f16m1(red, acc, red, vl); */
+/*   return __riscv_vfmv_f_s_f16m1_f16(red); */
 
-#else
+/* #else */
 
   size_t orig_avl = avl;
   size_t vl;
@@ -237,7 +234,7 @@ _Float16 fdotp_v16b(const _Float16 *a, const _Float16 *b, size_t avl) {
   asm volatile("vfmv.f.s %0, v0" : "=f"(red));
   return red;
 
-#endif
+/* #endif */
 }
 
 double fdotp_s64b(const double *a, const double *b, size_t avl) {
