@@ -2,8 +2,8 @@
 
 import numpy
 
-row_size = 128
-col_size = 128
+M_DIM = 128
+N_DIM = 128
 
 info = numpy.finfo(numpy.float64)
 nmant = 1 # Limit precision to avoid rounding errors
@@ -16,8 +16,8 @@ randf = lambda n: numpy.ldexp(
     numpy.random.randint(maxmant, size=n),
     numpy.random.randint(minexp, maxexp, size=n))
 
-A = randf((row_size, col_size)).astype(numpy.float64)
-x = randf(row_size).astype(numpy.float64)
+A = randf((M_DIM, N_DIM)).astype(numpy.float64)
+x = randf(M_DIM).astype(numpy.float64)
 result = numpy.dot(numpy.transpose(x), A)
 
 def print_array(name, data, data_size, data_type='float', data_fmt='{}', fold=8):
@@ -26,10 +26,10 @@ def print_array(name, data, data_size, data_type='float', data_fmt='{}', fold=8)
         print('  ', ', '.join(data_fmt.format(x) for x in data[i:i+fold]), ',', sep='')
     print('};')
 
-print('#define ROW_SIZE {}'.format(row_size))
-print('#define COL_SIZE {}'.format(col_size))
-print('#define DIM_SIZE {}'.format(col_size*row_size))
+print('#define M_DIM {}'.format(M_DIM))
+print('#define N_DIM {}'.format(N_DIM))
+print('#define DIM_SIZE {}'.format(M_DIM*N_DIM))
 
-print_array('input_data_A', A.flatten(), 'ROW_SIZE * COL_SIZE')
-print_array('input_data_x', x, 'ROW_SIZE')
-print_array('verify_data', result, 'ROW_SIZE')
+print_array('input_data_A', A.flatten(), 'M_DIM * N_DIM')
+print_array('input_data_x', x, 'M_DIM')
+print_array('verify_data', result, 'N_DIM')
