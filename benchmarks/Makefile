@@ -18,24 +18,24 @@ instbasedir = $(UCB_VLSI_HOME)/install
 #--------------------------------------------------------------------
 
 bmarks = \
+	vec-conditional \
+	vec-conjugate-gradient \
+	vec-conv-3 \
+	vec-cos \
+	vec-div-approx \
+	vec-dotprod \
+	vec-dropout \
+	vec-exp \
+	vec-mixed_width_mask \
+	vec-sep-conv-3 \
 	vec-sgemm \
 	vec-sgemm-v2 \
 	vec-sgemm-v3 \
 	vec-sgemv \
-	vec-sep-conv-3 \
 	vec-slide-conv \
-	vec-transpose-store \
-	vec-transpose-load \
-	vec-conditional \
-	vec-div-approx \
-	vec-mixed_width_mask \
 	vec-square-root-approx \
-	vec-conjugate-gradient \
-	vec-cos \
-	vec-conv-3 \
-	vec-dotprod \
-	vec-dropout \
-	vec-exp
+	vec-transpose-load \
+	vec-transpose-store \
 
 cpp_bmarks = \
 	vec-tasks \
