@@ -37,10 +37,10 @@
 
 #include "ara/rivec/vector_defines.h"
 
-void cos_1xf64_bmark(double *angles, double *results, size_t len);
-void cos_2xf32_bmark(float *angles, float *results, size_t len);
+void cos_f64_bmark(double *angles, double *results, size_t len);
+void cos_f32_bmark(float *angles, float *results, size_t len);
 
-static inline _MMR_f64 __cos_1xf64(_MMR_f64 x, size_t gvl) {
+static inline _MMR_f64 __cos_f64(_MMR_f64 x, size_t gvl) {
 
   int64_t _ps_inv_sign_mask = ~0x8000000000000000;
   double _ps_cephes_FOPI = 1.27323954473516; // 4 / M_PI
@@ -145,7 +145,7 @@ static inline _MMR_f64 __cos_1xf64(_MMR_f64 x, size_t gvl) {
   return y;
 }
 
-static inline _MMR_f32 __cos_2xf32(_MMR_f32 x, size_t gvl) {
+static inline _MMR_f32 __cos_f32(_MMR_f32 x, size_t gvl) {
 
   int32_t _ps_inv_sign_mask = ~0x80000000;
   float _ps_cephes_FOPI = 1.27323954473516; // 4 / M_PI

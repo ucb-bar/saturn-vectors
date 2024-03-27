@@ -47,7 +47,7 @@ int main() {
  
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
-  cos_1xf64_bmark(angles_f64, results_f64, N_f64);
+  cos_f64_bmark(angles_f64, results_f64, N_f64);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
 
@@ -57,7 +57,7 @@ int main() {
 
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
-  cos_2xf32_bmark(angles_f32, results_f32, N_f32);
+  cos_f32_bmark(angles_f32, results_f32, N_f32);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
 
