@@ -38,6 +38,9 @@ extern size_t N_f32;
 extern float angles_f32[] __attribute__((aligned(16)));
 extern float results_f32[] __attribute__((aligned(16)));
 extern float gold_results_f32[] __attribute__((aligned(16)));
+float results_f32m1[N_F32] __attribute__((aligned(16)));
+float results_f32m2[N_F32] __attribute__((aligned(16)));
+float results_f32m4[N_F32] __attribute__((aligned(16)));
 
 #define THRESHOLD 0.3
 
@@ -54,6 +57,19 @@ int check64(double* results) {
   return error;
 }
 
+int check32(float* results) {
+  int error = 0;
+  for (uint64_t i = 0; i < N_f32; ++i) {
+    if (!similarity_check(results[i], gold_results_f32[i], THRESHOLD)) {
+      error = 1;
+      printf("32-bit error at index %d. %x != %x\n", i,
+	     *(uint32_t*)(&results[i]),
+             *(uint32_t*)(&gold_results_f32[i]));
+    }
+  }
+  return error;
+}
+
 int main() {
   if (N_F64 != N_f64 || N_F32 != N_f32) exit(1);
 
@@ -63,43 +79,51 @@ int main() {
   unsigned long cycles1, cycles2, instr2, instr1;
 
   printf("Executing cosine on %d 64-bit data LMUL1...\n", N_f64);
-
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f64m1_bmark(angles_f64, results_f64m1, N_f64);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
-
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
 
   printf("Executing cosine on %d 64-bit data LMUL2...\n", N_f64);
-
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f64m2_bmark(angles_f64, results_f64m2, N_f64);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
-
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
 
   printf("Executing cosine on %d 64-bit data LMUL4...\n", N_f64);
-
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f64m4_bmark(angles_f64, results_f64m4, N_f64);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
-
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
 
-  printf("Executing cosine on %d 32-bit data...\n", N_f32);
-
+  printf("Executing cosine on %d 32-bit data LMUL1...\n", N_f32);
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
-  cos_f32_bmark(angles_f32, results_f32, N_f32);
+  cos_f32m1_bmark(angles_f32, results_f32m1, N_f32);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
+  printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
 
+  printf("Executing cosine on %d 32-bit data LMUL2...\n", N_f32);
+  instr1 = read_csr(minstret);
+  cycles1 = read_csr(mcycle);
+  cos_f32m2_bmark(angles_f32, results_f32m2, N_f32);
+  instr2 = read_csr(minstret);
+  cycles2 = read_csr(mcycle);
+  printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
+
+  printf("Executing cosine on %d 32-bit data LMUL4...\n", N_f32);
+  instr1 = read_csr(minstret);
+  cycles1 = read_csr(mcycle);
+  cos_f32m4_bmark(angles_f32, results_f32m4, N_f32);
+  instr2 = read_csr(minstret);
+  cycles2 = read_csr(mcycle);
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
 
   printf("Checking results:\n");
@@ -107,15 +131,9 @@ int main() {
   error = check64(results_f64m1); if (error) { return error; }
   error = check64(results_f64m2); if (error) { return error; }
   error = check64(results_f64m4); if (error) { return error; }
-
-  for (uint64_t i = 0; i < N_f32; ++i) {
-    if (!similarity_check(results_f32[i], gold_results_f32[i], THRESHOLD)) {
-      error = 1;
-      printf("32-bit error at index %d. %x != %x\n", i,
-	     *(uint32_t*)(&results_f32[i]),
-             *(uint32_t*)(&gold_results_f32[i]));
-    }
-  }
+  error = check32(results_f32m1); if (error) { return error; }
+  error = check32(results_f32m2); if (error) { return error; }
+  error = check32(results_f32m4); if (error) { return error; }
 
   return error;
 }
