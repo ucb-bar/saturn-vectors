@@ -76,6 +76,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
 
+  io_fp_active := valid && issued
+
   // Create FPInput
   val req = Wire(new FPInput)
   req.ldst := false.B

@@ -38,13 +38,14 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
   val sharedFPUnits = fus.collect { case fp: HasSharedFPUIO => fp }
 
-  if (sharedFPUnits.size > 0) {
-    require(sharedFPUnits.size == 1, "Rocket FPU doesn't support interleaved requests")
-    io.shared_fp_req <> sharedFPUnits.head.io_fp_req
-    sharedFPUnits.head.io_fp_resp <> io.shared_fp_resp
-  } else {
-    io.shared_fp_req.valid := false.B
-    io.shared_fp_req.bits := DontCare
+  io.shared_fp_req.valid := false.B
+  io.shared_fp_req.bits := DontCare
+  for ((u, i) <- sharedFPUnits.zipWithIndex) {
+    val otherUnits = sharedFPUnits.zipWithIndex.filter(_._2 != i).map(_._1)
+    val other_busy = otherUnits.map(_.io_fp_active).orR
+    u.io_fp_req.ready := false.B
+    when (!other_busy) { io.shared_fp_req <> u.io_fp_req }
+    u.io_fp_resp := io.shared_fp_resp
   }
 
   val pipe_stall = WireInit(false.B)

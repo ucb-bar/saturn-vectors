@@ -12,6 +12,7 @@ import saturn.insns._
 trait HasSharedFPUIO {
   implicit val p: Parameters
   val io_fp_req = IO(Decoupled(new FPInput()))
+  val io_fp_active = IO(Output(Bool()))
   val io_fp_resp = IO(Flipped(Valid(new FPResult())))
 }
 
@@ -45,6 +46,8 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
 
   // Functional unit is ready if not currently running and the scalar FPU is available
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+
+  io_fp_active := io.pipe.tail.map(_.valid).orR // head is pipe0, issuing the request
 
   // Create FPInput
   val req = Wire(new FPInput)
