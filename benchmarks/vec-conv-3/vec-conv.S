@@ -15,8 +15,8 @@
  *     a2: size_t a_stride
  *     a3: size_t b_stride
  *     a4: const float *k
- *     a6: const float *a
- *	   a7: float *b
+ *     a5: const float *a
+ *	   a6: float *b
  */
 
 #define rows		a0
@@ -110,31 +110,26 @@ loop_prolog:
     vfmacc.vf vrow0, k4, vload1
     vle32.v vload2, (ap_8)
     vfmacc.vf vrow0, k5, vload2
-
-    vfmul.vf vrow1, vload0, k0
-    vfmacc.vf vrow1, k1, vload1
-    vfmacc.vf vrow1, k2, vload2
-
     add ap, ap, a_stride
-    addi ap_4, ap, 4
-    addi ap_8, ap, 8
 
-    # Load the third row and compute horizontal
+    # Load the third row
+    vfmul.vf vrow1, vload0, k0
     vle32.v vload0, (ap)
+    addi ap_4, ap, 4
+    vfmacc.vf vrow1, k1, vload1
     vle32.v vload1, (ap_4)
+    vfmacc.vf vrow1, k2, vload2
+    addi ap_8, ap, 8
     vle32.v vload2, (ap_8)
     
 # Main Loop
 conv_loop:
-
-	add ap, ap, a_stride
-	addi ap_4, ap, 4
-	addi ap_8, ap, 8
-
-    # TODO re-schedule this code
     vfmacc.vf vrow0, k6, vload0
+	add ap, ap, a_stride
     vfmacc.vf vrow0, k7, vload1
+	addi ap_4, ap, 4
     vfmacc.vf vrow0, k8, vload2
+	addi ap_8, ap, 8
 
     vse32.v vrow0, (bp)
     
@@ -143,21 +138,20 @@ conv_loop:
     vfmacc.vf vrow1, k5, vload2
 
     vfmul.vf vrow0, vload0, k0
+    vle32.v vload0, (ap)
     vfmacc.vf vrow0, k1, vload1
+    vle32.v vload1, (ap_4)
+	add bp, bp, b_stride
     vfmacc.vf vrow0, k2, vload2
 
-    vle32.v vload0, (ap)
-    vle32.v vload1, (ap_4)
     vle32.v vload2, (ap_8)
 
-	add bp, bp, b_stride
-	add ap, ap, a_stride
-	addi ap_4, ap, 4
-	addi ap_8, ap, 8
-
     vfmacc.vf vrow1, k6, vload0
+	add ap, ap, a_stride
     vfmacc.vf vrow1, k7, vload1
+	addi ap_4, ap, 4
     vfmacc.vf vrow1, k8, vload2
+	addi ap_8, ap, 8
 
     vfmacc.vf vrow0, k3, vload0
     vfmacc.vf vrow0, k4, vload1
@@ -166,15 +160,13 @@ conv_loop:
     vse32.v vrow1, (bp) 
 
     vfmul.vf vrow1, vload0, k0
-    vfmacc.vf vrow1, k1, vload1
-    vfmacc.vf vrow1, k2, vload2
-
     vle32.v vload0, (ap)
+    vfmacc.vf vrow1, k1, vload1
     vle32.v vload1, (ap_4)
+    vfmacc.vf vrow1, k2, vload2
     vle32.v vload2, (ap_8)
 
 	add bp, bp, b_stride
-    
 	addi row_count, row_count, -2
 
 	bgtz row_count, conv_loop
@@ -197,11 +189,10 @@ epilog:
 	add bp, bp, b_stride
 
     vle32.v vload0, (ap)
-    vle32.v vload1, (ap_4)
-    vle32.v vload2, (ap_8)
-
     vfmacc.vf vrow1, k6, vload0
+    vle32.v vload1, (ap_4)
     vfmacc.vf vrow1, k7, vload1
+    vle32.v vload2, (ap_8)
     vfmacc.vf vrow1, k8, vload2
 
     vse32.v vrow1, (bp)
