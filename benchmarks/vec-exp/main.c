@@ -46,7 +46,7 @@ int main() {
   printf("Executing exponential on %d 64-bit data...\n", N_f64);
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
-  exp_1xf64_bmark(exponents_f64, results_f64, N_f64);
+  exp_f64m1_bmark(exponents_f64, results_f64, N_f64);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
@@ -54,7 +54,7 @@ int main() {
   printf("Executing exponential on %d 32-bit data...\n", N_f32);
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
-  exp_2xf32_bmark(exponents_f32, results_f32, N_f32);
+  exp_f32m1_bmark(exponents_f32, results_f32, N_f32);
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
