@@ -46,6 +46,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vat_valids = RegInit(VecInit.fill(1 << vParams.vatSz)(false.B))
   val vat_tail = RegInit(0.U(vParams.vatSz.W))
+  val vat_head = RegInit(0.U(vParams.vatSz.W))
   def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, vat_tail)
   val vat_available = !vat_valids(vat_tail)
   val vat_available_count = PopCount(~vat_valids.asUInt)
@@ -55,6 +56,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     assert(!vat_valids(vat_tail))
     vat_valids(vat_tail) := true.B
     vat_tail := vat_tail + 1.U
+  }
+  when (vat_tail =/= vat_head && !vat_valids(vat_head)) {
+    vat_head := vat_head + 1.U
   }
 
   val issue_inst = WireInit(io.issue.bits)
@@ -290,6 +294,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       seq.io.perm := DontCare
       seq.io.acc.valid := false.B
       seq.io.acc.bits := DontCare
+      seq.io.vat_head := vat_head
 
       val older_issq_wintents = FillInterleaved(egsPerVReg, otherIssqs.map { i =>
         i.io.hazards.map(h => Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.wintent, 0.U))
@@ -426,7 +431,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vrf.io.read(0)(vxs.length+1).req.valid := io.index_access.valid && !index_access_hazard
   io.index_access.ready := vrf.io.read(0)(vxs.length+1).req.ready && !index_access_hazard
-  vrf.io.read(0)(vxs.length+1).req.bits  := index_access_eg
+  vrf.io.read(0)(vxs.length+1).req.bits.eg  := index_access_eg
+  vrf.io.read(0)(vxs.length+1).req.bits.oldest  := false.B
   io.index_access.idx   := vrf.io.read(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
   vrf.io.read(2)(vxs.length) <> vss.io.rvd
@@ -439,8 +445,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrf.io.read(3)(vxs.length+1) <> vss.io.rvm
   vrf.io.read(3)(vxs.length+2) <> vps.io.rvm
   val vm_busy = Wire(Bool())
-  vrf.io.read(3)(vxs.length+3).req.valid := io.mask_access.valid && !vm_busy
-  vrf.io.read(3)(vxs.length+3).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
+  vrf.io.read(3)(vxs.length+3).req.valid    := io.mask_access.valid && !vm_busy
+  vrf.io.read(3)(vxs.length+3).req.bits.eg  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
+  vrf.io.read(3)(vxs.length+3).req.bits.oldest := false.B
   io.mask_access.ready  := vrf.io.read(3)(vxs.length+3).req.ready && !vm_busy
   io.mask_access.mask   := vrf.io.read(3)(vxs.length+3).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 

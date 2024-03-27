@@ -7,24 +7,42 @@ import freechips.rocketchip.tile.{CoreModule}
 import freechips.rocketchip.util._
 import saturn.common._
 
+class OldestRRArbiter(val n: Int)(implicit p: Parameters) extends Module {
+  val io = IO(new ArbiterIO(new VectorReadReq, n))
+
+  val arb = Module(new RRArbiter(new VectorReadReq, n))
+  io <> arb.io
+  val oldest_oh = io.in.map(i => i.valid && i.bits.oldest)
+  assert(PopCount(oldest_oh) <= 1.U)
+  when (oldest_oh.orR) {
+    io.chosen := VecInit(oldest_oh).asUInt
+    io.out.valid := true.B
+    io.out.bits := Mux1H(oldest_oh, io.in.map(_.bits))
+    for (i <- 0 until n) {
+      io.in(i).ready := oldest_oh(i) && io.out.ready
+    }
+  }
+}
+
 class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val in = Vec(n, Flipped(new VectorReadIO))
     val out = Vec(banks, new VectorReadIO)
   })
 
-  val arbs = Seq.fill(banks) { Module(new RRArbiter(UInt(log2Ceil(egsTotal).W), n)) }
+  val arbs = Seq.fill(banks) { Module(new OldestRRArbiter(n)) }
   for (i <- 0 until banks) {
-      io.out(i).req <> arbs(i).io.out
+    io.out(i).req <> arbs(i).io.out
   }
 
   val bankOffset = log2Ceil(banks)
 
   for (i <- 0 until n) {
-    val bank_sel = if (bankOffset == 0) true.B else UIntToOH(io.in(i).req.bits(bankOffset-1,0))
+    val bank_sel = if (bankOffset == 0) true.B else UIntToOH(io.in(i).req.bits.eg(bankOffset-1,0))
     for (j <- 0 until banks) {
       arbs(j).io.in(i).valid := io.in(i).req.valid && bank_sel(j)
-      arbs(j).io.in(i).bits := io.in(i).req.bits >> bankOffset
+      arbs(j).io.in(i).bits.eg := io.in(i).req.bits.eg >> bankOffset
+      arbs(j).io.in(i).bits.oldest := io.in(i).req.bits.oldest
     }
     io.in(i).req.ready := Mux1H(bank_sel, arbs.map(_.io.in(i).ready))
     io.in(i).resp := Mux1H(bank_sel, io.out.map(_.resp))
@@ -40,7 +58,7 @@ class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameter
   val vrf = Mem(rows, Vec(dLen, Bool()))
   for (read <- io.read) {
     read.req.ready := true.B
-    read.resp := vrf.read(read.req.bits).asUInt
+    read.resp := vrf.read(read.req.bits.eg).asUInt
   }
 
   for (write <- io.write) {

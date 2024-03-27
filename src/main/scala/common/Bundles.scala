@@ -117,8 +117,13 @@ class ScalarWrite extends Bundle {
   val rd = UInt(5.W)
 }
 
+class VectorReadReq(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val eg = UInt(log2Ceil(egsTotal).W)
+  val oldest = Bool()
+}
+
 class VectorReadIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val req = Decoupled(UInt(log2Ceil(egsTotal).W))
+  val req = Decoupled(new VectorReadReq)
   val resp = Input(UInt(dLen.W))
 }
 

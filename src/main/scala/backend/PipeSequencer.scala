@@ -14,6 +14,7 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
     val seq_hazard = Output(Valid(new SequencerHazard))
 
     val vat = Output(UInt(vParams.vatSz.W))
+    val vat_head = Input(UInt(vParams.vatSz.W))
     val older_writes = Input(UInt(egsTotal.W))
     val older_reads  = Input(UInt(egsTotal.W))
 

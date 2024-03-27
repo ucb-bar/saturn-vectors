@@ -49,7 +49,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
   io.seq_hazard.bits.vat     := inst.vat
 
-  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)
+  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits.eg), 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
   val raw_hazard = (vm_read_oh & io.older_writes) =/= 0.U
@@ -58,7 +58,8 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
   io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
+  io.rvm.req.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
+  io.rvm.req.bits.oldest := inst.vat === io.vat_head
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready)
   io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
@@ -75,7 +76,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
       wvd_mask := wvd_mask & ~vd_write_oh
     }
     when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
-      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits)
+      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits.eg)
     }
     when (sidx === inst.seg_nf) {
       sidx := 0.U
