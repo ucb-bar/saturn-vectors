@@ -31,7 +31,8 @@ bmarks = \
 	vec-mixed_width_mask \
 	vec-square-root-approx \
 	vec-conjugate-gradient \
-	vec-cos
+	vec-cos \
+	vec-conv-3
 
 cpp_bmarks = \
 	vec-tasks \
