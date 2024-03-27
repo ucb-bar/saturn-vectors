@@ -83,6 +83,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   exp_f64m1_bmark(exponents_f64, results_f64m1, N_f64);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
@@ -91,6 +92,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   exp_f64m2_bmark(exponents_f64, results_f64m2, N_f64);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
@@ -99,6 +101,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   exp_f64m4_bmark(exponents_f64, results_f64m4, N_f64);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
@@ -107,6 +110,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   exp_f32m1_bmark(exponents_f32, results_f32m1, N_f32);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
@@ -115,6 +119,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   exp_f32m2_bmark(exponents_f32, results_f32m2, N_f32);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
@@ -123,6 +128,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   exp_f32m4_bmark(exponents_f32, results_f32m4, N_f32);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %d cycles.\n", cycles2 - cycles1);
