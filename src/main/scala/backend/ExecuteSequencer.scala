@@ -11,7 +11,7 @@ import saturn.common._
 import saturn.insns._
 
 class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new ExecuteMicroOp)(p) {
-  def accepts(inst: VectorIssueInst) = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
+  def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
