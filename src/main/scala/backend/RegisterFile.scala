@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{CoreModule}
+import freechips.rocketchip.util._
 import saturn.common._
 
 class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -52,7 +53,7 @@ class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameter
   }
 }
 
-class RegisterFile(reads: Seq[Int])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class RegisterFile(reads: Seq[Int], pipeWrites: Int, llWrites: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val nBanks = vParams.vrfBanking
   // Support 1, 2, and 4 banks for the VRF
@@ -60,7 +61,9 @@ class RegisterFile(reads: Seq[Int])(implicit p: Parameters) extends CoreModule()
 
   val io = IO(new Bundle {
     val read = MixedVec(reads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
-    val write = Vec(nBanks, Input(Valid(new VectorWrite(dLen))))
+
+    val pipe_writes = Vec(pipeWrites, Input(Valid(new VectorWrite(dLen))))
+    val ll_writes = Vec(llWrites, Flipped(Decoupled(new VectorWrite(dLen))))
   })
 
   val vrf = Seq.fill(nBanks) { Module(new RegisterFileBank(reads.size, 1, egsTotal/nBanks)) }
@@ -73,7 +76,35 @@ class RegisterFile(reads: Seq[Int])(implicit p: Parameters) extends CoreModule()
     xbar.io.in <> io.read(i)
   }
 
-  vrf.zip(io.write).foreach { case (rf, w) =>
-    rf.io.write(0) := w
+  io.ll_writes.foreach(_.ready := false.B)
+
+  vrf.zipWithIndex.foreach { case (rf, i) =>
+    val arb = Module(new Arbiter(new VectorWrite(dLen), 1 + llWrites))
+    rf.io.write(0).valid := arb.io.out.valid
+    rf.io.write(0).bits  := arb.io.out.bits
+    arb.io.out.ready := true.B
+
+    val bank_match = io.pipe_writes.map { w => (w.bits.bankId === i.U) && w.valid }
+    val bank_write_data = Mux1H(bank_match, io.pipe_writes.map(_.bits.data))
+    val bank_write_mask = Mux1H(bank_match, io.pipe_writes.map(_.bits.mask))
+    val bank_write_eg   = Mux1H(bank_match, io.pipe_writes.map(_.bits.eg))
+    val bank_write_valid = bank_match.orR
+
+    arb.io.in(0).valid := bank_write_valid
+    arb.io.in(0).bits.data := bank_write_data
+    arb.io.in(0).bits.mask := bank_write_mask
+    arb.io.in(0).bits.eg   := bank_write_eg >> vrfBankBits
+
+    when (bank_write_valid) { assert(arb.io.in(0).ready && PopCount(bank_match) === 1.U) }
+
+    io.ll_writes.zipWithIndex.foreach { case (w, j) =>
+      arb.io.in(1+j).valid := w.valid && w.bits.bankId === i.U
+      arb.io.in(1+j).bits.eg   := w.bits.eg >> vrfBankBits
+      arb.io.in(1+j).bits.data := w.bits.data
+      arb.io.in(1+j).bits.mask := w.bits.mask
+      when (arb.io.in(1+j).ready && w.bits.bankId === i.U) {
+        w.ready := true.B
+      }
+    }
   }
 }

@@ -370,7 +370,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs0-vrs3, vxs1-vrs1, vss-vrd
   // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
   val vrf = Module(new RegisterFile(
-    reads = Seq(2 + vxs.size, vxs.size, 1 + vxs.size, 4 + vxs.size)
+    reads = Seq(2 + vxs.size, vxs.size, 1 + vxs.size, 4 + vxs.size),
+    pipeWrites = vxus.size,
+    llWrites = 2
   ))
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
@@ -382,7 +384,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
 
   val resetting = RegInit(true.B)
-  val reset_ctr = RegInit(0.U(log2Ceil(egsTotal/2).W))
+  val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
   when (resetting) {
     reset_ctr := reset_ctr + 1.U
     io.issue.ready := false.B
@@ -390,57 +392,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   when (~reset_ctr === 0.U) { resetting := false.B }
 
   // Write ports
-  // vxu/lresp/reset
-  val writes = Seq.tabulate(vParams.vrfBanking) { i =>
-    val arb = Module(new Arbiter(new VectorWrite(dLen), 3))
-    vrf.io.write(i).valid := arb.io.out.valid
-    vrf.io.write(i).bits  := arb.io.out.bits
-    arb.io.out.ready := true.B
-    arb.io.in
+  vrf.io.pipe_writes.zip(vxus).foreach { case (w,vxu) =>
+    w := vxu.io.write
   }
 
-  for (b <- 0 until vParams.vrfBanking) {
-    val bank_match = vxus.map{ xu => (xu.io.write.bits.bankId === b.U) && xu.io.write.valid }
-    val bank_write_bits = Mux1H(bank_match, vxus.map(_.io.write.bits.data))
-    val bank_write_mask = Mux1H(bank_match, vxus.map(_.io.write.bits.mask))
-    val bank_writes_eg = Mux1H(bank_match, vxus.map(_.io.write.bits.eg))
-    val bank_match_valid = bank_match.asUInt.orR
-    writes(b)(0).valid := bank_match_valid
-    writes(b)(0).bits.data := bank_write_bits
-    writes(b)(0).bits.mask := bank_write_mask
-    writes(b)(0).bits.eg := bank_writes_eg >> vrfBankBits
-    when(bank_match_valid) {
-      assert(writes(b)(0).ready)
-      assert(PopCount(bank_match.asUInt) === 1.U)
-    }
-  }
-
-  load_write.ready := Mux1H(UIntToOH(load_write.bits.bankId), writes.map(_(1).ready))
-  for (b <- 0 until vParams.vrfBanking) {
-    writes(b)(1).valid := load_write.valid && load_write.bits.bankId === b.U
-    writes(b)(1).bits.eg   := load_write.bits.eg >> vrfBankBits
-    writes(b)(1).bits.data := load_write.bits.data
-    writes(b)(1).bits.mask := load_write.bits.mask
-    writes(b)(2).valid := resetting
-    writes(b)(2).bits.eg := reset_ctr
-    writes(b)(2).bits.data := 0.U
-    writes(b)(2).bits.mask := ~(0.U(dLen.W))
-  }
-
-  // // Read ports are
-  // // vxs0-vrs1, vxs1-vrs1, vmu-index, frontend-index
-  // // vxs0-vrs2, vxs1-vrs1
-  // // vxs0-vrs3, vxs1-vrs1, vss-vrd
-  // // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
-  // val reads = Seq(2 + vxs.length, vxs.length, 1 + vxs.length, 4 + vxs.length).zipWithIndex.map { case (rc, i) =>
-  //   val arb = Module(new RegisterReadXbar(rc, vParams.vrfBanking))
-
-  //   vrf.zipWithIndex.foreach { case(bank, j) =>
-  //     bank.io.read(i) <> arb.io.out(j)
-  //   }
-
-  //   arb.io.in
-  // }
+  vrf.io.ll_writes(0) <> load_write
+  vrf.io.ll_writes(1).valid     := resetting
+  vrf.io.ll_writes(1).bits.eg   := reset_ctr
+  vrf.io.ll_writes(1).bits.data := 0.U
+  vrf.io.ll_writes(1).bits.mask := ~(0.U(dLen.W))
 
   vxs.zipWithIndex.foreach { case(xs, i) =>
     vrf.io.read(0)(i) <> vxs(i).io.rvs1
