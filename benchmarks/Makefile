@@ -34,7 +34,8 @@ bmarks = \
 	vec-cos \
 	vec-conv-3 \
 	vec-dotprod \
-	vec-dropout
+	vec-dropout \
+	vec-exp
 
 cpp_bmarks = \
 	vec-tasks \
