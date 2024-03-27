@@ -51,3 +51,29 @@ class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameter
     }
   }
 }
+
+class RegisterFile(reads: Seq[Int])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+
+  val nBanks = vParams.vrfBanking
+  // Support 1, 2, and 4 banks for the VRF
+  require(nBanks == 1 || nBanks == 2 || nBanks == 4)
+
+  val io = IO(new Bundle {
+    val read = MixedVec(reads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
+    val write = Vec(nBanks, Input(Valid(new VectorWrite(dLen))))
+  })
+
+  val vrf = Seq.fill(nBanks) { Module(new RegisterFileBank(reads.size, 1, egsTotal/nBanks)) }
+
+  reads.zipWithIndex.foreach { case (rc, i) =>
+    val xbar = Module(new RegisterReadXbar(rc, nBanks))
+    vrf.zipWithIndex.foreach { case (bank, j) =>
+      bank.io.read(i) <> xbar.io.out(j)
+    }
+    xbar.io.in <> io.read(i)
+  }
+
+  vrf.zip(io.write).foreach { case (rf, w) =>
+    rf.io.write(0) := w
+  }
+}

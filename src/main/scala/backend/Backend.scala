@@ -364,9 +364,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxs(i).io.acc := vxus(i).io.acc_write
   }
 
-  // Support 1,2, and 4 banks for the VRF
-  require(vParams.vrfBanking == 1 || vParams.vrfBanking == 2 || vParams.vrfBanking == 4)
-  val vrf = Seq.fill(vParams.vrfBanking) { Module(new RegisterFileBank(4, 1, egsTotal/vParams.vrfBanking)) }
+  // Read ports are
+  // vxs0-vrs1, vxs1-vrs1, vmu-index, frontend-index
+  // vxs0-vrs2, vxs1-vrs1
+  // vxs0-vrs3, vxs1-vrs1, vss-vrd
+  // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
+  val vrf = Module(new RegisterFile(
+    reads = Seq(2 + vxs.size, vxs.size, 1 + vxs.size, 4 + vxs.size)
+  ))
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
   vmu.io.lresp.ready := vls.io.iss.valid && load_write.ready
@@ -388,8 +393,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxu/lresp/reset
   val writes = Seq.tabulate(vParams.vrfBanking) { i =>
     val arb = Module(new Arbiter(new VectorWrite(dLen), 3))
-    vrf(i).io.write(0).valid := arb.io.out.valid
-    vrf(i).io.write(0).bits  := arb.io.out.bits
+    vrf.io.write(i).valid := arb.io.out.valid
+    vrf.io.write(i).bits  := arb.io.out.bits
     arb.io.out.ready := true.B
     arb.io.in
   }
@@ -422,29 +427,29 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     writes(b)(2).bits.mask := ~(0.U(dLen.W))
   }
 
-  // Read ports are
-  // vxs0-vrs1, vxs1-vrs1, vmu-index, frontend-index
-  // vxs0-vrs2, vxs1-vrs1
-  // vxs0-vrs3, vxs1-vrs1, vss-vrd
-  // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
-  val reads = Seq(2 + vxs.length, vxs.length, 1 + vxs.length, 4 + vxs.length).zipWithIndex.map { case (rc, i) =>
-    val arb = Module(new RegisterReadXbar(rc, vParams.vrfBanking))
+  // // Read ports are
+  // // vxs0-vrs1, vxs1-vrs1, vmu-index, frontend-index
+  // // vxs0-vrs2, vxs1-vrs1
+  // // vxs0-vrs3, vxs1-vrs1, vss-vrd
+  // // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
+  // val reads = Seq(2 + vxs.length, vxs.length, 1 + vxs.length, 4 + vxs.length).zipWithIndex.map { case (rc, i) =>
+  //   val arb = Module(new RegisterReadXbar(rc, vParams.vrfBanking))
 
-    vrf.zipWithIndex.foreach { case(bank, j) =>
-      bank.io.read(i) <> arb.io.out(j)
-    }
+  //   vrf.zipWithIndex.foreach { case(bank, j) =>
+  //     bank.io.read(i) <> arb.io.out(j)
+  //   }
 
-    arb.io.in
-  }
+  //   arb.io.in
+  // }
 
   vxs.zipWithIndex.foreach { case(xs, i) =>
-    reads(0)(i) <> vxs(i).io.rvs1
-    reads(1)(i) <> vxs(i).io.rvs2
-    reads(2)(i) <> vxs(i).io.rvd
-    reads(3)(i) <> vxs(i).io.rvm
+    vrf.io.read(0)(i) <> vxs(i).io.rvs1
+    vrf.io.read(1)(i) <> vxs(i).io.rvs2
+    vrf.io.read(2)(i) <> vxs(i).io.rvd
+    vrf.io.read(3)(i) <> vxs(i).io.rvm
   }
 
-  reads(0)(vxs.length) <> vps.io.rvs2
+  vrf.io.read(0)(vxs.length) <> vps.io.rvs2
   vps.io.rvs1.req.ready := true.B
 
   val index_access_eg = getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
@@ -459,25 +464,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     h.valid && h.bits.eg === index_access_eg
   }).orR
 
-  reads(0)(vxs.length+1).req.valid := io.index_access.valid && !index_access_hazard
-  io.index_access.ready := reads(0)(vxs.length+1).req.ready && !index_access_hazard
-  reads(0)(vxs.length+1).req.bits  := index_access_eg
-  io.index_access.idx   := reads(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
+  vrf.io.read(0)(vxs.length+1).req.valid := io.index_access.valid && !index_access_hazard
+  io.index_access.ready := vrf.io.read(0)(vxs.length+1).req.ready && !index_access_hazard
+  vrf.io.read(0)(vxs.length+1).req.bits  := index_access_eg
+  io.index_access.idx   := vrf.io.read(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
-  reads(2)(vxs.length) <> vss.io.rvd
+  vrf.io.read(2)(vxs.length) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
   vmu.io.sdata.bits.data := vss.io.iss.bits.stdata
   vmu.io.sdata.bits.mask := vss.io.iss.bits.stmask
   vss.io.iss.ready     := vmu.io.sdata.ready
 
-  reads(3)(vxs.length) <> vls.io.rvm
-  reads(3)(vxs.length+1) <> vss.io.rvm
-  reads(3)(vxs.length+2) <> vps.io.rvm
+  vrf.io.read(3)(vxs.length) <> vls.io.rvm
+  vrf.io.read(3)(vxs.length+1) <> vss.io.rvm
+  vrf.io.read(3)(vxs.length+2) <> vps.io.rvm
   val vm_busy = Wire(Bool())
-  reads(3)(vxs.length+3).req.valid := io.mask_access.valid && !vm_busy
-  reads(3)(vxs.length+3).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
-  io.mask_access.ready  := reads(3)(vxs.length+3).req.ready && !vm_busy
-  io.mask_access.mask   := reads(3)(vxs.length+3).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
+  vrf.io.read(3)(vxs.length+3).req.valid := io.mask_access.valid && !vm_busy
+  vrf.io.read(3)(vxs.length+3).req.bits  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
+  io.mask_access.ready  := vrf.io.read(3)(vxs.length+3).req.ready && !vm_busy
+  io.mask_access.mask   := vrf.io.read(3)(vxs.length+3).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
   val maskindex_q = Module(new DCEQueue(new MaskIndex, 2))
