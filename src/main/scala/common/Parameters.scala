@@ -24,7 +24,7 @@ object VectorParams {
     vrfBanking = 4,
   )
   def dspParams = refParams.copy(
-    separateFpVxs = true
+    issStructure = VectorIssueStructure.SharedIssQ
   )
   def dmaParams = VectorParams(
     vdqEntries = 2,
@@ -38,6 +38,13 @@ object VectorParams {
     vrfBanking = 1,
     useIterativeIMul = true
   )
+}
+
+sealed trait VectorIssueStructure
+object VectorIssueStructure {
+  case object Unified extends VectorIssueStructure
+  case object SharedIssQ extends VectorIssueStructure
+  case object SplitIssQ extends VectorIssueStructure
 }
 
 case class VectorParams(
@@ -74,7 +81,7 @@ case class VectorParams(
 
   vrfBanking: Int = 2,
 
-  separateFpVxs: Boolean = false,
+  issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
   tlBuffer: BufferParams = BufferParams.default
 )

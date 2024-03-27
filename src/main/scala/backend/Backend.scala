@@ -143,15 +143,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
 
-  val vxus = if (vParams.separateFpVxs) {
-    Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs)), Module(new ExecutionUnit(Seq(fpFMA) ++ integerMul)))
-  } else {
-    Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))
+  val vxus = vParams.issStructure match {
+    case VectorIssueStructure.Unified => {
+      Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))
+    }
+    case _ => {
+      require(!vParams.useScalarFPFMA)
+      Seq(
+        Module(new ExecutionUnit(integerFUs ++ fpMISCs)),
+        Module(new ExecutionUnit(Seq(fpFMA) ++ integerMul))
+      )
+    }
   }
-
-  require(!(vParams.separateFpVxs & vParams.useScalarFPFMA))
-  io.fp_req <> vxus.head.io.shared_fp_req
-  vxus.head.io.shared_fp_resp <> io.fp_resp
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
@@ -163,13 +166,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vxs = vxus.map { xu => Module(new ExecuteSequencer(xu.supported_insns)) }
   val vps = Module(new PermuteSequencer(vxus.head.supported_insns))
 
-  if (vParams.separateFpVxs) {
-    vxus.last.io.shared_fp_req.ready := false.B
-    vxus.last.io.shared_fp_resp.valid := false.B
-    vxus.last.io.shared_fp_resp.bits := DontCare
+  io.fp_req <> vxus.head.io.shared_fp_req
+  vxus.head.io.shared_fp_resp <> io.fp_resp
+  vxus.tail.foreach { vxu =>
+    vxu.io.shared_fp_req.ready := false.B
+    vxu.io.shared_fp_resp.valid := false.B
+    vxu.io.shared_fp_resp.bits := DontCare
 
-    assert(vxus.last.io.shared_fp_req.valid === false.B)
-    assert(vxs.last.io.perm.req.valid === false.B)
+    assert(vxu.io.shared_fp_req.valid === false.B)
+  }
+  vxs.tail.foreach { seq =>
+    assert(seq.io.perm.req.valid === false.B)
   }
 
   case class IssueGroup(
