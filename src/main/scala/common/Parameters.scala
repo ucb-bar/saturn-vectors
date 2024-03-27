@@ -9,7 +9,15 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy.{BufferParams}
 
 object VectorParams {
+
+  // minParams:
+  // For a very small area-efficient vector unit with iterative
+  // and element-wise functional units
   def minParams = VectorParams()
+
+  // refParams
+  // For a standard modestly capable small vector unit with
+  // SIMD functional units
   def refParams = minParams.copy(
     vlifqEntries = 8,
     vsifqEntries = 8,
@@ -23,9 +31,22 @@ object VectorParams {
     useScalarFPFMA = false,
     vrfBanking = 4,
   )
+
+  // dspParams
+  // For a wide high-performance vector unit with multi-issue
   def dspParams = refParams.copy(
-    issStructure = VectorIssueStructure.SharedIssQ
+    issStructure = VectorIssueStructure.Shared
   )
+
+  // genParams:
+  // For a vector unit that performs better on less-optimized
+  // code sequences
+  def genParams = dspParams.copy(
+    issStructure = VectorIssueStructure.Split
+  )
+
+  // dmaParams:
+  // For a vector unit that only does memcpys, and no arithmetic
   def dmaParams = VectorParams(
     vdqEntries = 2,
     vliqEntries = 4,
@@ -43,8 +64,8 @@ object VectorParams {
 sealed trait VectorIssueStructure
 object VectorIssueStructure {
   case object Unified extends VectorIssueStructure
-  case object SharedIssQ extends VectorIssueStructure
-  case object SplitIssQ extends VectorIssueStructure
+  case object Shared extends VectorIssueStructure
+  case object Split extends VectorIssueStructure
 }
 
 case class VectorParams(

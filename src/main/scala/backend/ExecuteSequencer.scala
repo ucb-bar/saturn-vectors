@@ -11,7 +11,7 @@ import saturn.common._
 import saturn.insns._
 
 class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new ExecuteMicroOp)(p) {
-  def accepts(inst: VectorIssueInst) = !inst.vmu
+  def accepts(inst: VectorIssueInst) = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
@@ -74,7 +74,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 
-  io.dis.ready := (!valid || (tail && io.iss.fire)) && new VectorDecoder(io.dis.bits.funct3, io.dis.bits.funct6, io.dis.bits.rs1, io.dis.bits.rs2, supported_insns, Nil).matched
+  io.dis.ready := (!valid || (tail && io.iss.fire))
 
   when (io.dis.fire) {
     val dis_inst = io.dis.bits
