@@ -33,8 +33,7 @@ extern float angles_f32[] __attribute__((aligned(16)));
 extern float results_f32[] __attribute__((aligned(16)));
 extern float gold_results_f32[] __attribute__((aligned(16)));
 
-#define THRESHOLD 1
-
+#define THRESHOLD 0.3
 #define CHECK
 
 int main() {
@@ -69,7 +68,7 @@ int main() {
   for (uint64_t i = 0; i < N_f64; ++i) {
     if (!similarity_check(results_f64[i], gold_results_f64[i], THRESHOLD)) {
       error = 1;
-      printf("64-bit error at index %d. %%lx != %%lx\n", i,
+      printf("64-bit error at index %d. %lx != %lx\n", i,
 	     *(uint64_t*)(&results_f64[i]),
              *(uint64_t*)(&gold_results_f64[i]));
     }
