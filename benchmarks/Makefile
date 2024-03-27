@@ -32,7 +32,9 @@ bmarks = \
 	vec-square-root-approx \
 	vec-conjugate-gradient \
 	vec-cos \
-	vec-conv-3
+	vec-conv-3 \
+	vec-dotprod \
+	vec-dropout
 
 cpp_bmarks = \
 	vec-tasks \
