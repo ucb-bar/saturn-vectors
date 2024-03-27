@@ -74,20 +74,13 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val half_sel = (io.pipe(depth-2).bits.eidx >> (dLenOffBits.U - out_eew_pipe))(0)
   val wide = Mux(half_sel, mul_out >> dLen, mul_out)(dLen-1,0)
 
-  val (smul_clipped, smul_sat) = if (vParams.useVectorSMul) {
+  val (smul_clipped, smul_sat) = {
     val smul_arr = Module(new VectorSMul)
     smul_arr.io.mul_in := mul_out
     smul_arr.io.eew := out_eew_pipe
     smul_arr.io.vxrm := io.pipe(depth-2).bits.vxrm
     (smul_arr.io.clipped, smul_arr.io.sat)
-  } else {
-    val smul_arr = Module(new ElementwiseSMul)
-    smul_arr.io.mul_in := mul_out
-    smul_arr.io.eew := out_eew_pipe
-    smul_arr.io.vxrm := io.pipe(depth-2).bits.vxrm
-    smul_arr.io.eidx := io.pipe(depth-2).bits.eidx
-    (smul_arr.io.clipped, smul_arr.io.sat)
-  }
+  } 
 
   val adder_arr = Module(new AdderArray(dLenB))
   adder_arr.io.in1 := Mux(ctrl_wmul, wide, lo).asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -259,31 +252,4 @@ class VectorSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
   }
   io.clipped := smul_clipped_sew(io.eew)
   io.sat := smul_sat_sew(io.eew)
-}
-
-class ElementwiseSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
-  val io = IO(new Bundle {
-    val eew = Input(UInt(2.W))
-    val vxrm = Input(UInt(2.W))
-    val eidx =  Input(UInt(log2Ceil(maxVLMax).W))
-    val mul_in = Input(UInt((2*dLen).W))
-
-    val clipped = Output(UInt((dLen).W))
-    val sat = Output(Bool())
-  })
-  val smul_prod = VecInit.tabulate(4)({sew =>
-    if (sew == 3 && dLenB == 8) { io.mul_in } else {
-      io.mul_in.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))(io.eidx(log2Ceil(dLenB)-1-sew,0))
-    }
-  })(io.eew).asSInt
-  val rounding_incr = VecInit.tabulate(4)({ sew => RoundingIncrement(io.vxrm, smul_prod((8 << sew)-1,0)) })(io.eew)
-  val smul = VecInit.tabulate(4)({ sew => smul_prod >> ((8 << sew) - 1) })(io.eew) + Cat(0.U(1.W), rounding_incr).asSInt
-  val clip_neg = VecInit.tabulate(4)({ sew => (-1 << ((8 << sew)-1)).S })(io.eew)
-  val clip_pos = VecInit.tabulate(4)({ sew => ((1 << ((8 << sew)-1)) - 1).S })(io.eew)
-  val clip_hi = smul > clip_pos
-  val clip_lo = smul < clip_neg
-  val clipped = Mux(clip_hi, clip_pos, 0.S) | Mux(clip_lo, clip_neg, 0.S) | Mux(!clip_hi && !clip_lo, smul, 0.S)
-
-  io.sat := clip_hi || clip_lo
-  io.clipped := VecInit.tabulate(4)({ sew => Fill(dLenB >> sew, clipped((8<<sew)-1,0)) })(io.eew)
 }
