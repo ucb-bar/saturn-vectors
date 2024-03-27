@@ -145,13 +145,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vxus = vParams.issStructure match {
     case VectorIssueStructure.Unified => {
-      Seq(Module(new ExecutionUnit(integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul)))
+      Seq(ExecutionUnit.instantiate("", integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul))
     }
     case _ => {
       require(!vParams.useScalarFPFMA)
       Seq(
-        Module(new ExecutionUnit(integerFUs ++ fpMISCs)),
-        Module(new ExecutionUnit(Seq(fpFMA) ++ integerMul))
+        ExecutionUnit.instantiate("_int", integerFUs ++ fpMISCs),
+        ExecutionUnit.instantiate("_fp", Seq(fpFMA) ++ integerMul)
       )
     }
   }
@@ -163,7 +163,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vxs = vxus.map { xu => Module(new ExecuteSequencer(xu.supported_insns)) }
+  val vxs = vxus.map { xu => Module(new ExecuteSequencer(xu.supported_insns)).suggestName(s"vxs${xu.suffix}") }
   val vps = Module(new PermuteSequencer(vxus.head.supported_insns))
 
   io.fp_req <> vxus.head.io.shared_fp_req

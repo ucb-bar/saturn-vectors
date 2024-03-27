@@ -8,7 +8,17 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
 
-class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+object ExecutionUnit {
+  def instantiate(
+    suffix: String,
+    genFUs: Seq[(() => FunctionalUnit, String)]
+  )(implicit p: Parameters): ExecutionUnit = {
+    val vxu = Module(new ExecutionUnit(suffix, genFUs)).suggestName(s"vxu${suffix}")
+    vxu
+  }
+}
+
+class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val fus = genFUs.map{ case(gen, suggested_name) => Module(gen()).suggestName(suggested_name) }
   val supported_insns = fus.map(_.supported_insns).flatten
 
