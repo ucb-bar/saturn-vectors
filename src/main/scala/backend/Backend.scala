@@ -30,7 +30,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val set_fflags = Output(Valid(UInt(5.W)))
 
     val fp_req = Decoupled(new FPInput())
-    val fp_resp = Flipped(Decoupled(new FPResult()))
+    val fp_resp = Flipped(Valid(new FPResult()))
   })
 
   require(vLen >= 64)
@@ -119,7 +119,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     (() => new IterativeIntegerDivider(vParams.useIterativeIMul), "vdivfu"),
     (() => new MaskUnit, "vmaskfu"),
     (() => new PermuteUnit, "vpermfu"),
-  ) 
+  )
 
   val integerMul = (!vParams.useIterativeIMul).option((if (vParams.useSegmentedIMul)
     (() => new SegmentedMultiplyPipe(vParams.imaPipeDepth), "vsegmulfu")
@@ -169,7 +169,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxus.last.io.shared_fp_resp.bits := DontCare
 
     assert(vxus.last.io.shared_fp_req.valid === false.B)
-    assert(vxs.last.io.perm.req.valid === false.B) 
+    assert(vxs.last.io.perm.req.valid === false.B)
   }
 
   case class IssueGroup(
@@ -384,8 +384,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     writes(b)(0).bits.data := bank_write_bits
     writes(b)(0).bits.mask := bank_write_mask
     writes(b)(0).bits.eg := bank_writes_eg >> vrfBankBits
-    when(bank_match_valid) { 
-      assert(writes(b)(0).ready) 
+    when(bank_match_valid) {
+      assert(writes(b)(0).ready)
       assert(PopCount(bank_match.asUInt) === 1.U)
     }
   }

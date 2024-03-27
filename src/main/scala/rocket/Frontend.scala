@@ -96,7 +96,9 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     io.core.set_fflags     := vu.io.set_fflags
     io.core.resp           <> vu.io.scalar_resp
     io.fp_req <> vu.io.fp_req
-    vu.io.fp_resp <> io.fp_resp
+    vu.io.fp_resp.valid := io.fp_resp.valid
+    vu.io.fp_resp.bits := io.fp_resp.bits
+    io.fp_resp.ready := true.B
 
     io.dmem <> hella_if.io.dmem
     hella_if.io.vec_busy := vu.io.backend_busy

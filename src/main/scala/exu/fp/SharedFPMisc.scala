@@ -38,8 +38,11 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     FPSwapVdV2, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
 
   val issued = Reg(Bool())
+  val has_wdata = Reg(Bool())
+  val wdata = Reg(UInt(64.W))
   when (io.iss.valid && io.iss.ready) {
     issued := false.B
+    has_wdata := false.B
   }
 
   val vs1_eew = op.rvs1_eew
@@ -143,8 +146,6 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   fp_req.valid := valid && !issued && !vfrsqrt7_inst && !vfrec7_inst && !mgt_NaN
   when (fp_req.fire) { issued := true.B }
 
-  io_fp_resp.ready := io.write.ready && valid
-
   // Approximation Instructions
 
   // Reciprocal Sqrt Approximation
@@ -158,22 +159,24 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   rec7.io.eew := op.rvs2_eew
   rec7.io.frm := op.frm
 
-  val write_bits = Wire(UInt(64.W))
-
-  when (ctrl.bool(WritesAsMask)) {
-    when (ctrl.bool(FPMNE) || (ctrl.bool(FPMGT) && !mgt_NaN)) {
-      write_bits := Fill(dLen, !io_fp_resp.bits.data(0))
-    } .elsewhen (ctrl.bool(FPMGT) && mgt_NaN) {
-      write_bits := Fill(dLen, 0.U)
+  when (io_fp_resp.valid) {
+    has_wdata := true.B
+    when (ctrl.bool(WritesAsMask)) {
+      when (ctrl.bool(FPMNE) || (ctrl.bool(FPMGT) && !mgt_NaN)) {
+        wdata := Fill(dLen, !io_fp_resp.bits.data(0))
+      } .elsewhen (ctrl.bool(FPMGT) && mgt_NaN) {
+        wdata := Fill(dLen, 0.U)
+      } .otherwise {
+        wdata := Fill(dLen, io_fp_resp.bits.data(0))
+      }
+    } .elsewhen (vfclass_inst) {
+      wdata := Mux(vd_eew64, Cat(0.U(54.W), io_fp_resp.bits.data(9,0)), Fill(2, Cat(0.U(22.W), io_fp_resp.bits.data(9,0))))
+    } .elsewhen (ctrl_fptoint) {
+      wdata := Mux(vd_eew64, io_fp_resp.bits.data(63,0), Fill(2, io_fp_resp.bits.data(31,0)))
     } .otherwise {
-      write_bits := Fill(dLen, io_fp_resp.bits.data(0))
+      wdata := Mux(vd_eew64, FType.D.ieee(io_fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, 0.U, Some(FType.S)))))
     }
-  } .elsewhen (vfclass_inst) {
-    write_bits := Mux(vd_eew64, Cat(0.U(54.W), io_fp_resp.bits.data(9,0)), Fill(2, Cat(0.U(22.W), io_fp_resp.bits.data(9,0))))
-  } .elsewhen (ctrl_fptoint) {
-    write_bits := Mux(vd_eew64, io_fp_resp.bits.data(63,0), Fill(2, io_fp_resp.bits.data(31,0)))
-  } .otherwise {
-    write_bits := Mux(vd_eew64, FType.D.ieee(io_fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, 0.U, Some(FType.S)))))
+    has_wdata := true.B
   }
 
   val mask_write_offset = VecInit.tabulate(4)({ eew =>
@@ -183,11 +186,11 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     VecInit(op.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
   })(op.vd_eew) << mask_write_offset)(dLen-1,0)
 
-  io.write.valid := (io_fp_resp.fire() || vfrsqrt7_inst || vfrec7_inst || mgt_NaN) && valid
+  io.write.valid := (has_wdata || vfrsqrt7_inst || vfrec7_inst || mgt_NaN) && valid
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, op.wmask))
   io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io_fp_resp.fire()),
-                              Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, write_bits)))
+                              Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, wdata)))
 
   last := io.write.fire()
 
