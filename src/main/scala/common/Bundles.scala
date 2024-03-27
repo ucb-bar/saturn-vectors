@@ -99,6 +99,10 @@ class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
   val wvd = Bool()
 }
 
+class IssueQueueInst(nSeqs: Int)(implicit p: Parameters) extends BackendIssueInst()(p) {
+  val seq = UInt(nSeqs.W)
+}
+
 class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(32 * vLen / writeBits).W)
   def bankId = if (vrfBankBits == 0) 0.U else eg(vrfBankBits-1,0)

@@ -156,15 +156,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
   }
 
-  val vlissq = Module(new IssueQueue(vParams.vlissqEntries))
-  val vsissq = Module(new IssueQueue(vParams.vsissqEntries))
+  val vlissq = Module(new IssueQueue(vParams.vlissqEntries, 1))
+  val vsissq = Module(new IssueQueue(vParams.vsissqEntries, 1))
   val vxissqs = vParams.issStructure match {
     case VectorIssueStructure.Split => vxus.map { vxu =>
-      Module(new IssueQueue(vParams.vxissqEntries)).suggestName(s"vxissq${vxu.suffix}")
+      Module(new IssueQueue(vParams.vxissqEntries, 1)).suggestName(s"vxissq${vxu.suffix}")
     }
-    case _ => Seq(Module(new IssueQueue(vParams.vxissqEntries)).suggestName("vxissq"))
+    case _ => Seq(Module(new IssueQueue(vParams.vxissqEntries, vxus.size)).suggestName("vxissq"))
   }
-  val vpissq = Module(new IssueQueue(vParams.vpissqEntries))
+  val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 1))
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
@@ -320,15 +320,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
 
     issq_stall(i) := group.seqs.map(_.accepts(vdq.io.deq.bits)).reduce(_ || _) && !group.issq.io.enq.ready
-    group.issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && group.seqs.map(_.accepts(vdq.io.deq.bits)).orR
+    val accepts = group.seqs.map(_.accepts(vdq.io.deq.bits))
+    group.issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && accepts.orR
     group.issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
+    group.issq.io.enq.bits.seq := VecInit(accepts).asUInt
 
     group.seqs.zipWithIndex.foreach{ case(s, j) =>
-      s.io.dis.valid := group.issq.io.deq.valid
-      s.io.dis.bits := group.issq.io.deq.bits
+      s.io.dis.valid := group.issq.io.deq.valid && group.issq.io.deq.bits.seq(j)
+      s.io.dis.bits := group.issq.io.deq.bits.viewAsSupertype(new BackendIssueInst)
     }
-
-    group.issq.io.deq.ready := group.seqs.map(_.io.dis.ready).reduce(_ || _)
+    group.issq.io.deq.ready := Mux1H(group.issq.io.deq.bits.seq, group.seqs.map(_.io.dis.ready))
   }
 
   // Hazard checking for multi-VXS
