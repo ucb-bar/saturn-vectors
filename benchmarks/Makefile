@@ -27,6 +27,7 @@ bmarks = \
 	vec-dropout \
 	vec-exp \
 	vec-fconv2d \
+	vec-fconv3d \
 	vec-mixed_width_mask \
 	vec-sep-conv-3 \
 	vec-sgemm \
