@@ -28,6 +28,7 @@ bmarks = \
 	vec-exp \
 	vec-fconv2d \
 	vec-fconv3d \
+	vec-fdotprod \
 	vec-mixed_width_mask \
 	vec-sep-conv-3 \
 	vec-sgemm \
