@@ -59,7 +59,7 @@ RISCV_GXX_OPTS ?= $(RISCV_COMMON_OPTS) -std=c++17 -specs=htif_nano.specs
 RISCV_LINK ?= $(RISCV_GCC) -T $(src_dir)/common/test.ld $(incs)
 RISCV_LINK_OPTS ?= -static -nostdlib -nostartfiles -lm -lgcc -T $(src_dir)/common/test.ld
 RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump -C -D -S --disassemble-all --disassemble-zeroes --section=.text --section=.text.startup --section=.text.init --section=.data
-RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh -p4 -m0x70020000:0x20000,0x80000000:0x10000000
+RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh_zvfh -p4 -m0x70020000:0x20000,0x80000000:0x10000000
 
 incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks))
 objs  :=
