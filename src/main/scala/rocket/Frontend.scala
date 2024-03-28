@@ -60,6 +60,8 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     when (RegEnable(!io.tlb.req.ready, icu.io.s0_tlb_req.valid)) { icu.io.tlb_resp.miss := true.B }
     io.tlb.s2_kill := false.B
 
+    ecu.io.s2.scalar_store_pending := io.core.wb.store_pending
+
     io.core.wb.replay := ecu.io.s2.replay
     io.core.wb.xcpt   := Mux(icu.io.busy, icu.io.xcpt.valid     , ecu.io.s2.xcpt.valid)
     io.core.wb.cause  := Mux(icu.io.busy, icu.io.xcpt.bits.cause, ecu.io.s2.xcpt.bits.cause)
