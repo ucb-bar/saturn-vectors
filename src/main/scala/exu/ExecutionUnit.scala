@@ -8,7 +8,17 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
 
-class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+object ExecutionUnit {
+  def instantiate(
+    suffix: String,
+    genFUs: Seq[(() => FunctionalUnit, String)]
+  )(implicit p: Parameters): ExecutionUnit = {
+    val vxu = Module(new ExecutionUnit(suffix, genFUs)).suggestName(s"vxu${suffix}")
+    vxu
+  }
+}
+
+class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val fus = genFUs.map{ case(gen, suggested_name) => Module(gen()).suggestName(suggested_name) }
   val supported_insns = fus.map(_.supported_insns).flatten
 
@@ -19,7 +29,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new ExecuteMicroOp))
-    val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(pipe_depth)))) 
+    val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(pipe_depth))))
     val write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
     val scalar_write = Decoupled(new ScalarWrite)
@@ -29,7 +39,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
     val issue_pipe_latency = Output(UInt((log2Ceil(pipe_depth) + 1).W))
 
     val shared_fp_req = Decoupled(new FPInput())
-    val shared_fp_resp = Flipped(Decoupled(new FPResult()))
+    val shared_fp_resp = Flipped(Valid(new FPResult()))
 
     val set_vxsat = Output(Bool())
     val set_fflags = Output(Valid(UInt(5.W)))
@@ -38,17 +48,14 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
 
   val sharedFPUnits = fus.collect { case fp: HasSharedFPUIO => fp }
 
-  if (sharedFPUnits.size > 0) {
-    val shared_fp_arb = Module(new Arbiter(new FPInput(), sharedFPUnits.size))
-    io.shared_fp_req <> shared_fp_arb.io.out
-    sharedFPUnits.zipWithIndex.foreach { case(u, i) =>
-      shared_fp_arb.io.in(i) <> u.io_fp_req
-      u.io_fp_resp <> io.shared_fp_resp
-    }
-  } else {
-    io.shared_fp_req.valid := false.B
-    io.shared_fp_req.bits := DontCare
-    io.shared_fp_resp.ready := false.B
+  io.shared_fp_req.valid := false.B
+  io.shared_fp_req.bits := DontCare
+  for ((u, i) <- sharedFPUnits.zipWithIndex) {
+    val otherUnits = sharedFPUnits.zipWithIndex.filter(_._2 != i).map(_._1)
+    val other_busy = otherUnits.map(_.io_fp_active).orR
+    u.io_fp_req.ready := false.B
+    when (!other_busy) { io.shared_fp_req <> u.io_fp_req }
+    u.io_fp_resp := io.shared_fp_resp
   }
 
   val pipe_stall = WireInit(false.B)
@@ -63,7 +70,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
   io.iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
   when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
 
-  io.issue_pipe_latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U)) 
+  io.issue_pipe_latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
 
   val pipe_write = WireInit(false.B)
 
@@ -118,7 +125,7 @@ class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Par
     }
     for ((fu, j) <- pipe_fus.zipWithIndex) {
       for (i <- 0 until fu.depth) {
-        fu.io.pipe(i).valid := pipe_valids(i) && pipe_sels(i)(j) 
+        fu.io.pipe(i).valid := pipe_valids(i) && pipe_sels(i)(j)
         fu.io.pipe(i).bits  := Mux(pipe_valids(i) && pipe_sels(i)(j),
           pipe_bits(i), 0.U.asTypeOf(new ExecuteMicroOp))
       }

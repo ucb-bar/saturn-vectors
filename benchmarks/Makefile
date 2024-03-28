@@ -18,21 +18,33 @@ instbasedir = $(UCB_VLSI_HOME)/install
 #--------------------------------------------------------------------
 
 bmarks = \
+	vec-conditional \
+	vec-conjugate-gradient \
+	vec-conv-3 \
+	vec-cos \
+	vec-div-approx \
+	vec-dotprod \
+	vec-dropout \
+	vec-exp \
+	vec-fconv2d \
+	vec-fconv3d \
+	vec-fdotprod \
+	vec-iconv2d \
+	vec-jacobi2d \
+	vec-mixed_width_mask \
+	vec-sep-conv-3 \
 	vec-sgemm \
 	vec-sgemm-v2 \
 	vec-sgemm-v3 \
 	vec-sgemv \
-	vec-sep-conv-3 \
 	vec-slide-conv \
-	vec-transpose-store \
-	vec-transpose-load \
-	vec-conditional \
-	vec-div-approx \
-	vec-mixed_width_mask \
 	vec-square-root-approx \
+	vec-transpose-load \
+	vec-transpose-store \
 
 cpp_bmarks = \
-	vec-tasks
+	vec-tasks \
+	vec-daxpy 
 
 #--------------------------------------------------------------------
 # Build rules
@@ -41,20 +53,22 @@ cpp_bmarks = \
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
 RISCV_GCC ?= $(RISCV_PREFIX)gcc
 RISCV_GXX ?= $(RISCV_PREFIX)g++
-RISCV_COMMON_OPTS ?= -DPREALLOCATE=1 -mcmodel=medany -static -O2 -g -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv$(XLEN)gcv_zfh -mabi=lp64d
+RISCV_COMMON_OPTS ?= -DPREALLOCATE=1 -mcmodel=medany -static -O2 -g -ffast-math -fno-common -fno-builtin-printf -fno-tree-loop-distribute-patterns -march=rv$(XLEN)gcv_zfh_zvfh -mabi=lp64d
 RISCV_GCC_OPTS ?= $(RISCV_COMMON_OPTS) -std=gnu99
 RISCV_GXX_OPTS ?= $(RISCV_COMMON_OPTS) -std=c++17 -specs=htif_nano.specs
 RISCV_LINK ?= $(RISCV_GCC) -T $(src_dir)/common/test.ld $(incs)
 RISCV_LINK_OPTS ?= -static -nostdlib -nostartfiles -lm -lgcc -T $(src_dir)/common/test.ld
 RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump -C -D -S --disassemble-all --disassemble-zeroes --section=.text --section=.text.startup --section=.text.init --section=.data
-RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh
+RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh_zvfh -p4 -m0x70020000:0x20000,0x80000000:0x10000000
 
 incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks))
 objs  :=
 
+COMMON_SRCS = $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S) $(wildcard $(src_dir)/common/ara/*.c)
+
 define compile_template
 $(1).riscv: $(wildcard $(src_dir)/$(1)/*) $(wildcard $(src_dir)/common/*)
-	$$(RISCV_GCC) $$(incs) $$(RISCV_GCC_OPTS) -o $$@ $(wildcard $(src_dir)/$(1)/*.c) $(wildcard $(src_dir)/$(1)/*.S) $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S) $$(RISCV_LINK_OPTS)
+	$$(RISCV_GCC) $$(incs) $$(RISCV_GCC_OPTS) -o $$@ $(wildcard $(src_dir)/$(1)/*.c) $(wildcard $(src_dir)/$(1)/*.S) $(COMMON_SRCS) $$(RISCV_LINK_OPTS)
 endef
 
 define compile_cpp_template
@@ -71,7 +85,7 @@ $(foreach bmark,$(cpp_bmarks),$(eval $(call compile_cpp_template,$(bmark))))
 
 bmarks_riscv_bin  = $(addsuffix .riscv,  $(bmarks) $(cpp_bmarks))
 bmarks_riscv_dump = $(addsuffix .riscv.dump, $(bmarks) $(cpp_bmarks))
-bmarks_riscv_out  = $(addsuffix .riscv.out,  $(bmarks))
+bmarks_riscv_out  = $(addsuffix .riscv.out,  $(bmarks) $(cpp_bmarks))
 
 $(bmarks_riscv_dump): %.riscv.dump: %.riscv
 	$(RISCV_OBJDUMP) $< > $@

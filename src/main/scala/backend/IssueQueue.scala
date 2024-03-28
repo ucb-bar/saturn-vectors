@@ -9,16 +9,16 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
 
-class IssueQueue(depth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class IssueQueue(depth: Int, nSeqs: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val io = IO(new Bundle {
-    val enq = Flipped(Decoupled(new BackendIssueInst))
-    val deq = Decoupled(new BackendIssueInst)
+    val enq = Flipped(Decoupled(new IssueQueueInst(nSeqs)))
+    val deq = Decoupled(new IssueQueueInst(nSeqs))
     val hazards = Output(Vec(depth, Valid(new InstructionHazard)))
   })
 
   if (depth > 0) {
-    val q = Module(new DCEQueue(new BackendIssueInst, depth, pipe=true))
+    val q = Module(new DCEQueue(new IssueQueueInst(nSeqs), depth, pipe=true))
     q.io.enq <> io.enq
     io.deq <> q.io.deq
 

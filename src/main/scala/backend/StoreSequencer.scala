@@ -49,20 +49,24 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
 
   io.vat := inst.vat
   io.seq_hazard.valid := valid
-  io.seq_hazard.bits.rintent := rvd_mask | rvm_mask
+  io.seq_hazard.bits.rintent := hazardMultiply(rvd_mask | rvm_mask)
   io.seq_hazard.bits.wintent := 0.U
   io.seq_hazard.bits.vat := inst.vat
 
-  val vd_read_oh = UIntToOH(io.rvd.req.bits)
-  val vm_read_oh = Mux(renvm, UIntToOH(io.rvm.req.bits), 0.U)
+  val vd_read_oh = UIntToOH(io.rvd.req.bits.eg)
+  val vm_read_oh = Mux(renvm, UIntToOH(io.rvm.req.bits.eg), 0.U)
 
   val raw_hazard = ((vm_read_oh | vd_read_oh) & io.older_writes) =/= 0.U
   val data_hazard = raw_hazard
 
+  val oldest = inst.vat === io.vat_head
+
   io.rvd.req.valid := valid
-  io.rvd.req.bits := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
+  io.rvd.req.bits.eg := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
+  io.rvd.req.bits.oldest := oldest
   io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits := getEgId(0.U, eidx, 0.U, true.B)
+  io.rvm.req.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
+  io.rvm.req.bits.oldest := oldest
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && io.rvd.req.ready
   io.iss.bits.stdata  := io.rvd.resp
@@ -73,10 +77,10 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
 
   when (io.iss.fire && !tail) {
     when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B)) {
-      rvd_mask := rvd_mask & ~UIntToOH(io.rvd.req.bits)
+      rvd_mask := rvd_mask & ~UIntToOH(io.rvd.req.bits.eg)
     }
     when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
-      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits)
+      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits.eg)
     }
     when (sidx === inst.seg_nf) {
       sidx := 0.U

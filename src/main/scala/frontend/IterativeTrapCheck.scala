@@ -83,11 +83,6 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   io.mask_access.valid := valid && !inst.vm && tlb_backoff === 0.U
   io.mask_access.eidx  := eidx
 
-  when ((io.index_access.valid && !io.index_access.ready) || (io.mask_access.valid && !io.mask_access.ready)) {
-    tlb_backoff := 3.U
-  }
-
-
   io.s0_tlb_req.valid            := tlb_valid && tlb_backoff === 0.U && mask_ready && index_ready
   io.s0_tlb_req.bits.vaddr       := tlb_addr
   io.s0_tlb_req.bits.passthrough := false.B

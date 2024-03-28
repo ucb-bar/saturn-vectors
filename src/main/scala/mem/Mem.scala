@@ -249,9 +249,11 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   sas.io.maskindex.bits := io.maskindex.bits
   siq_sas_fire := sas.io.done
 
-  io.dmem.store_req <> sas.io.req
-  io.dmem.store_req.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
-  io.dmem.store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & sas.io.req.bits.mask
+  val store_req_q = Module(new DCEQueue(new MemRequest, 2))
+  io.dmem.store_req <> store_req_q.io.deq
+  store_req_q.io.enq <> sas.io.req
+  store_req_q.io.enq.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
+  store_req_q.io.enq.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & sas.io.req.bits.mask
 
   val store_rob = Module(new ReorderBuffer(Bool(), vParams.vsifqEntries))
   sas.io.tag <> store_rob.io.reserve
@@ -262,12 +264,6 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   sifq.io.enq.bits := sas.io.out.bits
   scu.io.pop.valid := sas.io.out.valid && sifq.io.enq.ready
 
-  val sifq_mask_hazard = sifq.io.peek.map(e => e.valid && e.bits.masked).orR
-  when (sifq_mask_hazard) {
-    io.dmem.store_req.valid := false.B
-    sas.io.req.ready := false.B
-  }
-
   scu.io.pop.bits.head := sas.io.out.bits.head
   scu.io.pop.bits.tail := sas.io.out.bits.tail
 
@@ -277,6 +273,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   sifq.io.deq.ready := sifq.io.deq.bits.masked || store_rob.io.deq.valid
   store_rob.io.deq.ready := true.B
+  when (store_rob.io.deq.valid) { assert(sifq.io.deq.valid) }
   siq_deq_fire := sifq.io.deq.fire && sifq.io.deq.bits.last
   io.vat_release.valid := siq_deq_fire
   io.vat_release.bits := siq(siq_deq_ptr).op.vat

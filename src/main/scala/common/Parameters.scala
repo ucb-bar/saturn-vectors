@@ -9,8 +9,16 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy.{BufferParams}
 
 object VectorParams {
+
+  // minParams:
+  // For a very small area-efficient vector unit with iterative
+  // and element-wise functional units
   def minParams = VectorParams()
-  def refParams = VectorParams(
+
+  // refParams
+  // For a standard modestly capable small vector unit with
+  // SIMD functional units
+  def refParams = minParams.copy(
     vlifqEntries = 8,
     vsifqEntries = 8,
     vlrobEntries = 4,
@@ -23,20 +31,22 @@ object VectorParams {
     useScalarFPFMA = false,
     vrfBanking = 4,
   )
-  def dspParams = VectorParams(
-    vlifqEntries = 8,
-    vsifqEntries = 8,
-    vlrobEntries = 4,
-    vlissqEntries = 3,
-    vsissqEntries = 3,
-    vxissqEntries = 3,
-    vatSz = 5,
-    useSegmentedIMul = true,
-    doubleBufferSegments = true,
-    useScalarFPFMA = false,
-    vrfBanking = 4,
-    separateFpVxs = true
+
+  // dspParams
+  // For a wide high-performance vector unit with multi-issue
+  def dspParams = refParams.copy(
+    issStructure = VectorIssueStructure.Shared
   )
+
+  // genParams:
+  // For a vector unit that performs better on less-optimized
+  // code sequences
+  def genParams = dspParams.copy(
+    issStructure = VectorIssueStructure.Split
+  )
+
+  // dmaParams:
+  // For a vector unit that only does memcpys, and no arithmetic
   def dmaParams = VectorParams(
     vdqEntries = 2,
     vliqEntries = 4,
@@ -49,6 +59,13 @@ object VectorParams {
     vrfBanking = 1,
     useIterativeIMul = true
   )
+}
+
+sealed trait VectorIssueStructure
+object VectorIssueStructure {
+  case object Unified extends VectorIssueStructure
+  case object Shared extends VectorIssueStructure
+  case object Split extends VectorIssueStructure
 }
 
 case class VectorParams(
@@ -78,14 +95,14 @@ case class VectorParams(
   useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
-
   imaPipeDepth: Int = 4,
+  hazardingMultiplier: Int = 0,
 
   doubleBufferSegments: Boolean = false,
 
   vrfBanking: Int = 2,
 
-  separateFpVxs: Boolean = false,
+  issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
   tlBuffer: BufferParams = BufferParams.default
 )
@@ -160,4 +177,11 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     FillInterleaved(1 << lmul, UIntToOH(reg >> lmul)((32>>lmul)-1,0))
   })(emul)
   def log2_up(f: UInt, max: Int) = VecInit.tabulate(max)({nf => log2Ceil(nf+1).U})(f)
+
+  def hazardMultiply(mask: UInt): UInt = if (vParams.hazardingMultiplier == 0) { mask } else {
+    require((1 << vParams.hazardingMultiplier) <= egsTotal)
+    VecInit(mask.asBools.grouped(1 << vParams.hazardingMultiplier).map { g =>
+      Fill(1 << vParams.hazardingMultiplier, g.orR)
+    }.toSeq).asUInt
+  }
 }
