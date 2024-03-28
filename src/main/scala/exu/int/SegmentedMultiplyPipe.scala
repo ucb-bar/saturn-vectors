@@ -98,7 +98,8 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
 
   val out = Mux(ctrl_smul, smul_clipped, 0.U) | Mux(ctrl_MULHi, hi, 0.U) | Mux(!ctrl_smul && !ctrl_MULHi, add_out.asUInt, 0.U)
   val pipe_out = Pipe(io.pipe(depth-2).valid, out, 1).bits
-  val pipe_vxsat = Pipe(io.pipe(depth-2).valid, smul_sat && ctrl_smul, 1).bits
+  
+  val pipe_vxsat   = Mux(ctrl_smul, smul_sat, 0.U) & io.pipe(depth-2).bits.wmask
 
   io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(depth-1).valid
@@ -106,7 +107,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   io.write.bits.data := pipe_out
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
 
-  io.set_vxsat := io.pipe(depth-1).valid && pipe_vxsat && io.pipe(depth-1).bits.wmask =/= 0.U
+  io.set_vxsat := io.pipe(depth-1).valid && (pipe_vxsat =/= 0.U)
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
 }
@@ -229,7 +230,7 @@ class VectorSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
     val mul_in = Input(UInt((2*dLen).W))
 
     val clipped = Output(UInt((dLen).W))
-    val sat = Output(Bool())
+    val sat = Output(UInt(dLenB.W))
   })
   val smul_sat_sew = Wire(Vec(4, Bool()))
   val smul_clipped_sew = Wire(Vec(4, UInt(dLen.W)))
@@ -248,8 +249,12 @@ class VectorSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
       val smul_long = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
       smul_long((8 << sew)-1, 0)
     }.asUInt
-    smul_sat_sew(sew) := clip_hi.orR || clip_lo.orR
+    val sat_sew = smul.zipWithIndex.map { case (sm, i) => 
+      clip_hi(i) || clip_lo(i)
+    }
+    smul_sat_sew(sew) := FillInterleaved((1 << sew), sat_sew)
   }
+  
   io.clipped := smul_clipped_sew(io.eew)
   io.sat := smul_sat_sew(io.eew)
 }
