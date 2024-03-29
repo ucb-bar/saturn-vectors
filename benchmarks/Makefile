@@ -30,6 +30,7 @@ bmarks = \
 	vec-fconv3d \
 	vec-fdotprod \
 	vec-iconv2d \
+	vec-igemm \
 	vec-jacobi2d \
 	vec-mixed_width_mask \
 	vec-sep-conv-3 \
