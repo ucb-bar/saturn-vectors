@@ -42,6 +42,7 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
     }
 
     val s2 = new Bundle {
+      val scalar_store_pending = Input(Bool())
       val inst   = Valid(new VectorIssueInst)
       val replay = Output(Bool())
       val vstart = Valid(UInt(log2Ceil(maxVLMax).W))
@@ -173,7 +174,7 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
   }
 
   when (s2_valid) {
-    when (!io.s2.issue.ready) {
+    when (!io.s2.issue.ready || (io.s2.scalar_store_pending && s2_inst.vmu)) {
       io.s2.replay := true.B
     } .elsewhen (s2_inst.vstart =/= 0.U && !s2_inst.vmu) {
       io.s2.xcpt.valid := true.B
