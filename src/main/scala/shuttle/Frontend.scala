@@ -68,6 +68,8 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     ecu.io.s1.tlb_resp := mem_tlb_resp
     icu.io.tlb_resp    := mem_tlb_resp
 
+    ecu.io.s2.scalar_store_pending := io.wb.store_pending
+
     io.wb.retire_late  := icu.io.retire
     io.wb.inst         := Mux(icu.io.busy, icu.io.inst.bits      , ecu.io.s2.inst.bits.bits)
     io.wb.pc           := Mux(icu.io.busy, icu.io.pc             , ecu.io.s2.pc)
