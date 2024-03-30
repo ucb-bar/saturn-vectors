@@ -25,6 +25,19 @@ class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends Func
   val write = Valid(new VectorWrite(dLen))
   val pipe = Input(Vec(depth, Valid(new ExecuteMicroOp)))
   val pipe0_stall = Output(Bool())
+
+  def narrow2_expand(bits: Seq[UInt], eew: UInt, upper: Bool, sext: Bool): Vec[UInt] = {
+    val narrow_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
+    for (eew <- 0 until 3) {
+      val in_vec = bits.grouped(1 << eew).map(g => VecInit(g).asUInt).toSeq
+      for (i <- 0 until dLenB >> (eew + 1)) {
+        val lo = Mux(upper, in_vec(i + (dLenB >> (eew + 1))), in_vec(i))
+        val hi = Fill(16 << eew, lo((8 << eew)-1) && sext)
+        narrow_eew(eew)(i) := Cat(hi, lo)
+      }
+    }
+    VecInit(narrow_eew.map(_.asUInt))(eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+  }
 }
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {
