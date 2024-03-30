@@ -210,8 +210,8 @@ class ShiftArray(dLenB: Int) extends Module {
   })
 
   val shamt_mask = VecInit.tabulate(4)({eew => ~(0.U((log2Ceil(8) + eew).W))})(io.in_eew)
-  val shifted = Wire(Vec(dLenB, UInt(8.W)))
-  val rounding_incrs = Wire(Vec(dLenB, Bool()))
+  val shifted = Reg(Vec(dLenB, UInt(8.W)))
+  val rounding_incrs = Reg(Vec(dLenB, Bool()))
 
   for (i <- 0 until (dLenB >> 3)) {
     val shifter = Module(new ShiftUnit)
@@ -324,6 +324,53 @@ class SaturatedSumArray(dLenB: Int) extends Module {
   io.set_vxsat := mask
 }
 
+class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
+  val support_insns = Seq(
+    SLL.VV, SLL.VX, SLL.VI, SRL.VV, SRL.VX, SRL.VI, SRA.VV, SRA.VX, SRA.VI,
+    NSRA.VV, NSRA.VX, NSRA.VI, NSRL.VV, NSRL.VX, NSRL.VI,
+    NCLIPU.VV, NCLIPU.VX, NCLIPU.VI, NCLIP.VV, NCLIP.VX, NCLIP.VI
+  )
+
+  val rvs1_eew = io.pipe(0).bits.rvs1_eew
+  val rvs2_eew = io.pipe(0).bits.rvs2_eew
+  val vd_eew   = io.pipe(0).bits.vd_eew
+
+  val ctrl = new VectorDecoder(
+    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
+    supported_insns,
+    Seq(UsesShift, ShiftsLeft, ScalingShift))
+
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+
+  val rvs1_bytes = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew, (io.pipe(0).bits.eidx >> (dLenOffBits.U - rvs2_eew))(0), false.B)
+
+  val shift_narrowing = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.nclip, OPIFunct6.nclipu, OPIFunct6.nsra, OPIFunct6.nsrl)
+  val shift_arr = Module(new ShiftArray(dLenB))
+  shift_arr.io.in_eew := rvs2_eew
+  shift_arr.io.in     := io.pipe(0).bits.rvs2_data
+  shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes).asUInt
+  shift_arr.io.shl       := ctrl.bool(ShiftsLeft)
+  shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
+  shift_arr.io.rm        := io.pipe(0).bits.vxrm
+  shift_arr.io.scaling   := ctrl.bool(ScalingShift)
+  shift_arr.io.narrowing := shift_narrowing
+
+  io.pipe0_stall     := false.B
+  io.write.valid     := io.pipe(depth-1).valid
+  io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
+  io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
+  io.write.bits.data := shift_arr.io.out.asUInt
+
+  val shift_vxsat = shift_arr.io.set_vxsat & io.pipe(depth-1).bits.wmask
+  io.set_vxsat := io.pipe(depth-1).valid && (shift_vxsat) =/= 0.U)
+  io.set_fflags.valid := false.B
+  io.set_fflags.bits := DontCare
+
+  io.scalar_write.valid := false.B
+  io.scalar_write.bits := DontCare
+}
+
 class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = Seq(
     ADD.VV, ADD.VX, ADD.VI, SUB.VV, SUB.VX, RSUB.VX, RSUB.VI,
@@ -332,8 +379,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     ADC.VV, ADC.VX, ADC.VI, MADC.VV, MADC.VX, MADC.VI,
     SBC.VV, SBC.VX, MSBC.VV, MSBC.VX,
     NEXT.VV,
-    SLL.VV, SLL.VX, SLL.VI, SRL.VV, SRL.VX, SRL.VI, SRA.VV, SRA.VX, SRA.VI,
-    NSRA.VV, NSRA.VX, NSRA.VI, NSRL.VV, NSRL.VX, NSRL.VI,
     MSEQ.VV, MSEQ.VX, MSEQ.VI, MSNE.VV, MSNE.VX, MSNE.VI,
     MSLTU.VV, MSLTU.VX, MSLT.VV, MSLT.VX,
     MSLEU.VV, MSLEU.VX, MSLEU.VI, MSLE.VV, MSLE.VX, MSLE.VI,
@@ -346,7 +391,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     AADDU.VV, AADDU.VX, AADD.VV, AADD.VX,
     ASUBU.VV, ASUBU.VX, ASUB.VV, ASUB.VX,
     SSRL.VV, SSRL.VX, SSRL.VI, SSRA.VV, SSRA.VX, SSRA.VI,
-    NCLIPU.VV, NCLIPU.VX, NCLIPU.VI, NCLIP.VV, NCLIP.VX, NCLIP.VI,
     REDSUM.VV, WREDSUM.VV, WREDSUMU.VV,
     REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
     FMERGE.VF
@@ -359,10 +403,9 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val ctrl = new VectorDecoder(
     io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
     supported_insns,
-    Seq(UsesShift, UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
+    Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
       DoSub, WideningSext, Averaging,
-      CarryIn, AlwaysCarryIn, ShiftsLeft, ScalingShift,
-      CmpLess, Swap12, WritesAsMask))
+      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask))
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
@@ -378,21 +421,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val in1_bytes = Mux(ctrl.bool(Swap12), rvs2_bytes, rvs1_bytes)
   val in2_bytes = Mux(ctrl.bool(Swap12), rvs1_bytes, rvs2_bytes)
 
-  def narrow2_expand(bits: Seq[UInt], eew: UInt, upper: Bool, sext: Bool): Vec[UInt] = {
-    val narrow_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
-    for (eew <- 0 until 3) {
-      val in_vec = bits.grouped(1 << eew).map(g => VecInit(g).asUInt).toSeq
-      for (i <- 0 until dLenB >> (eew + 1)) {
-        val lo = Mux(upper, in_vec(i + (dLenB >> (eew + 1))), in_vec(i))
-        val hi = Fill(16 << eew, lo((8 << eew)-1) && sext)
-        narrow_eew(eew)(i) := Cat(hi, lo)
-      }
-    }
-    VecInit(narrow_eew.map(_.asUInt))(eew).asTypeOf(Vec(dLenB, UInt(8.W)))
-  }
-
   val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew,
-    (io.pipe(0).bits.eidx >> (dLenOffBits.U - Mux(ctrl.bool(UsesShift), rvs2_eew, vd_eew)))(0),
+    (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0),
     ctrl.bool(WideningSext))
   val narrow_vs2 = narrow2_expand(rvs2_bytes, rvs2_eew,
     (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0),
@@ -437,19 +467,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
 
   val mask_out = Fill(8, Mux(ctrl.bool(UsesCmp), cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl.bool(DoSub))))
 
-  val shift_narrowing = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.nclip, OPIFunct6.nclipu, OPIFunct6.nsra, OPIFunct6.nsrl)
-  val shift_arr = Module(new ShiftArray(dLenB))
-  shift_arr.io.in_eew := rvs2_eew
-  shift_arr.io.in     := io.pipe(0).bits.rvs2_data
-  shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes).asUInt
-  shift_arr.io.shl       := ctrl.bool(ShiftsLeft)
-  shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
-  shift_arr.io.rm        := io.pipe(0).bits.vxrm
-  shift_arr.io.scaling   := ctrl.bool(ScalingShift)
-  shift_arr.io.narrowing := shift_narrowing
-
-  val shift_out = shift_arr.io.out.asUInt
-
   val sat_arr = Module(new SaturatedSumArray(dLenB))
   sat_arr.io.sum      := add_out
   sat_arr.io.carry    := add_carry
@@ -485,7 +502,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val outs = Seq(
     (ctrl.bool(UsesNarrowingSext)        , xunary0_out),
     (ctrl.bool(WritesAsMask)             , mask_out),
-    (ctrl.bool(UsesShift)                , shift_out),
     (ctrl.bool(UsesMinMax)               , minmax_out),
     (ctrl.bool(UsesMerge)                , merge_out),
     (ctrl.bool(UsesSat)                  , sat_out)
@@ -506,8 +522,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.write.bits.data := out
 
   val sat_vxsat   = Mux(ctrl.bool(UsesSat)  , sat_arr.io.set_vxsat  , 0.U) & io.pipe(0).bits.wmask
-  val shift_vxsat = Mux(ctrl.bool(UsesShift), shift_arr.io.set_vxsat, 0.U) & io.pipe(0).bits.wmask
-  io.set_vxsat := io.pipe(0).valid && ((sat_vxsat | shift_vxsat) =/= 0.U)
+  io.set_vxsat := io.pipe(0).valid && sat_vxsat =/= 0.U
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
