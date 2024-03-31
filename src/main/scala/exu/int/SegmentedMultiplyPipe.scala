@@ -250,10 +250,10 @@ class VectorSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
       val long = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
       long((8 << sew)-1, 0)
     }.asUInt
-    val sat_sew = smul.zipWithIndex.map { case (sm, i) => 
+    val sat_vec_sew = smul.zipWithIndex.map { case (sm, i) => 
       clip_hi(i) || clip_lo(i)
     }
-    sat_sew(sew) := FillInterleaved((1 << sew), sat_sew)
+    sat_sew(sew) := FillInterleaved((1 << sew), sat_vec_sew)
   }
   
   io.clipped := clipped_sew(io.eew)
