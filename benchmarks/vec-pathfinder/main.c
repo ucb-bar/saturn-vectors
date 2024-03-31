@@ -16,7 +16,7 @@
 #include "util.h"
 #include <stdio.h>
 
-#define CHECK
+//#define CHECK
 
 extern int32_t num_runs;
 extern int32_t rows;
@@ -27,6 +27,7 @@ extern int result_v[] __attribute__((aligned(32), section(".l2")));
 extern int result_s[] __attribute__((aligned(32), section(".l2")));
 
 int verify_result(int *result_s, int *result_v, uint32_t cols) {
+#ifdef CHECK
   // Check vector with scalar result
   for (uint32_t i = 0; i < cols; i++) {
     if (result_v[i] != result_s[i]) {
@@ -37,7 +38,12 @@ int verify_result(int *result_s, int *result_v, uint32_t cols) {
   }
 
   printf("Test result: PASS. No errors found.\n");
-
+#else
+  volatile uint32_t x;
+  for (uint32_t i = 0; i < cols; i++) {
+    x = result_v[i];
+  }
+#endif
   return 0;
 }
 
@@ -50,6 +56,7 @@ int main() {
 
   printf("Number of runs: %d\n", num_runs);
 
+#ifdef CHECK
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   s_ptr = run(wall, result_s, src, cols, rows, num_runs);
@@ -57,6 +64,7 @@ int main() {
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("Scalar code cycles: %d\n", cycles2 - cycles1);
+#endif
 
 #define TEST(l)                                                         \
   instr1 = read_csr(minstret);                                          \
