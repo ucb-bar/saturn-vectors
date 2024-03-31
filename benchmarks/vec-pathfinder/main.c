@@ -50,19 +50,30 @@ int main() {
 
   printf("Number of runs: %d\n", num_runs);
 
-  s_ptr = run(wall, result_s, src, cols, rows, num_runs);
-
-
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
-  run_vector(wall, result_v, cols, rows, num_runs);
+  s_ptr = run(wall, result_s, src, cols, rows, num_runs);
   asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
-  printf("Vector code cycles: %d\n", cycles2 - cycles1);
+  printf("Scalar code cycles: %d\n", cycles2 - cycles1);
 
-  error = verify_result(s_ptr, result_v, cols);
+#define TEST(l)                                                         \
+  instr1 = read_csr(minstret);                                          \
+  cycles1 = read_csr(mcycle);                                           \
+  run_vectorm##l(wall, result_v, cols, rows, num_runs);                 \
+  asm volatile("fence");                                                \
+  instr2 = read_csr(minstret);                                          \
+  cycles2 = read_csr(mcycle);                                           \
+  printf("Vector code LMUL=%d, cycles: %d\n", l, cycles2 - cycles1);    \
+  error = verify_result(s_ptr, result_v, cols);                         \
+  if (error) return error;                                              \
 
+
+  TEST(1);
+  TEST(2);
+  TEST(4);
+  TEST(8);
 
   return error;
 }
