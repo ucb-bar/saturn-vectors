@@ -34,6 +34,7 @@ bmarks = \
 	vec-jacobi2d \
 	vec-log \
 	vec-mixed_width_mask \
+	vec-pathfinder \
 	vec-sep-conv-3 \
 	vec-sgemm \
 	vec-sgemm-v2 \
