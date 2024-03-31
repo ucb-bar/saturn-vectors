@@ -233,8 +233,8 @@ class VectorSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
     val clipped = Output(UInt((dLen).W))
     val sat = Output(UInt(dLenB.W))
   })
-  val smul_sat_sew = Wire(Vec(4, Bool()))
-  val smul_clipped_sew = Wire(Vec(4, UInt(dLen.W)))
+  val sat_sew = Wire(Vec(4, UInt(dLenB.W)))
+  val clipped_sew = Wire(Vec(4, UInt(dLen.W)))
   for (sew <- 0 until 4) {
     val wideProds = io.mul_in.asTypeOf(Vec(dLenB >> sew, SInt((16 << sew).W)))
     val smul = wideProds.map { wideElem => 
@@ -246,16 +246,16 @@ class VectorSMul(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
     val clip_hi = smul.map{ _ > clip_pos }
     val clip_lo = smul.map{ _ < clip_neg }    
     
-    smul_clipped_sew(sew) := smul.zipWithIndex.map { case (sm, i) => 
-      val smul_long = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
-      smul_long((8 << sew)-1, 0)
+    clipped_sew(sew) := smul.zipWithIndex.map { case (sm, i) => 
+      val long = Mux(clip_hi(i), clip_pos, 0.S) | Mux(clip_lo(i), clip_neg, 0.S) | Mux(!clip_hi(i) && !clip_lo(i), sm, 0.S)
+      long((8 << sew)-1, 0)
     }.asUInt
     val sat_sew = smul.zipWithIndex.map { case (sm, i) => 
       clip_hi(i) || clip_lo(i)
     }
-    smul_sat_sew(sew) := FillInterleaved((1 << sew), sat_sew)
+    sat_sew(sew) := FillInterleaved((1 << sew), sat_sew)
   }
   
-  io.clipped := smul_clipped_sew(io.eew)
-  io.sat := smul_sat_sew(io.eew)
+  io.clipped := clipped_sew(io.eew)
+  io.sat := sat_sew(io.eew)
 }
