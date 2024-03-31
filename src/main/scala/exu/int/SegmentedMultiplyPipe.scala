@@ -99,7 +99,8 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val out = Mux(ctrl_smul, smul_clipped, 0.U) | Mux(ctrl_MULHi, hi, 0.U) | Mux(!ctrl_smul && !ctrl_MULHi, add_out.asUInt, 0.U)
   val pipe_out = Pipe(io.pipe(depth-2).valid, out, 1).bits
   
-  val pipe_vxsat   = Mux(ctrl_smul, smul_sat, 0.U) & io.pipe(depth-2).bits.wmask
+  val vxsat = Mux(ctrl_smul, smul_sat, 0.U) & io.pipe(depth-2).bits.wmask
+  val pipe_vxsat = Pipe(io.pipe(depth-2).valid, vxsat, 1).bits
 
   io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(depth-1).valid
