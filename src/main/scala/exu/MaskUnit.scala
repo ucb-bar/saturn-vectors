@@ -69,11 +69,6 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
     out.asUInt
   })(op.vd_eew)
 
-  when (io.iss.valid && io.iss.ready && io.iss.op.head) {
-    scalar_wb_data := 0.U
-    found_first := false.B
-  }
-
   when (io.pipe(0).valid) {
     scalar_wb_rd := io.pipe(0).bits.rd
     scalar_wb_size := io.pipe(0).bits.rvs2_eew
@@ -103,6 +98,11 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
       scalar_wb_busy := wxunary0 || wfunary0
       scalar_wb_fp := wfunary0
     }
+  }
+
+  when (io.iss.valid && io.iss.ready && io.iss.op.head) {
+    scalar_wb_data := 0.U
+    found_first := false.B
   }
 
   io.scalar_write.valid := scalar_wb_busy

@@ -178,7 +178,6 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     } .otherwise {
       wdata := Mux(vd_eew64, FType.D.ieee(io_fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, 0.U, Some(FType.S)))))
     }
-    has_wdata := true.B
   }
 
   val mask_write_offset = VecInit.tabulate(4)({ eew =>
@@ -191,7 +190,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   io.write.valid := (has_wdata || vfrsqrt7_inst || vfrec7_inst || mgt_NaN) && valid
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, op.wmask))
-  io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io_fp_resp.fire()),
+  io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, has_wdata),
                               Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, wdata)))
 
   last := io.write.fire()

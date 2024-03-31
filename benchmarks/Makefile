@@ -32,6 +32,7 @@ bmarks = \
 	vec-iconv2d \
 	vec-igemm \
 	vec-jacobi2d \
+	vec-log \
 	vec-mixed_width_mask \
 	vec-sep-conv-3 \
 	vec-sgemm \
@@ -45,7 +46,7 @@ bmarks = \
 
 cpp_bmarks = \
 	vec-tasks \
-	vec-daxpy 
+	vec-daxpy
 
 #--------------------------------------------------------------------
 # Build rules
