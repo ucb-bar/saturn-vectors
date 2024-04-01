@@ -35,6 +35,7 @@ bmarks = \
 	vec-log \
 	vec-mixed_width_mask \
 	vec-pathfinder \
+	vec-roi-align \
 	vec-sep-conv-3 \
 	vec-sgemm \
 	vec-sgemm-v2 \
