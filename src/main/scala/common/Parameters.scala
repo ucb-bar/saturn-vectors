@@ -95,7 +95,7 @@ case class VectorParams(
   useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
-  imaPipeDepth: Int = 4,
+  imaPipeDepth: Int = 3,
   hazardingMultiplier: Int = 0,
 
   doubleBufferSegments: Boolean = false,
