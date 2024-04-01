@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "exp.h"
+#include "ara/exp.h"
 #include "util.h"
 #include "ara/util.h"
 #include <stdio.h>

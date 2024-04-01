@@ -33,7 +33,7 @@
   (this is the zlib license)
 */
 
-#include "exp.h"
+#include "ara/exp.h"
 
 #define EXP_BMARK(t,w,l)							\
 void exp_f##w##m##l##_bmark(t *exponents, t *results, size_t len) {		\

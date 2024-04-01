@@ -42,6 +42,7 @@ bmarks = \
 	vec-sgemm-v3 \
 	vec-sgemv \
 	vec-slide-conv \
+	vec-softmax \
 	vec-square-root-approx \
 	vec-transpose-load \
 	vec-transpose-store \
