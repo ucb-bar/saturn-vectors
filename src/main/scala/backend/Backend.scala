@@ -119,6 +119,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val integerFUs = Seq(
     (() => new IntegerPipe, "vintfu"),
+    (() => new ShiftPipe, "vshiftfu"),
     (() => new BitwisePipe, "vbitfu"),
     (() => new IterativeIntegerDivider(vParams.useIterativeIMul), "vdivfu"),
     (() => new MaskUnit, "vmaskfu"),

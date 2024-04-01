@@ -46,7 +46,21 @@ abstract class PipelinedFunctionalUnit(val depth: Int)(implicit p: Parameters) e
   val io = IO(new PipelinedFunctionalUnitIO(depth))
 
   require (depth > 0)
+
+  def narrow2_expand(bits: Seq[UInt], eew: UInt, upper: Bool, sext: Bool): Vec[UInt] = {
+    val narrow_eew = (0 until 3).map { eew => Wire(Vec(dLenB >> (eew + 1), UInt((16 << eew).W))) }
+    for (eew <- 0 until 3) {
+      val in_vec = bits.grouped(1 << eew).map(g => VecInit(g).asUInt).toSeq
+      for (i <- 0 until dLenB >> (eew + 1)) {
+        val lo = Mux(upper, in_vec(i + (dLenB >> (eew + 1))), in_vec(i))
+        val hi = Fill(16 << eew, lo((8 << eew)-1) && sext)
+        narrow_eew(eew)(i) := Cat(hi, lo)
+      }
+    }
+    VecInit(narrow_eew.map(_.asUInt))(eew).asTypeOf(Vec(dLenB, UInt(8.W)))
+  }
 }
+
 abstract class IterativeFunctionalUnit(implicit p: Parameters) extends FunctionalUnit()(p) {
   val io = IO(new IterativeFunctionalUnitIO)
 
