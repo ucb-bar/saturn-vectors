@@ -27,7 +27,8 @@ class WithShuttleVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParam
             decoder = ((p: Parameters) => {
               val decoder = Module(new EarlyVectorDecode()(p))
               decoder
-            })
+            }),
+            issueVConfig = false
           )),
         )
       )) else tp
