@@ -50,7 +50,7 @@ int main() {
 
   unsigned long cycles1, cycles2, instr2, instr1;
 
-  for (uint64_t avl = 8; avl <= (vsize >> 3); avl *= 8) {
+  for (uint64_t avl = 8; avl <= vsize; avl *= 8) {
     // Dotp
     printf("Calulating 64b dotp with vectors with length = %lu\n", avl);
     instr1 = read_csr(minstret);
@@ -59,10 +59,10 @@ int main() {
     asm volatile("fence");
     instr2 = read_csr(minstret);
     cycles2 = read_csr(mcycle);
-    printf("Vector cycles: %ld instructions: %ld result: %ld\n", cycles2 - cycles1, instr2 - instr1, res64_v);
+    printf("Vector cycles: %ld instructions: %ld\n", cycles2 - cycles1, instr2 - instr1);
   }
 
-  for (uint64_t avl = 8; avl <= (vsize >> 2); avl *= 8) {
+  for (uint64_t avl = 8; avl <= vsize; avl *= 8) {
     // Dotp
     printf("Calulating 32b dotp with vectors with length = %lu\n", avl);
     instr1 = read_csr(minstret);
@@ -71,10 +71,10 @@ int main() {
     asm volatile("fence");
     instr2 = read_csr(minstret);
     cycles2 = read_csr(mcycle);
-    printf("Vector cycles: %ld instructions: %ld result: %d\n", cycles2 - cycles1, instr2 - instr1, res32_v);
+    printf("Vector cycles: %ld instructions: %ld\n", cycles2 - cycles1, instr2 - instr1);
   }
 
-  for (uint64_t avl = 8; avl <= (vsize >> 1); avl *= 8) {
+  for (uint64_t avl = 8; avl <= vsize; avl *= 8) {
     // Dotp
     printf("Calulating 16b dotp with vectors with length = %lu\n", avl);
     instr1 = read_csr(minstret);
@@ -83,10 +83,10 @@ int main() {
     asm volatile("fence");
     instr2 = read_csr(minstret);
     cycles2 = read_csr(mcycle);
-    printf("Vector cycles: %ld instructions: %ld result: %d\n", cycles2 - cycles1, instr2 - instr1, res16_v);
+    printf("Vector cycles: %ld instructions: %ld\n", cycles2 - cycles1, instr2 - instr1);
   }
 
-  for (uint64_t avl = 8; avl <= (vsize >> 0); avl *= 8) {
+  for (uint64_t avl = 8; avl <= vsize; avl *= 8) {
     // Dotp
     printf("Calulating 8b dotp with vectors with length = %lu\n", avl);
     instr1 = read_csr(minstret);
@@ -95,7 +95,7 @@ int main() {
     asm volatile("fence");
     instr2 = read_csr(minstret);
     cycles2 = read_csr(mcycle);
-    printf("Vector cycles: %ld instructions: %ld result: %d\n", cycles2 - cycles1, instr2 - instr1, res8_v);
+    printf("Vector cycles: %ld instructions: %ld\n", cycles2 - cycles1, instr2 - instr1);
   }
 
   printf("SUCCESS.\n");

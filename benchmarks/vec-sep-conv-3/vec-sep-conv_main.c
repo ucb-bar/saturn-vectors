@@ -7,6 +7,7 @@
 // This benchmark tests a vectorized 2D separable convolution implementation.
 
 #include <string.h>
+#include <stdio.h>
 #include "util.h"
 
 //--------------------------------------------------------------------------
@@ -22,7 +23,7 @@ void *vec_sep_conv (size_t, size_t, size_t, size_t, const float*, const float*, 
 int main( int argc, char* argv[] )
 {
   float results_data[O_SIZE] = {0};
-
+  printf("2dsepconv (OH,OW,KH,KW,IH,IW) = (%ld, %ld, %ld, %ld, %ld, %ld)\n", OH, OW, KH, KW, IH, IW);
 #if PREALLOCATE
   // If needed we preallocate everything in the caches
   vec_sep_conv(OH, OW, IW, OW, input_k1, input_k2, input_image, results_data);

@@ -7,6 +7,7 @@
 // This benchmark tests a vectorized sgemm implementation.
 
 #include <string.h>
+#include <stdio.h>
 #include "util.h"
 
 //--------------------------------------------------------------------------
@@ -22,6 +23,7 @@ void *vec_sgemm_nn (size_t, size_t, size_t, const float*, size_t, const float*, 
 int main( int argc, char* argv[] )
 {
   float results_data[M_DIM*N_DIM] = {0};
+  printf("sgemm M,N,K = %ld,%ld,%ld\n", M_DIM, N_DIM, K_DIM);
 
 #if PREALLOCATE
   // If needed we preallocate everything in the caches

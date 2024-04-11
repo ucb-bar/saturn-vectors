@@ -7,6 +7,7 @@
 // This benchmark tests a vectorized sgemm implementation.
 
 #include <string.h>
+#include <stdio.h>
 #include "util.h"
 
 //--------------------------------------------------------------------------
@@ -23,6 +24,7 @@ int main( int argc, char* argv[] )
 {
   float results_data[N_DIM] = {0};
 
+  printf("sgemv M,N = %ld,%ld\n", M_DIM, N_DIM);
 #if PREALLOCATE
   // If needed we preallocate everything in the caches
   vec_sgemv(M_DIM, N_DIM, input_data_x, input_data_A, results_data);

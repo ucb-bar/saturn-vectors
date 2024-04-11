@@ -72,18 +72,18 @@ res8  = 0
 # Print information on file
 print(".section .data,\"aw\",@progbits")
 emit("vsize", np.array(vsize, dtype=np.uint64))
-emit("v64a", v64a, 'NR_LANES*4')
-emit("v64b", v64b, 'NR_LANES*4')
-emit("v32a", v32a, 'NR_LANES*4')
-emit("v32b", v32b, 'NR_LANES*4')
-emit("v16a", v16a, 'NR_LANES*4')
-emit("v16b", v16b, 'NR_LANES*4')
-emit("v8a",  v8a,  'NR_LANES*4')
-emit("v8b",  v8b,  'NR_LANES*4')
+emit("v64a", v64a, '32')
+emit("v64b", v64b, '32')
+emit("v32a", v32a, '32')
+emit("v32b", v32b, '32')
+emit("v16a", v16a, '32')
+emit("v16b", v16b, '32')
+emit("v8a",  v8a,  '32')
+emit("v8b",  v8b,  '32')
 #emit("gold64", np.array(gold64, dtype=np.int64));
 #emit("gold32", np.array(gold32, dtype=np.int32));
-#emit("gold16", gold16, 'NR_LANES*4');
-#emit("gold8",  gold8,  'NR_LANES*4');
+#emit("gold16", gold16, '32');
+#emit("gold8",  gold8,  '32');
 emit("res64_v", np.array(res64, dtype=np.int64));
 emit("res32_v", np.array(res32, dtype=np.int32));
 emit("res16_v", np.array(res16, dtype=np.int32));

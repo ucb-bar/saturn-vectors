@@ -55,6 +55,7 @@ int main() {
   unsigned long cycles1, cycles2, instr2, instr1;
 
   printf("Number of runs: %d\n", num_runs);
+  printf("rows=%ld cols=%ld\n", rows, cols);
 
 #ifdef CHECK
   instr1 = read_csr(minstret);

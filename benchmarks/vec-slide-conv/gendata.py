@@ -4,8 +4,8 @@ import numpy as np
 
 KH = 3
 KW = 3
-IH = 10
-IW = 10
+IH = 72
+IW = 72
 OH = IH - KH + 1
 OW = IW - KW + 1
 
