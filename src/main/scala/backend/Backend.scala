@@ -64,12 +64,22 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vat_head_incr := true.B
   }
 
+
   val issue_inst = WireInit(io.issue.bits)
   issue_inst.vat := vat_tail
 
-  io.issue.ready   := vat_available && vdq.io.enq.ready && (!issue_inst.vmu || vmu.io.enq.ready)
-  vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready)
-  vmu.io.enq.valid := vat_available && io.issue.valid   && vdq.io.enq.ready && issue_inst.bits(6,0).isOneOf(opcLoad, opcStore)
+  val hwacha_limiter = vParams.hwachaLimiter.map(n => Module(new HwachaLimiter(n)))
+  hwacha_limiter.foreach { h =>
+    h.io.inst := issue_inst
+    h.io.fire := io.issue.fire
+    h.io.vat_release.foreach(_ := false.B)
+  }
+  val hwacha_block = hwacha_limiter.map(_.io.block).getOrElse(false.B)
+
+
+  io.issue.ready   := vat_available && vdq.io.enq.ready && (!issue_inst.vmu || vmu.io.enq.ready) && !hwacha_block
+  vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready) && !hwacha_block
+  vmu.io.enq.valid := vat_available && io.issue.valid   && vdq.io.enq.ready && issue_inst.vmu    && !hwacha_block
 
   val scalar_resp_arb = Module(new Arbiter(new ScalarWrite, 2))
   io.scalar_resp <> Queue(scalar_resp_arb.io.out)
@@ -489,6 +499,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     assert(vat_valids(tag))
     when (tag === vat_head) { vat_head_incr := true.B }
     vat_valids(tag) := false.B
+    hwacha_limiter.foreach(_.io.vat_release(tag) := true.B)
   }
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)

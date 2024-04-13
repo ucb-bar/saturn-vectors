@@ -73,6 +73,25 @@ object VectorParams {
     vrfBanking = 4,
     vatSz = 2 // spatz supports up to 4 parallel insns
   )
+
+  // hwaParams
+  // For a vector unit with limited sequencer slots akin to Hwacha
+  def hwaParams = VectorParams(
+    vatSz = 3,
+    vlifqEntries = 32, // match VLTEntries
+    vsifqEntries = 32,
+    vlrobEntries = 32,
+    vlissqEntries = 8,
+    vsissqEntries = 8,
+    vxissqEntries = 8,
+    vpissqEntries = 8,
+    useSegmentedIMul = true,
+    useScalarFPMisc = false,
+    useScalarFPFMA = false,
+    vrfBanking = 4,
+    hwachaLimiter = Some(8), // sequencer slots
+    issStructure = VectorIssueStructure.Split
+  )
 }
 
 sealed trait VectorIssueStructure
@@ -110,7 +129,10 @@ case class VectorParams(
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
   imaPipeDepth: Int = 3,
+
+  // for comparisons only
   hazardingMultiplier: Int = 0,
+  hwachaLimiter: Option[Int] = None,
 
   doubleBufferSegments: Boolean = false,
 
@@ -118,7 +140,7 @@ case class VectorParams(
 
   issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
-  tlBuffer: BufferParams = BufferParams.default
+  tlBuffer: BufferParams = BufferParams.default,
 )
 
 case object VectorParamsKey extends Field[VectorParams]
