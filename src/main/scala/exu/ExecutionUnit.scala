@@ -30,7 +30,8 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new ExecuteMicroOp))
     val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(pipe_depth))))
-    val write = Output(Valid(new VectorWrite(dLen)))
+    val iter_write = Decoupled(new VectorWrite(dLen))
+    val pipe_write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
     val scalar_write = Decoupled(new ScalarWrite)
     val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
@@ -77,8 +78,10 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
   io.vat_release.valid := false.B
   io.vat_release.bits := DontCare
 
-  io.write.valid := false.B
-  io.write.bits := DontCare
+  io.pipe_write.valid := false.B
+  io.pipe_write.bits := DontCare
+  io.iter_write.valid := false.B
+  io.iter_write.bits := DontCare
   io.acc_write.valid := false.B
   io.acc_write.bits := DontCare
   io.busy := false.B
@@ -137,8 +140,8 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
     when (write_sel.orR) {
       val acc = Mux1H(write_sel, pipe_bits.map(_.acc))
       val tail = Mux1H(write_sel, pipe_bits.map(_.tail))
-      io.write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
-      io.write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+      io.pipe_write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
+      io.pipe_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
       io.acc_write.valid := acc && !tail
       io.acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
       io.vat_release.valid := Mux1H(write_sel, pipe_bits.map(_.tail))
@@ -160,15 +163,15 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
   if (iter_fus.size > 0) {
     val iter_write_arb = Module(new Arbiter(new VectorWrite(dLen), iter_fus.size))
     iter_write_arb.io.in.zip(iter_fus.map(_.io.write)).foreach { case (l,r) => l <> r }
-    iter_write_arb.io.out.ready := !pipe_write
+    iter_write_arb.io.out.ready := !pipe_write && io.iter_write.ready
 
+    val acc = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.acc))
+    val tail = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.tail))
+    io.iter_write.valid     := iter_write_arb.io.out.valid && (!acc || tail) && !pipe_write
+    io.iter_write.bits.eg   := iter_write_arb.io.out.bits.eg
+    io.iter_write.bits.mask := iter_write_arb.io.out.bits.mask
+    io.iter_write.bits.data := iter_write_arb.io.out.bits.data
     when (!pipe_write) {
-      val acc = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.acc))
-      val tail = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.tail))
-      io.write.valid     := iter_write_arb.io.out.valid && (!acc || tail)
-      io.write.bits.eg   := iter_write_arb.io.out.bits.eg
-      io.write.bits.mask := iter_write_arb.io.out.bits.mask
-      io.write.bits.data := iter_write_arb.io.out.bits.data
       io.acc_write.valid := iter_write_arb.io.out.valid && acc
       io.acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.eg))
       io.acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.data))

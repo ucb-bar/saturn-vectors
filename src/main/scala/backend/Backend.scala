@@ -378,7 +378,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vrf = Module(new RegisterFile(
     reads = Seq(2 + vxs.size, vxs.size, 1 + vxs.size, 4 + vxs.size),
     pipeWrites = vxus.size,
-    llWrites = 2
+    llWrites = vxus.size + 2 // vxus + load + reset
   ))
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
@@ -399,7 +399,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   // Write ports
   vrf.io.pipe_writes.zip(vxus).foreach { case (w,vxu) =>
-    w := vxu.io.write
+    w := vxu.io.pipe_write
   }
 
   vrf.io.ll_writes(0) <> load_write
@@ -407,6 +407,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrf.io.ll_writes(1).bits.eg   := reset_ctr
   vrf.io.ll_writes(1).bits.data := 0.U
   vrf.io.ll_writes(1).bits.mask := ~(0.U(dLen.W))
+  vxus.zipWithIndex.foreach { case (vxu,i) =>
+    vrf.io.ll_writes(2+i) <> vxu.io.iter_write
+  }
 
   vxs.zipWithIndex.foreach { case(xs, i) =>
     vrf.io.read(0)(i) <> vxs(i).io.rvs1
