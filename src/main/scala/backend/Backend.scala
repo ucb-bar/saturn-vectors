@@ -50,7 +50,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, vat_tail)
   val vat_available = !vat_valids(vat_tail)
   val vat_available_count = PopCount(~vat_valids.asUInt)
-
+  val vat_head_incr = WireInit(false.B)
+  when (vat_head_incr) {
+    vat_head := vat_head + 1.U
+  }
 
   when (vdq.io.enq.fire) {
     assert(!vat_valids(vat_tail))
@@ -58,7 +61,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vat_tail := vat_tail + 1.U
   }
   when (vat_tail =/= vat_head && !vat_valids(vat_head)) {
-    vat_head := vat_head + 1.U
+    vat_head_incr := true.B
   }
 
   val issue_inst = WireInit(io.issue.bits)
@@ -484,6 +487,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Clear the age tags
   def clearVat(fire: Bool, tag: UInt) = when (fire) {
     assert(vat_valids(tag))
+    when (tag === vat_head) { vat_head_incr := true.B }
     vat_valids(tag) := false.B
   }
 
