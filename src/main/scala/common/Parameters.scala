@@ -59,6 +59,20 @@ object VectorParams {
     vrfBanking = 1,
     useIterativeIMul = true
   )
+
+  // spzParams:
+  // For a vector unit which is similar-ish to Spatz
+  def spzParams = VectorParams(
+    vdqEntries = 1,
+    vlifqEntries = 8, // match spatz params
+    vsifqEntries = 8,
+    vlrobEntries = 8,
+    useSegmentedIMul = true,
+    useScalarFPMisc = false,
+    useScalarFPFMA = false,
+    vrfBanking = 4,
+    vatSz = 2 // spatz supports up to 4 parallel insns
+  )
 }
 
 sealed trait VectorIssueStructure
