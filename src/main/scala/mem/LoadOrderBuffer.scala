@@ -21,6 +21,7 @@ object AgePriorityEncoder
 
 class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   require(nEntries > 0, "Queue must have non-negative number of entries")
+  require(nRobEntries <= nEntries)
 
   val tagBits = log2Ceil(nEntries)
   val io = IO(new Bundle {
@@ -37,6 +38,8 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
     val deq_data = Output(UInt(dLen.W))
   })
 
+  val simpleRob = nEntries == nRobEntries
+
   val valids = RegInit(VecInit.fill(nEntries)(false.B))
   val must_replay = RegInit(VecInit.fill(nEntries)(false.B))
   val entries = Reg(Vec(nEntries, new IFQEntry))
@@ -48,7 +51,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
   val deq_ptr = Counter(nEntries)
   val maybe_full = RegInit(false.B)
   val has_replay = must_replay.orR
-  val rob_full = rob_valids.andR
+  val rob_full = rob_valids.andR && (!simpleRob).B
   val rob_next = PriorityEncoder(~rob_valids)
   val ptr_match = enq_ptr.value === deq_ptr.value
   val empty = ptr_match && !maybe_full
@@ -64,15 +67,18 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
 
   io.deq.valid := !empty && (valids(deq_ptr.value) || (io.push.fire && io.push.bits.tag === deq_ptr.value))
   io.deq.bits := entries(deq_ptr.value)
-  io.deq_data := Mux(valids(deq_ptr.value), rob(rob_idxs(deq_ptr.value)), io.push.bits.data)
+  val rob_deq_idx = if (simpleRob) deq_ptr.value else rob_idxs(deq_ptr.value)
+  io.deq_data := Mux(valids(deq_ptr.value), rob(rob_deq_idx), io.push.bits.data)
+
+  val rob_push_idx = if (simpleRob) io.push.bits.tag else rob_next
   when (io.push.valid && !(deq_ptr.value === io.push.bits.tag && io.deq.ready)) {
     when (rob_full) {
       must_replay(io.push.bits.tag) := true.B
     } .otherwise {
       valids(io.push.bits.tag) := true.B
       rob_idxs(io.push.bits.tag) := rob_next
-      rob_valids(rob_next) := true.B
-      rob(rob_next) := io.push.bits.data
+      rob_valids(rob_push_idx) := true.B
+      rob(rob_push_idx) := io.push.bits.data
     }
   }
 
@@ -80,7 +86,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
     deq_ptr.inc()
     valids(deq_ptr.value) := false.B
     when (valids(deq_ptr.value) && !entries(deq_ptr.value).masked) {
-      rob_valids(rob_idxs(deq_ptr.value)) := false.B
+      rob_valids(rob_deq_idx) := false.B
     }
   }
 
