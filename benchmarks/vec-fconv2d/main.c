@@ -75,7 +75,7 @@ int main() {
   // Performance metrics
   int64_t runtime = cycles2 - cycles1;
   float performance = 2.0 * F * F * M * N / runtime;
-
+  printf("operations: %d\n", F * F * M * N);
   printf("The execution took %d cycles.\n", runtime);
   printf("The performance is %ld DPFLOP/1000 cycles.\n",
          (uint64_t)(1000.0 * performance));

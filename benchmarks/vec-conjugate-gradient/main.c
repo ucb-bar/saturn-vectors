@@ -134,9 +134,19 @@ int main() {
   // End instruction and cycles count of the region of interest
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
+
+  size_t rk_norm_ops = size;
+  size_t spmv_ops = sparsity * size * size;
+  size_t pAp_ops = size;
+  size_t daxpy_ops = size * 3;
+  size_t rk_norm_new_ops = size;
+
+  size_t operations = i * (rk_norm_ops + spmv_ops + pAp_ops + daxpy_ops + rk_norm_new_ops);
+
   // Instruction and cycles count of the region of interest
+  printf("NUMBER OF OPERATIONS %lu\n", operations);
   printf("NUMBER OF EXEC CYCLES :%lu\n", cycles2 - cycles1);
   printf("NUMBER OF INSTRUCTIONS EXECUTED :%lu\n", instr2 - instr1);
-  
+
   return 0;
 }

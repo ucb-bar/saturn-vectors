@@ -54,7 +54,7 @@ int verify_matrix(double *matrix, double *golden_matrix, int64_t R, int64_t C,
 }
 
 int main() {
-  printf("FCONV3D\n");
+  printf("FCONV3D float64\n");
   printf("Input Mtx size: %dx%d\n", M + F - 1, N + F - 1);
   printf("Output Mtx size: %dx%d\n", M, N);
   printf("Filter size: %dx%d\n", F, F);
@@ -75,7 +75,7 @@ int main() {
   // Performance metrics
   int64_t runtime = cycles2 - cycles1;
   float performance = 2.0 * CH * F * F * M * N / runtime;
-
+  printf("Operations: %ld\n", CH * F * F * M * N);
   printf("The execution took %d cycles.\n", runtime);
   printf("The performance is %ld DPFLOP/1000 cycles.\n",
          (uint64_t)(1000.0 * performance));

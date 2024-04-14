@@ -56,6 +56,7 @@ int main() {
 
   printf("Number of runs: %d\n", num_runs);
   printf("rows=%ld cols=%ld\n", rows, cols);
+  printf("operations=%ld\n", num_runs * cols * rows * 3);
 
 #ifdef CHECK
   instr1 = read_csr(minstret);

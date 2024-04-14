@@ -4,9 +4,9 @@ import numpy as np
 import argparse
 
 
-m_dim = 8
-k_dim = 8
-n_dim = 8
+m_dim = 71
+k_dim = 71
+n_dim = 71
 
 parser = argparse.ArgumentParser(description='A script to generate input data for an SGEMM kernel.')
 
@@ -34,9 +34,9 @@ b_array_size = k_dim * n_dim
 c_array_size = m_dim * n_dim
 
 info = np.finfo(np.float32)
-maxmant = 1 << 5
-minexp = -5
-maxexp = 5
+maxmant = 1 << 4
+minexp = -4
+maxexp = 4
 
 # Generate floating-point values with exact mantissa and exponent
 randf = lambda n: np.ldexp(

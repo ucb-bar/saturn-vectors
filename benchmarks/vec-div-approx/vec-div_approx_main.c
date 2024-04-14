@@ -25,7 +25,7 @@ void vec_div_approx(size_t n, float x[], float y[]);
 
 int main( int argc, char* argv[] )
 {
-
+  printf("Div approx size = %ld\n", DATA_SIZE);
 #if PREALLOCATE
   // If needed we preallocate everything in the caches
   vec_div_approx(DATA_SIZE, input1_data, input2_data);

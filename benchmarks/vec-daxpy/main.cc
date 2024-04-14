@@ -31,6 +31,9 @@ int main(int argc, char *argv[])
 {
   double a=1.0;
 
+  // warmup
+  axpy_intrinsics(a, dx, dy, N);
+
   // Start instruction and cycles count of the region of interest
   unsigned long cycles1, cycles2, instr2, instr1;
   instr1 = read_csr(minstret);

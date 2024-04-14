@@ -93,6 +93,9 @@ int main() {
   runtime_v = cycles2 - cycles1;
   printf("Vector benchmark complete.\n");
   printf("Cycles: %d\n", runtime_v);
+  printf("Operations: %ld\n", N_BOXES * CROP_WIDTH * CROP_HEIGHT * DEPTH * 6);
+  printf("Loads: %ld\n", N_BOXES * CROP_WIDTH * CROP_HEIGHT * DEPTH * 4);
+  printf("Stores: %ld\n", N_BOXES * CROP_WIDTH * CROP_HEIGHT * DEPTH);
 
 
   // Check for errors

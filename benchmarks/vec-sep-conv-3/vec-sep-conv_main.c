@@ -24,6 +24,7 @@ int main( int argc, char* argv[] )
 {
   float results_data[O_SIZE] = {0};
   printf("2dsepconv (OH,OW,KH,KW,IH,IW) = (%ld, %ld, %ld, %ld, %ld, %ld)\n", OH, OW, KH, KW, IH, IW);
+  printf("operations = %ld\n", (IW-KW+1)*(IH-KH+1)*(KW+KH));
 #if PREALLOCATE
   // If needed we preallocate everything in the caches
   vec_sep_conv(OH, OW, IW, OW, input_k1, input_k2, input_image, results_data);
