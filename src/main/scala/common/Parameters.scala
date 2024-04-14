@@ -60,6 +60,8 @@ object VectorParams {
     useIterativeIMul = true
   )
 
+  // The parameters below are approximations
+
   // spzParams:
   // For a vector unit which is similar-ish to Spatz
   def spzParams = VectorParams(
@@ -92,6 +94,25 @@ object VectorParams {
     hwachaLimiter = Some(8), // sequencer slots
     issStructure = VectorIssueStructure.Split
   )
+
+  // lgvParams
+  // For a vector unit with very long vector lengths
+  def lgvParams = VectorParams(
+    vatSz = 5,
+    vlifqEntries = 32,
+    vsifqEntries = 32,
+    vlrobEntries = 32,
+    vlissqEntries = 8,
+    vsissqEntries = 8,
+    vxissqEntries = 8,
+    vpissqEntries = 8,
+    useSegmentedIMul = true,
+    useScalarFPMisc = false,
+    useScalarFPFMA = false,
+    vrfBanking = 4,
+    issStructure = VectorIssueStructure.Split
+  )
+
 }
 
 sealed trait VectorIssueStructure
