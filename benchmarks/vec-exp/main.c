@@ -24,8 +24,8 @@
 #include "ara/util.h"
 #include <stdio.h>
 
-#define N_F64 128
-#define N_F32 256
+#define N_F64 512
+#define N_F32 1024
 
 extern size_t N_f64;
 extern double exponents_f64[] __attribute__((aligned(32)));
@@ -78,6 +78,17 @@ int main() {
 
   int error = 0;
   unsigned long cycles1, cycles2, instr2, instr1;
+
+  if (N_f32 >= 256) {
+    for (size_t t = 8; t <= 256; t += 31) {
+      cycles1 = read_csr(mcycle);
+      exp_f32m4_bmark(exponents_f32, results_f32m2, t);
+      asm volatile("fence");
+      cycles2 = read_csr(mcycle);
+      printf("32b LMUL=4 n=%ld cycles=%ld\n", t, cycles2 - cycles1);
+    }
+  }
+
 
   printf("Executing exponential on %d 64-bit data LMUL=1...\n", N_f64);
   instr1 = read_csr(minstret);

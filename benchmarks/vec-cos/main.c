@@ -78,10 +78,33 @@ int main() {
   int error = 0;
   unsigned long cycles1, cycles2, instr2, instr1;
 
+  if (N_f32 >= 256) {
+    for (size_t t = 8; t <= 256; t += 31) {
+      /* cycles1 = read_csr(mcycle); */
+      /* cos_f32m1_bmark(angles_f32, results_f32m1, t); */
+      /* asm volatile("fence"); */
+      /* cycles2 = read_csr(mcycle); */
+      /* printf("32b LMUL=1 n=%ld cycles=%ld\n", t, cycles2 - cycles1); */
+
+      cycles1 = read_csr(mcycle);
+      cos_f32m2_bmark(angles_f32, results_f32m2, t);
+      asm volatile("fence");
+      cycles2 = read_csr(mcycle);
+      printf("32b LMUL=2 n=%ld cycles=%ld\n", t, cycles2 - cycles1);
+
+      /* cycles1 = read_csr(mcycle); */
+      /* cos_f32m4_bmark(angles_f32, results_f32m4, t); */
+      /* asm volatile("fence"); */
+      /* cycles2 = read_csr(mcycle); */
+      /* printf("32b LMUL=4 n=%ld cycles=%ld\n", t, cycles2 - cycles1); */
+    }
+  }
+
   printf("Executing cosine on %d 64-bit data LMUL1...\n", N_f64);
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f64m1_bmark(angles_f64, results_f64m1, N_f64);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
@@ -90,6 +113,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f64m2_bmark(angles_f64, results_f64m2, N_f64);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
@@ -98,6 +122,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f64m4_bmark(angles_f64, results_f64m4, N_f64);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
@@ -106,6 +131,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f32m1_bmark(angles_f32, results_f32m1, N_f32);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
@@ -114,6 +140,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f32m2_bmark(angles_f32, results_f32m2, N_f32);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);
@@ -122,6 +149,7 @@ int main() {
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);
   cos_f32m4_bmark(angles_f32, results_f32m4, N_f32);
+  asm volatile("fence");
   instr2 = read_csr(minstret);
   cycles2 = read_csr(mcycle);
   printf("The execution took %ld cycles %ld instructions.\n", cycles2 - cycles1, instr2 - instr1);

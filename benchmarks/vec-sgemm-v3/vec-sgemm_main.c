@@ -28,10 +28,22 @@ int main( int argc, char* argv[] )
 #if PREALLOCATE
   // If needed we preallocate everything in the caches
   vec_sgemm_nn(N_DIM, M_DIM, K_DIM, a_matrix, K_DIM, b_matrix, N_DIM, results_data, N_DIM);
-  memset(results_data, 0, sizeof(results_data));
 #endif
 
+  // Do the size sweeps
+  if (M_DIM >= 64 && N_DIM >= 64 && K_DIM >= 64) {
+    for (size_t t = 8; t <= 64; t += 7) {
+      size_t start, end;
+      start = read_csr(mcycle);
+      vec_sgemm_nn(t, t, t, a_matrix, t, b_matrix, t, results_data, t);
+      asm volatile ("fence");
+      end = read_csr(mcycle);
+      printf("size %ld cycles = %ld\n", t, end - start);
+    }
+  }
+
   // Do the sgemm
+  memset(results_data, 0, sizeof(results_data));
   setStats(1);
   vec_sgemm_nn(N_DIM, M_DIM, K_DIM, a_matrix, K_DIM, b_matrix, N_DIM, results_data, N_DIM);
   setStats(0);
