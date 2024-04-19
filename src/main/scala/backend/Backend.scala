@@ -6,7 +6,7 @@ import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
-import saturn.mem.{VectorMemIO, MaskIndex, VectorMemUnit, ScalarMemOrderCheckIO}
+import saturn.mem._
 import saturn.exu._
 import saturn.common._
 import saturn.insns._
@@ -40,6 +40,22 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vmu = Module(new VectorMemUnit)
   vmu.io.dmem <> io.dmem
+  if (vParams.latencyInject) {
+    val latency = Wire(UInt(32.W))
+    latency := PlusArg("saturn_mem_latency")
+    val delay_timer = RegInit(0.U(64.W))
+    delay_timer := delay_timer + 1.U
+    val load_delay = Module(new DelayQueue(new MemRequest, 1024, 64))
+    val store_delay = Module(new DelayQueue(new MemRequest, 1024, 64))
+    load_delay.io.timer := delay_timer
+    store_delay.io.timer := delay_timer
+    load_delay.io.delay := latency
+    store_delay.io.delay := latency
+    load_delay.io.enq <> vmu.io.dmem.load_req
+    store_delay.io.enq <> vmu.io.dmem.store_req
+    io.dmem.load_req <> load_delay.io.deq
+    io.dmem.store_req <> store_delay.io.deq
+  }
   vmu.io.scalar_check <> io.scalar_check
 
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))

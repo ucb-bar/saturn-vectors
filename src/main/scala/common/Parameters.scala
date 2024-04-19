@@ -154,6 +154,8 @@ case class VectorParams(
   // for comparisons only
   hazardingMultiplier: Int = 0,
   hwachaLimiter: Option[Int] = None,
+  enableChaining: Boolean = true,
+  latencyInject: Boolean = false,
 
   doubleBufferSegments: Boolean = false,
 

@@ -72,10 +72,10 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   io.iss.bits.wmask := head_mask & tail_mask & vm_mask
 
   when (io.iss.fire && !tail) {
-    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B)) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B) && vParams.enableChaining.B) {
       wvd_mask := wvd_mask & ~vd_write_oh
     }
-    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
+    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B) && vParams.enableChaining.B) {
       rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits.eg)
     }
     when (sidx === inst.seg_nf) {

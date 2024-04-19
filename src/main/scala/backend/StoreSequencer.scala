@@ -76,10 +76,10 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
   io.iss.bits.stmask := vm_mask
 
   when (io.iss.fire && !tail) {
-    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B)) {
+    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B) && vParams.enableChaining.B) {
       rvd_mask := rvd_mask & ~UIntToOH(io.rvd.req.bits.eg)
     }
-    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
+    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B) && vParams.enableChaining.B) {
       rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits.eg)
     }
     when (sidx === inst.seg_nf) {
