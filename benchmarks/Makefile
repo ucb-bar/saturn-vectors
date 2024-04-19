@@ -29,6 +29,7 @@ bmarks = \
 	vec-fconv2d \
 	vec-fconv3d \
 	vec-fdotprod \
+	vec-fft \
 	vec-iconv2d \
 	vec-igemm \
 	vec-jacobi2d \
