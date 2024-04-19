@@ -415,8 +415,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vls.io.iss.ready := vmu.io.lresp.valid && load_write.ready
   load_write.valid := vls.io.iss.valid && vmu.io.lresp.valid
   load_write.bits.eg   := vls.io.iss.bits.wvd_eg
-  load_write.bits.data := vmu.io.lresp.bits
+  load_write.bits.data := vmu.io.lresp.bits.data
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
+  when (vmu.io.lresp.fire) {
+    assert(vmu.io.lresp.bits.debug_vat === vls.io.vat)
+  }
 
   val resetting = RegInit(true.B)
   val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
@@ -470,8 +473,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vrf.io.read(2)(vxs.length) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
-  vmu.io.sdata.bits.data := vss.io.iss.bits.stdata
-  vmu.io.sdata.bits.mask := vss.io.iss.bits.stmask
+  vmu.io.sdata.bits    := vss.io.iss.bits
   vss.io.iss.ready     := vmu.io.sdata.ready
 
   vrf.io.read(3)(vxs.length) <> vls.io.rvm

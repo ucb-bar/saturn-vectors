@@ -143,7 +143,8 @@ class VectorMaskAccessIO(implicit p: Parameters) extends CoreBundle()(p) with Ha
   val mask = Output(Bool())
 }
 
-class MaskedByte extends Bundle {
+class MaskedByte(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val debug_vat = UInt(vParams.vatSz.W)
   val data = UInt(8.W)
   val mask = Bool()
 }
@@ -206,6 +207,16 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
 class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val stdata = UInt(dLen.W)
   val stmask = UInt(dLenB.W)
+  val debug_vat = UInt(vParams.vatSz.W)
+  def asMaskedBytes = {
+    val bytes = Wire(Vec(dLenB, new MaskedByte))
+    for (i <- 0 until dLenB) {
+      bytes(i).data := stdata(((i+1)*8)-1,i*8)
+      bytes(i).mask := stmask(i)
+      bytes(i).debug_vat := debug_vat
+    }
+    bytes
+  }
 }
 
 class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

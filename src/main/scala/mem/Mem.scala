@@ -68,19 +68,6 @@ class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVector
   val store_ack = Input(Valid(UInt(dmemTagBits.W)))
 }
 
-class StoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val data = UInt(dLen.W)
-  val mask = UInt(dLenB.W)
-  def asMaskedBytes = {
-    val bytes = Wire(Vec(dLenB, new MaskedByte))
-    for (i <- 0 until dLenB) {
-      bytes(i).data := data(((i+1)*8)-1,i*8)
-      bytes(i).mask := mask(i)
-    }
-    bytes
-  }
-}
-
 class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new VectorMemMacroOp))
@@ -88,8 +75,11 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val dmem = new VectorMemIO
     val scalar_check = new ScalarMemOrderCheckIO
 
-    val lresp = Decoupled(UInt(dLen.W))
-    val sdata = Flipped(Decoupled(new StoreData))
+    val lresp = Decoupled(new Bundle {
+      val data = UInt(dLen.W)
+      val debug_vat = UInt(vParams.vatSz.W)
+    })
+    val sdata = Flipped(Decoupled(new StoreDataMicroOp))
 
     val maskindex = Flipped(Decoupled(new MaskIndex))
 
@@ -257,12 +247,20 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val store_rob = Module(new ReorderBuffer(Bool(), vParams.vsifqEntries))
   sas.io.tag <> store_rob.io.reserve
+  store_rob.io.reserve.ready := sas.io.tag.ready && sas.io.req.valid
 
   val sifq = Module(new DCEQueue(new IFQEntry, vParams.vsifqEntries))
   sas.io.out.ready := sifq.io.enq.ready && scu.io.pop.ready
   sifq.io.enq.valid := sas.io.out.valid && scu.io.pop.ready
   sifq.io.enq.bits := sas.io.out.bits
   scu.io.pop.valid := sas.io.out.valid && sifq.io.enq.ready
+  when (scu.io.pop.fire) {
+    for (i <- 0 until dLenB) {
+      assert(scu.io.pop_data(i).debug_vat === sas.io.op.vat ||
+        i.U < sas.io.out.bits.head ||
+        (i.U >= sas.io.out.bits.tail && sas.io.out.bits.tail =/= 0.U))
+    }
+  }
 
   scu.io.pop.bits.head := sas.io.out.bits.head
   scu.io.pop.bits.tail := sas.io.out.bits.tail
@@ -272,7 +270,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   store_rob.io.push.bits.data := DontCare
 
   sifq.io.deq.ready := sifq.io.deq.bits.masked || store_rob.io.deq.valid
-  store_rob.io.deq.ready := true.B
+  store_rob.io.deq.ready := !sifq.io.deq.bits.masked && sifq.io.deq.valid
   when (store_rob.io.deq.valid) { assert(sifq.io.deq.valid) }
   siq_deq_fire := sifq.io.deq.fire && sifq.io.deq.bits.last
   io.vat_release.valid := siq_deq_fire
