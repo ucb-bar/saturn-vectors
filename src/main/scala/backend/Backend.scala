@@ -465,11 +465,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     h.valid && h.bits.eg === index_access_eg
   }).orR
 
+  val index_access_ready_pipe = RegNext(vrf.io.read(0)(vxs.length+1).req.ready && !index_access_hazard && io.index_access.valid, false.B)
+  val index_access_idx_pipe = RegNext(vrf.io.read(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew))
+
   vrf.io.read(0)(vxs.length+1).req.valid := io.index_access.valid && !index_access_hazard
-  io.index_access.ready := vrf.io.read(0)(vxs.length+1).req.ready && !index_access_hazard
+  io.index_access.ready := index_access_ready_pipe
   vrf.io.read(0)(vxs.length+1).req.bits.eg  := index_access_eg
   vrf.io.read(0)(vxs.length+1).req.bits.oldest  := false.B
-  io.index_access.idx   := vrf.io.read(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
+  io.index_access.idx := index_access_idx_pipe
 
   vrf.io.read(2)(vxs.length) <> vss.io.rvd
   vmu.io.sdata.valid   := vss.io.iss.valid
