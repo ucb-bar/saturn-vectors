@@ -35,6 +35,7 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   })
 
   val replay_kill = WireInit(false.B)
+  val index_access_kill = RegInit(false.B)
 
   def nextPage(addr: UInt) = ((addr + (1 << pgIdxBits).U) >> pgIdxBits) << pgIdxBits
 
@@ -94,8 +95,9 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   io.s1_tlb_req.valid := RegEnable(io.s0_tlb_req.valid, false.B, valid)
   io.s1_tlb_req.bits  := RegEnable(io.s0_tlb_req.bits, valid)
 
-  val replay_fire = valid && eidx < inst.vconfig.vl && tlb_backoff === 0.U && index_ready && mask_ready
+  val replay_fire = valid && eidx < inst.vconfig.vl && tlb_backoff === 0.U && index_ready && mask_ready && !index_access_kill
   when (replay_fire) {
+    index_access_kill := true.B
     when (seg_hi || seg_single_page || inst.seg_nf === 0.U) {
       eidx := eidx + 1.U
       addr := addr + stride
@@ -103,9 +105,11 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
     } .otherwise {
       seg_hi := true.B
     }
+  } .otherwise {
+    index_access_kill := false.B
   }
 
-  val s1_valid       = RegNext(replay_fire && !replay_kill, false.B)
+  val s1_valid       = RegNext(replay_fire && !replay_kill && !index_access_kill, false.B)
   val s1_eidx        = RegEnable(eidx, valid)
   val s1_masked      = RegEnable(masked, valid)
   val s1_seg_hi      = RegEnable(seg_hi, valid)
