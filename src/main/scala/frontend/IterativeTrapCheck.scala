@@ -56,18 +56,14 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
     addr := io.in.bits.rs1_data
   }
 
-  val index_access_resp_q = Module(new DCEQueue(UInt(64.W), 2))
-  index_access_resp_q.io.enq.bits   := io.index_access.idx
-  index_access_resp_q.io.enq.valid  := io.index_access.ready && io.index_access.valid 
-
   val stride = MuxLookup(inst.mop, 0.U)(Seq(
     (mopUnit    -> ((inst.seg_nf +& 1.U) << inst.mem_elem_size)),
     (mopStrided -> inst.rs2_data)
   ))
   val indexed = inst.mop.isOneOf(mopOrdered, mopUnordered)
-  val index_ready = !indexed || index_access_resp_q.io.deq.valid
+  val index_ready = !indexed || io.index_access.ready
   val mask_ready = inst.vm || io.mask_access.ready
-  val index = Mux(indexed, index_access_resp_q.io.deq.bits & eewBitMask(inst.mem_idx_size), 0.U)
+  val index = Mux(indexed, io.index_access.idx & eewBitMask(inst.mem_idx_size), 0.U)
   val base = Mux(indexed, inst.rs1_data, addr)
   val indexaddr = base + index
   val tlb_addr = Mux(seg_hi, nextPage(indexaddr), indexaddr)
@@ -79,12 +75,10 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
 
   io.busy := valid
   io.inst := inst
-  io.index_access.valid := valid && indexed && tlb_backoff === 0.U && index_access_resp_q.io.enq.ready && (eidx +& 1.U < inst.vconfig.vl)
+  io.index_access.valid := valid && indexed && tlb_backoff === 0.U
   io.index_access.vrs   := inst.rs2
   io.index_access.eidx  := eidx
   io.index_access.eew   := inst.mem_idx_size
-
-  index_access_resp_q.io.deq.ready := valid && indexed && tlb_backoff === 0.U
 
   io.mask_access.valid := valid && !inst.vm && tlb_backoff === 0.U
   io.mask_access.eidx  := eidx
