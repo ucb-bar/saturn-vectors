@@ -208,7 +208,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     !(renacc && !acc_ready)
   )
   io.perm.req.valid := read_perm_buffer && valid
-  //io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready
   io.iss.valid := iss_valid && !(inst.reduction && reduction_head)
 
   io.perm.data.ready := iss_valid && io.iss.ready

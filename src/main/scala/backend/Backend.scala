@@ -509,9 +509,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     0.U)
   perm_buffer.io.push_data := perm_q.io.deq.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  //perm_buffer.io.pop <> vxs.head.io.perm.req
-  //vxs.head.io.perm.data := perm_buffer.io.pop_data.asUInt
-
   val perm_buffer_queue = Module(new DCEQueue(UInt(dLen.W), 1)) 
   perm_buffer.io.pop.bits := vxs.head.io.perm.req.bits
   perm_buffer.io.pop.valid := vxs.head.io.perm.req.valid && perm_buffer_queue.io.enq.ready
