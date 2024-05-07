@@ -26,7 +26,7 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
     val rvm  = new VectorReadIO
     val perm = new Bundle {
       val req = Decoupled(new CompactorReq(dLenB))
-      val data = Input(UInt(dLen.W))
+      val data = Flipped(Decoupled(UInt(dLen.W)))
     }
 
     val iss = Decoupled(issType)
@@ -69,4 +69,5 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
   io.rvm.req.bits := DontCare
   io.perm.req.valid := false.B
   io.perm.req.bits := DontCare
+  io.perm.data.ready := false.B
 }

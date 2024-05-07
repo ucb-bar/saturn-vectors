@@ -166,7 +166,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     (acc_init_fp_neg, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)),
   ))
 
-  val rgather_eidx = get_max_offset(Mux(rgather_ix && rgather, uscalar, io.perm.data & eewBitMask(vs1_eew)))
+  val rgather_eidx = get_max_offset(Mux(rgather_ix && rgather, uscalar, io.perm.data.bits & eewBitMask(vs1_eew)))
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
   val rvs2_eidx = Mux(rgather || rgatherei16, rgather_eidx, eidx)
   io.rvs1.req.bits.eg := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_vs1_mask)
@@ -204,11 +204,14 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     !(renv2 && !io.rvs2.req.ready) &&
     !(renvd && !io.rvd.req.ready) &&
     !(renvm && !io.rvm.req.ready) &&
-    !(read_perm_buffer && !io.perm.req.ready) &&
+    !(read_perm_buffer && !io.perm.data.valid) &&
     !(renacc && !acc_ready)
   )
-  io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready
+  io.perm.req.valid := read_perm_buffer && valid
+  //io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready
   io.iss.valid := iss_valid && !(inst.reduction && reduction_head)
+
+  io.perm.data.ready := iss_valid && io.iss.ready
 
   io.iss.bits.rvs1_data := io.rvs1.resp
   io.iss.bits.rvs2_data := io.rvs2.resp
@@ -308,8 +311,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     io.iss.bits.rvs2_data := 0.U
   }
   when (slide) {
-    io.iss.bits.rvs2_elem := io.perm.data & slide_down_bit_mask
-    io.iss.bits.rvs2_data := io.perm.data & slide_down_bit_mask
+    io.iss.bits.rvs2_elem := io.perm.data.bits & slide_down_bit_mask
+    io.iss.bits.rvs2_data := io.perm.data.bits & slide_down_bit_mask
   }
 
   when (iss_valid && inst.reduction && reduction_head) {
