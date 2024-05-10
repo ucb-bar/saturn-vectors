@@ -120,6 +120,7 @@ object VectorIssueStructure {
   case object Unified extends VectorIssueStructure
   case object Shared extends VectorIssueStructure
   case object Split extends VectorIssueStructure
+  case object MultiFMA extends VectorIssueStructure
 }
 
 case class VectorParams(
@@ -161,7 +162,8 @@ case class VectorParams(
 
   vrfBanking: Int = 2,
 
-  issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
+  issStructure: VectorIssueStructure = VectorIssueStructure.MultiFMA,
+  //issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
   tlBuffer: BufferParams = BufferParams.default,
 )

@@ -167,6 +167,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     (() => new FPFMAPipe(vParams.fmaPipeDepth), "vfpfma")
   }
 
+  val fpFMA_1 = if (vParams.useScalarFPFMA) {
+    (() => new SharedScalarElementwiseFPFMA(vParams.fmaPipeDepth), "vsharedfpfma")
+  } else {
+    (() => new FPFMAPipe(vParams.fmaPipeDepth), "vfpfma_1")
+  }
+
   val fpMISCs = if (vParams.useScalarFPMisc) Seq(
     (() => new SharedScalarElementwiseFPMisc, "vsharedfpmisc")
   ) else Seq(
@@ -180,6 +186,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vxus = vParams.issStructure match {
     case VectorIssueStructure.Unified => {
       Seq(ExecutionUnit.instantiate("", integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul))
+    }
+    case VectorIssueStructure.MultiFMA => {
+      Seq(
+        ExecutionUnit.instantiate("_int", integerFUs ++ fpMISCs),
+        ExecutionUnit.instantiate("_fp", Seq(fpFMA) ++ integerMul),
+        ExecutionUnit.instantiate("_fp1", Seq(fpFMA_1))
+      )
     }
     case _ => {
       require(!vParams.useScalarFPFMA)
@@ -196,6 +209,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     case VectorIssueStructure.Split => vxus.map { vxu =>
       Module(new IssueQueue(vParams.vxissqEntries, 1)).suggestName(s"vxissq${vxu.suffix}")
     }
+    case VectorIssueStructure.MultiFMA => Seq(Module(new IssueQueue(vParams.vxissqEntries, 1)), Module(new IssueQueue(vParams.vxissqEntries, 2)))
     case _ => Seq(Module(new IssueQueue(vParams.vxissqEntries, vxus.size)).suggestName("vxissq"))
   }
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 1))
@@ -231,6 +245,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     case VectorIssueStructure.Split => vxs.zip(vxissqs).map { case (seq, vxissq) =>
       IssueGroup(vxissq, Seq(seq))
     }
+    case VectorIssueStructure.MultiFMA => Seq(IssueGroup(vxissqs(0), Seq(vxs(0))), IssueGroup(vxissqs(1), vxs.tail))
+    //case VectorIssueStructure.MultiFMA => Seq(Seq(vxs.head), vxs.tail).zip(vxissqs).map { case(seq, vxissq) =>
+    //  IssueGroup(vxissq, seq)
+    //} 
+    //Seq(IssueGroup(vxissqs(0), Seq(vxs(0))), IssueGroup(vxissqs(1), ))
     case _ => Seq(IssueGroup(vxissqs(0), vxs))
   })
   val issqs = issGroups.map(_.issq)
@@ -360,11 +379,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     group.issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
     group.issq.io.enq.bits.seq := VecInit(accepts).asUInt
 
+    val first_ready_seq = PriorityEncoder(group.seqs.map(_.io.dis.ready))
+
     group.seqs.zipWithIndex.foreach{ case(s, j) =>
-      s.io.dis.valid := group.issq.io.deq.valid && group.issq.io.deq.bits.seq(j)
+      s.io.dis.valid := group.issq.io.deq.valid && (first_ready_seq === j.U) //&& group.issq.io.deq.bits.seq(j)
       s.io.dis.bits := group.issq.io.deq.bits.viewAsSupertype(new BackendIssueInst)
     }
-    group.issq.io.deq.ready := Mux1H(group.issq.io.deq.bits.seq, group.seqs.map(_.io.dis.ready))
+    group.issq.io.deq.ready := group.seqs.map(_.io.dis.ready).reduce(_ || _)
+    //group.issq.io.deq.ready := Mux1H(group.issq.io.deq.bits.seq, group.seqs.map(_.io.dis.ready))
   }
 
   // Hazard checking for multi-VXS
