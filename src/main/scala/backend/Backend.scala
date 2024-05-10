@@ -382,7 +382,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       s.io.dis.bits := group.issq.io.deq.bits.viewAsSupertype(new BackendIssueInst)
     }
     group.issq.io.deq.ready := group.seqs.map(_.io.dis.ready).reduce(_ || _)
-    //group.issq.io.deq.ready := Mux1H(group.issq.io.deq.bits.seq, group.seqs.map(_.io.dis.ready))
   }
 
   // Hazard checking for multi-VXS
