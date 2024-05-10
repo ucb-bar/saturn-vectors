@@ -246,10 +246,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       IssueGroup(vxissq, Seq(seq))
     }
     case VectorIssueStructure.MultiFMA => Seq(IssueGroup(vxissqs(0), Seq(vxs(0))), IssueGroup(vxissqs(1), vxs.tail))
-    //case VectorIssueStructure.MultiFMA => Seq(Seq(vxs.head), vxs.tail).zip(vxissqs).map { case(seq, vxissq) =>
-    //  IssueGroup(vxissq, seq)
-    //} 
-    //Seq(IssueGroup(vxissqs(0), Seq(vxs(0))), IssueGroup(vxissqs(1), ))
     case _ => Seq(IssueGroup(vxissqs(0), vxs))
   })
   val issqs = issGroups.map(_.issq)

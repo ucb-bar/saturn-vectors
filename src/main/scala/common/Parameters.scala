@@ -45,6 +45,12 @@ object VectorParams {
     issStructure = VectorIssueStructure.Split
   )
 
+  // multiFMAParams:
+  // For a vector unit with multi-issue and 2 FMA pipes
+  def multiFMAParams = dspParams.copy(
+    issStructure = VectorIssueStructure.MultiFMA
+  )
+
   // dmaParams:
   // For a vector unit that only does memcpys, and no arithmetic
   def dmaParams = VectorParams(
@@ -162,8 +168,7 @@ case class VectorParams(
 
   vrfBanking: Int = 2,
 
-  issStructure: VectorIssueStructure = VectorIssueStructure.MultiFMA,
-  //issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
+  issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
   tlBuffer: BufferParams = BufferParams.default,
 )
