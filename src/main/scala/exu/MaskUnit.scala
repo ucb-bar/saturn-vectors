@@ -79,7 +79,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
       } .elsewhen (op.rs1 === 17.U) { // first
         when (first_here) {
           scalar_wb_data := op.eidx + ff
-        } .otherwise {
+        } .elsewhen (!found_first) {
           scalar_wb_data := ~(0.U(64.W))
         }
       } .otherwise { // mv
