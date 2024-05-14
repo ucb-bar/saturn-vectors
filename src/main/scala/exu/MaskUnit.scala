@@ -21,7 +21,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
 
   def accepts(op: ExecuteMicroOp): Bool = (op.opff6.isOneOf(OPFFunct6.wrfunary0) || op.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)) && !scalar_wb_busy
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2, supported_insns, Nil).matched && !scalar_wb_busy
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2, supported_insns, Nil).matched && !scalar_wb_busy && !io.pipe(0).bits.tail
 
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
@@ -48,20 +48,21 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val ff_oh = PriorityEncoderOH(elems)
   val bf = ~((0 until dLen).map { i => (elems << i)(dLen-1,0) }.reduce(_|_))
   val nonzero = elems =/= 0.U
-  val first_here = !found_first && nonzero
-  val before = Mux(found_first, 0.U, Mux(nonzero, bf, ~(0.U(dLen.W))))
+  val first_here = (!found_first || op.head) && nonzero
+  val before = Mux(found_first && !op.head, 0.U, Mux(nonzero, bf, ~(0.U(dLen.W))))
   val first = Mux(first_here, ff_oh, 0.U)
   val set = Mux(set_before, before, 0.U) | Mux(set_first, first, 0.U)
   val sign = VecInit.tabulate(4)({sew => op.rvs2_data((8 << sew)-1)})(op.rvs2_eew)
   val eew_mask = eewBitMask(op.rvs2_eew).pad(64)
   val elem = (op.rvs2_data & eew_mask) | (Fill(64, sign && op.isOpm) & ~eew_mask)
+  val scalar_wb_rdata = Mux(op.head, 0.U, scalar_wb_data)
 
   val iota_dlenb = VecInit.tabulate(4)({sew =>
     val grouped = Mux(op.rs1(0), ~(0.U(dLen.W)), elems).asTypeOf(Vec(8 << sew, UInt((dLenB >> sew).W)))
     grouped(op.eidx(log2Ceil(dLen)-1,log2Ceil(dLenB) - sew))
   })(op.rvd_eew)
   val iota_sums = (0 until dLenB).map { i =>
-    (PopCount(iota_dlenb & ((1<<i)-1).U) +& scalar_wb_data)(log2Ceil(maxVLMax),0)
+    (PopCount(iota_dlenb & ((1<<i)-1).U) +& scalar_wb_rdata)(log2Ceil(maxVLMax),0)
   }
   val iota_out = VecInit.tabulate(4)({sew =>
     val out = Wire(Vec(dLenB >> sew, UInt((8<<sew).W)))
@@ -72,14 +73,18 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   when (io.pipe(0).valid) {
     scalar_wb_rd := io.pipe(0).bits.rd
     scalar_wb_size := io.pipe(0).bits.rvs2_eew
+    when (op.head) {
+      found_first := false.B
+      scalar_wb_data := 0.U
+    }
     when (first_here) { found_first := true.B }
     when (wxunary0) {
       when (op.rs1 === 16.U) { // popc
-        scalar_wb_data := (scalar_wb_data + popc)(log2Ceil(maxVLMax),0)
+        scalar_wb_data := (scalar_wb_rdata + popc)(log2Ceil(maxVLMax),0)
       } .elsewhen (op.rs1 === 17.U) { // first
         when (first_here) {
           scalar_wb_data := op.eidx + ff
-        } .elsewhen (!found_first) {
+        } .elsewhen (!found_first || op.head) {
           scalar_wb_data := ~(0.U(64.W))
         }
       } .otherwise { // mv
@@ -92,17 +97,12 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
     when (munary0) {
       val mask = VecInit.tabulate(4)({sew => ~(0.U((dLenB >> sew).W))})(op.vd_eew)
       val incr = PopCount(iota_dlenb & mask)
-      scalar_wb_data := (scalar_wb_data + incr)(log2Ceil(maxVLMax),0)
+      scalar_wb_data := (scalar_wb_rdata + incr)(log2Ceil(maxVLMax),0)
     }
     when (op.tail) {
       scalar_wb_busy := wxunary0 || wfunary0
       scalar_wb_fp := wfunary0
     }
-  }
-
-  when (io.iss.valid && io.iss.ready && io.iss.op.head) {
-    scalar_wb_data := 0.U
-    found_first := false.B
   }
 
   io.scalar_write.valid := scalar_wb_busy
