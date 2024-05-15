@@ -175,7 +175,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     (() => new FPConvPipe, "vfcvtfu")
   )
 
-  val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
+  val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
 
   val vxus = vParams.issStructure match {
     case VectorIssueStructure.Unified => {
