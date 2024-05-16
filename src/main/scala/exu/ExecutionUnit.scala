@@ -51,12 +51,17 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
 
   io.shared_fp_req.valid := false.B
   io.shared_fp_req.bits := DontCare
-  for ((u, i) <- sharedFPUnits.zipWithIndex) {
-    val otherUnits = sharedFPUnits.zipWithIndex.filter(_._2 != i).map(_._1)
-    val other_busy = otherUnits.map(_.io_fp_active).orR
-    u.io_fp_req.ready := false.B
-    when (!other_busy) { io.shared_fp_req <> u.io_fp_req }
-    u.io_fp_resp := io.shared_fp_resp
+  if (sharedFPUnits.size > 0) {
+    val shared_fp_arb = Module(new Arbiter(new FPInput, sharedFPUnits.size))
+    for ((u, i) <- sharedFPUnits.zipWithIndex) {
+      val otherUnits = sharedFPUnits.zipWithIndex.filter(_._2 != i).map(_._1)
+      val other_busy = otherUnits.map(_.io_fp_active).orR
+      u.io_fp_req.ready := shared_fp_arb.io.in(i).ready && !other_busy
+      shared_fp_arb.io.in(i).valid := u.io_fp_req.valid && !other_busy
+      shared_fp_arb.io.in(i).bits := u.io_fp_req.bits
+      u.io_fp_resp := io.shared_fp_resp
+    }
+    io.shared_fp_req <> shared_fp_arb.io.out
   }
 
   val pipe_stall = WireInit(false.B)
