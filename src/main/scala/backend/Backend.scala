@@ -463,7 +463,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     h.valid && h.bits.eg === index_access_eg
   } ++ vxus.map(_.io.iter_hazards).flatten.map { h =>
     h.valid && h.bits.eg === index_access_eg
-  }).orR
+  }).orR || vdq.io.peek.map(i => i.valid && !(i.bits.vmu && i.bits.store)).orR
+  // TODO: this conservatively assumes a index data hazard against anything in the vdq
 
   vrf.io.read(0)(vxs.length+1).req.valid := io.index_access.valid && !index_access_hazard
   io.index_access.ready := vrf.io.read(0)(vxs.length+1).req.ready && !index_access_hazard
