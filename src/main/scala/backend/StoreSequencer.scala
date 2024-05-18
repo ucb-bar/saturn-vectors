@@ -61,10 +61,10 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
 
   val oldest = inst.vat === io.vat_head
 
-  io.rvd.req.valid := valid
+  io.rvd.req.valid := valid && io.iss.ready
   io.rvd.req.bits.eg := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
   io.rvd.req.bits.oldest := oldest
-  io.rvm.req.valid := valid && renvm
+  io.rvm.req.valid := valid && renvm && io.iss.ready
   io.rvm.req.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
   io.rvm.req.bits.oldest := oldest
 
