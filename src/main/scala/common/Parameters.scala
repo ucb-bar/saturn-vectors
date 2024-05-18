@@ -19,8 +19,6 @@ object VectorParams {
   // For a standard modestly capable small vector unit with
   // SIMD functional units
   def refParams = minParams.copy(
-    vlifqEntries = 8,
-    vsifqEntries = 8,
     vlrobEntries = 4,
     vlissqEntries = 3,
     vsissqEntries = 3,
@@ -131,8 +129,8 @@ case class VectorParams(
   vsiqEntries: Int = 4,
 
   // Load store in-flight queues (in VLSU)
-  vlifqEntries: Int = 4,
-  vsifqEntries: Int = 4,
+  vlifqEntries: Int = 8,
+  vsifqEntries: Int = 8,
   vlrobEntries: Int = 2,
 
   // Load/store/execute/permute/maskindex issue queues
