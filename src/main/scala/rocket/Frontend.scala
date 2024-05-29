@@ -104,7 +104,6 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     io.dmem <> hella_if.io.dmem
     hella_if.io.vec_busy := vu.io.backend_busy
-    tl_if.module.io.vec_busy := vu.io.backend_busy
     hella_if.io.status := io.core.status
 
     def block[T <: Data](in: DecoupledIO[T], block: Bool): DecoupledIO[T] = {

@@ -16,12 +16,12 @@ class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCorePa
     name      = s"Core ${tileId} Vector LSU",
     sourceId  = IdRange(0, (2 << dmemTagBits))
   )))))
+  
 
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
     val io = IO(new Bundle {
       val vec = Flipped(new VectorMemIO)
-      val vec_busy = Input(Bool())
       val mem_busy = Output(Bool())
     })
 

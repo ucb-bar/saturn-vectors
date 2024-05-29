@@ -110,7 +110,6 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     io.resp           <> vu.io.scalar_resp
 
     tl_if.module.io.vec <> vu.io.dmem
-    tl_if.module.io.vec_busy := vu.io.backend_busy
 
     vu.io.fp_req.ready := false.B
     vu.io.fp_resp.valid := false.B
