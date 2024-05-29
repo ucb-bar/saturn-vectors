@@ -11,12 +11,12 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 import saturn.backend.{VectorBackend}
-import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLInterface}
+import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLInterface, SGTLInterface}
 import saturn.frontend.{EarlyTrapCheck, IterativeTrapCheck}
 import shuttle.common._
 
 
-class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
+class SaturnShuttleUnit(sgPorts: Int = 4)(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
   assert(!vParams.useScalarFPFMA && !vParams.useScalarFPMisc)
   if (vParams.useScalarFPFMA) {
     require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth - 1)
@@ -25,12 +25,22 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
   val tl_if = LazyModule(new TLInterface)
   atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLenB) := tl_if.node
 
+  val sg_if = sgNode.map { n =>
+    val sg_if = LazyModule(new SGTLInterface(sgPorts, dmemTagBits))
+    n :=* sg_if.node
+    sg_if
+  }
+
   override lazy val module = new SaturnShuttleImpl
   class SaturnShuttleImpl extends ShuttleVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
 
     val ecu = Module(new EarlyTrapCheck(tl_if.edge))
     val icu = Module(new IterativeTrapCheck)
-    val vu = Module(new VectorBackend)
+    val vu = Module(new VectorBackend(sgPorts))
+
+    sg_if.foreach { sg =>
+      sg.module.io.vec <> vu.io.sgmem
+    }
 
     val replayed = RegInit(false.B)
 
@@ -103,7 +113,7 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     vu.io.scalar_check.store := io.wb.scalar_check.bits.store
     io.wb.scalar_check.ready := !vu.io.scalar_check.conflict && !(ecu.io.s2.inst.valid && ecu.io.s2.inst.bits.vmu)
 
-    io.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy
+    io.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy || sg_if.map(_.module.io.mem_busy).getOrElse(false.B)
     io.set_vxsat      := vu.io.set_vxsat
     io.set_fflags     := vu.io.set_fflags
     io.resp           <> vu.io.scalar_resp

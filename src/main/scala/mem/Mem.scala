@@ -68,11 +68,19 @@ class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVector
   val store_ack = Input(Valid(UInt(dmemTagBits.W)))
 }
 
-class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorSGMemIO(ports: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val load_req = Vec(ports, Decoupled(new MemRequest(1, dmemTagBits)))
+  val load_resp = Vec(ports, Input(Valid(new LoadResponse(1, dmemTagBits))))
+  val store_req = Vec(ports, Decoupled(new MemRequest(1, dmemTagBits)))
+  val store_ack = Vec(ports, Input(Bool()))
+}
+
+class VectorMemUnit(sgports: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new VectorMemMacroOp))
 
     val dmem = new VectorMemIO
+    val sgmem = new VectorSGMemIO(sgports)
     val scalar_check = new ScalarMemOrderCheckIO
 
     val lresp = Decoupled(new Bundle {

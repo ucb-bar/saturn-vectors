@@ -11,11 +11,12 @@ import saturn.exu._
 import saturn.common._
 import saturn.insns._
 
-class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorBackend(sgports: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val issue = Flipped(Decoupled(new VectorIssueInst))
 
     val dmem = new VectorMemIO
+    val sgmem = new VectorSGMemIO(sgports)
     val scalar_check = new ScalarMemOrderCheckIO
 
     val backend_busy = Output(Bool())
@@ -38,8 +39,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   require(vLen >= dLen)
   require(vLen % dLen == 0)
 
-  val vmu = Module(new VectorMemUnit)
+  val vmu = Module(new VectorMemUnit(sgports))
   vmu.io.dmem <> io.dmem
+  vmu.io.sgmem <> io.sgmem
   if (vParams.latencyInject) {
     val latency = Wire(UInt(32.W))
     latency := PlusArg("saturn_mem_latency")
