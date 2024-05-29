@@ -11,12 +11,85 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 
-class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
+class TLLoadInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
   val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
-    name      = s"Core ${tileId} Vector LSU",
-    sourceId  = IdRange(0, (2 << dmemTagBits))
+    name      = s"Core ${tileId} Vector Load",
+    sourceId  = IdRange(0, 1 << dmemTagBits)
   )))))
-  
+  override lazy val module = new Impl
+  class Impl extends LazyModuleImp(this) {
+    val io = IO(new Bundle {
+      val busy = Output(Bool())
+      val req = Flipped(Decoupled(new MemRequest))
+      val resp = Valid(new LoadResponse)
+    })
+
+    val (out, edge) = node.out(0)
+    val inflights = RegInit(0.U(dmemTagBits.W))
+    when (out.a.fire || out.d.fire) {
+      inflights := inflights + out.a.fire - out.d.fire
+    }
+    io.busy := inflights =/= 0.U
+
+    io.req.ready := out.a.ready
+    out.a.valid := io.req.valid
+    out.a.bits := edge.Get(
+      io.req.bits.tag,
+      (io.req.bits.addr >> dLenOffBits) << dLenOffBits,
+      log2Ceil(dLenB).U)._2
+
+    out.d.ready := true.B
+    io.resp.valid := out.d.valid
+    io.resp.bits.data := out.d.bits.data
+    io.resp.bits.tag := out.d.bits.source
+  }
+}
+
+class TLStoreInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
+  val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
+    name      = s"Core ${tileId} Vector Store",
+    sourceId  = IdRange(0, 1 << dmemTagBits)
+  )))))
+  override lazy val module = new Impl
+  class Impl extends LazyModuleImp(this) {
+    val io = IO(new Bundle {
+      val busy = Output(Bool())
+      val req = Flipped(Decoupled(new MemRequest))
+      val ack = Valid(UInt(dmemTagBits.W))
+    })
+
+    val (out, edge) = node.out(0)
+    val inflights = RegInit(0.U(dmemTagBits.W))
+    when (out.a.fire || out.d.fire) {
+      inflights := inflights + out.a.fire - out.d.fire
+    }
+    io.busy := inflights =/= 0.U
+
+    io.req.ready := out.a.ready
+    out.a.valid := io.req.valid
+    out.a.bits := edge.Put(
+      io.req.bits.tag,
+      (io.req.bits.addr >> dLenOffBits) << dLenOffBits,
+      log2Ceil(dLenB).U,
+      io.req.bits.data,
+      io.req.bits.mask)._2
+
+    out.d.ready := true.B
+    io.ack.valid := out.d.valid
+    io.ack.bits := out.d.bits.source
+  }
+}
+
+class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
+
+  val reader = LazyModule(new TLLoadInterface)
+  val writer = LazyModule(new TLStoreInterface)
+
+  val arb = LazyModule(new TLXbar)
+  def node = arb.node
+
+  arb.node := reader.node
+  arb.node := writer.node
 
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
@@ -25,40 +98,10 @@ class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCorePa
       val mem_busy = Output(Bool())
     })
 
-    val (tl_out, edge) = node.out(0)
-
-    val inflights = RegInit(0.U((1+dmemTagBits).W))
-    when (tl_out.a.fire || tl_out.d.fire) {
-      inflights := inflights + tl_out.a.fire - tl_out.d.fire
-    }
-    io.mem_busy := inflights =/= 0.U
-
-    io.vec.load_req.ready := tl_out.a.ready
-    io.vec.store_req.ready := false.B
-
-    when (io.vec.load_req.valid) {
-      tl_out.a.valid := true.B
-      tl_out.a.bits := edge.Get(
-        Cat(0.U, io.vec.load_req.bits.tag),
-        (io.vec.load_req.bits.addr >> dLenOffBits) << dLenOffBits,
-        log2Ceil(dLenB).U)._2
-    } .otherwise {
-      tl_out.a.valid := io.vec.store_req.valid
-      tl_out.a.bits := edge.Put(
-        Cat(1.U, io.vec.store_req.bits.tag),
-        (io.vec.store_req.bits.addr >> dLenOffBits) << dLenOffBits,
-        log2Ceil(dLenB).U,
-        io.vec.store_req.bits.data,
-        io.vec.store_req.bits.mask)._2
-      io.vec.store_req.ready := tl_out.a.ready
-    }
-
-    tl_out.d.ready := true.B
-    val d_store = tl_out.d.bits.opcode === TLMessages.AccessAck
-    io.vec.store_ack.valid := tl_out.d.valid && d_store
-    io.vec.store_ack.bits := tl_out.d.bits.source
-    io.vec.load_resp.valid := tl_out.d.valid && !d_store
-    io.vec.load_resp.bits.data := tl_out.d.bits.data
-    io.vec.load_resp.bits.tag := tl_out.d.bits.source
+    reader.module.io.req <> io.vec.load_req
+    io.vec.load_resp <> reader.module.io.resp
+    writer.module.io.req <> io.vec.store_req
+    io.vec.store_ack <> writer.module.io.ack
+    io.mem_busy := reader.module.io.busy || writer.module.io.busy
   }
 }
