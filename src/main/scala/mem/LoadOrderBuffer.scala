@@ -33,7 +33,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
     }))
 
     val replay_liq_id = Output(UInt(log2Ceil(vParams.vliqEntries).W))
-    val replay = Decoupled(new MemRequest)
+    val replay = Decoupled(new MemRequest(dLenB, dmemTagBits))
     val deq = Decoupled(new IFQEntry)
     val deq_data = Output(UInt(dLen.W))
   })

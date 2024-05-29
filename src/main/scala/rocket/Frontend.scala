@@ -11,7 +11,7 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 import saturn.backend.{VectorBackend}
-import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLInterface}
+import saturn.mem.{ScalarMemOrderCheckIO, TLInterface}
 import saturn.frontend.{EarlyTrapCheck, IterativeTrapCheck}
 
 class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams with HasCoreParameters {
@@ -32,7 +32,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     val useL1DCache = dLen == vMemDataBits
 
-    val ecu = Module(new EarlyTrapCheck(tl_if.node.edges.out(0)))
+    val ecu = Module(new EarlyTrapCheck(tl_if.edge))
     val icu = Module(new IterativeTrapCheck)
     val vu = Module(new VectorBackend)
 

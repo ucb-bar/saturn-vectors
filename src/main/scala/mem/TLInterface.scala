@@ -11,21 +11,26 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 
-class TLLoadInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
+class TLLoadInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters {
   val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
     name      = s"Core ${tileId} Vector Load",
-    sourceId  = IdRange(0, 1 << dmemTagBits)
+    sourceId  = IdRange(0, 1 << tagBits)
   )))))
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
-    val io = IO(new Bundle {
-      val busy = Output(Bool())
-      val req = Flipped(Decoupled(new MemRequest))
-      val resp = Valid(new LoadResponse)
-    })
 
     val (out, edge) = node.out(0)
-    val inflights = RegInit(0.U(dmemTagBits.W))
+
+    val widthBytes = edge.slave.beatBytes
+    val offBits = log2Ceil(widthBytes)
+
+    val io = IO(new Bundle {
+      val busy = Output(Bool())
+      val req = Flipped(Decoupled(new MemRequest(widthBytes, tagBits)))
+      val resp = Valid(new LoadResponse(widthBytes, tagBits))
+    })
+
+    val inflights = RegInit(0.U(tagBits.W))
     when (out.a.fire || out.d.fire) {
       inflights := inflights + out.a.fire - out.d.fire
     }
@@ -35,8 +40,8 @@ class TLLoadInterface(implicit p: Parameters) extends LazyModule()(p) with HasCo
     out.a.valid := io.req.valid
     out.a.bits := edge.Get(
       io.req.bits.tag,
-      (io.req.bits.addr >> dLenOffBits) << dLenOffBits,
-      log2Ceil(dLenB).U)._2
+      (io.req.bits.addr >> offBits) << offBits,
+      log2Ceil(widthBytes).U)._2
 
     out.d.ready := true.B
     io.resp.valid := out.d.valid
@@ -45,21 +50,26 @@ class TLLoadInterface(implicit p: Parameters) extends LazyModule()(p) with HasCo
   }
 }
 
-class TLStoreInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
+class TLStoreInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters {
   val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
     name      = s"Core ${tileId} Vector Store",
-    sourceId  = IdRange(0, 1 << dmemTagBits)
+    sourceId  = IdRange(0, 1 << tagBits)
   )))))
   override lazy val module = new Impl
   class Impl extends LazyModuleImp(this) {
-    val io = IO(new Bundle {
-      val busy = Output(Bool())
-      val req = Flipped(Decoupled(new MemRequest))
-      val ack = Valid(UInt(dmemTagBits.W))
-    })
 
     val (out, edge) = node.out(0)
-    val inflights = RegInit(0.U(dmemTagBits.W))
+    val widthBytes = edge.slave.beatBytes
+    val offBits = log2Ceil(widthBytes)
+
+    val io = IO(new Bundle {
+      val busy = Output(Bool())
+      val req = Flipped(Decoupled(new MemRequest(widthBytes, tagBits)))
+      val ack = Valid(UInt(tagBits.W))
+    })
+
+
+    val inflights = RegInit(0.U(tagBits.W))
     when (out.a.fire || out.d.fire) {
       inflights := inflights + out.a.fire - out.d.fire
     }
@@ -69,8 +79,8 @@ class TLStoreInterface(implicit p: Parameters) extends LazyModule()(p) with HasC
     out.a.valid := io.req.valid
     out.a.bits := edge.Put(
       io.req.bits.tag,
-      (io.req.bits.addr >> dLenOffBits) << dLenOffBits,
-      log2Ceil(dLenB).U,
+      (io.req.bits.addr >> offBits) << offBits,
+      log2Ceil(widthBytes).U,
       io.req.bits.data,
       io.req.bits.mask)._2
 
@@ -82,11 +92,12 @@ class TLStoreInterface(implicit p: Parameters) extends LazyModule()(p) with HasC
 
 class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
 
-  val reader = LazyModule(new TLLoadInterface)
-  val writer = LazyModule(new TLStoreInterface)
+  val reader = LazyModule(new TLLoadInterface(dmemTagBits))
+  val writer = LazyModule(new TLStoreInterface(dmemTagBits))
 
   val arb = LazyModule(new TLXbar)
-  def node = arb.node
+  def node = TLWidthWidget(dLenB) := arb.node
+  def edge = arb.node.edges.out(0)
 
   arb.node := reader.node
   arb.node := writer.node

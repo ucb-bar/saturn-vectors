@@ -16,7 +16,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     val tag = Flipped(Decoupled(UInt(dmemTagBits.W)))
     val op = Input(new VectorMemMacroOp)
     val maskindex = Flipped(Decoupled(new MaskIndex))
-    val req = Decoupled(new MemRequest)
+    val req = Decoupled(new MemRequest(dLenB, dmemTagBits))
 
     val out = Decoupled(new IFQEntry)
   })

@@ -45,8 +45,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     latency := PlusArg("saturn_mem_latency")
     val delay_timer = RegInit(0.U(64.W))
     delay_timer := delay_timer + 1.U
-    val load_delay = Module(new DelayQueue(new MemRequest, 1024, 64))
-    val store_delay = Module(new DelayQueue(new MemRequest, 1024, 64))
+    val load_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
+    val store_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
     load_delay.io.timer := delay_timer
     store_delay.io.timer := delay_timer
     load_delay.io.delay := latency

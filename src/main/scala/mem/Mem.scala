@@ -37,16 +37,16 @@ class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPar
   val page_offset = UInt(pgIdxBits.W)
 }
 
-class MemRequest(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class MemRequest(bytes: Int, tagBits: Int)(implicit p: Parameters) extends CoreBundle()(p) {
   val addr = UInt(coreMaxAddrBits.W)
-  val data = UInt(dLen.W)
-  val mask = UInt(dLenB.W)
-  val tag = UInt(dmemTagBits.W)
+  val data = UInt((bytes*8).W)
+  val mask = UInt(bytes.W)
+  val tag = UInt(tagBits.W)
 }
 
-class LoadResponse(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val data = UInt(dLen.W)
-  val tag = UInt(dmemTagBits.W)
+class LoadResponse(bytes: Int, tagBits: Int)(implicit p: Parameters) extends CoreBundle()(p) {
+  val data = UInt((bytes*8).W)
+  val tag = UInt(tagBits.W)
 }
 
 class MaskIndex(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -62,9 +62,9 @@ class ScalarMemOrderCheckIO(implicit p: Parameters) extends CoreBundle()(p) with
 }
 
 class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val load_req = Decoupled(new MemRequest)
-  val load_resp = Input(Valid(new LoadResponse))
-  val store_req = Decoupled(new MemRequest)
+  val load_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
+  val load_resp = Input(Valid(new LoadResponse(dLenB, dmemTagBits)))
+  val store_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
   val store_ack = Input(Valid(UInt(dmemTagBits.W)))
 }
 
@@ -188,7 +188,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   lifq.io.push.bits.data := io.dmem.load_resp.bits.data
   lifq.io.push.bits.tag := io.dmem.load_resp.bits.tag
 
-  val load_arb = Module(new Arbiter(new MemRequest, 2))
+  val load_arb = Module(new Arbiter(new MemRequest(dLenB, dmemTagBits), 2))
   load_arb.io.in(1) <> las.io.req
   load_arb.io.in(0) <> lifq.io.replay
   load_arb.io.in(0).bits.addr := Cat(liq(lifq.io.replay_liq_id).op.page, lifq.io.replay.bits.addr(pgIdxBits-1,0))
@@ -239,7 +239,7 @@ class VectorMemUnit(implicit p: Parameters) extends CoreModule()(p) with HasVect
   sas.io.maskindex.bits := io.maskindex.bits
   siq_sas_fire := sas.io.done
 
-  val store_req_q = Module(new DCEQueue(new MemRequest, 2))
+  val store_req_q = Module(new DCEQueue(new MemRequest(dLenB, dmemTagBits), 2))
   io.dmem.store_req <> store_req_q.io.deq
   store_req_q.io.enq <> sas.io.req
   store_req_q.io.enq.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
