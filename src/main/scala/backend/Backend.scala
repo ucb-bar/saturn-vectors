@@ -282,7 +282,7 @@ class VectorBackend(sgports: Int)(implicit p: Parameters) extends CoreModule()(p
   vpissq.io.enq.bits.renv1 := false.B
   vpissq.io.enq.bits.renv2 := vdq.io.deq.bits.mop(0) || !vdq.io.deq.bits.vmu
   vpissq.io.enq.bits.renvd := true.B
-  vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit && vdq.io.deq.bits.vmu
+  vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit && vdq.io.deq.bits.vmu
   vpissq.io.enq.bits.wvd   := false.B
   vpissq.io.enq.bits.scalar_to_vd0 := false.B
   vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && (vdq.io.deq.bits.opif6 === OPIFunct6.rgather || (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.opif6 === OPIFunct6.rgatherei16))
@@ -494,16 +494,32 @@ class VectorBackend(sgports: Int)(implicit p: Parameters) extends CoreModule()(p
   io.mask_access.mask   := vrf.io.read(3)(vxs.length+3).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
-  val maskindex_q = Module(new DCEQueue(new MaskIndex, 2))
+  val vmu_index_q = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
+  val vmu_mask_q = Module(new Compactor(dLenB, dLenB, Bool(), false))
   val perm_q = Module(new DCEQueue(new PermuteMicroOp, 2))
 
-  vmu.io.maskindex <> maskindex_q.io.deq
+  vmu_index_q.io.push_data      := vps.io.iss.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  vmu_index_q.io.push.bits.head := vps.io.iss.bits.eidx << vps.io.iss.bits.rvs2_eew
+  vmu_index_q.io.push.bits.tail := Mux(vps.io.iss.bits.tail,
+    vps.io.iss.bits.vl << vps.io.iss.bits.rvs2_eew,
+    0.U)
 
-  maskindex_q.io.enq.valid := vps.io.iss.valid && vps.io.iss.bits.vmu
-  val index_shifted = (vps.io.iss.bits.rvs2_data >> ((vps.io.iss.bits.eidx << vps.io.iss.bits.rvs2_eew)(dLenOffBits-1,0) << 3))
-  maskindex_q.io.enq.bits.index := index_shifted & eewBitMask(vps.io.iss.bits.rvs2_eew)
-  maskindex_q.io.enq.bits.mask  := vps.io.iss.bits.rvm_data >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0)
-  vps.io.iss.ready             := Mux(vps.io.iss.bits.vmu, maskindex_q.io.enq.ready, perm_q.io.enq.ready)
+  vmu_mask_q.io.push_data       := (vps.io.iss.bits.rvm_data >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(dLenB-1,0).asBools
+  vmu_mask_q.io.push.bits.head  := 0.U
+  vmu_mask_q.io.push.bits.tail  := Mux(vps.io.iss.bits.tail, vps.io.iss.bits.vl, 0.U) - vps.io.iss.bits.eidx
+
+
+  vps.io.iss.ready := Mux(vps.io.iss.bits.vmu,
+    vmu_index_q.io.push.ready && vmu_mask_q.io.push.ready,
+    perm_q.io.enq.ready)
+
+  vmu_index_q.io.push.valid := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renv2 && vps.io.iss.ready
+  vmu_mask_q.io.push.valid  := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renvm && vps.io.iss.ready
+
+  vmu.io.mask_pop   <> vmu_mask_q.io.pop
+  vmu.io.mask_data  := vmu_mask_q.io.pop_data
+  vmu.io.index_pop  <> vmu_index_q.io.pop
+  vmu.io.index_data := vmu_index_q.io.pop_data
 
   perm_q.io.enq.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
   perm_q.io.enq.bits := vps.io.iss.bits

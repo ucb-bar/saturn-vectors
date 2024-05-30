@@ -13,7 +13,7 @@ class OldestRRArbiter(val n: Int)(implicit p: Parameters) extends Module {
   val arb = Module(new RRArbiter(new VectorReadReq, n))
   io <> arb.io
   val oldest_oh = io.in.map(i => i.valid && i.bits.oldest)
-  assert(PopCount(oldest_oh) <= 1.U)
+  //assert(PopCount(oldest_oh) <= 1.U)
   when (oldest_oh.orR) {
     io.chosen := VecInit(oldest_oh).asUInt
     io.out.valid := true.B

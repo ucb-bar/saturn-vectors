@@ -21,7 +21,6 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   val rs2 = Mux(inst.rs1_is_rs2, inst.rs1, inst.rs2)
   val gatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
 
-  val elementwise = inst.vmu
   val renvm = inst.renvm
   val renv2 = inst.renv2
   val incr_eew = Mux(inst.vmu, inst.mem_idx_size,
@@ -30,7 +29,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
     Mux(slide_up, inst.vconfig.vl - slide_offset, min(inst.vconfig.vtype.vlMax, inst.vconfig.vl + slide_offset)),
     inst.vconfig.vl
   )(log2Ceil(maxVLMax),0)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, false.B, elementwise)
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, false.B, false.B)
   val tail = next_eidx === eff_vl
 
   io.dis.ready := !valid || (tail && io.iss.fire)
@@ -82,6 +81,8 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   io.rvm.req.bits.oldest := oldest
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && (!renv2 || io.rvs2.req.ready)
+  io.iss.bits.renv2     := renv2
+  io.iss.bits.renvm     := renvm
   io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvs2_eew  := incr_eew
   io.iss.bits.eidx      := eidx
