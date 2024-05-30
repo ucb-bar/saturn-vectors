@@ -26,7 +26,7 @@ class SaturnShuttleUnit(sgPorts: Int = 4)(implicit p: Parameters) extends Shuttl
   atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLenB) := tl_if.node
 
   val sg_if = sgNode.map { n =>
-    val sg_if = LazyModule(new SGTLInterface(sgPorts, dmemTagBits))
+    val sg_if = LazyModule(new SGTLInterface(sgPorts, sgmemTagBits))
     n :=* sg_if.node
     sg_if
   }

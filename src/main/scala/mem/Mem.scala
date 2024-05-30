@@ -64,10 +64,10 @@ class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVector
 }
 
 class VectorSGMemIO(ports: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val load_req = Vec(ports, Decoupled(new MemRequest(1, dmemTagBits)))
-  val load_resp = Vec(ports, Input(Valid(new LoadResponse(1, dmemTagBits))))
-  val store_req = Vec(ports, Decoupled(new MemRequest(1, dmemTagBits)))
-  val store_ack = Vec(ports, Input(Valid(UInt(dmemTagBits.W))))
+  val load_req = Vec(ports, Decoupled(new MemRequest(1, sgmemTagBits)))
+  val load_resp = Vec(ports, Input(Valid(new LoadResponse(1, sgmemTagBits))))
+  val store_req = Vec(ports, Decoupled(new MemRequest(1, sgmemTagBits)))
+  val store_ack = Vec(ports, Input(Valid(UInt(sgmemTagBits.W))))
 }
 
 class VectorMemUnit(sgports: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -112,11 +112,13 @@ class VectorMemUnit(sgports: Int)(implicit p: Parameters) extends CoreModule()(p
   val lifq = Module(new LoadOrderBuffer(vParams.vlifqEntries, vParams.vlrobEntries))
   val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
   val lss = Module(new LoadSegmenter)
+  val lgas = if (sgports > 0) Some(Module(new SGAddrGen(sgports))) else None
 
   val scu = Module(new Compactor(dLenB, dLenB, new MaskedByte, true))
   val sss = Module(new StoreSegmenter)
   val sas = Module(new AddrGen)
   val sifq = Module(new DCEQueue(new IFQEntry, vParams.vsifqEntries))
+  val ssas = if (sgports > 0) Some(Module(new SGAddrGen(sgports))) else None
 
   val liq = Reg(Vec(vParams.vliqEntries, new LSIQEntry))
   val liq_valids    = RegInit(VecInit.fill(vParams.vliqEntries)(false.B))
