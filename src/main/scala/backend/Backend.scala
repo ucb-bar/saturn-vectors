@@ -145,6 +145,10 @@ class VectorBackend(sgports: Int)(implicit p: Parameters) extends CoreModule()(p
   vmu.io.enq.bits.elem_size := Mux(issue_inst.bits(26), issue_inst.vconfig.vtype.vsew, issue_inst.bits(13,12))
   vmu.io.enq.bits.whole_reg := issue_inst.umop === lumopWhole && issue_inst.mop === mopUnit
   vmu.io.enq.bits.store := issue_inst.bits(5)
+  vmu.io.enq.bits.fast_sg := issue_inst.fast_sg
+  when (vmu.io.enq.valid) {
+    assert(!issue_inst.fast_sg)
+  }
 
   vmu.io.vat_tail := vat_tail
 

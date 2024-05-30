@@ -12,13 +12,15 @@ import freechips.rocketchip.diplomacy._
 import saturn.common._
 import saturn.backend.{VectorBackend}
 
-class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val unified_addresses = AddressSet.unify(edge.manager.managers.map(_.address).flatten)
   require(unified_addresses.forall(_.alignment >= (1 << pgIdxBits)),
     "Memory devices on this system must be at least page-aligned")
 
   val io = IO(new Bundle {
+    val sg_base = Input(UInt(coreMaxAddrBits.W))
+
     val busy = Output(Bool())
     val s0 = new Bundle {
       val in = Input(Valid(new Bundle {
@@ -76,6 +78,7 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
   s0_inst.page     := DontCare
   s0_inst.vat      := DontCare
   s0_inst.rm       := DontCare
+  s0_inst.fast_sg  := false.B
   when (s0_inst.vmu && s0_inst.mop === mopUnit) {
     val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
     val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) * (s0_inst.nf +& 1.U)
@@ -134,6 +137,12 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
     when (io.s1.rs1.valid) { s2_inst.rs1_data := io.s1.rs1.bits }
   }
   val s2_tlb_resp = RegEnable(s1_tlb_resp, s1_valid)
+  val s2_phys = s2_tlb_resp.paddr === s2_base // TODO: Not the best way
+  val s2_fast_sg = s2_phys && s2_inst.mop =/= mopUnit && sgSize.map { size =>
+    s2_base >= io.sg_base && s2_base < io.sg_base // assume that an access to this range will fall entirely in this range
+  }.getOrElse(false.B)
+
+
 
   val s2_xcpts = Seq(
     (s2_tlb_resp.pf.st, Causes.store_page_fault.U),
@@ -188,6 +197,11 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
       io.s2.replay := true.B
     } .elsewhen (s2_xcpt) {
       io.s2.xcpt.valid := true.B
+    } .elsewhen (s2_inst.vmu && s2_iterative && s2_fast_sg) {
+      io.s2.retire := true.B
+      io.s2.issue.valid := true.B
+      io.s2.issue.bits.fast_sg := false.B
+      io.s2.vstart.valid := true.B
     } .elsewhen (s2_inst.vmu && s2_iterative) {
       io.s2.internal_replay.valid := true.B
     } .elsewhen (s2_replay_next_page) {

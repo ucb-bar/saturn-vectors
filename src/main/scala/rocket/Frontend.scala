@@ -32,10 +32,11 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     val useL1DCache = dLen == vMemDataBits
 
-    val ecu = Module(new EarlyTrapCheck(tl_if.edge))
+    val ecu = Module(new EarlyTrapCheck(tl_if.edge, None))
     val icu = Module(new IterativeTrapCheck)
     val vu = Module(new VectorBackend(0))
 
+    ecu.io.sg_base            := DontCare
     ecu.io.s0.in.valid        := io.core.ex.valid && !icu.io.busy
     ecu.io.s0.in.bits.inst    := io.core.ex.inst
     ecu.io.s0.in.bits.pc      := io.core.ex.pc

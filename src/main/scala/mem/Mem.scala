@@ -72,7 +72,7 @@ class VectorSGMemIO(ports: Int)(implicit p: Parameters) extends CoreBundle()(p) 
   val load_req = Vec(ports, Decoupled(new MemRequest(1, dmemTagBits)))
   val load_resp = Vec(ports, Input(Valid(new LoadResponse(1, dmemTagBits))))
   val store_req = Vec(ports, Decoupled(new MemRequest(1, dmemTagBits)))
-  val store_ack = Vec(ports, Input(Bool()))
+  val store_ack = Vec(ports, Input(Valid(UInt(dmemTagBits.W))))
 }
 
 class VectorMemUnit(sgports: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -96,6 +96,13 @@ class VectorMemUnit(sgports: Int)(implicit p: Parameters) extends CoreModule()(p
     val vat_tail = Input(UInt(vParams.vatSz.W))
     val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
   })
+
+  for (i <- 0 until sgports) {
+    io.sgmem.load_req(i).valid := false.B
+    io.sgmem.load_req(i).bits := DontCare
+    io.sgmem.store_req(i).valid := false.B
+    io.sgmem.store_req(i).bits := DontCare
+  }
 
   def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, io.vat_tail)
   def ptrIncr(u: UInt, sz: Int): Unit = {

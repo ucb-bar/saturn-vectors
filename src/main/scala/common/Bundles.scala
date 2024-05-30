@@ -27,6 +27,7 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val elem_size = UInt(2.W)
   val whole_reg = Bool()
   val store = Bool()
+  val fast_sg = Bool()
 
   def indexed = !mop.isOneOf(mopUnit, mopStrided)
   def seg_nf = Mux(whole_reg, 0.U, nf)
@@ -48,6 +49,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val vat = UInt(vParams.vatSz.W)
   val rm = UInt(3.W)
   val emul = UInt(2.W)
+  val fast_sg = Bool()
 
   def opcode = bits(6,0)
   def store = opcode(5)

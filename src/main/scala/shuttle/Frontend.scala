@@ -34,7 +34,7 @@ class SaturnShuttleUnit(sgPorts: Int = 4)(implicit p: Parameters) extends Shuttl
   override lazy val module = new SaturnShuttleImpl
   class SaturnShuttleImpl extends ShuttleVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
 
-    val ecu = Module(new EarlyTrapCheck(tl_if.edge))
+    val ecu = Module(new EarlyTrapCheck(tl_if.edge, sg_mask))
     val icu = Module(new IterativeTrapCheck)
     val vu = Module(new VectorBackend(sgPorts))
 
@@ -44,6 +44,7 @@ class SaturnShuttleUnit(sgPorts: Int = 4)(implicit p: Parameters) extends Shuttl
 
     val replayed = RegInit(false.B)
 
+    ecu.io.sg_base            := io_sg_base
     ecu.io.s0.in.valid        := io.ex.valid && !icu.io.busy && !(replayed && !vu.io.issue.ready)
     ecu.io.s0.in.bits.inst    := io.ex.uop.inst
     ecu.io.s0.in.bits.pc      := io.ex.uop.pc
