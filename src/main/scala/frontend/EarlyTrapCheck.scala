@@ -31,6 +31,7 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
         val vstart = UInt(log2Ceil(maxVLMax).W)
         val rs1 = UInt(xLen.W)
         val rs2 = UInt(xLen.W)
+        val phys = Bool()
       }))
       val tlb_req = Valid(new TLBReq(3))
     }
@@ -100,6 +101,10 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   val s0_single_page = (s0_base >> pgIdxBits) === (s0_bound >> pgIdxBits)
   val s0_replay_next_page = s0_inst.vmu && s0_inst.mop === mopUnit && s0_inst.nf === 0.U && !s0_single_page
   val s0_iterative = (!s0_single_page || (s0_inst.mop =/= mopUnit) || s0_inst.umop === lumopFF) && !s0_replay_next_page
+  val s0_fast_sg = s0_iterative && io.s0.in.bits.phys && s0_inst.mop =/= mopUnit && s0_inst.seg_nf === 0.U && sgSize.map { size =>
+    s0_base >= io.sg_base && s0_base < (io.sg_base + size.U)
+  }.getOrElse(false.B)
+
   val s0_tlb_valid = !s0_iterative && s0_inst.vmu && s0_inst.vstart < s0_inst.vconfig.vl
 
   io.s0.tlb_req.valid            := s0_tlb_valid && io.s0.in.valid
@@ -117,11 +122,16 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   val s1_replay_next_page = RegEnable(s0_replay_next_page, io.s0.in.valid)
   val s1_base             = RegEnable(s0_base            , io.s0.in.valid)
   val s1_tlb_valid        = RegEnable(s0_tlb_valid       , io.s0.in.valid)
+  val s1_fast_sg          = RegEnable(s0_fast_sg         , io.s0.in.valid)
   val s1_tlb_resp         = WireInit(io.s1.tlb_resp)
 
   when (!s1_tlb_valid) {
     s1_tlb_resp := 0.U.asTypeOf(new TLBResp)
+    when (s1_fast_sg) {
+      s1_tlb_resp.paddr := s1_base
+    }
   }
+
   io.s1.inst := s1_inst
   io.s1.tlb_req.valid := RegNext(io.s0.tlb_req.valid, false.B)
   io.s1.tlb_req.bits  := RegEnable(io.s0.tlb_req.bits, s0_tlb_valid)
@@ -131,18 +141,13 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   val s2_inst = Reg(new VectorIssueInst)
   val s2_base = RegEnable(s1_base, s1_valid)
   val s2_iterative        = RegEnable(s1_iterative       , s1_valid)
+  val s2_fast_sg          = RegEnable(s1_fast_sg         , s1_valid)
   val s2_replay_next_page = RegEnable(s1_replay_next_page, s1_valid)
   when (s1_valid) {
     s2_inst := s1_inst
     when (io.s1.rs1.valid) { s2_inst.rs1_data := io.s1.rs1.bits }
   }
   val s2_tlb_resp = RegEnable(s1_tlb_resp, s1_valid)
-  val s2_phys = s2_tlb_resp.paddr === s2_base // TODO: Not the best way
-  val s2_fast_sg = s2_phys && s2_inst.mop =/= mopUnit && sgSize.map { size =>
-    s2_base >= io.sg_base && s2_base < io.sg_base // assume that an access to this range will fall entirely in this range
-  }.getOrElse(false.B)
-
-
 
   val s2_xcpts = Seq(
     (s2_tlb_resp.pf.st, Causes.store_page_fault.U),
@@ -197,10 +202,10 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
       io.s2.replay := true.B
     } .elsewhen (s2_xcpt) {
       io.s2.xcpt.valid := true.B
-    } .elsewhen (s2_inst.vmu && s2_iterative && s2_fast_sg) {
+    } .elsewhen (s2_inst.vmu && s2_fast_sg) {
       io.s2.retire := true.B
       io.s2.issue.valid := true.B
-      io.s2.issue.bits.fast_sg := false.B
+      io.s2.issue.bits.fast_sg := true.B
       io.s2.vstart.valid := true.B
     } .elsewhen (s2_inst.vmu && s2_iterative) {
       io.s2.internal_replay.valid := true.B

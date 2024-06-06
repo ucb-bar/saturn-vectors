@@ -11,7 +11,7 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 
-class TLLoadInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters {
+class TLInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters {
   val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
     name      = s"Core ${tileId} Vector Load",
     sourceId  = IdRange(0, 1 << tagBits)
@@ -27,7 +27,7 @@ class TLLoadInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()
     val io = IO(new Bundle {
       val busy = Output(Bool())
       val req = Flipped(Decoupled(new MemRequest(widthBytes, tagBits)))
-      val resp = Valid(new LoadResponse(widthBytes, tagBits))
+      val resp = Valid(new MemResponse(widthBytes, tagBits))
     })
 
     val inflights = RegInit(0.U(tagBits.W))
@@ -38,10 +38,18 @@ class TLLoadInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()
 
     io.req.ready := out.a.ready
     out.a.valid := io.req.valid
-    out.a.bits := edge.Get(
-      io.req.bits.tag,
-      (io.req.bits.addr >> offBits) << offBits,
-      log2Ceil(widthBytes).U)._2
+    out.a.bits := Mux(io.req.bits.store,
+      edge.Put(
+        io.req.bits.tag,
+        (io.req.bits.addr >> offBits) << offBits,
+        log2Ceil(widthBytes).U,
+        io.req.bits.data,
+        io.req.bits.mask)._2,
+      edge.Get(
+        io.req.bits.tag,
+        (io.req.bits.addr >> offBits) << offBits,
+        log2Ceil(widthBytes).U)._2
+    )
 
     out.d.ready := true.B
     io.resp.valid := out.d.valid
@@ -50,50 +58,11 @@ class TLLoadInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()
   }
 }
 
-class TLStoreInterface(tagBits: Int)(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters {
-  val node = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
-    name      = s"Core ${tileId} Vector Store",
-    sourceId  = IdRange(0, 1 << tagBits)
-  )))))
-  override lazy val module = new Impl
-  class Impl extends LazyModuleImp(this) {
 
-    val (out, edge) = node.out(0)
-    val widthBytes = edge.slave.beatBytes
-    val offBits = log2Ceil(widthBytes)
+class TLSplitInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
 
-    val io = IO(new Bundle {
-      val busy = Output(Bool())
-      val req = Flipped(Decoupled(new MemRequest(widthBytes, tagBits)))
-      val ack = Valid(UInt(tagBits.W))
-    })
-
-
-    val inflights = RegInit(0.U(tagBits.W))
-    when (out.a.fire || out.d.fire) {
-      inflights := inflights + out.a.fire - out.d.fire
-    }
-    io.busy := inflights =/= 0.U
-
-    io.req.ready := out.a.ready
-    out.a.valid := io.req.valid
-    out.a.bits := edge.Put(
-      io.req.bits.tag,
-      (io.req.bits.addr >> offBits) << offBits,
-      log2Ceil(widthBytes).U,
-      io.req.bits.data,
-      io.req.bits.mask)._2
-
-    out.d.ready := true.B
-    io.ack.valid := out.d.valid
-    io.ack.bits := out.d.bits.source
-  }
-}
-
-class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
-
-  val reader = LazyModule(new TLLoadInterface(dmemTagBits))
-  val writer = LazyModule(new TLStoreInterface(dmemTagBits))
+  val reader = LazyModule(new TLInterface(dmemTagBits))
+  val writer = LazyModule(new TLInterface(dmemTagBits))
 
   val arb = LazyModule(new TLXbar)
   def node = TLWidthWidget(dLenB) := arb.node
@@ -112,7 +81,7 @@ class TLInterface(implicit p: Parameters) extends LazyModule()(p) with HasCorePa
     reader.module.io.req <> io.vec.load_req
     io.vec.load_resp <> reader.module.io.resp
     writer.module.io.req <> io.vec.store_req
-    io.vec.store_ack <> writer.module.io.ack
+    io.vec.store_ack <> writer.module.io.resp
     io.mem_busy := reader.module.io.busy || writer.module.io.busy
   }
 }

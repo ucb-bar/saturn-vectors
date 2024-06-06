@@ -11,18 +11,18 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 import saturn.backend.{VectorBackend}
-import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLInterface, SGTLInterface}
+import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLSplitInterface, SGTLInterface}
 import saturn.frontend.{EarlyTrapCheck, IterativeTrapCheck}
 import shuttle.common._
 
 
-class SaturnShuttleUnit(sgPorts: Int = 4)(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
+class SaturnShuttleUnit(sgPorts: Int = 8)(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
   assert(!vParams.useScalarFPFMA && !vParams.useScalarFPMisc)
   if (vParams.useScalarFPFMA) {
     require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth - 1)
   }
 
-  val tl_if = LazyModule(new TLInterface)
+  val tl_if = LazyModule(new TLSplitInterface)
   atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLenB) := tl_if.node
 
   val sg_if = sgNode.map { n =>
@@ -34,9 +34,9 @@ class SaturnShuttleUnit(sgPorts: Int = 4)(implicit p: Parameters) extends Shuttl
   override lazy val module = new SaturnShuttleImpl
   class SaturnShuttleImpl extends ShuttleVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
 
-    val ecu = Module(new EarlyTrapCheck(tl_if.edge, sg_mask))
+    val ecu = Module(new EarlyTrapCheck(tl_if.edge, sgSize))
     val icu = Module(new IterativeTrapCheck)
-    val vu = Module(new VectorBackend(sgPorts))
+    val vu = Module(new VectorBackend(sgPorts, sgSize))
 
     sg_if.foreach { sg =>
       sg.module.io.vec <> vu.io.sgmem
@@ -53,6 +53,7 @@ class SaturnShuttleUnit(sgPorts: Int = 4)(implicit p: Parameters) extends Shuttl
     ecu.io.s0.in.bits.vstart  := io.ex.vstart
     ecu.io.s0.in.bits.rs1     := io.ex.uop.rs1_data
     ecu.io.s0.in.bits.rs2     := io.ex.uop.rs2_data
+    ecu.io.s0.in.bits.phys    := !(io.status.dprv <= PRV.S.U && io.satp.mode(io.satp.mode.getWidth-1))
     io.ex.ready               := !icu.io.busy && !(replayed && !vu.io.issue.ready)
 
     ecu.io.s1.rs1.valid := ecu.io.s1.inst.isOpf && !ecu.io.s1.inst.vmu

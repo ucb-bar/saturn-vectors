@@ -13,16 +13,9 @@ import saturn.common._
 
 class SGTLInterface(ports: Int, tagBits: Int)(implicit p: Parameters) extends LazyModule()(p) with HasCoreParameters with HasVectorParams {
 
-  val readers = Seq.tabulate(ports) { i => LazyModule(new TLLoadInterface(tagBits)) }
-  val writers = Seq.tabulate(ports) { i => LazyModule(new TLStoreInterface(tagBits)) }
-
+  val accessors = Seq.tabulate(ports) { i => LazyModule(new TLInterface(tagBits)) }
   val identityNode = TLEphemeralNode()
-  for (i <- 0 until ports) {
-    val xbar = LazyModule(new TLXbar)
-    xbar.node := readers(i).node
-    xbar.node := writers(i).node
-    identityNode := xbar.node
-  }
+  accessors.foreach { a => identityNode := TLBuffer() := a.node }
 
   def node = TLWidthWidget(1) :=* identityNode
 
@@ -36,11 +29,9 @@ class SGTLInterface(ports: Int, tagBits: Int)(implicit p: Parameters) extends La
     io.vec.base := DontCare // this should be set outside
     io.mem_busy := false.B
     for (i <- 0 until ports) {
-      readers(i).module.io.req <> io.vec.load_req(i)
-      io.vec.load_resp(i) <> readers(i).module.io.resp
-      writers(i).module.io.req <> io.vec.store_req(i)
-      io.vec.store_ack(i) <> writers(i).module.io.ack
-      io.mem_busy := (readers.map(_.module.io.busy) ++ writers.map(_.module.io.busy)).orR
+      accessors(i).module.io.req <> io.vec.req(i)
+      accessors(i).module.io.resp <> io.vec.resp(i)
     }
+    io.mem_busy := accessors.map(_.module.io.busy).orR
   }
 }

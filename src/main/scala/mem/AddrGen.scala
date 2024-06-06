@@ -100,6 +100,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.bits.data := DontCare
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
   io.req.bits.tag := io.tag.bits
+  io.req.bits.store := DontCare
 
   io.tag.ready := io.valid && (io.req.ready || masked) && io.out.ready && !block_maskindex
 

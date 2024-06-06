@@ -132,7 +132,7 @@ case class VectorParams(
   vlifqEntries: Int = 8,
   vsifqEntries: Int = 8,
   vlrobEntries: Int = 2,
-  vsgqEntries: Int = 2,
+  vsgifqEntries: Int = 4,
 
   // Load/store/execute/permute/maskindex issue queues
   vlissqEntries: Int = 0,
@@ -174,7 +174,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
-  def sgmemTagBits = log2Ceil(vParams.vsgqEntries)
+  def sgmemTagBits = log2Ceil(vParams.vsgifqEntries)
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
   def vrfBankBits = log2Ceil(vParams.vrfBanking)
