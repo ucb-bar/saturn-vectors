@@ -132,7 +132,11 @@ case class VectorParams(
   vlifqEntries: Int = 8,
   vsifqEntries: Int = 8,
   vlrobEntries: Int = 2,
+
+  // Scatter-gather engine params
+  vsgPorts: Int = 8,
   vsgifqEntries: Int = 4,
+  vsgBuffers: Int = 3,
 
   // Load/store/execute/permute/maskindex issue queues
   vlissqEntries: Int = 0,

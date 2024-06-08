@@ -23,6 +23,7 @@ class ReorderBuffer[T <: Data](
       val tag = UInt(tagBits.W)
     }))
     val deq = Decoupled(gen)
+    val busy = Output(Bool())
   })
 
   val valids = RegInit(VecInit.fill(entries)(false.B))
@@ -34,6 +35,7 @@ class ReorderBuffer[T <: Data](
   val empty = ptr_match && !maybe_full
   val full = ptr_match && maybe_full
 
+  io.busy := !empty
   io.reserve.valid := !full
   io.reserve.bits := enq_ptr.value
   when (io.reserve.fire) {

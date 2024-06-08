@@ -63,17 +63,17 @@ class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVector
   val store_ack = Input(Valid(new MemResponse(dLenB, dmemTagBits)))
 }
 
-class VectorSGMemIO(ports: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val req = Vec(ports, Decoupled(new MemRequest(1, sgmemTagBits)))
-  val resp = Vec(ports, Input(Valid(new MemResponse(1, sgmemTagBits))))
+class VectorSGMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val req = Vec(vParams.vsgPorts, Decoupled(new MemRequest(1, sgmemTagBits)))
+  val resp = Vec(vParams.vsgPorts, Input(Valid(new MemResponse(1, sgmemTagBits))))
 }
 
-class VectorMemUnit(sgPorts: Int, sgSize: Option[BigInt])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new VectorMemMacroOp))
 
     val dmem = new VectorMemIO
-    val sgmem = new VectorSGMemIO(sgPorts)
+    val sgmem = new VectorSGMemIO
     val scalar_check = new ScalarMemOrderCheckIO
 
     val lresp = Decoupled(new Bundle {
@@ -99,14 +99,14 @@ class VectorMemUnit(sgPorts: Int, sgSize: Option[BigInt])(implicit p: Parameters
     u := Mux(n === sz.U, 0.U, n)
   }
 
-  val sgas = if (sgPorts > 0) Some(Module(new ScatterGatherAddrGen(sgPorts, sgSize.get))) else None
+  val sgas = sgSize.map { size => Module(new ScatterGatherAddrGen(size)) }
 
   val las = Module(new AddrGen)
   val lifq = Module(new LoadOrderBuffer(vParams.vlifqEntries, vParams.vlrobEntries))
   val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
   val lss = Module(new LoadSegmenter)
 
-  val scu = Module(new Compactor(dLenB, dLenB, new MaskedByte, true))
+  val scu = Module(new Compactor(dLenB, dLenB, new MaskedByte, false))
   val sss = Module(new StoreSegmenter)
   val sas = Module(new AddrGen)
   val sifq = Module(new DCEQueue(new IFQEntry, vParams.vsifqEntries))
@@ -151,7 +151,7 @@ class VectorMemUnit(sgPorts: Int, sgSize: Option[BigInt])(implicit p: Parameters
   when (siq_enq_fire) { ptrIncr(siq_enq_ptr, vParams.vsiqEntries); siq_valids(siq_enq_ptr) := true.B }
   when (siq_sss_fire) { ptrIncr(siq_sss_ptr, vParams.vsiqEntries); siq_sss(siq_sss_ptr) := true.B }
   when (siq_sas_fire) { ptrIncr(siq_sas_ptr, vParams.vsiqEntries); siq_sas(siq_sas_ptr) := true.B; assert(siq_sss(siq_sas_ptr) || (siq_sss_fire && siq_sss_ptr === siq_sas_ptr)) }
-  when (siq_deq_fire) { ptrIncr(siq_deq_ptr, vParams.vsiqEntries); siq_valids(siq_deq_ptr) := false.B; assert(siq_sas(siq_deq_ptr)) }
+  when (siq_deq_fire) { ptrIncr(siq_deq_ptr, vParams.vsiqEntries); siq_valids(siq_deq_ptr) := false.B; assert(siq_sas(siq_deq_ptr) || (siq_sas_fire && siq_sas_ptr === siq_deq_ptr)) }
 
   io.enq.ready := Mux(io.enq.bits.store, siq_enq_ready, liq_enq_ready)
   liq_enq_fire := io.enq.valid && liq_enq_ready && !io.enq.bits.store
@@ -182,7 +182,7 @@ class VectorMemUnit(sgPorts: Int, sgSize: Option[BigInt])(implicit p: Parameters
 
   // Send indices/masks to las/sas
 
-  val las_older_than_sas = (vatOlder(liq(liq_las_ptr).op.vat, siq(siq_sas_ptr).op.vat) || !siq_sas_valid)
+  val las_older_than_sas = (liq_las_valid && vatOlder(liq(liq_las_ptr).op.vat, siq(siq_sas_ptr).op.vat)) || !siq_sas_valid
   val maskindex_load    = liq_las_valid &&  las_older_than_sas && !liq(liq_las_ptr).op.fast_sg
   val maskindex_store   = siq_sas_valid && !las_older_than_sas && !siq(siq_sas_ptr).op.fast_sg
   val maskindex_gather  = liq_las_valid &&  las_older_than_sas &&  liq(liq_las_ptr).op.fast_sg
@@ -210,7 +210,7 @@ class VectorMemUnit(sgPorts: Int, sgSize: Option[BigInt])(implicit p: Parameters
   }
 
   // scatter/gather paths
-  for (i <- 0 until sgPorts) {
+  for (i <- 0 until vParams.vsgPorts) {
     io.sgmem.req(i).valid := false.B
     io.sgmem.req(i).bits := DontCare
   }
@@ -326,13 +326,23 @@ class VectorMemUnit(sgPorts: Int, sgSize: Option[BigInt])(implicit p: Parameters
   when (scu.io.pop.fire) {
     for (i <- 0 until dLenB) {
       assert(scu.io.pop_data(i).debug_vat === sas.io.op.vat ||
-        i.U < sas.io.out.bits.head ||
-        (i.U >= sas.io.out.bits.tail && sas.io.out.bits.tail =/= 0.U))
+        i.U < scu.io.pop.bits.head ||
+        (i.U >= scu.io.pop.bits.tail && scu.io.pop.bits.tail =/= 0.U))
     }
   }
 
   scu.io.pop.bits.head := sas.io.out.bits.head
   scu.io.pop.bits.tail := sas.io.out.bits.tail
+
+  sgas.foreach { sgas =>
+    sgas.io.store_pop.ready := false.B
+    sgas.io.store_data := scu.io.pop_data.map(_.data)
+    when (maskindex_scatter && !store_rob.io.busy) {
+      sgas.io.store_pop.ready := scu.io.pop.ready
+      scu.io.pop.valid := sgas.io.store_pop.valid
+      scu.io.pop.bits := sgas.io.store_pop.bits
+    }
+  }
 
   store_rob.io.push.valid := io.dmem.store_ack.valid
   store_rob.io.push.bits.tag := io.dmem.store_ack.bits.tag
@@ -344,6 +354,10 @@ class VectorMemUnit(sgPorts: Int, sgSize: Option[BigInt])(implicit p: Parameters
   siq_deq_fire := sifq.io.deq.fire && sifq.io.deq.bits.last
   io.vat_release.valid := siq_deq_fire
   io.vat_release.bits := siq(siq_deq_ptr).op.vat
+
+  sgas.foreach { sgas =>
+    when (maskindex_scatter && sgas.io.valid && sgas.io.done) { siq_deq_fire := true.B }
+  }
 
   io.busy := liq_valids.orR || siq_valids.orR
 }

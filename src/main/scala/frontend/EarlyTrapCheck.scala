@@ -101,7 +101,7 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   val s0_single_page = (s0_base >> pgIdxBits) === (s0_bound >> pgIdxBits)
   val s0_replay_next_page = s0_inst.vmu && s0_inst.mop === mopUnit && s0_inst.nf === 0.U && !s0_single_page
   val s0_iterative = (!s0_single_page || (s0_inst.mop =/= mopUnit) || s0_inst.umop === lumopFF) && !s0_replay_next_page
-  val s0_fast_sg = s0_iterative && io.s0.in.bits.phys && s0_inst.mop =/= mopUnit && s0_inst.seg_nf === 0.U && sgSize.map { size =>
+  val s0_fast_sg = s0_iterative && io.s0.in.bits.phys && s0_inst.mop === mopUnordered && s0_inst.seg_nf === 0.U && sgSize.map { size =>
     s0_base >= io.sg_base && s0_base < (io.sg_base + size.U)
   }.getOrElse(false.B)
 

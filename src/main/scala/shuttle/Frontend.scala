@@ -16,7 +16,7 @@ import saturn.frontend.{EarlyTrapCheck, IterativeTrapCheck}
 import shuttle.common._
 
 
-class SaturnShuttleUnit(sgPorts: Int = 8)(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
+class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
   assert(!vParams.useScalarFPFMA && !vParams.useScalarFPMisc)
   if (vParams.useScalarFPFMA) {
     require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth - 1)
@@ -26,7 +26,7 @@ class SaturnShuttleUnit(sgPorts: Int = 8)(implicit p: Parameters) extends Shuttl
   atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLenB) := tl_if.node
 
   val sg_if = sgNode.map { n =>
-    val sg_if = LazyModule(new SGTLInterface(sgPorts, sgmemTagBits))
+    val sg_if = LazyModule(new SGTLInterface)
     n :=* sg_if.node
     sg_if
   }
@@ -36,7 +36,7 @@ class SaturnShuttleUnit(sgPorts: Int = 8)(implicit p: Parameters) extends Shuttl
 
     val ecu = Module(new EarlyTrapCheck(tl_if.edge, sgSize))
     val icu = Module(new IterativeTrapCheck)
-    val vu = Module(new VectorBackend(sgPorts, sgSize))
+    val vu = Module(new VectorBackend(sgSize))
 
     sg_if.foreach { sg =>
       sg.module.io.vec <> vu.io.sgmem
