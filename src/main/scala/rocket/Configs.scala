@@ -35,6 +35,8 @@ class WithRocketVectorUnit(
           fpu = if (params.useScalarFPFMA) { tp.tileParams.core.fpu.map(_.copy(
             sfmaLatency = params.fmaPipeDepth - 1,
             dfmaLatency = params.fmaPipeDepth - 1,
+            ifpuLatency = params.fmaPipeDepth - 1,
+            fpmuLatency = params.fmaPipeDepth - 1,
           )) } else { tp.tileParams.core.fpu }
         ),
         dcache = if (useL1DCache) tp.tileParams.dcache.map(_.copy(rowBits = dLen)) else tp.tileParams.dcache

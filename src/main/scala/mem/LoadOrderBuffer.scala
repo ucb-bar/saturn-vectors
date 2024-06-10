@@ -36,6 +36,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
     val replay = Decoupled(new MemRequest(dLenB, dmemTagBits))
     val deq = Decoupled(new IFQEntry)
     val deq_data = Output(UInt(dLen.W))
+    val busy = Output(Bool())
   })
 
   val simpleRob = nEntries == nRobEntries
@@ -57,6 +58,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
   val empty = ptr_match && !maybe_full
   val full = ptr_match && maybe_full
 
+  io.busy := !empty
   io.reserve.valid := !full && !has_replay
   io.reserve.bits := enq_ptr.value
   when (io.reserve.fire) {
@@ -98,6 +100,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
   io.replay.bits.data := DontCare
   io.replay.bits.mask := ~(0.U(dLenB.W))
   io.replay.bits.tag  := next_replay
+  io.replay.bits.store := false.B
 
   when (io.replay.fire) {
     must_replay(next_replay) := false.B

@@ -11,7 +11,7 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 import saturn.backend.{VectorBackend}
-import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLInterface}
+import saturn.mem.{ScalarMemOrderCheckIO, MemRequest, TLSplitInterface, SGTLInterface}
 import saturn.frontend.{EarlyTrapCheck, IterativeTrapCheck}
 import shuttle.common._
 
@@ -22,18 +22,29 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth - 1)
   }
 
-  val tl_if = LazyModule(new TLInterface)
+  val tl_if = LazyModule(new TLSplitInterface)
   atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLenB) := tl_if.node
+
+  val sg_if = sgNode.map { n =>
+    val sg_if = LazyModule(new SGTLInterface)
+    n :=* sg_if.node
+    sg_if
+  }
 
   override lazy val module = new SaturnShuttleImpl
   class SaturnShuttleImpl extends ShuttleVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
 
-    val ecu = Module(new EarlyTrapCheck(tl_if.edge))
+    val ecu = Module(new EarlyTrapCheck(tl_if.edge, sgSize))
     val icu = Module(new IterativeTrapCheck)
-    val vu = Module(new VectorBackend)
+    val vu = Module(new VectorBackend(sgSize))
+
+    sg_if.foreach { sg =>
+      sg.module.io.vec <> vu.io.sgmem
+    }
 
     val replayed = RegInit(false.B)
 
+    ecu.io.sg_base            := io_sg_base
     ecu.io.s0.in.valid        := io.ex.valid && !icu.io.busy && !(replayed && !vu.io.issue.ready)
     ecu.io.s0.in.bits.inst    := io.ex.uop.inst
     ecu.io.s0.in.bits.pc      := io.ex.uop.pc
@@ -42,6 +53,7 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     ecu.io.s0.in.bits.vstart  := io.ex.vstart
     ecu.io.s0.in.bits.rs1     := io.ex.uop.rs1_data
     ecu.io.s0.in.bits.rs2     := io.ex.uop.rs2_data
+    ecu.io.s0.in.bits.phys    := !(io.status.dprv <= PRV.S.U && io.satp.mode(io.satp.mode.getWidth-1))
     io.ex.ready               := !icu.io.busy && !(replayed && !vu.io.issue.ready)
 
     ecu.io.s1.rs1.valid := ecu.io.s1.inst.isOpf && !ecu.io.s1.inst.vmu
@@ -103,7 +115,7 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     vu.io.scalar_check.store := io.wb.scalar_check.bits.store
     io.wb.scalar_check.ready := !vu.io.scalar_check.conflict && !(ecu.io.s2.inst.valid && ecu.io.s2.inst.bits.vmu)
 
-    io.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy
+    io.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy || sg_if.map(_.module.io.mem_busy).getOrElse(false.B)
     io.set_vxsat      := vu.io.set_vxsat
     io.set_fflags     := vu.io.set_fflags
     io.resp           <> vu.io.scalar_resp

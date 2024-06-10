@@ -15,7 +15,15 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     val done = Output(Bool())
     val tag = Flipped(Decoupled(UInt(dmemTagBits.W)))
     val op = Input(new VectorMemMacroOp)
-    val maskindex = Flipped(Decoupled(new MaskIndex))
+    val maskindex = new Bundle {
+      val index = Input(UInt(64.W))
+      val mask = Input(Bool())
+      val eew = Output(UInt(2.W))
+      val needs_mask = Output(Bool())
+      val needs_index = Output(Bool())
+      val valid = Input(Bool())
+      val ready = Output(Bool())
+    }
     val req = Decoupled(new MemRequest(dLenB, dmemTagBits))
 
     val out = Decoupled(new IFQEntry)
@@ -42,7 +50,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     io.op.stride,
     (io.op.seg_nf +& 1.U) << io.op.elem_size))(pgIdxBits-1,0)
   val start_addr = io.op.base_offset + start_offset + (io.op.segstart << io.op.elem_size)
-  val index_offset = io.maskindex.bits.index & eewBitMask(io.op.idx_size)
+  val index_offset = io.maskindex.index & eewBitMask(io.op.idx_size)
   val eaddr = Mux(io.op.indexed,
     io.op.base_offset + index_offset + Mux(r_head, io.op.segstart << io.op.elem_size, 0.U),
     Mux(r_head, start_addr, r_eaddr))
@@ -70,12 +78,15 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val needs_index = io.op.mop(0)
   val block_maskindex = (needs_mask || needs_index) && !io.maskindex.valid
 
-  val masked = (needs_mask && !io.maskindex.bits.mask) || (io.op.seg_nf > 0.U && sidx > io.op.segend)
+  val masked = (needs_mask && !io.maskindex.mask) || (io.op.seg_nf > 0.U && sidx > io.op.segend)
   val may_clear = (fast_segmented || next_sidx > io.op.seg_nf) && next_eidx >= max_eidx
 
 
   io.done := false.B
   io.maskindex.ready := false.B
+  io.maskindex.needs_mask := needs_mask
+  io.maskindex.needs_index := needs_index
+  io.maskindex.eew := io.op.idx_size
   io.out.valid := io.valid && !block_maskindex && (masked || io.req.ready) && io.tag.valid
   io.out.bits.head := saddr
   io.out.bits.tail := saddr + next_act_bytes
@@ -89,6 +100,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.bits.data := DontCare
   io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
   io.req.bits.tag := io.tag.bits
+  io.req.bits.store := DontCare
 
   io.tag.ready := io.valid && (io.req.ready || masked) && io.out.ready && !block_maskindex
 

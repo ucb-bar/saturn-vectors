@@ -11,7 +11,7 @@ import freechips.rocketchip.diplomacy._
 
 import saturn.common._
 import saturn.backend.{VectorBackend}
-import saturn.mem.{ScalarMemOrderCheckIO, TLInterface}
+import saturn.mem.{ScalarMemOrderCheckIO, TLSplitInterface}
 import saturn.frontend.{EarlyTrapCheck, IterativeTrapCheck}
 
 class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams with HasCoreParameters {
@@ -24,7 +24,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     }
   }
 
-  val tl_if = LazyModule(new TLInterface)
+  val tl_if = LazyModule(new TLSplitInterface)
   atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLen/8) := tl_if.node
 
   override lazy val module = new SaturnRocketImpl
@@ -32,10 +32,11 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
 
     val useL1DCache = dLen == vMemDataBits
 
-    val ecu = Module(new EarlyTrapCheck(tl_if.edge))
+    val ecu = Module(new EarlyTrapCheck(tl_if.edge, None))
     val icu = Module(new IterativeTrapCheck)
     val vu = Module(new VectorBackend)
 
+    ecu.io.sg_base            := DontCare
     ecu.io.s0.in.valid        := io.core.ex.valid && !icu.io.busy
     ecu.io.s0.in.bits.inst    := io.core.ex.inst
     ecu.io.s0.in.bits.pc      := io.core.ex.pc
@@ -44,6 +45,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     ecu.io.s0.in.bits.vstart  := io.core.ex.vstart
     ecu.io.s0.in.bits.rs1     := io.core.ex.rs1
     ecu.io.s0.in.bits.rs2     := io.core.ex.rs2
+    ecu.io.s0.in.bits.phys    := false.B
     io.core.ex.ready          := !icu.io.busy
 
     ecu.io.s1.rs1.valid := ecu.io.s1.inst.isOpf && !ecu.io.s1.inst.vmu
