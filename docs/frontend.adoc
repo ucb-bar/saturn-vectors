@@ -2,15 +2,32 @@
 
 == Frontend
 
+Instructions enter the VFU from an early stage
+
 
 === Core Integration
 
+
+[discrete]
+==== Updating `VTYPE` and `VL`
+
+[discrete]
 ==== Rocket
 
+[discrete]
 ==== Shuttle
-
-=== VType
 
 === Memory Ordering
 
-=== Precise Traps
+=== Memory Translation and Precise Trap
+
+shared TLB
+
+[discrete]
+==== Pipeline Trap Checker
+
+[discrete]
+==== Iterative Trap Checker
+
+=== Interface to VU/VLSU
+
