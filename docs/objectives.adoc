@@ -16,6 +16,8 @@ We highlight how Saturn, as a implementation of a modern scalable vector ISA tar
 
 === Data-parallel Workloads
 
+TODO: Comparison table of data-parallel workload categofies
+
 We broadly categorize the range of deployment scenarios and workloads for programmable data-parallel systems into four categories.
 These categories are differentiated by power/area constraints and workload characteristics.
 
@@ -45,6 +47,8 @@ Embedded applications executing on embedded cores face extreme constraints aroun
 Exploiting data-level parallelism can be critical for these workloads as well, but broadly comes as a secondary concern compared to power and area.
 
 === Data-parallel Architectures
+
+TODO: Taxonomy diagram
 
 We taxonomize the range of commonly deployed architectural and microarchitectural paradigms for each of the above deployment scenarios.
 

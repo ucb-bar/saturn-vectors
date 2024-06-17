@@ -1,12 +1,141 @@
 [[memory]]
 
-== Vector Memory System
+== Vector Load-Store Unit
+
+TODO memory system diagram
+
+The Vector Load-Store Unit (VLSU) contains independent paths for loads and stores.
+The load path performs load address generation and reformatting of load responses into load writebacks.
+The store path performs store address generation and reformats vector register data into store requests.
+Each path is designed to saturate a block memory interface that is DLEN bytes wide.
+
+Each path is designed as an in-order pipeline of units with latency-insenstive interfaces.
+The control signals for each unit are driven by pointers into the load/store instruction queues (VLIQ/VSIQ).
+An independent pointer for each unit is maintained, so each unit can operate on the same, or different instructions within the queues.
+After an instruction has finished execution in each unit in that path, its entry in the instruction queue can be freed.
+
+The load path consists of the following stages:
+
+ * Load Address Sequencer (LAS)
+ * Load Reordering Buffer (LROB)
+ * Load Response Merger (LMU)
+ * Load Segment Buffer (LSB)
+
+The store path consists of the following stages:
+
+ * Store Segment Buffer (SSB)
+ * Store Data Merger (SMU)
+ * Store Address Sequencer (SAS)
+ * Store Acknowledgement Unit (SAU)
+
+The store path is very similar to the reverse of the load path.
+Notably, the SAS is identical to the LAS, while the SMU is identical to the LMU.
+
+The VLSU additionally contains a specialized address sequencer for accessing a specialized memory region for high throughput scatter and gather - the Scatter-Gather Address Sequencer (SGAS).
+Indexed loads and stores which access a physical region managed by the scatter-gather memory use the SGAS for address sequencing, instead of the LAS or SAS, respectively.
+
+=== Memory System
+
+TODO memory system
+
+The VLSU assumes integration into a memory system that maintains coherencing between VLSU accesses and scalar accesses into a scalar L1.
+
+One approach would be to direct all vector memory accesses into the scalar L1.
+While simple, such an approach would induce frequent structural hazards and require a specialized host core with a specialized L1 data cache.
+While the Saturn VLSU does support this approach, the standard and preferred mechanism is to provide a vector-specific memory port that bypasses the L1 and accesses coherent backing memory.
+
+Saturn is responsible for interlocking vector or scalar requests if an older vector or scalar request has not been made visible to the coherent memory system.
+
+* A younger scalar load must stall until all older vector stores to the same block have been issued and acknowledged.
+* A younger scalar store must stall until all older vector loads to the same block have been completed and all older vector stores to the same block have been issued and acknowledged
+* A vector load or store cannot begin execution while there are pending older scalar stores in the scalar store buffer
+
+Saturn's VLSU exposes a generic load/store decoupled request and response interface.
+This is typically converted into a TileLink interface within either Rocket or Shuttle.
+In Rocket, Saturn can additionally be parameterized to access the scalar L1 data cache instead of direct access into the coherent memory system.
+
+The VLSU does not assume that the vector memory interface will respond to requests in-order.
+This necessitates the implementation of a load-reordering buffer.
+Saturn supports a LROB with as many buffer entries as possible inflight requests.
+Saturn additionally supports implementing the LROB with fewer buffer entries than possible inflight requests, for use in scenarios where te outer memory system generally preserves response order, but is not guaranteed to.
+In this configuration, the LROB will replay loads when the LROB's buffers overflow, preserving an in-order response stream into the LMU.
+
+Saturn also supports integration into a system with a specialized "scatter-gather memory" (SGM).
+Unlike the standard memory interface, which supports one address per cycle for loads and one address per cycle for stores, the SGM interface presents an array of parallel byte-wide ports.
+The SGM is intended to be implemented as a specialized non-cacheable core-local memory.
 
 === Inflight Instruction Queues
 
+Upon dispatch from the VFU into the VLSU, a vector memory instruction is writen into either the load instruction queue (VLIQ) or store instruction queue (VSIQ).
+Instructions are additionally tagged with a unique age tag (VAT) that is allocated at dispatch, and freed when an instruction exits the queue.
+
+Each entry in this queue contains the base offset, physical page index, and stride.
+As a consequence of the VFU cracking memory instructions into single-page accesses, the base offset and stride are stored as 12 bits of page offset.
+Each entry additionally contains the `vstart`, `vl`, `segstart`, and `segend` settings of this instruction, along with all the fields for addressing mode, element width, index width, and mask control.
+
+The entry also contains a bound (extent) for the instruction's memory access within its accessed page.
+This is derived from the base offset, stride, `vl`, and addressing mode settings of the instruction, but is encoded directly within the entry to enable fast ordering checks.
+Instructions with indexed accesses are marked conservatively to potentially access the entire page.
+
+Memory ordering checks are performed using a CAM over all the entries in the VLIQ and/or VSIQ to find the entries accessing the same page.
+The base and extent of a given access can be checked against the base and extent of the access in the entry to determine if there is overlap.
+Both vector-vector and vector-scalar ordering checks use this CAM.
+
 === Address Sequencing
+
+The Address Sequencers (LAS/SAS) generate memory access requests for all memory instuctions except for indexed accesses into the SGM.
+The address sequencers emit aligned requests aligned to the width of the memory interface.
+The sequencer can proceed with an instruction if it determines via the instructions age tag and the VLIQ/VSIQ that there is no potential ordering hazard.
+
+The address sequencers effectively iterate over two nested loops.
+The outer loop iterates over element index, while the inner loop iterates over a "segment index" within a segment for segmented access.
+A index port and mask port provide a stream of indices/masks generated by the VU for indexed and/or masked operations.
+
+Unit-strided (segmented and non-segmented) accesses do not execute the inner loop, and iterate the outer loop by the number of elements requested by the next request.
+These requests saturate the available memory bandwidth.
+Masked unit-strided loads ignore any mask settings, instead applying the mask to control writeback in the VU.
+Masked unit-strided stores receive a mask from the SMU, and do not read a mask from the mask port.
+
+Strided and indexed non-segmented accesses do not execute the inner loop, and iterate the outer loop by a single element per cycle.
+A mask is generated to select the active bytes within the access for the requested element.
+These accesses use the mask port if set by the instruction, and omit generating the request if the element is masked off.
+
+Strided and indexed segmented acceses execute both the outer and inner loop.
+The inner loop iterates by the number of elements within a segment available within the next segment, while the outer loop iterates by a single element.
+These access the mask port if set by the instruction, and omit generating the request if the element is masked off.
+Generally, these can saturate the memory bandwidth when the size of one segment is large
+
+The sequencers will stall if the memory interface is not ready or if there are no more tags to track outstanding memory accesses.
+When the last request for an instruction has been sent to the memory system, the pointer into the VLIQ/VSIQ for the instruction is incremented, and the next instruction to undergo address sequencing can proceed.
 
 === Merge Unit
 
+The merge units are general-purpose circuits that correct for misalignment of the memory system response data before the next step in the pipeline.
+These contain a rotation circuit and buffer.
+
+The merge units have FIFO semantics, where the enqueue into the unit specifies a base and extent of active data within the wide input vector.
+The merge unit rotates away the unactive bytes, compacting the active bytes into contiguous storage.
+The dequeue requests a base and extent from the merge unit, which then shifts the buffered data into position.
+
+The LMU shifts misaligned load response bytes into aligned packets for writeback or segment formation.
+The SMU shifts vector register bytes into misaligned packets for store request issue.
+The SMU additionally shifts the per-byte mask bits alongside the store bytes, so unit-strided masked stores can proceed at full rate.
+The extent of the shift is determined by the offset bits indexing into the byte width of the memory port.
+
 === Segment Buffer
+
+TODO diagram
+
+Non-segmented accesses bypass the segment buffer units entirely.
+For segmented accesses to proceed with high throughput, the LSB and SSB must "buffer" a sufficient number of responses to "transpose" a set of structs into a set of vector writebacks, or a set of vector store-data into a set of structs.
+
+Each segment buffer is implemented as a double-buffered 2D array of flops.
+The double-buffering enables full rate segmented accesses.
+For instance, in the LSB, one half is filled by load responses while the other is drained by load writeback.
+
+Each segment buffer is 8 rows deep to support up to 8 fields in a segment, as supported by the specification.
+Each segment buffer is DLEN bytes wide.
+
+Load responses from the LMU write columns into the LSB, while the LSB emits rows into the load writeback port to the VU.
+Store data from the VU writes columns into the SSB, while the SSB emits rows into the SMU.
 
