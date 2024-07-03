@@ -5,7 +5,8 @@ Saturn was developed with the following objectives:
 
  * Provide a *representative baseline* implementation of the RISC-V Vector specification
  * Support *full compliance* with the complete RVV specification, including support for virtual memory and precise traps
- * Be sufficiently *parameterized* to enable design-space-exploration across a wide range of the power/performance/area design space
+ * Target performant *ASIC implementations*, rather than FPGA deployments
+ * Be sufficiently *parameterized* to enable design-space-exploration across a wide power/performance/area design space of silicon implementations
  * Demonstrate efficient scheduling of vector operations on a microarchitecture with a *short hardware vector length*
  * Integrate with existing *efficient area-compact scalar core* implementations
  * Support *extensibility* with custom vector instructions, functional units, and accelerators that leverage the baseline capability in the standard RVV ISA
@@ -13,6 +14,13 @@ Saturn was developed with the following objectives:
 
 We present a background discussion of deployment scenarios for data-parallel systems as well as the dominant architectures in the commercial space for such systems.
 We highlight how Saturn, as a implementation of a modern scalable vector ISA targeting deployment in specialized cores, fills an underexplored niche in the space of data-parallel microarchitectures.
+
+=== Terminology
+
+In this document, we use the term "DSP" extensively. This term is slightly overloaded, as it may refer in the literature to the domain of "Digital Signal Processing" or to "Digital Signal Processor" cores.
+We generally use "DSP" in this document as a catch-all term to refer to the workloads and kernels in the digital signal processing domain, as well as adjacent domains that include image processing and machine learning.
+We use this terminology because of the similarity of many of the underlying kernels across these domains and the paradigms that are used to compute them in modern SoCs.
+We will be more precise and explicit where it is needed.
 
 === Data-parallel Workloads
 
@@ -38,12 +46,13 @@ In these systems, single-thread performance remains critical due to Amdahl's law
 
 Digital signal processing (DSP) and similar domain-specialized workloads feature a modest-to-high degree of data-level parallelism, and additionally often have strict latency requirements.
 These workloads are often offloaded in modern SoCs to specialized "DSP cores" optimized towards power and area-efficient expoitation of data-level parallelism.
+Large modern SoCs typically integrate many of such "DSP cores" across a variety of design points to provide optimized compute for different subsystems of the chip.
 To meet the application QoS requirements and system-wide power/area requirements, these cores must target extreme power and area efficiency while maintaining high utilization of data-parallel functional units.
 
 [discrete]
 ==== Embedded
 
-Embedded applications executing on embedded cores face extreme constraints around power and area.
+Embedded applications executing on embedded cores face extreme constraints around power and area, as well as code size.
 Exploiting data-level parallelism can be critical for these workloads as well, but broadly comes as a secondary concern compared to power and area.
 
 === Data-parallel Architectures
@@ -73,17 +82,20 @@ The rise of GPGPUs has partially led to the decline of specialized long-vector m
 ==== General-purpose ISAs with SIMD
 
 *General-purpose ISAs with SIMD extensions* enable exploiting data-level parallelism in a microarchitecture already optimized towards scalar IPC.
-SIMD extensions evolved from subword-SIMD ISAs designed to pack a small vector of sub-word elements within a single scalar register.
+SIMD extensions evolved from subword-SIMD ISAs designed to pack a small vector of sub-word elements within a single scalar register as a cheap way to integrate
+limited forms of data-parallel compute into a general-purpose processor.
 Microarchitectures of general-purpose cores perform instruction scheduling of such SIMD instructions using similar mechanisms as they do for scalar instructions; namely, existing features like superscalar issue, out-of-order execution, and register renaming are all reused to maintain high instruction throughput into the SIMD functional units.
 This paradigm has largely held true even towards modern general-purpose-SIMD cores, which feature much wider SIMD registers than scalar registers for improved performance on data-parallel codes.
 
 [discrete]
 ==== VLIW ISAs with SIMD
 
-*VLIW ISAs with SIMD extensions* dominate the space of DSP and similar domain-specialized cores, as well as embedded cores.
-For these deployment scenarios, power and area constraints preclude the deployment of costly microarchitectural features towards instruction throughput in a general-purpose ISA, such as speculative execution, register renaming, and hardware interlocks.
-Conversely, applications for domain-specialied cores benefit less from the compiler ergonomics afforded by general-purpose ISAs.
-Thus, specialized VLIW ISAs with efficient hardware implementations provide a cheap and programmer-visible mechanism for maitaining high instruction throughput into SIMD functional units.
+*VLIW ISAs with SIMD extensions* have traditionally dominated the space of DSP and similar domain-specialized cores.
+For these deployment scenarios, power and area constraints preclude the deployment of costly microarchitectural features that enable high instruction throughput in a general-purpose ISA, such as speculative execution, register renaming, and hardware interlocks.
+The regularity present in many DSP kernels lend themselves to the VLIW paradigm,
+and applications for domain-specialied cores benefit less from the compiler ergonomics afforded by general-purpose ISAs.
+Despite this, VLIW-based DSPs are notoriously difficult to program and can suffer from issues such as large static code size arising from the need for extensive static scheduling.
+Thus, specialized VLIW ISAs with efficient hardware implementations provide a cheap and programmer-visible mechanism for maintaining high instruction throughput into SIMD functional units.
 
 [discrete]
 ==== Scalable Vector ISAs
@@ -108,7 +120,7 @@ Stripmine loops in RVV use `vset` instructions to dynamically adjust vector conf
 These instructions set the dynamic `vl` vector length register in addition to the `vtype` register, which sets the element width, register grouping, and mask/tail agnosticity for subsequent operations.
 
 While a naive implementation of RVV might treat the `vtype` as a single system-wide register, owing to its effect on the behavior of many components of the vector datapath, such an approach would substantially degrade performance.
-As `vset` is used in inner-loops, performant implementations must effectively rename the `vtype` and `vl` registers, instead of maintaining a single global copy.
+As `vset` is used in inner-loops, performant implementations must dynamically track the `vtype` and `vl` registers, instead of maintaining a single global copy.
 Since neither `vtype` nor `vl` require many bits to encode, this state can be renamed into a control bundle that propagates alongside each vector instruction in the datapath.
 
 Furthermore, since `vtype` and `vl` affect the generation of precise traps by vector memory instructions, it is insufficent to update these registers only at commit, since precise-traps must be generated ahead-of-commit.
@@ -121,11 +133,11 @@ Instead, performant scalar core implementations should bypass updates of `vtype`
 RVV mandates that vector memory operations appear to execute in instruction order with respect to *all* other instructions on the same hart, including scalar memory instructions.
 While an alternative approach may have relaxed this ordering requirement, such an approach would necessitate costly and precise programmer-inserted fences to enforce scalar-vector memory ordering.
 
-For implementations, the ordering requirement poses a challenge to decoupled post-commit vector units, in which vector laods and store might run behind scalar loads and stores.
+This ordering requirement poses a challenge to decoupled post-commit vector unit implementations, in which vector loads and stores might run behind scalar loads and stores.
 Stalling scalar loads and stores until the vector loads and stores drain could have costly implications on kernels which naturally would benefit from overlapping scalar and vector memory operations.
-For instance, a input-stationary matrix-multiplication, where the inner loop streams across scalar load of one the inputs, and vector loads and store of the accumulator, naturally leads to scalar-vector memory overlap.
+For instance, an input-stationary matrix-multiplication, where the inner loop streams across scalar load of one the inputs, and vector loads and store of the accumulator, naturally leads to scalar-vector memory overlap.
 
-Performant implementations should allow concurrent execution of scalar and vector memory operations when it can be precisely determined that the accessed regions do not overlap, and thus do not violate the memory ordering requirements.
+Performant implementations should allow concurrent execution of scalar and vector memory operations when it can be precisely determined that the accessed regions do not overlap, and thus cannot  violate the memory ordering requirements.
 
 [discrete]
 ==== Precise Traps
@@ -142,12 +154,12 @@ Performant implementations should expediantly commit vector memory instructions 
 
 The `LMUL` (length multiplier) register grouping field of `VTYPE` enables grouping of consecutive vector registers into a single longer vector register.
 In addition to enabling mixed-precision operations, this feature also allows kernels which don't induce vector register pressure to access an effectively longer hardware vector length.
-Generally, performance programmers for RISC-V will use this feature to reduce dynamic instruction count of their loops.
-It is also true that many common vector kernels will want to use register grouping.
+Generally, performance programmers for RISC-V will use this feature to reduce dynamic instruction count of their loops and potentially improve utilization of hardware compute resources.
 For example, vector `memcpy` induces no register pressure and can trivially set a high `LMUL` to reduce dynamic instruction count.
 
-Thus, implementations should not penalize code which uses high LMUL.
-A naive approach of instruction cracking early in the pipeline, while easy and low-cost to implement, would violate this requirement, as the many micro-ops from cracked high-`LMUL` instructions would induce greater pressure on datapath scheduling resources.
+Thus, implementations should not penalize code which uses high LMUL, as long as the underlying application vector lengths are long enough to support it.
+One approach to implementing this functionality would be to treat LMUL > 1 operations as individual operations by cracking them early in the pipeline.
+While this strategy is easy and low-cost to implement, it may cause performance issues, as the many micro-ops from cracked high-`LMUL` instructions would induce greater pressure on datapath scheduling resources.
 
 [discrete]
 ==== Segmented Memory Operations
@@ -157,12 +169,12 @@ Such operations, while very complex behaviorally, are fundamental to many algori
 For instance, complex numbers and image pixel data are conventionally stored in memory as "arrays-of-structs".
 Such instructions can also be used to perform on-the-fly transposes into vector registers.
 
-Given the importance of these instructions, performant RVV implementations should not impose an excess performance overhead from their execution.
+These operations can significantly reduce programmer burden, and thus performant RVV implementations should not impose an excess performance overhead from their execution.
 To match the performance programming model, vector code which uses these memory operations to reduce dynamic instruction count should perform no worse than the equivalent code which explicitly transforms the data over many vector instructions.
 
-=== Comparing Saturn
+=== Comparing against Saturn
 
-We compare Saturn's architecture and short-vector microarchitecture to the existing data-parallel paradigms discussed above.
+We compare Saturn's architecture and short-vector microarchitecture to the data-parallel paradigms discussed above.
 
 [discrete]
 ==== Compared to Long-Vector Units
@@ -171,12 +183,20 @@ Long-vector microarchitectures for datacenter ML and HPC feature very-long-vecto
 Such implementations typically store these long vectors in dense SRAM.
 Given the very long vector lengths, a single vector instruction might encode many cycles of work, even across parallel vector lanes.
 Thus, instruction throughput is less critical for maintaining high utilization of functional units.
-Instead, long-vector microarchitectures can remain performant with few-inflight instructions, as long as a precise and efficient execution schedule is determined for those instructions.
+Instead, long-vector microarchitectures typically derive efficiency and high utilization by amortizing costs over fewer inflight instructions that are executed in a deep temporal fashion.
 
 In constrast, Saturn's short-vector microarchitecture implements a unified wide vector register file with a unified SIMD datapath and load-store path.
-Saturn also does not have the luxury of deep temporal execution of all vector instructions.
-Code sequences with low `LMUL` might require only 1-2 cycles of occupancy in the functional units per instruction.
-To remain performant for these sequences, Saturn supports higher instruction throughput than would be necessary in a long-vector microarchitecture.
+Saturn does not utilize deep temporal execution of vector instructions to achieve efficiency.
+For example, code sequences with low `LMUL` might require only 1-2 cycles of occupancy in the functional units per instruction.
+Instead, it relies on precise sequencing mechanisms to achieve high datapath utilization with shorter vectors.
+Note that this does imply that Saturn supports higher instruction throughput than would be necessary in a long-vector microarchitecture.
+
+We argue that this short-vectors paradigm is better suited than long-vectors implementations to build DSP-style cores for several important reasons:
+
+* Many DSP applications feature short and/or widely varying application vector lengths. This makes it difficult for long-vector to effectively utilize their resources as it precludes deep temporal execution.
+Short-vector machines can achieve higher utilization on these shorter application vector lengths.
+* Short-vector machines use an inherently lower capacity vector register file, which has positive implications in terms of silcon area and power consumption.
+* Saturn efficiently implements the register grouping functionality of RVV, and thus can still achieve high performance on long application vector lengths when the kernel calls for it.
 
 
 [discrete]
@@ -200,7 +220,7 @@ Efficient and precise vector operation scheduling, rather than high instruction 
 ==== Compared to VLIW + SIMD DSP Cores
 
 VLIW cores with SIMD extensions also rely on high-throughput instruction fetch for performance through VLIW instruction encodings.
-VLIW instruction encodings enable low-cost low-complexity superscalar fetch and provide the programmer precise control over instruction scheduling.
+VLIW instruction encodings enable low-cost, low-complexity superscalar fetch and provide the programmer precise control over instruction scheduling.
 
 Unlike instructions in SIMD ISAs, instructions in Saturn's vector ISA are executed over multiple cycles in multi-cycle "chime".
 Since a single instruction can occupy a functional unit or similar structural resource over multiple cycles, vector instruction throughput can be less than one per cycle while maintaining full utilization.
