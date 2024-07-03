@@ -39,7 +39,7 @@ class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) w
     val vu = Module(new VectorBackend(sgSize))
 
     sg_if.foreach { sg =>
-      sg.module.io.vec <> vu.io.sgmem
+      sg.module.io.vec <> vu.io.sgmem.get
     }
 
     val replayed = RegInit(false.B)

@@ -73,7 +73,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
     val enq = Flipped(Decoupled(new VectorMemMacroOp))
 
     val dmem = new VectorMemIO
-    val sgmem = new VectorSGMemIO
+    val sgmem = sgSize.map(_ => new VectorSGMemIO)
     val scalar_check = new ScalarMemOrderCheckIO
 
     val lresp = Decoupled(new Bundle {
@@ -210,11 +210,6 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   }
 
   // scatter/gather paths
-  for (i <- 0 until vParams.vsgPorts) {
-    io.sgmem.req(i).valid := false.B
-    io.sgmem.req(i).bits := DontCare
-  }
-
   sgas.foreach { sgas =>
     sgas.io.index_pop.ready := false.B
     sgas.io.mask_pop.ready := false.B
@@ -227,8 +222,8 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
     sgas.io.valid := maskindex_gather || maskindex_scatter
     sgas.io.lsiq_id := Mux(maskindex_gather, liq_las_ptr, siq_sas_ptr)
     sgas.io.op := Mux(maskindex_gather, liq(liq_las_ptr).op, siq(siq_sas_ptr).op)
-    sgas.io.req <> io.sgmem.req
-    sgas.io.resp <> io.sgmem.resp
+    sgas.io.req <> io.sgmem.get.req
+    sgas.io.resp <> io.sgmem.get.resp
   }
 
   las.io.maskindex.valid := maskindex_load && (io.mask_pop.ready || !las.io.maskindex.needs_mask) && (io.index_pop.ready || !las.io.maskindex.needs_index)

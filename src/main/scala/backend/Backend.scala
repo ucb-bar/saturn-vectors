@@ -16,7 +16,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     val issue = Flipped(Decoupled(new VectorIssueInst))
 
     val dmem = new VectorMemIO
-    val sgmem = new VectorSGMemIO
+    val sgmem = sgSize.map(_ => new VectorSGMemIO)
     val scalar_check = new ScalarMemOrderCheckIO
 
     val backend_busy = Output(Bool())
@@ -41,7 +41,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
 
   val vmu = Module(new VectorMemUnit(sgSize))
   vmu.io.dmem <> io.dmem
-  vmu.io.sgmem <> io.sgmem
+  vmu.io.sgmem.foreach(_ <> io.sgmem.get)
   if (vParams.latencyInject) {
     val latency = Wire(UInt(32.W))
     latency := PlusArg("saturn_mem_latency")
