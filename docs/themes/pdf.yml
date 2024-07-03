@@ -115,7 +115,7 @@ block:
   margin_top: 0
   margin_bottom: $vertical_rhythm
 caption:
-  align: left
+  align: center
   font_size: $base_font_size * 0.95
   font_style: italic
   # FIXME perhaps set line_height instead of / in addition to margins?
@@ -301,8 +301,8 @@ footer:
     #columns: "<50% =0% >50%"
     right:
       #content: '{page-number}'
-      content: '{document-title} | © RISC-V'
-      #content: '{document-title} | © RISC-V'
+      content: '{document-title} | © The University of California, Berkeley'
+      #content: '{document-title} | © The University of California, Berkeley'
       #center: '{page-number}'
       #content: '{revdate}'
   verso:

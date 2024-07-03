@@ -21,6 +21,7 @@ OPTIONS := --trace \
            -a revdate=${DATE} \
            -a pdf-fontsdir=fonts \
            -a pdf-theme=themes/pdf.yml \
+           -a stylesheet=themes/asciidoctor-default.css \
            $(XTRA_ADOC_OPTS) \
 		   -D build \
            --failure-level=ERROR

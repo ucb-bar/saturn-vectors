@@ -24,22 +24,29 @@ We will be more precise and explicit where it is needed.
 
 === Data-parallel Workloads
 
-TODO: Comparison table of data-parallel workload categofies
 
-We broadly categorize the range of deployment scenarios and workloads for programmable data-parallel systems into four categories.
+We broadly categorize the range of deployment scenarios and workloads for programmable data-parallel systems into four domains.
 These categories are differentiated by power/area constraints and workload characteristics.
+
+
+[.text-center]
+.Taxonomy of data-parallel domains and their dominant architectures
+image::diag/domains.png[DLP Domains,align=center,title-align=center]
+
 
 [discrete]
 ==== HPC, Scientific Computing, and Datacenter ML
 
 HPC, scientific computing, and ML training workloads are typically characterized by very long application vector lengths, exhibiting a high degree of data-level parallelism.
-Systems targeting these workloads are typically designed and deployed at datacenter scale, with available data-level-parallelism exploited across the many nodes in a system.
+Systems targeting these workloads are typically designed and deployed at datacenter scale, with available data-level-parallelism exploited across the many nodes in a warehouse-scale computer.
+
 
 [discrete]
 ==== General-purpose Server, Desktop, and Mobile
 
-General-purpose server, desktop, and mobile workloads exhibit a modest degree of available data-level-parallelism interspersed between many blocks of scalar, non-data-parallel code.
-In these systems, single-thread performance remains critical due to Amdahl's law, so data-parallel architectures and microarchitectures must not come at the expense of scalar performance in general-purpose code.
+General-purpose server, desktop, and mobile workloads exhibit a modest degree of available data-level-parallelism interspersed between many blocks of sequential, non-data-parallel code.
+The implications of Amdahl's Law dictate the design of these systems; exploiting data-level parallelism must not come at the expense of single-thread performance.
+Compare to the other domains, compiler and programmer-friendly ISAs are particularly important for these systems, as they must remain performant on the greatest diversity of workloads.
 
 [discrete]
 ==== Digital Signal Processing and Domain-Specialized
@@ -54,29 +61,37 @@ To meet the application QoS requirements and system-wide power/area requirements
 
 Embedded applications executing on embedded cores face extreme constraints around power and area, as well as code size.
 Exploiting data-level parallelism can be critical for these workloads as well, but broadly comes as a secondary concern compared to power and area.
+As these cores often provide a self-contained memory system, code and data size are critical architectural considerations.
 
 === Data-parallel Architectures
 
-TODO: Taxonomy diagram
-
-We taxonomize the range of commonly deployed architectural and microarchitectural paradigms for each of the above deployment scenarios.
+The requirements of the common data-parallel workload domains have induced the commercial space to reduce towards several fundamental architectural archetypes.
 
 [discrete]
 ==== Long-vector Implementations
 
 *Long-vector ISAs* and their *many-lane vector-unit* implementations trace their heritage most clearly to the early Cray-style vector units.
 Modern incarnations of such systems primarily target the HPC and datacenter space, where long application vector lengths map cleanly into high-capacity vector-register files.
+
 Microarchitecturally, these implementations distribute the vector register file, functional units, and memory units across many vector lanes, with scalability towards many lanes being a key requirement.
 A single core of such a vector unit might have upwards of 32 parallel vector lanes, with a hardware vector length of over 16384 bits.
+
 The NEC Aurora is a modern example of a commercial long-vector microarchitecture, while Hwacha, Ara, and Vitruvius are examples of academic long-vector implementations.
+
 
 [discrete]
 ==== SIMT GPGPUs
 
 *GPGPUs* execute a specialized *SIMT* ISA across a multi-core of multi-threaded processors.
-GPGPUs evolved from the development of general-purpose SIMT programming models for graphics pipelines.
+GPGPUs evolved from the development of general-purpose SIMT programming models for graphics shader pipelines.
 By scaling the number of multi-threaded cores, GPGPU microarchitectures can target integrated GPUs in general-purpose SoCs, graphics accelerator cards for desktop/consumer systems, as well as interconnected compute cards for datacenter-scale HPC systems.
-The rise of GPGPUs has partially led to the decline of specialized long-vector microarchitectures for datacenter HPC systems.
+The rise of GPGPUs can be associated with the decline of specialized long-vector microarchitectures for datacenter HPC systems.
+
+NVIDIA and AMD dominate the GPGPU market.
+Their HPC and datacenter products, while originally derived from consumer GPU architectures, have since diverged towards a more differentiated, yet still multi-core-SMT-SIMT microarchitecture.
+
+Within the general-purpose mobile consumer space, AMD, Intel, Apple, Qualcomm, and Huawei all deploy embedded GPGPU systems within their SoCs.
+These vendors all provide developer SDKs for supporting general purpose applications on their GPGPU microarchitectures.
 
 [discrete]
 ==== General-purpose ISAs with SIMD
@@ -84,18 +99,25 @@ The rise of GPGPUs has partially led to the decline of specialized long-vector m
 *General-purpose ISAs with SIMD extensions* enable exploiting data-level parallelism in a microarchitecture already optimized towards scalar IPC.
 SIMD extensions evolved from subword-SIMD ISAs designed to pack a small vector of sub-word elements within a single scalar register as a cheap way to integrate
 limited forms of data-parallel compute into a general-purpose processor.
+
 Microarchitectures of general-purpose cores perform instruction scheduling of such SIMD instructions using similar mechanisms as they do for scalar instructions; namely, existing features like superscalar issue, out-of-order execution, and register renaming are all reused to maintain high instruction throughput into the SIMD functional units.
-This paradigm has largely held true even towards modern general-purpose-SIMD cores, which feature much wider SIMD registers than scalar registers for improved performance on data-parallel codes.
+This paradigm has largely held true even towards modern general-purpose-SIMD cores, which feature much wider SIMD registers than scalar registers for improved performance on data-parallel workloads.
+
+Practically all relevant commercial general-purpose cores ship with SIMD extensions.
+All Intel and AMD out-of-order cores support some form of the SSE or AVX extensions, while ARM's A-profile architecture requires NEON.
 
 [discrete]
 ==== VLIW ISAs with SIMD
 
-*VLIW ISAs with SIMD extensions* have traditionally dominated the space of DSP and similar domain-specialized cores.
-For these deployment scenarios, power and area constraints preclude the deployment of costly microarchitectural features that enable high instruction throughput in a general-purpose ISA, such as speculative execution, register renaming, and hardware interlocks.
-The regularity present in many DSP kernels lend themselves to the VLIW paradigm,
-and applications for domain-specialied cores benefit less from the compiler ergonomics afforded by general-purpose ISAs.
+*VLIW ISAs with SIMD extensions have traditionally dominated the space of DSP and similar domain-specialized cores, as well as embedded cores.
+For these deployment scenarios, power and area constraints preclude the deployment of costly microarchitectural features towards high instruction throughput in a general-purpose ISA, such as speculative execution, register renaming, and hardware interlocks.
+
+Additionally, the regularity present in many DSP kernels lend themselves to the VLIW paradigm, and applications for domain-specialied cores benefit less from the compiler ergonomics afforded by general-purpose ISAs.
 Despite this, VLIW-based DSPs are notoriously difficult to program and can suffer from issues such as large static code size arising from the need for extensive static scheduling.
-Thus, specialized VLIW ISAs with efficient hardware implementations provide a cheap and programmer-visible mechanism for maintaining high instruction throughput into SIMD functional units.
+Nonetheless, specialized VLIW ISAs with efficient hardware implementations provide a cheap and programmer-visible mechanism for maintaining high instruction throughput into SIMD functional units.
+
+Cadence, CEVA, and Qualcomm all ship commercial VLIW DSPs with SIMD extensions.
+Cadence and CEVA cores are IP products typically integrated into a customer's SoC as an embedded core, while Qualcomm's Hexagon DSP Cores are integrated throughout their SoC line to provide DSP compute.
 
 [discrete]
 ==== Scalable Vector ISAs
@@ -105,6 +127,8 @@ The dominant examples of such ISAs include ARM's proprietary SVE and MVE extensi
 
 Existing academic implementations of RVV have broadly targeted the HPC and general-purpose deployment scenarios.
 Compared to prior academic implementations, Saturn targets DSP and domain-specialized cores, and represents a class of designs we call *"short-vector"*.
+Saturn demonstrates that these "short-vector" designs, without the distributed-lane microarchitecture of the long-vector units, can still retain high performance and efficiency for vector kernels.
+Notably, Saturn also demonstrates that these "short-vector" designs do not need to sacrifice any fundamental requirements of modern vector ISAs to be performant and efficient.
 
 
 === The RISC-V Vector ISA

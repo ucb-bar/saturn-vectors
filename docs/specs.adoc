@@ -11,13 +11,10 @@ Authors: Jerry Zhao, Daniel Grubb, Tianrui Wei, Miles Rusch, Borivoje Nikolic, K
 :preface-title: Preamble
 :colophon:
 :appendix-caption: Appendix
-// https://docs.asciidoctor.org/asciidoc/latest/macros/images-directory/
-:imagesdir: images
-//:title-logo-image: image:risc-v_logo.png["RISC-V International Logo",pdfwidth=3.25in,align=center]
+:imagesdir: ./
 // Settings:
 :experimental:
 :reproducible:
-//:WaveDromEditorApp: app/wavedrom-editor.app
 :imagesoutdir: ../build/images
 :srcdir: ./
 :bibtex-file: {srcdir}/example.bib
@@ -39,22 +36,7 @@ endif::[]
 :footnote:
 :xrefstyle: short
 
-// [WARNING]
-// .This document is in the link:http://riscv.org/spec-state[Development state]
-// ====
-// Expect potential changes. This draft specification is likely to evolve before
-// it is accepted as a standard. Implementations based on this draft
-// may not conform to the future standard.
-// ====
-
 [preface]
-// == Copyright and license information
-// This specification is licensed under the Creative Commons
-// Attribution 4.0 International License (CC-BY 4.0). The full
-// license text is available at
-// https://creativecommons.org/licenses/by/4.0/.
-
-// Copyright 2023 by RISC-V International.
 
 [preface]
 //include::contributors.adoc[]
