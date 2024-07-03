@@ -14,6 +14,7 @@ The register file, load-path, store-path, and most functional units are designed
 
 Vector instructions entering the VU are immediately assigned a unique age tag and enqueued into a in-order dispatch queue (VDQ).
 The age tag is used to disambiguate age for determining data hazards in the out-of-order sequencing stage.
+This means the age tag is wide enough to assign a unique tag to every inflight operation in the backend.
 Age tags are recovered when instructions complete execution.
 
 The VDQ provides a low-cost decoupling queue between the VU and the VLSU.
@@ -28,8 +29,10 @@ The permute issue queue, used for index generation and register gathers, tracks 
 
 There are three configuration options for the arithmetic issue queues.
 
- * In the *unified* configuration, there is a single sequencer for all arithmetic operations fed by a single issue queue. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and float-point functional units.
- * In the *shared* configuration, there are separate integer and floating-point sequencers, but they are fed by a common issue queues. Instruction will issue from the issue queue to either the integer or floating-point sequencer. This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code.
+ * In the *unified* configuration, there is a single sequencer for all arithmetic operations fed by a single issue queue. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and floating-point functional units.
+ * In the *shared* configuration, there are separate integer and floating-point sequencers, but they are fed by a common issue queue. 
+ Instructions will issue from the issue queue to either the integer or floating-point sequencer. 
+ This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code.
  * In the *split* configuration, there are separate integer and floating-point sequencers that are each fed by an independent issue queue. This configuration is the most performant, as it can dynamically schedule out-of-order across integer and floating-point instructions, but is also the most costly.
 
 === Operation Sequencers
@@ -58,7 +61,7 @@ To align with the data order expected in the segment buffers in the VLSU, the se
 ==== Execute Sequencer
 
 The execute sequencers sequence all arithmetic operations, and thus must track up to three register operands, with up to four reads and one write per operation (for a masked FMA).
-Each execute sequeners issues to a single vector execution unit (VXU), which is itself a collection of vector functional units (VFUs).
+Each execute sequencer issues to a single vector execution unit (VXU), which is itself a collection of vector functional units (VFUs).
 The execute sequencers will stall operation execution if the requested VFU within its VXU is unavailable.
 
 The execute sequencers additionally contain a DLEN-wide accumulation register for vector reductions.
@@ -74,9 +77,9 @@ For register-gather operations, it sequences into a index queue that feeds the a
 === Hazard Management
 
 Due to the out-of-order execution across the different sequences, RAW, WAW, and WAR hazards are all possible.
-Furthermore, supporting vector chaining implies that these hazards should be resolved at sub-register granularity.
+Furthermore, supporting vector chaining implies that these hazards should be resolved at sub-vector register granularity.
 Since Saturn is designed around DLEN-wide element groups as the core unit of compute, Saturn resolves data hazards at DLEN granularity.
-The scheduling mechanism precisely tracks which element groups a instruction or operation is yet-to-read-or-write to interlock the sequencers.
+The scheduling mechanism precisely tracks which element groups an instruction or operation is yet-to-read-or-write to interlock the sequencers.
 
 In Saturn, the "out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in-progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
 All instructions in this window must advertise a precise set of element groups they have not yet read or written, along with the age tag of the instruction.
@@ -94,12 +97,14 @@ If there is no data hazard and there is no structural hazard on the register fil
 For vector instructions with regular consecutive access patterns, the last issued operation that accesses some element group can clear the sequencer's internal bit-vector of pending reads and/or writes.
 
 
-=== Register File
+=== Vector Register File
 
-The register file is organized as a banked array of multi-ported flops.
+The VRF is organized as a multi-ported banked array of flops.
 The architectural register file is striped across the banks by element group index.
 Neighboring element groups reside in neighboring banks.
 Each bank contains 3 read ports and 1 write ports, to fulfill the minimum read requirements of a three-input fused-multiply-add.
+The generator currently supports generating VRFs with 1, 2, or 4 banks.
+Typically, more banks are desired with more independent sequencers since that will reduce structural hazards on VRF ports.
 
 A read crossbar connects the issue port of the sequencers to the register file read ports.
 The read crossback resolves structural hazards during the read stage, and stalls the sequencers if necessary.
@@ -109,6 +114,12 @@ The read stage also arbitrates for access to the write port when there are multi
 
 Each execution unit is composed of some set of functional units.
 Operations are issued to functional units along with their vector operands.
+Functional units can either be pipelined or iterative.
+Pipelined functional units execute at a DLEN granularity have fixed execution latencies, so once an operation is issued, it will execute without stalling.
+This means the sequencing mechanism checks for future write port conflicts on the target VRF bank across inflight and simultaneously sequenced operations to check that the operation is actually safe to execute.
+If a conflict is detected, the younger operation will be stalled and will likely start executing the very next cycle.
+Iterative functional units have variable execution latencies or contain expensive hardware such that it is desirable to execute at a rate of just one element per cycle.
+Once an iterative functional unit has completed its operation on a given element, it will arbitrate for the target VRF write port and proceed to executing the next element.
 
 [cols="1,2,2,2,3"]
 |===
@@ -186,3 +197,10 @@ These operands enter a permute-buffer, which is read by the main arithmetic sequ
 
 === EVA (Extended Vector Architecture) Port
 
+The EVA port provides an interface for integrating the Saturn vector unit with other accelerators or implementing custom functional units.
+The EVA interface is a port that exposes data read from the VRF along with control signals, and can take in data from the external unit and write it into the VRF.
+A key idea of the EVA interface is that it enables Saturn to execute custom instructions that specify VRF sources and destinations just like standard vector instructions.
+This allows Saturn to sequence these instructions alongside standard vector instructions, using very similar mechanisms.
+This enables the external accelerator or functional unit to utilize the Saturn vector unit as a base of compute and communicate with it over a high-bandwidth interface.
+
+TODO add more details

@@ -38,7 +38,7 @@ Indexed loads and stores which access a physical region managed by the scatter-g
 
 TODO memory system
 
-The VLSU assumes integration into a memory system that maintains coherencing between VLSU accesses and scalar accesses into a scalar L1.
+The VLSU assumes integration into a memory system that maintains coherence between VLSU accesses and scalar accesses into a scalar L1.
 
 One approach would be to direct all vector memory accesses into the scalar L1.
 While simple, such an approach would induce frequent structural hazards and require a specialized host core with a specialized L1 data cache.
