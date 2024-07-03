@@ -4,7 +4,7 @@
 
 TODO: Frontend detailed diagram
 
-Vector instructions are dispatched the VFU from an early stage in the host core's pipeline.
+Vector instructions are dispatched to the VFU from an early stage in the host core's pipeline.
 These instructions must be dispatched along with updated values of `vtype` and `vl`, to control the trap checking mechanisms.
 The *pipelined trap checker (PTC)* amd *iterative trap checker (ITC)* units perform memory translation for vector memory instructions, and either validate the absence of a memory access-related trap, or generate a precise trap ahaed of the commit point in the host core.
 Instructions that are validated to be free-of-traps are dispatched into the VLSU and VU.

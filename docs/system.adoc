@@ -1,7 +1,7 @@
 [[system]]
 == System Overview and Organization
 
-Saturn is organized into three main components.
+Saturn is organized into three main components:
 
 * The *Vector Frontend (VFU)* integrates into the pipeline of a host RISC-V core.
 In in-order cores, the stages of the VFU align with the pre-commit pipeline stages of the host core.
@@ -12,7 +12,7 @@ Instructions which do not trap are passed to the other vector components once th
 Inflight vector memory instructions are tracked in the vector load-instruction-queue (VLIQ) and store-instruction-queue (VSIQ).
 The V(L/S)IQs are used to check for both vector-vector and vector-scalar memory ordering hazards.
 The load/store paths within the VLSU execute independently and communicate with the VU through load-response and store-data ports.
-* The *Vector Datapath (VU)* contains instruction issue-queues (VIQs), vector sequencers (VXS/VLS/VSS), the vector register file (VRF, and the SIMD arithmetic functional units (VEUs/VFUs).
+* The *Vector Datapath (VU)* contains instruction issue-queues (VIQs), vector sequencers (VXS/VLS/VSS), the vector register file (VRF), and the SIMD arithmetic functional units (VEUs/VFUs).
 The sequencers schedule register read/write and operation issue into the VEUs, while interlocking on structural and data hazards.
 The VU is organized as a unified structure, instead of distributing the VRF and VEUs across vector lanes.
 
@@ -43,5 +43,5 @@ The VATs are aggressively allocated and freed, and referenced in the machine whe
 To decode vector instructions, the Saturn generator implements an *instruction-database*-driven methodology for vector decode.
 The Saturn generator tabularly describes a concise database of all vector control signals for all vector instructions.
 Within the generator of the VU, control signals are extracted from the pipeline stages using a generator-time query into the instruction database.
-The results from this query are used to construct a smaller decode table for only the relevant signals, which is passed to a logic minimizer in Chisel that generates that actual decode circuit.
-This approach is used to reduce the prevalence of hand-designed decode circuits in the VU.
+The results from this query are used to construct a smaller decode table for only the relevant signals, which is passed to a logic minimizer in Chisel that generates the actual decode circuit.
+This approach is used to reduce the prevalence of hand-designed decode circuits in the VU and provides a centralized location in the generator where control signal settings can be referenced.
