@@ -16,114 +16,97 @@ import saturn.frontend.{EarlyTrapCheck, IterativeTrapCheck}
 import shuttle.common._
 
 
-class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
-  assert(!vParams.useScalarFPFMA && !vParams.useScalarFPMisc)
-  if (vParams.useScalarFPFMA) {
-    require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth - 1)
-  }
+class SaturnShuttleFrontend(sgSize: Option[BigInt], edge: TLEdge)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  val io = IO(new Bundle {
+    val sg_base = Input(UInt(coreMaxAddrBits.W))
+    val core = new ShuttleVectorCoreIO
 
-  val tl_if = LazyModule(new TLSplitInterface)
-  atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLenB) := tl_if.node
+    val issue = Decoupled(new VectorIssueInst)
 
-  val sg_if = sgNode.map { n =>
-    val sg_if = LazyModule(new SGTLInterface)
-    n :=* sg_if.node
-    sg_if
-  }
+    val index_access = Flipped(new VectorIndexAccessIO)
+    val mask_access = Flipped(new VectorMaskAccessIO)
 
-  override lazy val module = new SaturnShuttleImpl
-  class SaturnShuttleImpl extends ShuttleVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
+    val scalar_check = Flipped(new ScalarMemOrderCheckIO)
+  })
 
-    val ecu = Module(new EarlyTrapCheck(tl_if.edge, sgSize))
-    val icu = Module(new IterativeTrapCheck)
-    val vu = Module(new VectorBackend(sgSize))
+  val ptc = Module(new EarlyTrapCheck(edge, sgSize))
+  val itc = Module(new IterativeTrapCheck)
 
-    sg_if.foreach { sg =>
-      sg.module.io.vec <> vu.io.sgmem.get
-    }
+  val replayed = RegInit(false.B)
 
-    val replayed = RegInit(false.B)
+  ptc.io.sg_base            := io.sg_base
+  ptc.io.s0.in.valid        := io.core.ex.valid && !itc.io.busy && !(replayed && !io.issue.ready)
+  ptc.io.s0.in.bits.inst    := io.core.ex.uop.inst
+  ptc.io.s0.in.bits.pc      := io.core.ex.uop.pc
+  ptc.io.s0.in.bits.status  := io.core.status
+  ptc.io.s0.in.bits.vconfig := io.core.ex.vconfig
+  ptc.io.s0.in.bits.vstart  := io.core.ex.vstart
+  ptc.io.s0.in.bits.rs1     := io.core.ex.uop.rs1_data
+  ptc.io.s0.in.bits.rs2     := io.core.ex.uop.rs2_data
+  ptc.io.s0.in.bits.phys    := !(io.core.status.dprv <= PRV.S.U && io.core.satp.mode(io.core.satp.mode.getWidth-1))
+  io.core.ex.ready          := !itc.io.busy && !(replayed && !io.issue.ready)
 
-    ecu.io.sg_base            := io_sg_base
-    ecu.io.s0.in.valid        := io.ex.valid && !icu.io.busy && !(replayed && !vu.io.issue.ready)
-    ecu.io.s0.in.bits.inst    := io.ex.uop.inst
-    ecu.io.s0.in.bits.pc      := io.ex.uop.pc
-    ecu.io.s0.in.bits.status  := io.status
-    ecu.io.s0.in.bits.vconfig := io.ex.vconfig
-    ecu.io.s0.in.bits.vstart  := io.ex.vstart
-    ecu.io.s0.in.bits.rs1     := io.ex.uop.rs1_data
-    ecu.io.s0.in.bits.rs2     := io.ex.uop.rs2_data
-    ecu.io.s0.in.bits.phys    := !(io.status.dprv <= PRV.S.U && io.satp.mode(io.satp.mode.getWidth-1))
-    io.ex.ready               := !icu.io.busy && !(replayed && !vu.io.issue.ready)
+  ptc.io.s1.rs1.valid := ptc.io.s1.inst.isOpf && !ptc.io.s1.inst.vmu
+  ptc.io.s1.rs1.bits := io.core.mem.frs1
+  ptc.io.s1.kill := io.core.mem.kill || !RegEnable(io.core.ex.fire, io.core.ex.valid)
 
-    ecu.io.s1.rs1.valid := ecu.io.s1.inst.isOpf && !ecu.io.s1.inst.vmu
-    ecu.io.s1.rs1.bits := io.mem.frs1
-    ecu.io.s1.kill := io.mem.kill || !RegEnable(io.ex.fire, io.ex.valid)
+  io.core.mem.tlb_req.valid := Mux(itc.io.busy, itc.io.s1_tlb_req.valid, ptc.io.s1.tlb_req.valid)
+  io.core.mem.tlb_req.bits  := Mux(itc.io.busy, itc.io.s1_tlb_req.bits,  ptc.io.s1.tlb_req.bits)
+  val mem_tlb_resp = Wire(new TLBResp)
+  mem_tlb_resp.miss := io.core.mem.tlb_resp.miss || !io.core.mem.tlb_req.ready
+  mem_tlb_resp.paddr := io.core.mem.tlb_resp.paddr
+  mem_tlb_resp.pf    := io.core.mem.tlb_resp.pf
+  mem_tlb_resp.ae    := io.core.mem.tlb_resp.ae
+  mem_tlb_resp.ma    := io.core.mem.tlb_resp.ma
+  mem_tlb_resp.gpa        := DontCare
+  mem_tlb_resp.gpa_is_pte := DontCare
+  mem_tlb_resp.gf         := 0.U.asTypeOf(new TLBExceptions)
+  mem_tlb_resp.cacheable  := DontCare
+  mem_tlb_resp.must_alloc := DontCare
+  mem_tlb_resp.prefetchable := DontCare
+  mem_tlb_resp.size         := DontCare
+  mem_tlb_resp.cmd          := DontCare
+  ptc.io.s1.tlb_resp := mem_tlb_resp
+  itc.io.tlb_resp    := mem_tlb_resp
 
-    io.mem.tlb_req.valid := Mux(icu.io.busy, icu.io.s1_tlb_req.valid, ecu.io.s1.tlb_req.valid)
-    io.mem.tlb_req.bits  := Mux(icu.io.busy, icu.io.s1_tlb_req.bits,  ecu.io.s1.tlb_req.bits)
-    val mem_tlb_resp = Wire(new TLBResp)
-    mem_tlb_resp.miss := io.mem.tlb_resp.miss || !io.mem.tlb_req.ready
-    mem_tlb_resp.paddr := io.mem.tlb_resp.paddr
-    mem_tlb_resp.pf    := io.mem.tlb_resp.pf
-    mem_tlb_resp.ae    := io.mem.tlb_resp.ae
-    mem_tlb_resp.ma    := io.mem.tlb_resp.ma
-    mem_tlb_resp.gpa        := DontCare
-    mem_tlb_resp.gpa_is_pte := DontCare
-    mem_tlb_resp.gf         := 0.U.asTypeOf(new TLBExceptions)
-    mem_tlb_resp.cacheable  := DontCare
-    mem_tlb_resp.must_alloc := DontCare
-    mem_tlb_resp.prefetchable := DontCare
-    mem_tlb_resp.size         := DontCare
-    mem_tlb_resp.cmd          := DontCare
-    ecu.io.s1.tlb_resp := mem_tlb_resp
-    icu.io.tlb_resp    := mem_tlb_resp
+  ptc.io.s2.scalar_store_pending := io.core.wb.store_pending
 
-    ecu.io.s2.scalar_store_pending := io.wb.store_pending
+  io.core.wb.retire_late  := itc.io.retire
+  io.core.wb.inst         := Mux(itc.io.busy, itc.io.inst.bits      , ptc.io.s2.inst.bits.bits)
+  io.core.wb.pc           := Mux(itc.io.busy, itc.io.pc             , ptc.io.s2.pc)
+  io.core.wb.xcpt         := Mux(itc.io.busy, itc.io.xcpt.valid     , ptc.io.s2.xcpt.valid)
+  io.core.wb.cause        := Mux(itc.io.busy, itc.io.xcpt.bits.cause, ptc.io.s2.xcpt.bits.cause)
+  io.core.wb.tval         := Mux(itc.io.busy, itc.io.xcpt.bits.tval , ptc.io.s2.xcpt.bits.tval)
+  io.core.wb.internal_replay  := ptc.io.s2.internal_replay.valid
+  io.core.wb.block_all        := itc.io.busy || (ptc.io.s2.inst.valid && !ptc.io.s2.retire && !ptc.io.s2.internal_replay.valid)
+  io.core.wb.rob_should_wb    := Mux(itc.io.busy, itc.io.inst.writes_xrf, ptc.io.s2.inst.bits.writes_xrf)
+  io.core.wb.rob_should_wb_fp := Mux(itc.io.busy, itc.io.inst.writes_frf, ptc.io.s2.inst.bits.writes_frf)
+  io.core.set_vstart  := Mux(itc.io.busy, itc.io.vstart, ptc.io.s2.vstart)
+  io.core.set_vconfig := itc.io.vconfig
+  ptc.io.s2.vxrm := io.core.wb.vxrm
+  ptc.io.s2.frm := io.core.wb.frm
+  itc.io.in := ptc.io.s2.internal_replay
 
-    io.wb.retire_late  := icu.io.retire
-    io.wb.inst         := Mux(icu.io.busy, icu.io.inst.bits      , ecu.io.s2.inst.bits.bits)
-    io.wb.pc           := Mux(icu.io.busy, icu.io.pc             , ecu.io.s2.pc)
-    io.wb.xcpt         := Mux(icu.io.busy, icu.io.xcpt.valid     , ecu.io.s2.xcpt.valid)
-    io.wb.cause        := Mux(icu.io.busy, icu.io.xcpt.bits.cause, ecu.io.s2.xcpt.bits.cause)
-    io.wb.tval         := Mux(icu.io.busy, icu.io.xcpt.bits.tval , ecu.io.s2.xcpt.bits.tval)
-    io.wb.internal_replay  := ecu.io.s2.internal_replay.valid
-    io.wb.block_all        := icu.io.busy || (ecu.io.s2.inst.valid && !ecu.io.s2.retire && !ecu.io.s2.internal_replay.valid)
-    io.wb.rob_should_wb    := Mux(icu.io.busy, icu.io.inst.writes_xrf, ecu.io.s2.inst.bits.writes_xrf)
-    io.wb.rob_should_wb_fp := Mux(icu.io.busy, icu.io.inst.writes_frf, ecu.io.s2.inst.bits.writes_frf)
-    io.set_vstart  := Mux(icu.io.busy, icu.io.vstart, ecu.io.s2.vstart)
-    io.set_vconfig := icu.io.vconfig
-    ecu.io.s2.vxrm := io.wb.vxrm
-    ecu.io.s2.frm := io.wb.frm
-    icu.io.in := ecu.io.s2.internal_replay
+  when (!io.issue.ready && ptc.io.s2.inst.valid) { replayed := true.B }
+  when (io.issue.ready) { replayed := false.B }
 
-    when (!vu.io.issue.ready && ecu.io.s2.inst.valid) { replayed := true.B }
-    when (vu.io.issue.ready) { replayed := false.B }
+  io.issue.valid := Mux(itc.io.busy, itc.io.issue.valid, ptc.io.s2.issue.valid)
+  io.issue.bits  := Mux(itc.io.busy, itc.io.issue.bits , ptc.io.s2.issue.bits)
+  itc.io.issue.ready    := io.issue.ready
+  ptc.io.s2.issue.ready := !itc.io.busy && io.issue.ready
 
-    vu.io.issue.valid := Mux(icu.io.busy, icu.io.issue.valid, ecu.io.s2.issue.valid)
-    vu.io.issue.bits  := Mux(icu.io.busy, icu.io.issue.bits , ecu.io.s2.issue.bits)
-    icu.io.issue.ready    := vu.io.issue.ready
-    ecu.io.s2.issue.ready := !icu.io.busy && vu.io.issue.ready
+  io.core.trap_check_busy := ptc.io.busy || itc.io.busy
 
-    io.trap_check_busy := ecu.io.busy || icu.io.busy
+  itc.io.status := io.core.status
+  itc.io.index_access <> io.index_access
+  itc.io.mask_access <> io.mask_access
+  io.scalar_check.addr := io.core.wb.scalar_check.bits.addr
+  io.scalar_check.size := io.core.wb.scalar_check.bits.size
+  io.scalar_check.store := io.core.wb.scalar_check.bits.store
+  io.core.wb.scalar_check.ready := !io.scalar_check.conflict && !(ptc.io.s2.inst.valid && ptc.io.s2.inst.bits.vmu)
 
-    icu.io.status := io.status
-    icu.io.index_access <> vu.io.index_access
-    icu.io.mask_access <> vu.io.mask_access
-    vu.io.scalar_check.addr := io.wb.scalar_check.bits.addr
-    vu.io.scalar_check.size := io.wb.scalar_check.bits.size
-    vu.io.scalar_check.store := io.wb.scalar_check.bits.store
-    io.wb.scalar_check.ready := !vu.io.scalar_check.conflict && !(ecu.io.s2.inst.valid && ecu.io.s2.inst.bits.vmu)
-
-    io.backend_busy   := vu.io.backend_busy || tl_if.module.io.mem_busy || sg_if.map(_.module.io.mem_busy).getOrElse(false.B)
-    io.set_vxsat      := vu.io.set_vxsat
-    io.set_fflags     := vu.io.set_fflags
-    io.resp           <> vu.io.scalar_resp
-
-    tl_if.module.io.vec <> vu.io.dmem
-
-    vu.io.fp_req.ready := false.B
-    vu.io.fp_resp.valid := false.B
-    vu.io.fp_resp.bits := DontCare
-  }
+  io.core.backend_busy   := false.B // set externally
+  io.core.set_vxsat      := false.B // set externally
+  io.core.set_fflags     := DontCare // set externally
+  io.core.resp           := DontCare // set externally
 }
