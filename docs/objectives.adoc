@@ -152,7 +152,7 @@ Doing so would introduce an interlock between a `vset` and a subsequent vector m
 Instead, performant scalar core implementations should bypass updates of `vtype` and `vset` to an early stage in the pipeline to avoid this interlock.
 
 [discrete]
-==== Memory Ordering
+==== Memory Disambiguation
 
 RVV mandates that vector memory operations appear to execute in instruction order with respect to *all* other instructions on the same hart, including scalar memory instructions.
 While an alternative approach may have relaxed this ordering requirement, such an approach would necessitate costly and precise programmer-inserted fences to enforce scalar-vector memory ordering.
@@ -161,7 +161,7 @@ This ordering requirement poses a challenge to decoupled post-commit vector unit
 Stalling scalar loads and stores until the vector loads and stores drain could have costly implications on kernels which naturally would benefit from overlapping scalar and vector memory operations.
 For instance, an input-stationary matrix-multiplication, where the inner loop streams across scalar load of one the inputs, and vector loads and store of the accumulator, naturally leads to scalar-vector memory overlap.
 
-Performant implementations should allow concurrent execution of scalar and vector memory operations when it can be precisely determined that the accessed regions do not overlap, and thus cannot  violate the memory ordering requirements.
+Performant implementations should allow concurrent execution of scalar and vector memory operations by performing precise early-stage memory disambiguation of vector memory accesses.
 
 [discrete]
 ==== Precise Traps
@@ -196,9 +196,37 @@ Such instructions can also be used to perform on-the-fly transposes into vector 
 These operations can significantly reduce programmer burden, and thus performant RVV implementations should not impose an excess performance overhead from their execution.
 To match the performance programming model, vector code which uses these memory operations to reduce dynamic instruction count should perform no worse than the equivalent code which explicitly transforms the data over many vector instructions.
 
-=== Comparing against Saturn
+=== Instruction Scheduling in Saturn Short-Vector Units
 
-We compare Saturn's architecture and short-vector microarchitecture to the data-parallel paradigms discussed above.
+We highlight how Saturn's instruction scheduling mechanism differentiate it from the relevant comparable archetypes for data-parallel microarchitectures.
+Fundamentally, Saturn relies on efficient dynamic scheduling of short-chime short-vectors, without relying on costly register renaming.
+When `LMUL` is short (1/2), vector chimes may be only 2-4 cycles long, requiring higher throughput scheduling than a long-chime machine.
+
+[.text-center]
+.Pipeline diagram of instruction execution with short vector lengths, zero dead-time, limited out-of-order execution, and chaining.
+image::diag/short-vectors.png[Saturn Pipeline,width=400,align=center,title-align=center]
+
+Figure 3 depicts a simplified pipeline visualization of a short vector loop, consisting of a load and dependent arithmetic instruction, executing on a simplified Saturn datapath.
+Notably, Saturn can fully saturate both the arithmetic and memory pipelines with such short vector lengths.
+Instruction throughput requirements are moderate, but can still be fulfilled with a modest in-order scalar core.
+
+[.text-center]
+.Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead-time, limited out-of-order execution, and chaining.
+image::diag/short-vectors-dead.png[Saturn Dead-time Pipeline,width=450,align=center,title-align=center]
+
+Figure 4 highlights the importance of zero dead-time for short-vector microarchitectures like Saturn.
+As vector chimes are short, and dead-time would substantially degrade the utilizations of the datapaths.
+
+[.text-center]
+.Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead-time, strict in-order execution, and chaining.
+image::diag/short-vectors-in-order.png[Saturn In-order Pipeline,width=500,align=center,title-align=center]
+
+Figure 5 highlights the importance of limited out-of-order execution for short-vector microarchitectures like Saturn.
+Requiring strict in-order execution would substantially degrade performance for suboptimally scheduled vector code.
+
+We compare Saturn's architecture and short-vector microarchitecture to the most relevant archetypes for data-parallel microarchitectures.
+
+
 
 [discrete]
 ==== Compared to Long-Vector Units
@@ -207,38 +235,48 @@ Long-vector microarchitectures for datacenter ML and HPC feature very-long-vecto
 Such implementations typically store these long vectors in dense SRAM.
 Given the very long vector lengths, a single vector instruction might encode many cycles of work, even across parallel vector lanes.
 Thus, instruction throughput is less critical for maintaining high utilization of functional units.
-Instead, long-vector microarchitectures typically derive efficiency and high utilization by amortizing costs over fewer inflight instructions that are executed in a deep temporal fashion.
+Instead, long-vector microarchitectures typically derive efficiency and high utilization by amortizing costs over fewer inflight instructions executed temporally.
 
-In constrast, Saturn's short-vector microarchitecture implements a unified wide vector register file with a unified SIMD datapath and load-store path.
-Saturn does not utilize deep temporal execution of vector instructions to achieve efficiency.
-For example, code sequences with low `LMUL` might require only 1-2 cycles of occupancy in the functional units per instruction.
-Instead, it relies on precise sequencing mechanisms to achieve high datapath utilization with shorter vectors.
-Note that this does imply that Saturn supports higher instruction throughput than would be necessary in a long-vector microarchitecture.
+[.text-center]
+.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with zero dead-time.
+image::diag/long-vectors.png[Long-vector Pipeline,width=900,align=center,title-align=center]
 
-We argue that this short-vectors paradigm is better suited than long-vectors implementations to build DSP-style cores for several important reasons:
+Figure 6 shows an example pipeline diagram of a vector loop in a deeply temporal long-vector machine.
+Instruction throughput requirements are minimal, and notably, strict in-order execution is sufficient for maintaining high utilization of the datapaths.
+
+[.text-center]
+.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with 1-cycle dead-time.
+image::diag/long-vectors-dead.png[Long-vector Pipeline,width=900,align=center,title-align=center]
+
+Figure 7 highlights how dead-time in a deeply-temporal vector-unit is amortized out over many cycles of temporal execution per instruction.
+This is in contrast to the Saturn-like short-vector machine, in which short chimes cannot hide dead-time as well.
+
+We additionally argue that the short-vectors paradigm is especially better suited than long-vectors implementations for DSP-style cores.
 
 * Many DSP applications feature short and/or widely varying application vector lengths. This makes it difficult for long-vector to effectively utilize their resources as it precludes deep temporal execution.
 Short-vector machines can achieve higher utilization on these shorter application vector lengths.
 * Short-vector machines use an inherently lower capacity vector register file, which has positive implications in terms of silcon area and power consumption.
 * Saturn efficiently implements the register grouping functionality of RVV, and thus can still achieve high performance on long application vector lengths when the kernel calls for it.
 
-
-[discrete]
-==== Compared to GPGPUs
-
-GPGPUs exploit data-level-parallelism across many SIMT threads, executing on a multi-core of multi-threaded processors.
-In contrast, Saturn's vector ISA exploits data-level-parallelism across many elements in a single vector register, executing on a vector datapath with SIMD functional units.
-
 [discrete]
 ==== Compared to General-purpose SIMD Cores
 
 SIMD datapaths in general-purpose out-of-order cores are typically deeply integrated into the scalar instruction execution pipeline.
-Existing capabilities for out-of-order execution, speculative execution, superscalar fetch, and register renaming are leveraged to maximize SIMD datapath utilization.
+In these designs, dxisting capabilities for out-of-order execution, speculative execution, superscalar fetch, and register renaming are leveraged to maximize SIMD datapath utilization.
 While these features are costly in power and area, they are fundamental necessary components of modern general-purpose cores, and thus are also leveraged when executing SIMD code.
 
-Unlike these cores, Saturn's short-vector design does not rely on high-performance features of the scalar core and instruction fetch.
+[.text-center]
+.Pipeline diagram of instruction execution in a out-of-order SIMD machine.
+image::diag/ooo-simd.png[OOO SIMD Pipeline,width=350,align=center,title-align=center]
+
+
+Figure 8 depicts an example pipeline diagram of a SIMD loop in a out-of-order core with SIMD extensions.
+Notably, as these machines are typically designed with single-chime instruction execution, high instruction throughput is necessary to maintain utilization of multiple datapaths.
+Furthermore, register renaming is required to enable execution past the WAW and WAR hazards in this simple unoptimized loop.
+
+Unlike these cores, Saturn's short-vector design does not rely on costly features like high-throughput instruction fetch, full out-of-order or speculative execution, or register-renaming.
 By leveraging efficient scheduling of short-chime vector instructions, with limited capability for out-of-order execution, Saturn remains performant even with a minimal in-order scalar core.
-Efficient and precise vector operation scheduling, rather than high instruction throughput, is key to maintaining SIMD datapath utilization.
+//Efficient and precise vector operation scheduling, rather than high instruction throughput, is key to maintaining SIMD datapath utilization.
 
 [discrete]
 ==== Compared to VLIW + SIMD DSP Cores
@@ -246,6 +284,13 @@ Efficient and precise vector operation scheduling, rather than high instruction 
 VLIW cores with SIMD extensions also rely on high-throughput instruction fetch for performance through VLIW instruction encodings.
 VLIW instruction encodings enable low-cost, low-complexity superscalar fetch and provide the programmer precise control over instruction scheduling.
 
-Unlike instructions in SIMD ISAs, instructions in Saturn's vector ISA are executed over multiple cycles in multi-cycle "chime".
-Since a single instruction can occupy a functional unit or similar structural resource over multiple cycles, vector instruction throughput can be less than one per cycle while maintaining full utilization.
-Thus, Saturn can remain performant with a narrow in-order host scalar core executing a general-purpose ISA.
+[.text-center]
+.Pipeline diagram of instruction execution in a VLIW SIMD machine, executing a SW-pipelined loop.
+image::diag/vliw-simd.png[VLIW SIMD Pipeline,width=500,align=center,title-align=center]
+
+Figure 9 depicts an example software-pipelined loop executing on a VLIW-SIMD machine.
+High-instruction throughput is achieced through VLIW instruction encodings, but require precisely optimized software-pipelined loops to maximize througput.
+Notably, the verbose prologue and epilogue sections of such loops have negative implications on code size.
+
+Unlike SIMD datapaths in VLIW cores, Saturn's short-vector design does not require the high instruction throughput of VLIW fetch.
+Saturn's more aggressive capability for dynamic instruction scheduling also diminishes the need for precisely-scheduled microarchitecture-aware code.

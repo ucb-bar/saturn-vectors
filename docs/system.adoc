@@ -1,6 +1,10 @@
 [[system]]
 == System Overview and Organization
 
+[.text-center]
+.Overview of Saturn's Microarchitecture
+image::diag/uarch.png[Saturn Microarchitecture,width=900,align=center,title-align=center]
+
 Saturn is organized into three main components:
 
 * The *Vector Frontend (VFU)* integrates into the pipeline of a host RISC-V core.
