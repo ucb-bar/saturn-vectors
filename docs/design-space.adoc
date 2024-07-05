@@ -1,6 +1,9 @@
 [[design-space]]
 == Design Space
 
+Saturn is a highly parameterized and capable of generating designs that target a wide variety of PPA design points.
+Several high-level parameter sets and defaults are provided, but you may configure a given implementation at a fine granularity.
+
 === Parameterization Space
 
 === "vMIN" Minimal Configuration
