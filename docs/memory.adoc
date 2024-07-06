@@ -2,7 +2,9 @@
 
 == Vector Load-Store Unit
 
-TODO memory system diagram
+[.text-center]
+.Vector Load-Store Unit Diagram
+image::diag/lsu.png[LSU,width=900,align=center,title-align=center]
 
 The Vector Load-Store Unit (VLSU) contains independent paths for loads and stores.
 The load path performs load address generation and reformatting of load responses into load writebacks.
@@ -36,13 +38,40 @@ Indexed loads and stores which access a physical region managed by the scatter-g
 
 === Memory System
 
-TODO memory system
 
 The VLSU assumes integration into a memory system that maintains coherence between VLSU accesses and scalar accesses into a scalar L1.
+The VLSU exposes a generic load/store decoupled request and response interface.
+This is typically converted into a TileLink interface within either Rocket or Shuttle.
+
+[.text-center]
+.Example default configuration of the Saturn memory system
+image::diag/memdefault.png[Defaut memory system,width=500,align=center,title-align=center]
 
 One approach would be to direct all vector memory accesses into the scalar L1.
 While simple, such an approach would induce frequent structural hazards and require a specialized host core with a specialized L1 data cache.
 While the Saturn VLSU does support this approach, the standard and preferred mechanism is to provide a vector-specific memory port that bypasses the L1 and accesses coherent backing memory.
+Figure 16 depicts this memory system.
+
+[.text-center]
+.Example Saturn memory system with high-bandwidth local TCM (Tightly-coupled memory)
+image::diag/memtcm.png[TCM memory system,width=550,align=center,title-align=center]
+
+Saturn configurations with high `DLEN` would generally require higher memory bandwidth.
+However, scaling up the system-level interconnect to meet Saturn's bandwidth demands may be prohibitively costly.
+Instead, the preferred approach for high-`DLEN` Saturn configs is to integrate a high-bandwidth local TCM (tightly-coupled-memory), which software should treat as a software-managed cache for vector accesses.
+This TCM should be tile-local and globally addressable, but not necessarily cacheable.
+Figure 17 depicts a Saturn configuration with a high-bandwidth TCM, but lower-bandwidth system interconnect.
+
+
+[.text-center]
+.Example Saturn memory system with high-bandwidth local TCM and scatter-gather TCM (SGTCM)
+image::diag/memsgtcm.png[SGTCM memory system,width=600,align=center,title-align=center]
+
+Saturn also supports integration into a system with a specialized "scatter-gather memory" (SGTCM).
+Unlike the standard memory interface, which supports one address per cycle for loads and one address per cycle for stores, the SGTCM interface presents an array of parallel byte-wide ports.
+The SGTCM is intended to be implemented as a specialized non-cacheable core-local memory.
+
+=== Memory Disambiguation
 
 Saturn is responsible for interlocking vector or scalar requests if an older vector or scalar request has not been made visible to the coherent memory system.
 
@@ -50,19 +79,12 @@ Saturn is responsible for interlocking vector or scalar requests if an older vec
 * A younger scalar store must stall until all older vector loads to the same block have been completed and all older vector stores to the same block have been issued and acknowledged
 * A vector load or store cannot begin execution while there are pending older scalar stores in the scalar store buffer
 
-Saturn's VLSU exposes a generic load/store decoupled request and response interface.
-This is typically converted into a TileLink interface within either Rocket or Shuttle.
-In Rocket, Saturn can additionally be parameterized to access the scalar L1 data cache instead of direct access into the coherent memory system.
-
 The VLSU does not assume that the vector memory interface will respond to requests in-order.
 This necessitates the implementation of a load-reordering buffer.
 Saturn supports a LROB with as many buffer entries as possible inflight requests.
 Saturn additionally supports implementing the LROB with fewer buffer entries than possible inflight requests, for use in scenarios where te outer memory system generally preserves response order, but is not guaranteed to.
 In this configuration, the LROB will replay loads when the LROB's buffers overflow, preserving an in-order response stream into the LMU.
 
-Saturn also supports integration into a system with a specialized "scatter-gather memory" (SGM).
-Unlike the standard memory interface, which supports one address per cycle for loads and one address per cycle for stores, the SGM interface presents an array of parallel byte-wide ports.
-The SGM is intended to be implemented as a specialized non-cacheable core-local memory.
 
 === Inflight Instruction Queues
 
@@ -77,7 +99,7 @@ The entry also contains a bound (extent) for the instruction's memory access wit
 This is derived from the base offset, stride, `vl`, and addressing mode settings of the instruction, but is encoded directly within the entry to enable fast ordering checks.
 Instructions with indexed accesses are marked conservatively to potentially access the entire page.
 
-Memory ordering checks are performed using a CAM over all the entries in the VLIQ and/or VSIQ to find the entries accessing the same page.
+Memory disambiguation checks are performed using a CAM over all the entries in the VLIQ and/or VSIQ to find the entries accessing the same page.
 The base and extent of a given access can be checked against the base and extent of the access in the entry to determine if there is overlap.
 Both vector-vector and vector-scalar ordering checks use this CAM.
 
@@ -110,21 +132,34 @@ When the last request for an instruction has been sent to the memory system, the
 
 === Merge Unit
 
+[.text-center]
+.Control and datapath of the merge units. The merge unit can be considered a generalized rotation buffer, where the enqueue and dequeue sides are each latency-insensitive interfaces requesting an update (either a push or pop) of some segment of contiguous valid data into or out of the merge buffer.
+image::diag/merger.png[Merge unit,width=700,align=center,title-align=center]
+
 The merge units are general-purpose circuits that correct for misalignment of the memory system response data before the next step in the pipeline.
-These contain a rotation circuit and buffer.
+These can be considered a generalized form of a rotation buffer, decoupling the alignment and extent of input data from the alignment and extent of output data, and preserving latency-insensitive decoupled interfaces.
 
 The merge units have FIFO semantics, where the enqueue into the unit specifies a base and extent of active data within the wide input vector.
 The merge unit rotates away the unactive bytes, compacting the active bytes into contiguous storage.
 The dequeue requests a base and extent from the merge unit, which then shifts the buffered data into position.
+A bypass path from the enqueue to the dequeue enables full-throughput continuous dataflow for misaligned contiguous accesses.
 
-The LMU shifts misaligned load response bytes into aligned packets for writeback or segment formation.
-The SMU shifts vector register bytes into misaligned packets for store request issue.
-The SMU additionally shifts the per-byte mask bits alongside the store bytes, so unit-strided masked stores can proceed at full rate.
-The extent of the shift is determined by the offset bits indexing into the byte width of the memory port.
+For the LMU, the push base and extent (head and tail) are set by the address offset associated with the original memory request.
+For block-contiguous accesses, only the first and last beat of a single access would encode a non-aligned head or tail, respectively.
+For element-indexed or strided accesses where each memory request contains only a single valid element, the push head and tail denote the start and end byte of the active element.
+In this way, the LMU serves double-duty, either rotating block-contiguous accesses or compressing indexed or strided accesses, into aligned `DLEN`-wide contiguous bytes that are directly sequenced by the datapath into register file writes.
+
+For segmented loads, the LMU serves an additional purpose; it enables decoupling of the load writeback sequencing performed by the datapath from the segment buffer.
+That is, the segment buffer does not necessarily proceed at `DLEN` bits per cycle for all segment sizes.
+Depending on the segment size, the segment buffer may request a sub-`DLEN` slice of bytes, which the LMU will gracefully provide once available.
+
+The SMU operates as the reversed path of the LMU.
+The push head and tail of the SMU are usually aligned, except for the last element group when `VL` is misaligned.
+For segmented stores, the push head and tail may be set by the store segment buffer, instead of the store datapath.
+The pop head and tail are driven by the addresses generated by the SAS.
+Notably, the SMU additionally tracks a byte-wise mask bit for masked stores, such that the mask can be applied to the generated store request.
 
 === Segment Buffer
-
-TODO diagram
 
 Non-segmented accesses bypass the segment buffer units entirely.
 For segmented accesses to proceed with high throughput, the LSB and SSB must "buffer" a sufficient number of responses to "transpose" a set of structs into a set of vector writebacks, or a set of vector store-data into a set of structs.
@@ -137,5 +172,12 @@ Each segment buffer is 8 rows deep to support up to 8 fields in a segment, as su
 Each segment buffer is DLEN bytes wide.
 
 Load responses from the LMU write columns into the LSB, while the LSB emits rows into the load writeback port to the VU.
-Store data from the VU writes columns into the SSB, while the SSB emits rows into the SMU.
+Store data from the VU writes rows into the SSB, while the SSB emits columns into the SMU.
 
+[.text-center]
+.Table depicting behavior, storage layout, and throughput of the double-buffered LSB for varying NF/ELEN on a DLEN=64b configuration..
+image::diag/segbuf.png[Merge unit,width=900,align=center,title-align=center]
+
+Table 20 depicts how the LSB requests aligned segments from the LMU, stores them in a 2D segment buffer array, and sequences some series of aligned write-back data to the datapath.
+Notably, some configurations of `NF` and `ELEN` result in sub-optimal throughput, underutilizing the memory system.
+Some obvious optimizations have yet to be implemented to improve the throughp0ut of the power-of-two `NF` instructions.

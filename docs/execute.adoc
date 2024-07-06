@@ -29,6 +29,11 @@ The permute issue queue, used for index generation and register gathers, tracks 
 
 There are three configuration options for the arithmetic issue queues.
 
+[.text-center]
+.Issue queue configurations
+image::diag/iqconfigs.png[Issue queue configurations,width=900,align=center,title-align=center]
+
+
  * In the *unified* configuration, there is a single sequencer for all arithmetic operations fed by a single issue queue. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and floating-point functional units.
  * In the *shared* configuration, there are separate integer and floating-point sequencers, but they are fed by a common issue queue. 
  Instructions will issue from the issue queue to either the integer or floating-point sequencer. 

@@ -71,7 +71,7 @@ Vector instructions dispatched into the VFU first execute through the pipelined 
 Instructions for which the PTC cannot conservatively guarantee to be free of traps are issued to the ITC.
 Instructions which pass the PTC successfully can then be dispatched to the VU and VLSU after they pass the commit point.
 
-tSince vector instructions may be speculative ahead of the commit point, any vector instruction killed by the scalar core is also killed in the VFU.
+Since vector instructions may be speculative ahead of the commit point, any vector instruction killed by the scalar core is also killed in the VFU.
 The PTC/ITC design pattern achieves the goal of making common case vector instructions fast, through the PTC, while preserving correct precise trap behavior for all vector instructions through the ITC.
 
 
