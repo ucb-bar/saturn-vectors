@@ -42,15 +42,25 @@ endif::[]
 //include::contributors.adoc[]
 
 include::intro.adoc[]
+
 include::objectives.adoc[]
+
 include::system.adoc[]
+
 include::frontend.adoc[]
+
 include::memory.adoc[]
+
 include::execute.adoc[]
-include::programming.adoc[]
+
 include::design-space.adoc[]
+
+include::programming.adoc[]
+
 include::eval-pd.adoc[]
+
 include::eval-perf.adoc[]
+
 include::history.adoc[]
 
 // The index must precede the bibliography

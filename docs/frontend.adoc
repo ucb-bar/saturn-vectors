@@ -9,7 +9,7 @@ Instructions that are validated to be free-of-traps are dispatched into the VLSU
 
 === Core Integration
 
-Saturn currently supports integration into either Rocket or Shuttle as the host scalar RISC-V core.
+Saturn currently supports integration into either https://github.com/ucb-bar/saturn-vector-impls/tree/master/src/main/scala/rocket[Rocket] or https://github.com/ucb-bar/saturn-vector-impls/tree/master/src/main/scala/shuttle[Shuttle] as the host scalar RISC-V core.
 The host cores are responsible for decoding vector instructions that must dispatch to the VFU, in addition to updating and supplying the `VTYPE` and `VL` CSRs to these instructions.
 
 Both Rocket and Shuttle expose similar interfaces.
@@ -17,7 +17,7 @@ The Scalar pipeline dispatches vector instructions to the VFU pipeline at the X 
 These instructions are provided with updated values of `vtype`, `vl`, and `vstart`.
 The `M` stage exposes a port through which the `VFU` can access the host core's TLB and MMU.
 The `W` stage contains interfaces for synchronizing committing or trapping vector instructions with the scalar core's instruction scheme, and stalling scalar instruction commit if necessary.
-The `W` stage also contains interfaces for modifying `vstart` and `vconfig`` as vector instructions commit.
+The `W` stage also contains interfaces for modifying `vstart` and `vconfig` as vector instructions commit.
 
 [discrete]
 ==== Rocket
