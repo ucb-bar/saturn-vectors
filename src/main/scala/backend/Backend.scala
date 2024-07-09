@@ -133,7 +133,6 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
 
   vdq.io.enq.bits := issue_inst
 
-  vmu.io.enq.bits.vat := issue_inst.vat
   vmu.io.enq.bits.base_offset := issue_inst.rs1_data
   vmu.io.enq.bits.stride := issue_inst.rs2_data
   vmu.io.enq.bits.page := issue_inst.page
@@ -543,7 +542,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   }
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
-  clearVat(vmu.io.vat_release.valid               , vmu.io.vat_release.bits)
+  clearVat(vss.io.iss.fire && vss.io.iss.bits.tail, vss.io.iss.bits.vat)
   vxus.map(_.io.vat_release).foreach{ rel => clearVat(rel.valid, rel.bits) }
 
   // Signalling to frontend

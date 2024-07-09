@@ -90,8 +90,6 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
     val index_data = Input(Vec(dLenB, UInt(8.W)))
 
     val busy = Output(Bool())
-
-    val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
   })
 
   def ptrIncr(u: UInt, sz: Int): Unit = {
@@ -371,8 +369,6 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   store_rob.io.deq.ready := !sifq.io.deq.bits.masked && sifq.io.deq.valid
   when (store_rob.io.deq.valid) { assert(sifq.io.deq.valid) }
   siq_deq_fire := sifq.io.deq.fire && sifq.io.deq.bits.last
-  io.vat_release.valid := siq_deq_fire
-  io.vat_release.bits := siq(siq_deq_ptr).op.vat
 
   sgas.foreach { sgas =>
     when (maskindex_scatter && sgas.io.valid && sgas.io.done) { siq_deq_fire := true.B }

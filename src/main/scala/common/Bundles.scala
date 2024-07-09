@@ -9,7 +9,6 @@ import freechips.rocketchip.tile._
 
 class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val debug_id = UInt(debugIdSz.W)
-  val vat = UInt(vParams.vatSz.W)
 
   val base_offset = UInt(pgIdxBits.W)
   val page        = UInt((paddrBits - pgIdxBits).W)
@@ -212,6 +211,8 @@ class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val stdata = UInt(dLen.W)
   val stmask = UInt(dLenB.W)
   val debug_id = UInt(debugIdSz.W)
+  val tail = Bool()
+  val vat = UInt(vParams.vatSz.W)
   def asMaskedBytes = {
     val bytes = Wire(Vec(dLenB, new MaskedByte))
     for (i <- 0 until dLenB) {
