@@ -11,16 +11,13 @@ import saturn.exu._
 import saturn.common._
 import saturn.insns._
 
-class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
-    val issue = Flipped(Decoupled(new VectorIssueInst))
+    val dis = Flipped(Decoupled(new VectorIssueInst))
 
-    val dmem = new VectorMemIO
-    val sgmem = sgSize.map(_ => new VectorSGMemIO)
-    val scalar_check = new ScalarMemOrderCheckIO
+    val vmu = Flipped(new VectorMemDatapathIO)
 
-    val backend_busy = Output(Bool())
-    val mem_busy = Output(Bool())
+    val busy = Output(Bool())
 
     val index_access = new VectorIndexAccessIO
     val mask_access = new VectorMaskAccessIO
@@ -32,6 +29,11 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
 
     val fp_req = Decoupled(new FPInput())
     val fp_resp = Flipped(Valid(new FPResult()))
+
+    val vat_tail = Input(UInt(vParams.vatSz.W))
+    val vat_head = Input(UInt(vParams.vatSz.W))
+
+    val vat_release = Output(Vec(nRelease, Valid(UInt(vParams.vatSz.W))))
   })
 
   require(vLen >= 64)
@@ -39,24 +41,11 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   require(vLen >= dLen)
   require(vLen % dLen == 0)
 
-  val vmu = Module(new VectorMemUnit(sgSize))
-  vmu.io.dmem <> io.dmem
-  vmu.io.sgmem.foreach(_ <> io.sgmem.get)
-  vmu.io.scalar_check <> io.scalar_check
-
-  val dispatcher = Module(new saturn.frontend.VectorDispatcher)
-  dispatcher.io.issue <> io.issue
-
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
 
-  def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, dispatcher.io.vat_tail)
+  def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, io.vat_tail)
 
-  val scalar_resp_arb = Module(new Arbiter(new ScalarWrite, 2))
-  io.scalar_resp <> Queue(scalar_resp_arb.io.out)
-  scalar_resp_arb.io.in(1) <> dispatcher.io.scalar_resp
-
-  vdq.io.enq <> dispatcher.io.dis
-  vmu.io.enq <> dispatcher.io.mem
+  vdq.io.enq <> io.dis
 
   val integerFUs = Seq(
     (() => new IntegerPipe, "vintfu"),
@@ -236,7 +225,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
       seq.io.perm := DontCare
       seq.io.acc.valid := false.B
       seq.io.acc.bits := DontCare
-      seq.io.vat_head := dispatcher.io.vat_head
+      seq.io.vat_head := io.vat_head
 
       val older_issq_wintents = FillInterleaved(egsPerVReg, otherIssqs.map { i =>
         i.io.hazards.map(h => Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.wintent, 0.U))
@@ -323,21 +312,21 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   ))
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
-  vmu.io.lresp.ready := vls.io.iss.valid && load_write.ready
-  vls.io.iss.ready := vmu.io.lresp.valid && load_write.ready
-  load_write.valid := vls.io.iss.valid && vmu.io.lresp.valid
+  io.vmu.lresp.ready := vls.io.iss.valid && load_write.ready
+  vls.io.iss.ready := io.vmu.lresp.valid && load_write.ready
+  load_write.valid := vls.io.iss.valid && io.vmu.lresp.valid
   load_write.bits.eg   := vls.io.iss.bits.wvd_eg
-  load_write.bits.data := vmu.io.lresp.bits.data
+  load_write.bits.data := io.vmu.lresp.bits.data
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
-  when (vmu.io.lresp.fire) {
-    assert(vmu.io.lresp.bits.debug_id === vls.io.iss.bits.debug_id)
+  when (io.vmu.lresp.fire) {
+    assert(io.vmu.lresp.bits.debug_id === vls.io.iss.bits.debug_id)
   }
 
   val resetting = RegInit(true.B)
   val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
   when (resetting) {
     reset_ctr := reset_ctr + 1.U
-    io.issue.ready := false.B
+    io.dis.ready := false.B
   }
   when (~reset_ctr === 0.U) { resetting := false.B }
 
@@ -385,9 +374,9 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   io.index_access.idx   := vrf.io.read(0)(vxs.length+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
   vrf.io.read(2)(vxs.length) <> vss.io.rvd
-  vmu.io.sdata.valid   := vss.io.iss.valid
-  vmu.io.sdata.bits    := vss.io.iss.bits
-  vss.io.iss.ready     := vmu.io.sdata.ready
+  io.vmu.sdata.valid   := vss.io.iss.valid
+  io.vmu.sdata.bits    := vss.io.iss.bits
+  vss.io.iss.ready     := io.vmu.sdata.ready
 
   vrf.io.read(3)(vxs.length) <> vls.io.rvm
   vrf.io.read(3)(vxs.length+1) <> vss.io.rvm
@@ -422,10 +411,10 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   vmu_index_q.io.push.valid := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renv2 && vps.io.iss.ready
   vmu_mask_q.io.push.valid  := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renvm && vps.io.iss.ready
 
-  vmu.io.mask_pop   <> vmu_mask_q.io.pop
-  vmu.io.mask_data  := vmu_mask_q.io.pop_data
-  vmu.io.index_pop  <> vmu_index_q.io.pop
-  vmu.io.index_data := vmu_index_q.io.pop_data
+  io.vmu.mask_pop   <> vmu_mask_q.io.pop
+  io.vmu.mask_data  := vmu_mask_q.io.pop_data
+  io.vmu.index_pop  <> vmu_index_q.io.pop
+  io.vmu.index_data := vmu_index_q.io.pop_data
 
   perm_q.io.enq.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
   perm_q.io.enq.bits := vps.io.iss.bits
@@ -445,8 +434,8 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   var r_idx = 0
   def clearVat(fire: Bool, tag: UInt) = {
     assert(r_idx < nRelease)
-    dispatcher.io.vat_release(r_idx).valid := fire
-    dispatcher.io.vat_release(r_idx).bits := tag
+    io.vat_release(r_idx).valid := fire
+    io.vat_release(r_idx).bits := tag
     r_idx += 1
   }
 
@@ -468,11 +457,10 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     h.valid && h.bits.may_write_v0
   }.orR
 
-  io.mem_busy := vmu.io.busy
   vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.backend_busy := vdq.io.deq.valid || allSeqs.map(_.io.busy).orR || vxus.map(_.io.busy).asUInt.orR || resetting
+  io.busy := vdq.io.deq.valid || allSeqs.map(_.io.busy).orR || vxus.map(_.io.busy).asUInt.orR || resetting
   io.set_vxsat := vxus.map(_.io.set_vxsat).asUInt.orR
   io.set_fflags.valid := vxus.map(_.io.set_fflags.valid).asUInt.orR
   io.set_fflags.bits  := vxus.map( xu => Mux(xu.io.set_fflags.valid, xu.io.set_fflags.bits, 0.U)).reduce(_|_)
-  scalar_resp_arb.io.in(0) <> vxus(0).io.scalar_write
+  io.scalar_resp <> vxus(0).io.scalar_write
 }

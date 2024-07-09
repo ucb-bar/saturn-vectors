@@ -59,7 +59,7 @@ class ScalarMemOrderCheckIO(implicit p: Parameters) extends CoreBundle()(p) with
 }
 
 class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val load_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
+   val load_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
   val load_resp = Input(Valid(new MemResponse(dLenB, dmemTagBits)))
   val store_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
   val store_ack = Input(Valid(new MemResponse(dLenB, dmemTagBits)))
@@ -70,7 +70,20 @@ class VectorSGMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val resp = Vec(vParams.vsgPorts, Input(Valid(new MemResponse(1, sgmemTagBits))))
 }
 
-class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class VectorMemDatapathIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val lresp = Decoupled(new Bundle {
+    val data = UInt(dLen.W)
+    val debug_id = UInt(debugIdSz.W)
+  })
+  val sdata = Flipped(Decoupled(new StoreDataMicroOp))
+
+  val mask_pop = Decoupled(new CompactorReq(dLenB))
+  val mask_data = Input(Vec(dLenB, Bool()))
+  val index_pop = Decoupled(new CompactorReq(dLenB))
+  val index_data = Input(Vec(dLenB, UInt(8.W)))
+}
+
+class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val enq = Flipped(Decoupled(new VectorMemMacroOp))
 
@@ -78,16 +91,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
     val sgmem = sgSize.map(_ => new VectorSGMemIO)
     val scalar_check = new ScalarMemOrderCheckIO
 
-    val lresp = Decoupled(new Bundle {
-      val data = UInt(dLen.W)
-      val debug_id = UInt(debugIdSz.W)
-    })
-    val sdata = Flipped(Decoupled(new StoreDataMicroOp))
-
-    val mask_pop = Decoupled(new CompactorReq(dLenB))
-    val mask_data = Input(Vec(dLenB, Bool()))
-    val index_pop = Decoupled(new CompactorReq(dLenB))
-    val index_data = Input(Vec(dLenB, UInt(8.W)))
+    val vu = new VectorMemDatapathIO
 
     val busy = Output(Bool())
   })
@@ -209,26 +213,26 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   val maskindex_store   = siq_sas_valid && !las_older_than_sas && !siq(siq_sas_ptr).op.fast_sg
   val maskindex_gather  = liq_las_valid &&  las_older_than_sas &&  liq(liq_las_ptr).op.fast_sg
   val maskindex_scatter = siq_sas_valid && !las_older_than_sas &&  siq(siq_sas_ptr).op.fast_sg
-  las.io.maskindex.index := io.index_data.asUInt
-  sas.io.maskindex.index := io.index_data.asUInt
-  las.io.maskindex.mask := io.mask_data(0)
-  sas.io.maskindex.mask := io.mask_data(0)
-  io.mask_pop.valid := false.B
-  io.mask_pop.bits.head := 0.U
-  io.mask_pop.bits.tail := 1.U
-  io.index_pop.valid := false.B
-  io.index_pop.bits.head := 0.U
-  io.index_pop.bits.tail := 1.U
+  las.io.maskindex.index := io.vu.index_data.asUInt
+  sas.io.maskindex.index := io.vu.index_data.asUInt
+  las.io.maskindex.mask := io.vu.mask_data(0)
+  sas.io.maskindex.mask := io.vu.mask_data(0)
+  io.vu.mask_pop.valid := false.B
+  io.vu.mask_pop.bits.head := 0.U
+  io.vu.mask_pop.bits.tail := 1.U
+  io.vu.index_pop.valid := false.B
+  io.vu.index_pop.bits.head := 0.U
+  io.vu.index_pop.bits.tail := 1.U
 
   when (maskindex_load) {
-    io.mask_pop.valid := las.io.maskindex.needs_mask && las.io.maskindex.ready
-    io.index_pop.valid := las.io.maskindex.needs_index && las.io.maskindex.ready
-    io.index_pop.bits.tail := 1.U << las.io.maskindex.eew
+    io.vu.mask_pop.valid := las.io.maskindex.needs_mask && las.io.maskindex.ready
+    io.vu.index_pop.valid := las.io.maskindex.needs_index && las.io.maskindex.ready
+    io.vu.index_pop.bits.tail := 1.U << las.io.maskindex.eew
   }
   when (maskindex_store) {
-    io.mask_pop.valid := sas.io.maskindex.needs_mask && sas.io.maskindex.ready
-    io.index_pop.valid := sas.io.maskindex.needs_index && sas.io.maskindex.ready
-    io.index_pop.bits.tail := 1.U << sas.io.maskindex.eew
+    io.vu.mask_pop.valid := sas.io.maskindex.needs_mask && sas.io.maskindex.ready
+    io.vu.index_pop.valid := sas.io.maskindex.needs_index && sas.io.maskindex.ready
+    io.vu.index_pop.bits.tail := 1.U << sas.io.maskindex.eew
   }
 
   // scatter/gather paths
@@ -236,11 +240,11 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
     sgas.io.index_pop.ready := false.B
     sgas.io.mask_pop.ready := false.B
     when (maskindex_gather || maskindex_scatter) {
-      io.mask_pop <> sgas.io.mask_pop
-      io.index_pop <> sgas.io.index_pop
+      io.vu.mask_pop <> sgas.io.mask_pop
+      io.vu.index_pop <> sgas.io.index_pop
     }
-    sgas.io.index_data := io.index_data
-    sgas.io.mask_data := io.mask_data
+    sgas.io.index_data := io.vu.index_data
+    sgas.io.mask_data := io.vu.mask_data
     sgas.io.valid := maskindex_gather || maskindex_scatter
     sgas.io.lsiq_id := Mux(maskindex_gather, liq_las_ptr, siq_sas_ptr)
     sgas.io.op := Mux(maskindex_gather, liq(liq_las_ptr).op, siq(siq_sas_ptr).op)
@@ -248,8 +252,8 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
     sgas.io.resp <> io.sgmem.get.resp
   }
 
-  las.io.maskindex.valid := maskindex_load && (io.mask_pop.ready || !las.io.maskindex.needs_mask) && (io.index_pop.ready || !las.io.maskindex.needs_index)
-  sas.io.maskindex.valid := maskindex_load && (io.mask_pop.ready || !sas.io.maskindex.needs_mask) && (io.index_pop.ready || !sas.io.maskindex.needs_index)
+  las.io.maskindex.valid := maskindex_load && (io.vu.mask_pop.ready || !las.io.maskindex.needs_mask) && (io.vu.index_pop.ready || !las.io.maskindex.needs_index)
+  sas.io.maskindex.valid := maskindex_load && (io.vu.mask_pop.ready || !sas.io.maskindex.needs_mask) && (io.vu.index_pop.ready || !sas.io.maskindex.needs_index)
 
   // Load Addr Sequencing
   val las_order_block = (0 until vParams.vsiqEntries).map { i =>
@@ -302,7 +306,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   lss.io.op := liq(liq_lss_ptr).op
   lcu.io.pop <> lss.io.compactor
   lss.io.compactor_data := lcu.io.pop_data.asUInt
-  io.lresp <> lss.io.resp
+  io.vu.lresp <> lss.io.resp
   liq_lss_fire := lss.io.done
 
   // Store segment sequencing
@@ -310,7 +314,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   sss.io.op := siq(siq_sss_ptr).op
   scu.io.push <> sss.io.compactor
   scu.io.push_data := sss.io.compactor_data
-  sss.io.stdata <> io.sdata
+  sss.io.stdata <> io.vu.sdata
   siq_sss_fire := sss.io.done
 
   // Store address sequencing
