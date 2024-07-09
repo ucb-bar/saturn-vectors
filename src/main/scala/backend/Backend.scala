@@ -244,11 +244,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       val older_rintents = older_issq_rintents | older_seq_rintents
 
       val older_pipe_writes = vxus.map(_.io.pipe_hazards.toSeq).flatten.map { h =>
-        Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.eg_oh, 0.U)
+        Mux(h.valid, h.bits.eg_oh, 0.U)
       }.reduce(_|_)
 
       val older_iter_writes = vxus.map(_.io.iter_hazards.toSeq).flatten.map { h =>
-        Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.eg_oh, 0.U)
+        Mux(h.valid, h.bits.eg_oh, 0.U)
       }.reduce(_|_)
 
       seq.io.older_writes := older_pipe_writes | older_iter_writes | older_wintents
