@@ -42,24 +42,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   val vmu = Module(new VectorMemUnit(sgSize))
   vmu.io.dmem <> io.dmem
   vmu.io.sgmem.foreach(_ <> io.sgmem.get)
-  if (vParams.latencyInject) {
-    val latency = Wire(UInt(32.W))
-    latency := PlusArg("saturn_mem_latency")
-    val delay_timer = RegInit(0.U(64.W))
-    delay_timer := delay_timer + 1.U
-    val load_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
-    val store_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
-    load_delay.io.timer := delay_timer
-    store_delay.io.timer := delay_timer
-    load_delay.io.delay := latency
-    store_delay.io.delay := latency
-    load_delay.io.enq <> vmu.io.dmem.load_req
-    store_delay.io.enq <> vmu.io.dmem.store_req
-    io.dmem.load_req <> load_delay.io.deq
-    io.dmem.store_req <> store_delay.io.deq
-  }
   vmu.io.scalar_check <> io.scalar_check
-
 
   val dispatcher = Module(new saturn.frontend.VectorDispatcher)
   dispatcher.io.issue <> io.issue

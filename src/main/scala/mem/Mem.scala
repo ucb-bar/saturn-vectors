@@ -279,8 +279,6 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
     load_arb.io.in(0).valid := false.B
     lifq.io.replay.ready := false.B
   }
-  io.dmem.load_req <> load_arb.io.out
-  io.dmem.load_req.bits.mask := ~(0.U(dLenB.W))
 
   // Load compacting
   lcu.io.push.valid := lifq.io.deq.valid
@@ -326,7 +324,6 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   siq_sas_fire := Mux(siq(siq_sas_ptr).op.fast_sg, sgas.map(_.io.done && maskindex_scatter).getOrElse(false.B), sas.io.done)
 
   val store_req_q = Module(new DCEQueue(new MemRequest(dLenB, dmemTagBits), 2))
-  io.dmem.store_req <> store_req_q.io.deq
   store_req_q.io.enq <> sas.io.req
   store_req_q.io.enq.bits.store := true.B
   store_req_q.io.enq.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
@@ -373,6 +370,27 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   sgas.foreach { sgas =>
     when (maskindex_scatter && sgas.io.valid && sgas.io.done) { siq_deq_fire := true.B }
   }
+
+  if (vParams.latencyInject) {
+    val latency = Wire(UInt(32.W))
+    latency := PlusArg("saturn_mem_latency")
+    val delay_timer = RegInit(0.U(64.W))
+    delay_timer := delay_timer + 1.U
+    val load_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
+    val store_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
+    load_delay.io.timer := delay_timer
+    store_delay.io.timer := delay_timer
+    load_delay.io.delay := latency
+    store_delay.io.delay := latency
+    load_delay.io.enq <> load_arb.io.out
+    store_delay.io.enq <> store_req_q.io.deq
+    io.dmem.load_req <> load_delay.io.deq
+    io.dmem.store_req <> store_delay.io.deq
+  } else {
+    io.dmem.load_req <> load_arb.io.out
+    io.dmem.store_req <> store_req_q.io.deq
+  }
+  io.dmem.load_req.bits.mask := ~(0.U(dLenB.W))
 
   io.busy := liq_valids.orR || siq_valids.orR
 }
