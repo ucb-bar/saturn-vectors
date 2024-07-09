@@ -12,6 +12,8 @@ class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
   val op = new VectorMemMacroOp
   def bound_all = op.mop =/= mopUnit
   val bound_offset = UInt(pgIdxBits.W)
+  val ld_dep_mask = Vec(vParams.vliqEntries, Bool())
+  val st_dep_mask = Vec(vParams.vsiqEntries, Bool())
 
   def containsBlock(addr: UInt) = {
     val cl = addr(pgIdxBits-1,lgCacheBlockBytes)
@@ -126,10 +128,6 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   val liq_las_valid = !liq_las(liq_las_ptr) && liq_valids(liq_las_ptr)
   val liq_lss_valid = liq_valids(liq_lss_ptr)
 
-  when (liq_enq_fire) { ptrIncr(liq_enq_ptr, vParams.vliqEntries); liq_valids(liq_enq_ptr) := true.B }
-  when (liq_las_fire) { ptrIncr(liq_las_ptr, vParams.vliqEntries); liq_las(liq_las_ptr) := true.B }
-  when (liq_lss_fire) { ptrIncr(liq_lss_ptr, vParams.vliqEntries); liq_valids(liq_lss_ptr) := false.B; assert(liq_las(liq_lss_ptr) || (liq_lss_ptr === liq_las_ptr && liq_las_fire)) }
-
   val siq = Reg(Vec(vParams.vsiqEntries, new LSIQEntry))
   val siq_valids    = RegInit(VecInit.fill(vParams.vsiqEntries)(false.B))
   val siq_sss       = RegInit(VecInit.fill(vParams.vsiqEntries)(false.B))
@@ -148,29 +146,57 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   val siq_sss_valid = !siq_sss(siq_sss_ptr) && siq_valids(siq_sss_ptr)
   val siq_sas_valid = !siq_sas(siq_sas_ptr) && siq_valids(siq_sas_ptr)
 
-  when (siq_enq_fire) { ptrIncr(siq_enq_ptr, vParams.vsiqEntries); siq_valids(siq_enq_ptr) := true.B }
-  when (siq_sss_fire) { ptrIncr(siq_sss_ptr, vParams.vsiqEntries); siq_sss(siq_sss_ptr) := true.B }
-  when (siq_sas_fire) { ptrIncr(siq_sas_ptr, vParams.vsiqEntries); siq_sas(siq_sas_ptr) := true.B; assert(siq_sss(siq_sas_ptr) || (siq_sss_fire && siq_sss_ptr === siq_sas_ptr)) }
-  when (siq_deq_fire) { ptrIncr(siq_deq_ptr, vParams.vsiqEntries); siq_valids(siq_deq_ptr) := false.B; assert(siq_sas(siq_deq_ptr) || (siq_sas_fire && siq_sas_ptr === siq_deq_ptr)) }
-
-  io.enq.ready := Mux(io.enq.bits.store, siq_enq_ready, liq_enq_ready)
-  liq_enq_fire := io.enq.valid && liq_enq_ready && !io.enq.bits.store
-  siq_enq_fire := io.enq.valid && siq_enq_ready &&  io.enq.bits.store
-
   val enq_bound_max = (((io.enq.bits.nf +& 1.U) * io.enq.bits.vl) << io.enq.bits.elem_size) + io.enq.bits.base_offset - 1.U
   val enq_bound = Mux((enq_bound_max >> pgIdxBits) =/= 0.U, ~(0.U(pgIdxBits.W)), enq_bound_max)
 
   when (liq_enq_fire) {
     liq(liq_enq_ptr).op := io.enq.bits
     liq(liq_enq_ptr).bound_offset := enq_bound
+    liq(liq_enq_ptr).st_dep_mask := siq_valids
     liq_las(liq_enq_ptr) := false.B
+    ptrIncr(liq_enq_ptr, vParams.vliqEntries)
+    liq_valids(liq_enq_ptr) := true.B
   }
+  when (liq_las_fire) {
+    ptrIncr(liq_las_ptr, vParams.vliqEntries)
+    liq_las(liq_las_ptr) := true.B
+  }
+  when (liq_lss_fire) {
+    ptrIncr(liq_lss_ptr, vParams.vliqEntries)
+    liq_valids(liq_lss_ptr) := false.B
+    assert(liq_las(liq_lss_ptr) || (liq_lss_ptr === liq_las_ptr && liq_las_fire))
+  }
+
   when (siq_enq_fire) {
     siq(siq_enq_ptr).op := io.enq.bits
     siq(siq_enq_ptr).bound_offset := enq_bound
+    siq(siq_enq_ptr).ld_dep_mask := liq_valids
     siq_sss(siq_enq_ptr) := false.B
     siq_sas(siq_enq_ptr) := false.B
+    ptrIncr(siq_enq_ptr, vParams.vsiqEntries)
+    siq_valids(siq_enq_ptr) := true.B
   }
+  when (siq_sss_fire) {
+    ptrIncr(siq_sss_ptr, vParams.vsiqEntries)
+    siq_sss(siq_sss_ptr) := true.B
+  }
+  when (siq_sas_fire) {
+    ptrIncr(siq_sas_ptr, vParams.vsiqEntries)
+    siq_sas(siq_sas_ptr) := true.B
+    assert(siq_sss(siq_sas_ptr) || (siq_sss_fire && siq_sss_ptr === siq_sas_ptr))
+  }
+  when (siq_deq_fire) {
+    ptrIncr(siq_deq_ptr, vParams.vsiqEntries)
+    siq_valids(siq_deq_ptr) := false.B
+    assert(siq_sas(siq_deq_ptr) || (siq_sas_fire && siq_sas_ptr === siq_deq_ptr))
+  }
+
+  io.enq.ready := Mux(io.enq.bits.store, siq_enq_ready, liq_enq_ready)
+  liq_enq_fire := io.enq.valid && liq_enq_ready && !io.enq.bits.store
+  siq_enq_fire := io.enq.valid && siq_enq_ready &&  io.enq.bits.store
+
+  when (liq_lss_fire) { siq.foreach(_.ld_dep_mask(liq_lss_ptr) := false.B) }
+  when (siq_deq_fire) { liq.foreach(_.st_dep_mask(siq_deq_ptr) := false.B) }
 
   val scalar_store_conflict = (0 until vParams.vsiqEntries).map { i =>
     siq_valids(i) && siq(i).containsBlock(io.scalar_check.addr)
@@ -182,7 +208,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
 
   // Send indices/masks to las/sas
 
-  val las_older_than_sas = (liq_las_valid && vatOlder(liq(liq_las_ptr).op.vat, siq(siq_sas_ptr).op.vat)) || !siq_sas_valid
+  val las_older_than_sas = (liq_las_valid && !liq(liq_las_ptr).st_dep_mask(siq_sas_ptr)) || !siq_sas_valid
   val maskindex_load    = liq_las_valid &&  las_older_than_sas && !liq(liq_las_ptr).op.fast_sg
   val maskindex_store   = siq_sas_valid && !las_older_than_sas && !siq(siq_sas_ptr).op.fast_sg
   val maskindex_gather  = liq_las_valid &&  las_older_than_sas &&  liq(liq_las_ptr).op.fast_sg
@@ -232,7 +258,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   // Load Addr Sequencing
   val las_order_block = (0 until vParams.vsiqEntries).map { i =>
     val addr_conflict = siq(i).overlaps(liq(liq_las_ptr))
-    siq_valids(i) && addr_conflict && vatOlder(siq(i).op.vat, liq(liq_las_ptr).op.vat)
+    siq_valids(i) && addr_conflict && liq(liq_las_ptr).st_dep_mask(i)
   }.orR
   las.io.valid := liq_las_valid && !las_order_block && !liq(liq_las_ptr).op.fast_sg
   las.io.lsiq_id := liq_las_ptr
@@ -296,7 +322,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   // Store address sequencing
   val sas_order_block = (0 until vParams.vliqEntries).map { i =>
     val addr_conflict = liq(i).overlaps(siq(siq_sas_ptr))
-    liq_valids(i) && addr_conflict && vatOlder(liq(i).op.vat, siq(siq_sas_ptr).op.vat)
+    liq_valids(i) && addr_conflict && siq(siq_sas_ptr).ld_dep_mask(i)
   }.orR
   sas.io.valid := siq_sas_valid && !sas_order_block && !siq(siq_sas_ptr).op.fast_sg
   sas.io.lsiq_id := siq_sas_ptr
