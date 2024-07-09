@@ -184,6 +184,10 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def vrfBankBits = log2Ceil(vParams.vrfBanking)
   def lsiqIdBits = log2Ceil(vParams.vliqEntries.max(vParams.vsiqEntries))
   val debugIdSz = 16
+  val nRelease = vParams.issStructure match {
+    case VectorIssueStructure.Unified => 3
+    case VectorIssueStructure.Shared | VectorIssueStructure.Split => 4
+  }
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)

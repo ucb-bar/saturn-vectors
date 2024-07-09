@@ -60,95 +60,20 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   }
   vmu.io.scalar_check <> io.scalar_check
 
+
+  val dispatcher = Module(new saturn.frontend.VectorDispatcher)
+  dispatcher.io.issue <> io.issue
+
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
 
-  val debug_id_ctr = RegInit(0.U(debugIdSz.W))
-  val vat_valids = RegInit(VecInit.fill(1 << vParams.vatSz)(false.B))
-  val vat_tail = RegInit(0.U(vParams.vatSz.W))
-  val vat_head = RegInit(0.U(vParams.vatSz.W))
-  def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, vat_tail)
-  val vat_available = !vat_valids(vat_tail)
-  val vat_available_count = PopCount(~vat_valids.asUInt)
-  val vat_head_incr = WireInit(false.B)
-  when (vat_head_incr) {
-    vat_head := vat_head + 1.U
-  }
-
-  when (vdq.io.enq.fire) {
-    assert(!vat_valids(vat_tail))
-    vat_valids(vat_tail) := true.B
-    vat_tail := vat_tail + 1.U
-    debug_id_ctr := debug_id_ctr + 1.U
-  }
-  when (vat_tail =/= vat_head && !vat_valids(vat_head)) {
-    vat_head_incr := true.B
-  }
-
-
-  val issue_inst = WireInit(io.issue.bits)
-  issue_inst.vat := vat_tail
-  issue_inst.debug_id := debug_id_ctr
-
-  val hwacha_limiter = vParams.hwachaLimiter.map(n => Module(new HwachaLimiter(n)))
-  hwacha_limiter.foreach { h =>
-    h.io.inst := issue_inst
-    h.io.fire := io.issue.fire
-    h.io.vat_release.foreach(_ := false.B)
-  }
-  val hwacha_block = hwacha_limiter.map(_.io.block).getOrElse(false.B)
-
-
-  io.issue.ready   := vat_available && vdq.io.enq.ready && (!issue_inst.vmu || vmu.io.enq.ready) && !hwacha_block
-  vdq.io.enq.valid := vat_available && io.issue.valid   && (!issue_inst.vmu || vmu.io.enq.ready) && !hwacha_block
-  vmu.io.enq.valid := vat_available && io.issue.valid   && vdq.io.enq.ready && issue_inst.vmu    && !hwacha_block
+  def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, dispatcher.io.vat_tail)
 
   val scalar_resp_arb = Module(new Arbiter(new ScalarWrite, 2))
   io.scalar_resp <> Queue(scalar_resp_arb.io.out)
-  scalar_resp_arb.io.in(1).valid := false.B
-  scalar_resp_arb.io.in(1).bits.fp := false.B
-  scalar_resp_arb.io.in(1).bits.rd := io.issue.bits.rd
-  scalar_resp_arb.io.in(1).bits.data := 0.U
-  scalar_resp_arb.io.in(1).bits.size := 3.U
+  scalar_resp_arb.io.in(1) <> dispatcher.io.scalar_resp
 
-  when ((io.issue.bits.funct3 === OPMVV && io.issue.bits.opmf6 === OPMFunct6.wrxunary0 && io.issue.bits.rs1 === 0.U) ||
-        (io.issue.bits.funct3 === OPFVV && io.issue.bits.opff6 === OPFFunct6.wrfunary0 && io.issue.bits.rs1 === 0.U)) {
-    issue_inst.vconfig.vl := 1.U
-    issue_inst.vstart := 0.U
-  }
-
-
-  when (issue_inst.vconfig.vl <= issue_inst.vstart && !(issue_inst.funct3 === OPIVI && issue_inst.opif6 === OPIFunct6.mvnrr)) {
-    io.issue.ready := true.B
-    vdq.io.enq.valid := false.B
-    vmu.io.enq.valid := false.B
-    when (io.issue.bits.funct3 === OPMVV && io.issue.bits.opmf6 === OPMFunct6.wrxunary0) {
-      io.issue.ready := scalar_resp_arb.io.in(1).ready
-      scalar_resp_arb.io.in(1).valid := io.issue.valid
-      scalar_resp_arb.io.in(1).bits.data := Mux(io.issue.bits.rs1(0),
-        ~(0.U(xLen.W)), // vfirst
-        0.U // vpopc
-      )
-    }
-  }
-
-  vdq.io.enq.bits := issue_inst
-
-  vmu.io.enq.bits.base_offset := issue_inst.rs1_data
-  vmu.io.enq.bits.stride := issue_inst.rs2_data
-  vmu.io.enq.bits.page := issue_inst.page
-  vmu.io.enq.bits.vstart := issue_inst.vstart
-  vmu.io.enq.bits.segstart := issue_inst.segstart
-  vmu.io.enq.bits.segend := issue_inst.segend
-  vmu.io.enq.bits.vl := issue_inst.vconfig.vl
-  vmu.io.enq.bits.mop := issue_inst.mop
-  vmu.io.enq.bits.vm := issue_inst.vm
-  vmu.io.enq.bits.nf := issue_inst.nf
-  vmu.io.enq.bits.idx_size := issue_inst.mem_idx_size
-  vmu.io.enq.bits.elem_size := Mux(issue_inst.bits(26), issue_inst.vconfig.vtype.vsew, issue_inst.bits(13,12))
-  vmu.io.enq.bits.whole_reg := issue_inst.umop === lumopWhole && issue_inst.mop === mopUnit
-  vmu.io.enq.bits.store := issue_inst.bits(5)
-  vmu.io.enq.bits.fast_sg := issue_inst.fast_sg
-  vmu.io.enq.bits.debug_id := issue_inst.debug_id
+  vdq.io.enq <> dispatcher.io.dis
+  vmu.io.enq <> dispatcher.io.mem
 
   val integerFUs = Seq(
     (() => new IntegerPipe, "vintfu"),
@@ -328,7 +253,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
       seq.io.perm := DontCare
       seq.io.acc.valid := false.B
       seq.io.acc.bits := DontCare
-      seq.io.vat_head := vat_head
+      seq.io.vat_head := dispatcher.io.vat_head
 
       val older_issq_wintents = FillInterleaved(egsPerVReg, otherIssqs.map { i =>
         i.io.hazards.map(h => Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.wintent, 0.U))
@@ -534,11 +459,12 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   vxs.head.io.perm.data := perm_buffer.io.pop_data.asUInt
 
   // Clear the age tags
-  def clearVat(fire: Bool, tag: UInt) = when (fire) {
-    assert(vat_valids(tag))
-    when (tag === vat_head) { vat_head_incr := true.B }
-    vat_valids(tag) := false.B
-    hwacha_limiter.foreach(_.io.vat_release(tag) := true.B)
+  var r_idx = 0
+  def clearVat(fire: Bool, tag: UInt) = {
+    assert(r_idx < nRelease)
+    dispatcher.io.vat_release(r_idx).valid := fire
+    dispatcher.io.vat_release(r_idx).bits := tag
+    r_idx += 1
   }
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
