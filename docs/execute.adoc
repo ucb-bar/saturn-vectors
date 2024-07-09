@@ -42,6 +42,10 @@ image::diag/iqconfigs.png[Issue queue configurations,width=900,align=center,titl
 
 === Operation Sequencers
 
+[.text-center]
+.Vector instruction sequencer
+image::diag/sequencer.png[Instruction sequencer,width=900,align=center,title-align=center]
+
 The operation sequencers convert a vector instruction into a sequence of operations that execute down the functional unit datapaths, one operation per cycle.
 The sequencers advertise the requested register file read and write addresses for the next operation, as well as the age tag for the currently sequenced instruction.
 If there are no structural hazards from non-pipelined functional units or register file port arbitration, and there are no data hazards against older vector instructions that have not fully read or written their operands, a sequencer will issue an operation and update its internal state.
@@ -202,7 +206,13 @@ These operands enter a permute-buffer, which is read by the main arithmetic sequ
 
 === EVA (Extended Vector Architecture) Port
 
-The EVA port provides an interface for integrating the Saturn vector unit with other accelerators or implementing custom functional units.
+The EVA port provides an interface for integrating the Saturn vector unit with custom accelerators or functional units.
+Physically, this interface appears allows users to integrate a custom functional unit accepting some subset of the empty RVV encoding space.
+Like all other functional units, a EVA-attached functional unit must advertise the pending reads or writes a current in-flight operations will make into the VRF.
+This allows Saturn's instruction sequencers to schedule EVA instructions alongside standard vector instructions, and enables chaining to and from EVA instructions.
+
+A EVA accelerator implementation should additionally be parameterized by `VLEN` and `DLEN`, to match the range of possible Saturn configurations it may be attached to.
+
 The EVA interface is a port that exposes data read from the VRF along with control signals, and can take in data from the external unit and write it into the VRF.
 A key idea of the EVA interface is that it enables Saturn to execute custom instructions that specify VRF sources and destinations just like standard vector instructions.
 This allows Saturn to sequence these instructions alongside standard vector instructions, using very similar mechanisms.

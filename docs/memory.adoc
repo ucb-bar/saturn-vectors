@@ -136,11 +136,11 @@ When the last request for an instruction has been sent to the memory system, the
 .Control and datapath of the merge units. The merge unit can be considered a generalized rotation buffer, where the enqueue and dequeue sides are each latency-insensitive interfaces requesting an update (either a push or pop) of some segment of contiguous valid data into or out of the merge buffer.
 image::diag/merger.png[Merge unit,width=700,align=center,title-align=center]
 
-The merge units are general-purpose circuits that correct for misalignment of the memory system response data before the next step in the pipeline.
+The merge units are general-purpose circuits that correct for misalignment of the memory system response data before the next step in the load or store paths.
 These can be considered a generalized form of a rotation buffer, decoupling the alignment and extent of input data from the alignment and extent of output data, and preserving latency-insensitive decoupled interfaces.
 
 The merge units have FIFO semantics, where the enqueue into the unit specifies a base and extent of active data within the wide input vector.
-The merge unit rotates away the unactive bytes, compacting the active bytes into contiguous storage.
+The merge unit rotates away the inactive bytes, compacting the active bytes into contiguous storage.
 The dequeue requests a base and extent from the merge unit, which then shifts the buffered data into position.
 A bypass path from the enqueue to the dequeue enables full-throughput continuous dataflow for misaligned contiguous accesses.
 
@@ -162,14 +162,14 @@ Notably, the SMU additionally tracks a byte-wise mask bit for masked stores, suc
 === Segment Buffer
 
 Non-segmented accesses bypass the segment buffer units entirely.
-For segmented accesses to proceed with high throughput, the LSB and SSB must "buffer" a sufficient number of responses to "transpose" a set of structs into a set of vector writebacks, or a set of vector store-data into a set of structs.
+For segmented accesses to proceed with high throughput, the LSB and SSB must "buffer" a sufficient number of responses to "transpose" a set of segments into a set of vector writebacks, or a set of vector store-data into a set of segments.
 
 Each segment buffer is implemented as a double-buffered 2D array of flops.
 The double-buffering enables full rate segmented accesses.
 For instance, in the LSB, one half is filled by load responses while the other is drained by load writeback.
 
-Each segment buffer is 8 rows deep to support up to 8 fields in a segment, as supported by the specification.
-Each segment buffer is DLEN bytes wide.
+Each segment buffer is 8 rows deep to support up to 8 fields in a segment, as required by the specification.
+Each segment buffer is DLEN bits wide to be able to buffer entire element group of writeback data.
 
 Load responses from the LMU write columns into the LSB, while the LSB emits rows into the load writeback port to the VU.
 Store data from the VU writes rows into the SSB, while the SSB emits columns into the SMU.
@@ -180,4 +180,4 @@ image::diag/segbuf.png[Merge unit,width=900,align=center,title-align=center]
 
 Table 20 depicts how the LSB requests aligned segments from the LMU, stores them in a 2D segment buffer array, and sequences some series of aligned write-back data to the datapath.
 Notably, some configurations of `NF` and `ELEN` result in sub-optimal throughput, underutilizing the memory system.
-Some obvious optimizations have yet to be implemented to improve the throughp0ut of the power-of-two `NF` instructions.
+Some obvious optimizations have yet to be implemented to improve the throughput of the power-of-two `NF` instructions.
