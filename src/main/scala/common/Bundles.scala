@@ -8,6 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val debug_id = UInt(debugIdSz.W)
   val vat = UInt(vParams.vatSz.W)
 
   val base_offset = UInt(pgIdxBits.W)
@@ -50,6 +51,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val rm = UInt(3.W)
   val emul = UInt(2.W)
   val fast_sg = Bool()
+  val debug_id = UInt(debugIdSz.W)
 
   def opcode = bits(6,0)
   def store = opcode(5)
@@ -146,7 +148,7 @@ class VectorMaskAccessIO(implicit p: Parameters) extends CoreBundle()(p) with Ha
 }
 
 class MaskedByte(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val debug_vat = UInt(vParams.vatSz.W)
+  val debug_id = UInt(debugIdSz.W)
   val data = UInt(8.W)
   val mask = Bool()
 }
@@ -209,13 +211,13 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
 class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val stdata = UInt(dLen.W)
   val stmask = UInt(dLenB.W)
-  val debug_vat = UInt(vParams.vatSz.W)
+  val debug_id = UInt(debugIdSz.W)
   def asMaskedBytes = {
     val bytes = Wire(Vec(dLenB, new MaskedByte))
     for (i <- 0 until dLenB) {
       bytes(i).data := stdata(((i+1)*8)-1,i*8)
       bytes(i).mask := stmask(i)
-      bytes(i).debug_vat := debug_vat
+      bytes(i).debug_id := debug_id
     }
     bytes
   }
@@ -225,6 +227,7 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val wvd_eg = UInt(log2Ceil(egsTotal).W)
   val wmask = UInt(dLenB.W)
   val tail = Bool()
+  val debug_id = UInt(debugIdSz.W)
   val vat = UInt(vParams.vatSz.W)
 }
 

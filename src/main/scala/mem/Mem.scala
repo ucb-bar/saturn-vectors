@@ -80,7 +80,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
 
     val lresp = Decoupled(new Bundle {
       val data = UInt(dLen.W)
-      val debug_vat = UInt(vParams.vatSz.W)
+      val debug_id = UInt(debugIdSz.W)
     })
     val sdata = Flipped(Decoupled(new StoreDataMicroOp))
 
@@ -91,11 +91,9 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
 
     val busy = Output(Bool())
 
-    val vat_tail = Input(UInt(vParams.vatSz.W))
     val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
   })
 
-  def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, io.vat_tail)
   def ptrIncr(u: UInt, sz: Int): Unit = {
     val n = u +& 1.U
     u := Mux(n === sz.U, 0.U, n)
@@ -346,7 +344,7 @@ class VectorMemUnit(sgSize: Option[BigInt])(implicit p: Parameters) extends Core
   scu.io.pop.valid := sas.io.out.valid && sifq.io.enq.ready
   when (scu.io.pop.fire) {
     for (i <- 0 until dLenB) {
-      assert(scu.io.pop_data(i).debug_vat === sas.io.op.vat ||
+      assert(scu.io.pop_data(i).debug_id === sas.io.op.debug_id ||
         i.U < scu.io.pop.bits.head ||
         (i.U >= scu.io.pop.bits.tail && scu.io.pop.bits.tail =/= 0.U))
     }

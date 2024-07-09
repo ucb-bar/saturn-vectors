@@ -62,6 +62,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
 
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
 
+  val debug_id_ctr = RegInit(0.U(debugIdSz.W))
   val vat_valids = RegInit(VecInit.fill(1 << vParams.vatSz)(false.B))
   val vat_tail = RegInit(0.U(vParams.vatSz.W))
   val vat_head = RegInit(0.U(vParams.vatSz.W))
@@ -77,6 +78,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     assert(!vat_valids(vat_tail))
     vat_valids(vat_tail) := true.B
     vat_tail := vat_tail + 1.U
+    debug_id_ctr := debug_id_ctr + 1.U
   }
   when (vat_tail =/= vat_head && !vat_valids(vat_head)) {
     vat_head_incr := true.B
@@ -85,6 +87,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
 
   val issue_inst = WireInit(io.issue.bits)
   issue_inst.vat := vat_tail
+  issue_inst.debug_id := debug_id_ctr
 
   val hwacha_limiter = vParams.hwachaLimiter.map(n => Module(new HwachaLimiter(n)))
   hwacha_limiter.foreach { h =>
@@ -146,8 +149,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   vmu.io.enq.bits.whole_reg := issue_inst.umop === lumopWhole && issue_inst.mop === mopUnit
   vmu.io.enq.bits.store := issue_inst.bits(5)
   vmu.io.enq.bits.fast_sg := issue_inst.fast_sg
-
-  vmu.io.vat_tail := vat_tail
+  vmu.io.enq.bits.debug_id := issue_inst.debug_id
 
   val integerFUs = Seq(
     (() => new IntegerPipe, "vintfu"),
@@ -421,7 +423,7 @@ class VectorBackend(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   load_write.bits.data := vmu.io.lresp.bits.data
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.wmask)
   when (vmu.io.lresp.fire) {
-    assert(vmu.io.lresp.bits.debug_vat === vls.io.vat)
+    assert(vmu.io.lresp.bits.debug_id === vls.io.iss.bits.debug_id)
   }
 
   val resetting = RegInit(true.B)

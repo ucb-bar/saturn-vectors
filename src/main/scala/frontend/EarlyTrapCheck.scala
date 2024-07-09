@@ -78,6 +78,7 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   s0_inst.emul     := Mux(io.s0.in.bits.vconfig.vtype.vlmul_sign, 0.U, io.s0.in.bits.vconfig.vtype.vlmul_mag)
   s0_inst.page     := DontCare
   s0_inst.vat      := DontCare
+  s0_inst.debug_id := DontCare
   s0_inst.rm       := DontCare
   s0_inst.fast_sg  := false.B
   when (s0_inst.vmu && s0_inst.mop === mopUnit) {

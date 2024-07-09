@@ -19,11 +19,11 @@ class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends C
       val sidx = UInt(3.W)
       val sidx_tail = Bool()
       val tail = Bool()
-      val vat = UInt(vParams.vatSz.W)
+      val debug_id = UInt(debugIdSz.W)
     }))
     val out = Decoupled(new Bundle {
       val data = UInt(dLen.W)
-      val debug_vat = UInt(vParams.vatSz.W)
+      val debug_id = UInt(debugIdSz.W)
     })
     val busy = Output(Bool())
   })
@@ -55,12 +55,12 @@ class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends C
   val out_sel = RegInit(false.B)
   val out_nf  = Reg(Vec(nB, UInt(3.W)))
   val out_row = Reg(Vec(nB, UInt(3.W)))
-  val out_vat = Reg(Vec(nB, UInt(vParams.vatSz.W)))
+  val out_id = Reg(Vec(nB, UInt(debugIdSz.W)))
 
   io.in.ready := !modes(in_sel)
   io.out.valid := modes(out_sel)
   io.out.bits.data := Mux1H(UIntToOH(out_row(out_sel)), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
-  io.out.bits.debug_vat := out_vat(out_sel)
+  io.out.bits.debug_id := out_id(out_sel)
 
   when (io.in.fire) {
     wrow := ((1.U << (dLenB.U >> io.in.bits.eew)) - 1.U)(7,0) << io.in.bits.sidx
@@ -91,7 +91,7 @@ class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends C
     modes(in_sel) := true.B
     out_nf(in_sel) := io.in.bits.nf
     out_row(in_sel) := io.in.bits.segstart
-    out_vat(in_sel) := io.in.bits.vat
+    out_id(in_sel) := io.in.bits.debug_id
   }
 
   when (io.out.fire) {
@@ -112,7 +112,7 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
     val in = Flipped(Decoupled(new Bundle {
       val data = UInt(dLen.W)
       val mask = UInt(dLenB.W)
-      val vat = UInt(vParams.vatSz.W)
+      val debug_id = UInt(debugIdSz.W)
       val eew = UInt(2.W)
       val nf = UInt(3.W)
       val rows = UInt(4.W)
@@ -159,7 +159,7 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
   val out_eew = Reg(Vec(nB, UInt(2.W)))
   val out_rows = Reg(Vec(nB, UInt(4.W)))
   val out_segstart = Reg(Vec(nB, UInt(3.W)))
-  val out_vat = Reg(Vec(nB, UInt(vParams.vatSz.W)))
+  val out_id = Reg(Vec(nB, UInt(debugIdSz.W)))
 
 
   def sidxOff(sidx: UInt, eew: UInt) = sidx & ~((1.U << (log2Ceil(cols).U - eew)) - 1.U)
@@ -169,7 +169,7 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
   val row_sel = out_row + sidxOff(out_sidx(out_sel), out_eew(out_sel))
   io.out.bits.data.stdata := Mux1H(UIntToOH(row_sel), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
   io.out.bits.data.stmask := Fill(dLenB, (Mux1H(UIntToOH(out_sel), mask) >> (out_row << out_eew(out_sel)))(0))
-  io.out.bits.data.debug_vat := out_vat(out_sel)
+  io.out.bits.data.debug_id := out_id(out_sel)
   io.out.bits.head := out_sidx(out_sel) << out_eew(out_sel)
   val remaining_bytes = (out_nf(out_sel) +& 1.U - out_sidx(out_sel)) << out_eew(out_sel)
   io.out.bits.tail := Mux((remaining_bytes +& io.out.bits.head) >= dLenB.U, dLenB.U, remaining_bytes + io.out.bits.head)
@@ -212,7 +212,7 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
     out_eew(in_sel) := io.in.bits.eew
     out_rows(in_sel) := io.in.bits.rows
     out_segstart(in_sel) := io.in.bits.segstart
-    out_vat(in_sel) := io.in.bits.vat
+    out_id(in_sel) := io.in.bits.debug_id
   }
 
   when (io.out.fire) {
