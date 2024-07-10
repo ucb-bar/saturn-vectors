@@ -156,7 +156,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   val narrowing_out = Fill(2, Mux1H(Seq(vd_eew === 1.U, vd_eew === 2.U, vd_eew === 3.U), Seq(fp16_gen_fptoint) ++ narrowing_conversions))
 
   val pipe_out = Pipe(io.pipe(0).valid, Mux1H(Seq(!ctrl_widen && !ctrl_narrow, ctrl_widen, ctrl_narrow), 
-                                              Seq(single_width_out, widening_out, narrowing_out)))
+                                              Seq(single_width_out, widening_out, narrowing_out))).bits
 
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg

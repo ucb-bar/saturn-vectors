@@ -188,8 +188,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     } .elsewhen (ctrl_fptoint) {
       wdata := Mux(vd_eew64, io_fp_resp.bits.data(63,0), Fill(2, io_fp_resp.bits.data(31,0)))
     } .otherwise {
-      wdata := Mux(vd_eew64, FType.D.ieee(io_fp_resp.bits.data), Mux(vd_ee32, Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, 0.U, Some(FType.S)))),
-                                                                              Fill(4, FType.H.ieee(unbox(io_fp_resp.bits.data, H, Some(FType.H))))))
+      wdata := Mux(vd_eew64, FType.D.ieee(io_fp_resp.bits.data), Mux(vd_eew32, Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, 0.U, Some(FType.S)))),
+                                                                               Fill(4, FType.H.ieee(unbox(io_fp_resp.bits.data, H, Some(FType.H))))))
     }
   }
 
