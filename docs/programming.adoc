@@ -14,6 +14,7 @@ Saturn's implementation is built around the machine datapath width, `DLEN`.
 The fundamental occupancy of one vector instruction, or chime length, in a given Saturn implementation is stem:[VLEN/DLEN].
 In most implementations, this will be 2, although Saturn can generate implementations with a chime length of 1 or greater.
 Using the `LMUL` parameter allows the programmer to extend the chime length to stem:[LMUL * VLEN/DLEN], which increases the effective occupancy of each vector instruction.
+
 Generally speaking, "writing efficient vector code" is equivalent to "maximizing the utilization of the functional units."
 Saturn efficiently implements vector register grouping, and thus programmers should generally use the largest possible LMUL that applications allow without causing excessive vector register spilling.
 By maximizing the `LMUL`, more work is encoded in each vector instruction and fewer iterations of a given stripmine loop will need to be executed.
@@ -26,7 +27,7 @@ When using a config with multiple execute sequencers, independent arithmetic ope
 
 It is also important to take the pipeline depths of the various functional units into account.
 For instance, the FMA functional units have a default pipeline depth of 4.
-In order to saturate the FMA units, stem:[LMUL * VLEN/DLEN] must exceed the pipeline depth when executing successive dependent vector operations or a sufficient number of independent FMAs must be scheduled to cover up this latency.
+In order to saturate the FMA units, stem:[LMUL * VLEN/DLEN] must exceed the pipeline depth when executing successive dependent vector operations or a sufficient number of independent FMAs must be scheduled to hide this latency.
 
 === Microarchitecture Parameters
 
@@ -76,6 +77,6 @@ As an example, programmers should make use of segment loads and stores where app
 
 * Reductions are far slower than independent vector operations. Avoid them where possible.
 
-=== Performance Examples
+// === Performance Examples
 
-TODO demonstrate results with increasing levels of static scheduling, etc.
+// TODO demonstrate results with increasing levels of static scheduling, etc.

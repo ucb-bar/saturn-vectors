@@ -1,3 +1,4 @@
+<<<
 [[execute]]
 == Vector Datapath
 
@@ -124,11 +125,13 @@ The read stage also arbitrates for access to the write port when there are multi
 Each execution unit is composed of some set of functional units.
 Operations are issued to functional units along with their vector operands.
 Functional units can either be pipelined or iterative.
-Pipelined functional units execute at a DLEN granularity have fixed execution latencies, so once an operation is issued, it will execute without stalling.
-This means the sequencing mechanism checks for future write port conflicts on the target VRF bank across inflight and simultaneously sequenced operations to check that the operation is actually safe to execute.
+
+Pipelined functional units have fixed execution latencies, so once an operation is issued, it will execute without stalling.
+The sequencing mechanism checks for future write port conflicts on the target VRF bank across inflight and simultaneously sequenced operations to ensure that the next sequenced operation will not induce a structural hazard on the write port in the future.
 If a conflict is detected, the younger operation will be stalled and will likely start executing the very next cycle.
+
 Iterative functional units have variable execution latencies or contain expensive hardware such that it is desirable to execute at a rate of just one element per cycle.
-Once an iterative functional unit has completed its operation on a given element, it will arbitrate for the target VRF write port and proceed to executing the next element.
+Once an iterative functional unit has completed its operation on a given element, it will arbitrate for the target VRF write port and then proceed to executing the next element.
 
 [cols="1,2,2,2,3"]
 |===
@@ -204,18 +207,18 @@ For slide and register-gather instructions, a separate permute-sequencer reads o
 These operands enter a permute-buffer, which is read by the main arithmetic sequencer to generate aligned operands for slides, and read addresses for register-gathers.
 
 
-=== EVA (Extended Vector Architecture) Port
+// === EVA (Extended Vector Architecture) Port
 
-The EVA port provides an interface for integrating the Saturn vector unit with custom accelerators or functional units.
-Physically, this interface appears allows users to integrate a custom functional unit accepting some subset of the empty RVV encoding space.
-Like all other functional units, a EVA-attached functional unit must advertise the pending reads or writes a current in-flight operations will make into the VRF.
-This allows Saturn's instruction sequencers to schedule EVA instructions alongside standard vector instructions, and enables chaining to and from EVA instructions.
+// The EVA port provides an interface for integrating the Saturn vector unit with custom accelerators or functional units.
+// Physically, this interface appears allows users to integrate a custom functional unit accepting some subset of the empty RVV encoding space.
+// Like all other functional units, a EVA-attached functional unit must advertise the pending reads or writes a current in-flight operations will make into the VRF.
+// This allows Saturn's instruction sequencers to schedule EVA instructions alongside standard vector instructions, and enables chaining to and from EVA instructions.
 
-A EVA accelerator implementation should additionally be parameterized by `VLEN` and `DLEN`, to match the range of possible Saturn configurations it may be attached to.
+// A EVA accelerator implementation should additionally be parameterized by `VLEN` and `DLEN`, to match the range of possible Saturn configurations it may be attached to.
 
-The EVA interface is a port that exposes data read from the VRF along with control signals, and can take in data from the external unit and write it into the VRF.
-A key idea of the EVA interface is that it enables Saturn to execute custom instructions that specify VRF sources and destinations just like standard vector instructions.
-This allows Saturn to sequence these instructions alongside standard vector instructions, using very similar mechanisms.
-This enables the external accelerator or functional unit to utilize the Saturn vector unit as a base of compute and communicate with it over a high-bandwidth interface.
+// The EVA interface is a port that exposes data read from the VRF along with control signals, and can take in data from the external unit and write it into the VRF.
+// A key idea of the EVA interface is that it enables Saturn to execute custom instructions that specify VRF sources and destinations just like standard vector instructions.
+// This allows Saturn to sequence these instructions alongside standard vector instructions, using very similar mechanisms.
+// This enables the external accelerator or functional unit to utilize the Saturn vector unit as a base of compute and communicate with it over a high-bandwidth interface.
 
-TODO add more details
+// TODO add more details

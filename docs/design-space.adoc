@@ -3,24 +3,29 @@
 
 Saturn is a highly parameterized and capable of generating designs that target a wide variety of PPA design points.
 Several high-level parameter sets and defaults are provided, but you may configure a given implementation at a fine granularity.
+The high-level parameter sets control parameters of the machine other than `VLEN` or `DLEN`.
 
-=== Parameterization Space
+ * `vMIN` is a minimal, yet still V-profile compliant configuration. Performance is de-emphasized. If possible, scalar floating-point units are used
+ * `vREF` is a modest design with SIMD execution units, demonstrating the key scheduling mechanisms without minimal overhead. SIMD functional units are used, and issue queues are sized up/
+ * `vDSP` splits the floating point and integer units into two execution units, enabling higher throughput in tightly optimized kernels.
+ * `vGEN` generates separate issue queues for the floating point and integer sequencers, improving performance for suboptimally scheduled code.
+ * `vDMA` generates a design optimized around memory-to-memory transfers, deemphasizing compute throughput. The load-store unit is parameterized to tolerate higher latencies, but the datapath uses conservative functional units
 
-[cols="1,3,1"]
+[cols="3,8,2"]
 |===
 |Parameter|Description|Range
 
 |`vLen`
 |Architectural vector length, in bits
-|Powers of 2 >= 64
+|64+
 
 |`dLen`
 |Datapath and memory system width, in bits
-|Powers of 2 >= 64
+|64+
 
 |`vrfBanking`
 |Number of banks of the VRF
-|Powers of 2 1+
+|1+
 
 |`issStructure`
 |Issue queue organization
@@ -44,7 +49,7 @@ Several high-level parameter sets and defaults are provided, but you may configu
 
 |`vsgPorts`
 |Number of vector scatter-gather memory ports
-|Powers of 2 0+
+|0+
 
 |`vsgifqEntries`
 |Number of entries per port in the vector scatter-gather load path
@@ -67,7 +72,7 @@ Several high-level parameter sets and defaults are provided, but you may configu
 |0+
 
 |`vatSz`
-|With of the vector age tag
+|Width of the vector age tag
 |1+
 
 |`useSegmentedIMul`
@@ -79,7 +84,7 @@ Several high-level parameter sets and defaults are provided, but you may configu
 |True/False
 
 |`useScalarFMMisc`
-|Offload miscellaneous floating point operations to the host core's scalar FPU
+|Offload miscellaneous floating point operations to the host core's scalar FPU (if available)
 |True/False
 
 |`useScalarFPFMA`
@@ -99,15 +104,3 @@ Several high-level parameter sets and defaults are provided, but you may configu
 |True/False
 
 |===
-
-=== "vMIN" Minimal Configuration
-
-This configuration targets mimimal area overhead against a very minimal host scalar core.
-
-=== "vREF" Reference Configuration
-
-=== "vDSP" DSP Configuration
-
-=== "vGEN" General-purpose Configuration
-
-=== "vDMA" DMA Configuration

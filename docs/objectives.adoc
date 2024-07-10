@@ -1,3 +1,4 @@
+<<<
 [[objectives]]
 == Objectives and Background
 
@@ -204,7 +205,7 @@ When `LMUL` is short (1/2), vector chimes may be only 2-4 cycles long, requiring
 
 [.text-center]
 .Pipeline diagram of instruction execution with short vector lengths, zero dead-time, limited out-of-order execution, and chaining.
-image::diag/short-vectors.png[Saturn Pipeline,width=400,align=center,title-align=center]
+image::diag/short-vectors.png[Saturn Pipeline,width=50%,align=center,title-align=center]
 
 Figure 3 depicts a simplified pipeline visualization of a short vector loop, consisting of a load and dependent arithmetic instruction, executing on a simplified Saturn datapath.
 Notably, Saturn can fully saturate both the arithmetic and memory pipelines with such short vector lengths.
@@ -212,14 +213,14 @@ Instruction throughput requirements are moderate, but can still be fulfilled wit
 
 [.text-center]
 .Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead-time, limited out-of-order execution, and chaining.
-image::diag/short-vectors-dead.png[Saturn Dead-time Pipeline,width=450,align=center,title-align=center]
+image::diag/short-vectors-dead.png[Saturn Dead-time Pipeline,width=55%,align=center,title-align=center]
 
 Figure 4 highlights the importance of zero dead-time for short-vector microarchitectures like Saturn.
 As vector chimes are short, and dead-time would substantially degrade the utilizations of the datapaths.
 
 [.text-center]
 .Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead-time, strict in-order execution, and chaining.
-image::diag/short-vectors-in-order.png[Saturn In-order Pipeline,width=500,align=center,title-align=center]
+image::diag/short-vectors-in-order.png[Saturn In-order Pipeline,width=60%,align=center,title-align=center]
 
 Figure 5 highlights the importance of limited out-of-order execution for short-vector microarchitectures like Saturn.
 Requiring strict in-order execution would substantially degrade performance for suboptimally scheduled vector code.
@@ -267,7 +268,7 @@ While these features are costly in power and area, they are fundamental necessar
 
 [.text-center]
 .Pipeline diagram of instruction execution in a out-of-order SIMD machine.
-image::diag/ooo-simd.png[OOO SIMD Pipeline,width=350,align=center,title-align=center]
+image::diag/ooo-simd.png[OOO SIMD Pipeline,width=50%,align=center,title-align=center]
 
 
 Figure 8 depicts an example pipeline diagram of a SIMD loop in a out-of-order core with SIMD extensions.
@@ -286,7 +287,7 @@ VLIW instruction encodings enable low-cost, low-complexity superscalar fetch and
 
 [.text-center]
 .Pipeline diagram of instruction execution in a VLIW SIMD machine, executing a SW-pipelined loop.
-image::diag/vliw-simd.png[VLIW SIMD Pipeline,width=500,align=center,title-align=center]
+image::diag/vliw-simd.png[VLIW SIMD Pipeline,width=60%,align=center,title-align=center]
 
 Figure 9 depicts an example software-pipelined loop executing on a VLIW-SIMD machine.
 High-instruction throughput is achieced through VLIW instruction encodings, but require precisely optimized software-pipelined loops to maximize througput.

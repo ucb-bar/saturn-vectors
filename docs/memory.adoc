@@ -1,5 +1,5 @@
+<<<
 [[memory]]
-
 == Vector Load-Store Unit
 
 [.text-center]
@@ -45,7 +45,7 @@ This is typically converted into a TileLink interface within either Rocket or Sh
 
 [.text-center]
 .Example default configuration of the Saturn memory system
-image::diag/memdefault.png[Defaut memory system,width=500,align=center,title-align=center]
+image::diag/memdefault.png[Defaut memory system,width=50%,align=center,title-align=center]
 
 One approach would be to direct all vector memory accesses into the scalar L1.
 While simple, such an approach would induce frequent structural hazards and require a specialized host core with a specialized L1 data cache.
@@ -54,7 +54,7 @@ Figure 16 depicts this memory system.
 
 [.text-center]
 .Example Saturn memory system with high-bandwidth local TCM (Tightly-coupled memory)
-image::diag/memtcm.png[TCM memory system,width=550,align=center,title-align=center]
+image::diag/memtcm.png[TCM memory system,width=55%,align=center,title-align=center]
 
 Saturn configurations with high `DLEN` would generally require higher memory bandwidth.
 However, scaling up the system-level interconnect to meet Saturn's bandwidth demands may be prohibitively costly.
@@ -65,7 +65,7 @@ Figure 17 depicts a Saturn configuration with a high-bandwidth TCM, but lower-ba
 
 [.text-center]
 .Example Saturn memory system with high-bandwidth local TCM and scatter-gather TCM (SGTCM)
-image::diag/memsgtcm.png[SGTCM memory system,width=600,align=center,title-align=center]
+image::diag/memsgtcm.png[SGTCM memory system,width=60%,align=center,title-align=center]
 
 Saturn also supports integration into a system with a specialized "scatter-gather memory" (SGTCM).
 Unlike the standard memory interface, which supports one address per cycle for loads and one address per cycle for stores, the SGTCM interface presents an array of parallel byte-wide ports.
@@ -130,11 +130,12 @@ Generally, these can saturate the memory bandwidth when the size of one segment 
 The sequencers will stall if the memory interface is not ready or if there are no more tags to track outstanding memory accesses.
 When the last request for an instruction has been sent to the memory system, the pointer into the VLIQ/VSIQ for the instruction is incremented, and the next instruction to undergo address sequencing can proceed.
 
+<<<
 === Merge Unit
 
 [.text-center]
 .Control and datapath of the merge units. The merge unit can be considered a generalized rotation buffer, where the enqueue and dequeue sides are each latency-insensitive interfaces requesting an update (either a push or pop) of some segment of contiguous valid data into or out of the merge buffer.
-image::diag/merger.png[Merge unit,width=700,align=center,title-align=center]
+image::diag/merger.png[Merge unit,width=70%,align=center,title-align=center]
 
 The merge units are general-purpose circuits that correct for misalignment of the memory system response data before the next step in the load or store paths.
 These can be considered a generalized form of a rotation buffer, decoupling the alignment and extent of input data from the alignment and extent of output data, and preserving latency-insensitive decoupled interfaces.

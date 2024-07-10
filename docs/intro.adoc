@@ -3,7 +3,7 @@
 
 [.text-center]
 .High level overview of the Saturn Vector Unit
-image::diag/overview.png[Overview of Saturn,width=500,align=center,title-align=center]
+image::diag/overview.png[Overview of Saturn,width=75%,align=center,title-align=center]
 
 This document discusses in detail the Saturn Vector Unit, a parameterized and extensible vector microarchitecture executing the RISC-V vector extension.
 Saturn was developed to address an academic need for a representative, compliant, and highly-flexible generator of RISC-V vector units targeting deployment in domain-specialized cores.
