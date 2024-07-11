@@ -61,7 +61,7 @@ include::programming.adoc[]
 
 //include::eval-perf.adoc[]
 
-//include::history.adoc[]
+include::history.adoc[]
 
 // The index must precede the bibliography
 //include::index.adoc[]

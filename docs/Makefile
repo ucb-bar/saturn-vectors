@@ -2,8 +2,8 @@ DOCS := \
 	specs.adoc
 
 DATE ?= $(shell date +%Y-%m-%d)
-VERSION ?= v0.0.0
-REVMARK ?= Draft
+VERSION ?= v1.0.0
+REVMARK ?= Release
 
 BUILD_DIR := build
 

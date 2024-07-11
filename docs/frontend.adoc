@@ -11,9 +11,9 @@ Instructions that are validated to be free-of-traps are dispatched into the VLSU
 === Core Integration
 
 Saturn currently supports integration into either https://github.com/ucb-bar/saturn-vector-impls/tree/master/src/main/scala/rocket[Rocket] or https://github.com/ucb-bar/saturn-vector-impls/tree/master/src/main/scala/shuttle[Shuttle] as the host scalar RISC-V core.
-The host cores are responsible for decoding vector instructions that must dispatch to the VFU, in addition to updating and supplying the `VTYPE` and `VL` CSRs to these instructions.
+The host cores are responsible for decoding vector instructions that must dispatch to the VFU, in addition to updating and supplying the `vtype` and `vl` CSRs to these instructions.
 
-Both Rocket and Shuttle expose similar interfaces.
+Rocket and Shuttle expose nearly identical interfaces to the vector unit.
 The Scalar pipeline dispatches vector instructions to the VFU pipeline at the X stage, immediately after scalar operands are read from the scalar register files.
 These instructions are provided with updated values of `vtype`, `vl`, and `vstart`.
 The `M` stage exposes a port through which the `VFU` can access the host core's TLB and MMU.
@@ -24,37 +24,42 @@ The `W` stage also contains interfaces for modifying `vstart` and `vconfig` as v
 ==== Rocket
 
 [.text-center]
+[#rocket]
 .Rocket's pipeline stages with Saturn attached. Hatched lines indicate FIFO queues between pipeline stages.
 image::diag/rocketpipe.png[Rocket Pipeline Stages,width=50%,align=center,title-align=center]
 
 Rocket is a 5-stage in-order single-issue core.
-The Saturn VFU integrates into execute (X), memory (M), and write-back (W) stages of Rocket, where the W stage is the commit point.
+As showin in <<rocket>> The Saturn VFU integrates into execute (X), memory (M), and write-back (W) stages of Rocket, where the W stage is the commit point.
 At the W stage, vector instructions which cannot retire due to ongoing activity in the ITC can kill all younger instructions in earlier pipeline stages, and request the core to refetch and replay the instruction at the next PC.
 
 [.text-center]
+[#rocket-vset]
 .`vset`-induced bubble in Rocket
 image::diag/rocketvset.png[Rocket VSET,width=40%,align=center,title-align=center]
 
-Rocket does not maintain a speculative copy of the `VTYPE` and `VL` CSRs at the decode (D) stage, so a data hazard can interlock the D stage whenever a vector instruction proceeds a `vset` instruction.
-Thus, a `vset` will always induce a 2-cycle bubble on a proceeding vector instruction.
+Rocket does not maintain a speculative copy of the `vtype` and `vl` CSRs at the decode (D) stage, so a data hazard can interlock the D stage whenever a vector instruction proceeds a `vset` instruction.
+As showin in <<rocket-vset>>, a `vset` will always induce a 2-cycle bubble on a proceeding vector instruction.
 The effect of this is most noticeable in short-chime mixed-precision vector code, in which `vset` instructions are frequent.
-
-
 
 [discrete]
 ==== Shuttle
 
 [.text-center]
+[#shuttle]
 .Shuttle's pipeline stages with Saturn attached. Hatched lines indicate FIFO queues between pipeline stages.
 image::diag/shuttlepipe.png[Shuttle Pipeline Stages,width=55%,align=center,title-align=center]
 
 Shuttle is a 6-stage in-order superscalar core, typically configured as 2-issue or 3-issue.
 The Saturn VFU integrates into the execute (X), memory (M), and write-back (W) stages of Shuttle, where the W stage is the commit point.
+
 Only one of the execution pipes in Shuttle can dispatch into the VFU, but any of the pipes can execute a `vset` operation.
+However, during steady-state operation, Shuttle can dynamically construct instruction packets at the `D` stage to maximize instruction throughput given structural hazards by stalling partial instruction packets.
+
 Similar to Rocket, vector instructions which cannot retire at the W stage will kill younger instructions in the pipeline, and request a refetch and replay of the subsequent instruction.
 
 
 [.text-center]
+[#shuttle-vset]
 .Shuttle dual-issue with forwarding of `vset`
 image::diag/shuttlevset.png[Shuttle VSET,width=45%,align=center,title-align=center]
 
@@ -62,19 +67,18 @@ image::diag/shuttlevset.png[Shuttle VSET,width=45%,align=center,title-align=cent
 Unlike Rocket, Shuttle implements a bypass network for `vset` instructions modifying `VTYPE` or `VL`.
 Vector instructions following a `vset` instruction do not need to stall, as the `VTYPE` and `VL` operands can be accesses through the bypass network.
 However, a vector instruction cannot follow a `vset` on the same cycle, it must proceed on the next cycle.
-Figure 14 shows how Shuttle can dynamically stall a partial instruction packet with the `vadd` to issue it with a younger `vset` on the next cycle.
+<<shuttle-vset>> shows how Shuttle can dynamically stall a partial instruction packet with the `vadd` to issue it with a younger `vset` on the next cycle.
+This example also depicts how stalling the `vadd` maintains 2 IPC through Shuttle, and 1 IPC into the vector unit.
 
 
+=== Memory Translation and Traps
 
-=== Memory Translation and Precise Traps
-
-Vector instructions dispatched into the VFU first execute through the pipelined PTC.
+Vector instructions dispatched into the VFU first execute through the pipelined trap checker (PTC).
 Instructions for which the PTC cannot conservatively guarantee to be free of traps are issued to the ITC.
 Instructions which pass the PTC successfully can then be dispatched to the VU and VLSU after they pass the commit point.
 
 Since vector instructions may be speculative ahead of the commit point, any vector instruction killed by the scalar core is also killed in the VFU.
 The PTC/ITC design pattern achieves the goal of making common case vector instructions fast, through the PTC, while preserving correct precise trap behavior for all vector instructions through the ITC.
-
 
 Both the PTC and ITC share access to a single TLB port in the VFU.
 This TLB port would typically access the scalar core's TLB.
@@ -84,11 +88,11 @@ Future modifications to Saturn could supply a dedicated vector TLB instead.
 ==== Pipelined Trap Checker (PTC)
 
 The Pipelined Trap Checker is designed to handle common vector instructions without stalling the pipeline at 1 IPC.
-We divide vector instructions into the following categories
+Vector instructions fall into one of the following categories
 
  * *Single-beat* vector instructions include arithmetic instructions and vector memory instructions for which the extent of the access can be bound to one physical page, at most. This includes unit-strided vector loads and stores that do not cross pages, as well as physically addressed accesses that access a large contiguous physical region. These are the most common vector instructions, and need to issue at high throughput through the VFU
  * *Multi-beat* vector instructions are vector instructions for which the extent of the instruction's memory access can be easily determine, but the range crosses pages. These are somewhat common vector instructions, and must not incur a substantial penalty
- * *Iterative* vector instructions include masked, indexed, or strided memory instructions that might access arbitrarily many pages. These instructions would fundamentally be performance-bound by the TLB access, so the VFU can process these instructions iteratively
+ * *Iterative* vector instructions include masked, indexed, or strided memory instructions that might access arbitrarily many pages. These instructions would fundamentally be performance-bound by the single-ported TLB, so the VFU can process these instructions iteratively
 
 In stage-0 (VF0), the PTC establishes which category a vector instruction belongs to.
 Note that this does not require memory translation, and can be quickly determined from the instruction opcode, base address offset, and current settings of `vtype` and `vl`.
@@ -96,7 +100,8 @@ Note that this does not require memory translation, and can be quickly determine
 Single-beat instructions execute down the PTC pipeline with no stalls.
 In stage-1 (VF1), the accessed page for single-beat memory operations is checked through the TLB port.
 In stage-2 (VF2), misses in the TLB flush the PTC, which in turn forces the VFU to request a replay of the vector instruction.
-This is similar to how in-order handle scalar TLB misses through a replay mechanism.
+This is similar to how the host in-order core handles scalar TLB misses through a replay mechanism.
+
 If the VF2 TLB response indicates a access fault or page fault, retirement of the instruction is blocked, and the instruction is issued to the ITC to determine if it traps.
 This is done because masked vector memory operations that access invalid addresses do not generate traps, and the ITC maintains the capability to access the vector register file for mask data.
 
@@ -104,7 +109,7 @@ Multi-beat instructions incur multi-cycle occupancy of the PTC.
 The VF1 stage computes the number of elements of access within the first page, then updates `vstart` and requests a replay from the scalar core at the same PC.
 The replayed instruction will see a non-zero `vstart`, and compute an updated base address at the next page, and so on, until all the pages have been checked.
 In the VF2 stage, the PTC will correctly set the `vstart` and `vl` signals for the vector instructions dispatched into the VU and VLSU to correctly.
-In effect, the PTC cracks page-crossing contiguous loads and stores into single-beat operations.
+In effect, the PTC cracks page-crossing contiguous loads and stores into single-page operations.
 
 [discrete]
 ==== Iterative Trap Checker (ITC)
@@ -114,15 +119,15 @@ Unlike the PTC, which operates page-by-page, the ITC executes element-by-element
 The ITC generates a unique address for each element in the vector access, checks the TLB, and dispatches the element operation for that instruction to the VU and VLSU only if no fault is found.
 Upon a trap, the precise element index of the access which generates the trap is known, and all accesses preceding the faulting element would have been dispatched to the VU and VLSU.
 
-The ITC accesses the TLB in addition to the VRF through the VU.
-The index and mask access ports allow the ITC to read out the indices and masks in early-stage address generation.
+The ITC accesses the TLB through the same port as the PTC.
+The ITC also can access the VRF through the VU to fetch index or mask data.
 
 === Memory Disambiguation
 
 Vector memory instructions appear to execute in sequential order with the scalar loads and stores generated by the same hart.
 Scalar stores cannot execute while there is a pending older vector load or store to that same address.
 Scalar loads cannot execute while there is a pending older vector load to that same address.
-Furthermore, the scalar store buffer must be empty when dispatching a younger vector memory operation, since the vector memory path might not check the contents of the scalar store buffer.
+Furthermore, the scalar store buffer must be empty when dispatching a younger vector memory operation, since the vector memory path does not check the contents of the scalar store buffer.
 
 The S2 stage of the PTC also receives the physical address for the current in-flight scalar load or store about to commit in the host scalar core's W stage.
 This address is checked against the older inflight loads and stores in the VLIQ and VSIQ in the VLSU.

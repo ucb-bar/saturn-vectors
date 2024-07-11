@@ -6,10 +6,9 @@ The vector datapath (VU) handles all vector instruction scheduling, computation,
 The VU is organized around independent "sequencing paths", which issue instructions independently to a per-sequencer vector execution unit (VXU).
 
 The datapath is organized around a "vector element group" as the base unit of register access and compute.
-A element group is a fixed-width contiguous slice of the architectural register file space.
-Each element group is DLEN bits wide.
+A element group is a fixed-width `DLEN`-bits-wide contiguous slice of the architectural register file space.
 DLEN guides the parameterization of most critical components in the backend.
-The register file, load-path, store-path, and most functional units are designed to process DLEN bits per cycle (or 1 element group/cycle), regardless of datatype width.
+The register file, load-path, store-path, and most functional units are designed to process DLEN bits per cycle (or 1 element group/cycle), regardless of element width (`ELEN`).
 
 === Issue Queues
 
@@ -36,10 +35,10 @@ image::diag/iqconfigs.png[Issue queue configurations,width=900,align=center,titl
 
 
  * In the *unified* configuration, there is a single sequencer for all arithmetic operations fed by a single issue queue. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and floating-point functional units.
- * In the *shared* configuration, there are separate integer and floating-point sequencers, but they are fed by a common issue queue. 
+ * In the *shared* configuration, there are separate integer and floating-point sequencers, but they are fed by a common issue queue.
  Instructions will issue from the issue queue to either the integer or floating-point sequencer. 
  This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code.
- * In the *split* configuration, there are separate integer and floating-point sequencers that are each fed by an independent issue queue. This configuration is the most performant, as it can dynamically schedule out-of-order across integer and floating-point instructions, but is also the most costly.
+ * In the *split* configuration, there are separate integer and floating-point sequencers that are each fed by an independent issue queue. This configuration is the most performant, as it can dynamically schedule out-of-order across integer and floating-point instructions, but is also the most costly, owing to the separate floating-point issue queue.
 
 === Operation Sequencers
 
@@ -47,10 +46,14 @@ image::diag/iqconfigs.png[Issue queue configurations,width=900,align=center,titl
 .Vector instruction sequencer
 image::diag/sequencer.png[Instruction sequencer,width=900,align=center,title-align=center]
 
-The operation sequencers convert a vector instruction into a sequence of operations that execute down the functional unit datapaths, one operation per cycle.
+The instruction sequencers convert a vector instruction into a sequence of operations that execute down the functional unit datapaths, one operation per cycle.
 The sequencers advertise the requested register file read and write addresses for the next operation, as well as the age tag for the currently sequenced instruction.
 If there are no structural hazards from non-pipelined functional units or register file port arbitration, and there are no data hazards against older vector instructions that have not fully read or written their operands, a sequencer will issue an operation and update its internal state.
 An instruction will depart a sequencer along with the last operation it sequences, so there is zero dead time between sequencing of successive vector instructions.
+
+Notably, the sequencers enact "fire-and-forget" operation issue.
+Once an operation is issued by the sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipeline VFU datapaths.
+This eliminates the need for costly back-pressued operand or result queues.
 
 [discrete]
 ==== Load/Store Sequencers
@@ -75,7 +78,7 @@ Each execute sequencer issues to a single vector execution unit (VXU), which is 
 The execute sequencers will stall operation execution if the requested VFU within its VXU is unavailable.
 
 The execute sequencers additionally contain a DLEN-wide accumulation register for vector reductions.
-Unordered vector reductions will accumulate into this register iteratively before generating a final writeback into the VRF.
+Vector reductions will accumulate into this register iteratively before generating a final writeback into the VRF.
 
 [discrete]
 ==== Permute Sequencer
@@ -83,12 +86,13 @@ Unordered vector reductions will accumulate into this register iteratively befor
 The permute sequencer handles index generation for register-gather and indexed-memory operations.
 For memory operations, it sequences into the index-port to the VLSU.
 For register-gather operations, it sequences into a index queue that feeds the arithmetic sequencer for register gathers.
+For slides, the index queue is reused to align the slide operand to the result. In other words, the register-read for slides is performed by the permute sequencer, while the writeback is sequenced by the integer arithmetic sequencer.
 
-=== Hazard Management
+=== Hazards
 
 Due to the out-of-order execution across the different sequences, RAW, WAW, and WAR hazards are all possible.
-Furthermore, supporting vector chaining implies that these hazards should be resolved at sub-vector register granularity.
-Since Saturn is designed around DLEN-wide element groups as the core unit of compute, Saturn resolves data hazards at DLEN granularity.
+Furthermore, supporting vector chaining implies that these hazards should be resolved at sub-vector-register granularity.
+Since Saturn is designed around `DLEN`-wide element groups as the core unit of compute, Saturn resolves data hazards at `DLEN` granularity.
 The scheduling mechanism precisely tracks which element groups an instruction or operation is yet-to-read-or-write to interlock the sequencers.
 
 In Saturn, the "out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in-progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
@@ -104,8 +108,9 @@ These one-hot vectors are constructed using an age-filter based on the age-tag o
 
 Each sequencer computes the element groups that will be accessed or written to by the next operation to-be-issued, and determines if a pending read or write to those element groups would induce a RAW, WAR, or WAR hazard.
 If there is no data hazard and there is no structural hazard on the register file ports, the operation can be issued, with the sequencer incrementing its internal element index counter, or draining the instruction.
-For vector instructions with regular consecutive access patterns, the last issued operation that accesses some element group can clear the sequencer's internal bit-vector of pending reads and/or writes.
 
+For vector instructions with regular consecutive access patterns, the last issued operation that accesses some element group can clear the sequencer's internal bit-vector of pending reads and/or writes.
+This frees younger vector instructions in other sequencers to chain off this element group as soon as possible.
 
 === Vector Register File
 
@@ -117,8 +122,8 @@ The generator currently supports generating VRFs with 1, 2, or 4 banks.
 Typically, more banks are desired with more independent sequencers since that will reduce structural hazards on VRF ports.
 
 A read crossbar connects the issue port of the sequencers to the register file read ports.
-The read crossback resolves structural hazards during the read stage, and stalls the sequencers if necessary.
-The read stage also arbitrates for access to the write port when there are multiple fixed-latency execution paths.
+The read crossbar resolves structural hazards during the read stage, and stalls the sequencers if necessary.
+The read stage also arbitrates for access to the write ports across multiple fixed-latency execution paths.
 
 === Functional Units
 
@@ -135,7 +140,7 @@ Once an iterative functional unit has completed its operation on a given element
 
 [cols="1,2,2,2,3"]
 |===
-|Name|Instruction support|Microarchitecture|Structure|Notes
+|Name|Instruction support|Microarchitecture/s|Structure|Notes
 
 |ALU
 |Integer add/sub/max/min
