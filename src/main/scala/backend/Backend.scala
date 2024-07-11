@@ -302,8 +302,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   // Read ports are
   // vxs0-vrs1, vxs1-vrs1, vmu-index, frontend-index
-  // vxs0-vrs2, vxs1-vrs1
-  // vxs0-vrs3, vxs1-vrs1, vss-vrd
+  // vxs0-vrs2, vxs1-vrs2
+  // vxs0-vrs3, vxs1-vrs3, vss-vrd
   // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
   // Mask ports are
   // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
