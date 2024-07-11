@@ -10,7 +10,7 @@ import saturn.common._
 import saturn.insns._
 
 
-class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
+class TandemFMAPipe(depth: Int, zve64f: Boolean)(implicit p: Parameters) extends FPUModule()(p) {
   val io = IO(new Bundle {
     val valid = Input(Bool())
     val frm = Input(UInt(3.W))
@@ -33,7 +33,8 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   val frm_pipe = Pipe(io.valid, io.frm, depth-1)
   val mask_pipe = Pipe(io.valid, io.mask, depth-1)
 
-  val fTypes = Seq(FType.D, FType.S, FType.H)
+  val zve64f_fTypes = Seq(FType.S, FType.H)
+  val fTypes = (if(zve64f) Seq.empty else Seq(FType.D)) ++ zve64f_fTypes
 
   val fma_results = fTypes.zipWithIndex.map { case(fType, j) =>
     val n = 64 / fType.ieeeWidth
@@ -46,7 +47,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
       val lsb_idx = i * fType.ieeeWidth
 
       val inputs = Seq((io.a, io.a_eew), (io.b, io.b_eew), (io.c, io.c_eew)).map { case(in, eew) =>
-        if (j <= 1) {
+        if (j <= (fTypes.length - 2)) {
           val widen = Module(new hardfloat.RecFNToRecFN(fTypes(j+1).exp, fTypes(j+1).sig, fType.exp, fType.sig))
           widen.io.in := fTypes(j+1).recode(Mux(validin && io.mask(i*(4/n)), in(fTypes(j+1).ieeeWidth-1,0), 0.U))
           widen.io.roundingMode := io.frm
@@ -122,7 +123,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   val vec_rvs2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(nTandemFMA, UInt(64.W)))
   val vec_rvd = io.pipe(0).bits.rvd_data.asTypeOf(Vec(nTandemFMA, UInt(64.W)))
 
-  val fma_pipes = Seq.fill(nTandemFMA)(Module(new TandemFMAPipe(depth))).zipWithIndex.map { case(fma_pipe, i) =>
+  val fma_pipes = Seq.fill(nTandemFMA)(Module(new TandemFMAPipe(depth, vParams.zve64f))).zipWithIndex.map { case(fma_pipe, i) =>
     val widening_vs1_bits = extractElem(io.pipe(0).bits.rvs1_data, 2.U, eidx + i.U)(31,0)
     val rs1_bits = Mux(ctrl_widen_vs1, widening_vs1_bits, vec_rvs1(i))
     val widening_vs2_bits = extractElem(io.pipe(0).bits.rvs2_data, 2.U, eidx + i.U)(31,0)

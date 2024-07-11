@@ -43,6 +43,10 @@ object VectorParams {
     issStructure = VectorIssueStructure.Split
   )
 
+  def zve64fGenParams = genParams.copy(
+    zve64f = true
+  )
+
   // dmaParams:
   // For a vector unit that only does memcpys, and no arithmetic
   def dmaParams = VectorParams(
@@ -146,6 +150,8 @@ case class VectorParams(
 
   dLen: Int = 64,
   vatSz: Int = 3,
+
+  zve64f: Boolean = false,
 
   useSegmentedIMul: Boolean = false,
   useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions
