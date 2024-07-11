@@ -24,7 +24,7 @@ However, execution across the VIQs may be out-of-order, as the VIQs may naturall
 
 Each sequencing path has an independent issue queue.
 The load issue queue only needs to track a destination address and mask enable, while the store issue queue only needs to track a source address and mask enable.
-The arithmetic issue queue/s must track up to two source operands in addition to the destination and mask enable.
+The arithmetic issue queue(s) must track up to two source operands in addition to the destination and mask enable.
 The permute issue queue, used for index generation and register gathers, tracks a source operand.
 
 There are three configuration options for the arithmetic issue queues.
@@ -52,8 +52,8 @@ If there are no structural hazards from non-pipelined functional units or regist
 An instruction will depart a sequencer along with the last operation it sequences, so there is zero dead time between sequencing of successive vector instructions.
 
 Notably, the sequencers enact "fire-and-forget" operation issue.
-Once an operation is issued by the sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipeline VFU datapaths.
-This eliminates the need for costly back-pressued operand or result queues.
+Once an operation is issued by a sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipelined VFU datapaths.
+This eliminates the need for costly back-pressured operand or result queues.
 
 [discrete]
 ==== Load/Store Sequencers
