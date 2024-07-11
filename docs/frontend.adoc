@@ -29,7 +29,7 @@ The `W` stage also contains interfaces for modifying `vstart` and `vconfig` as v
 image::diag/rocketpipe.png[Rocket Pipeline Stages,width=50%,align=center,title-align=center]
 
 Rocket is a 5-stage in-order single-issue core.
-As showin in <<rocket>> The Saturn VFU integrates into execute (X), memory (M), and write-back (W) stages of Rocket, where the W stage is the commit point.
+As shown in <<rocket>>, the Saturn VFU integrates into execute (X), memory (M), and write-back (W) stages of Rocket, where the W stage is the commit point.
 At the W stage, vector instructions which cannot retire due to ongoing activity in the ITC can kill all younger instructions in earlier pipeline stages, and request the core to refetch and replay the instruction at the next PC.
 
 [.text-center]
@@ -91,7 +91,7 @@ The Pipelined Trap Checker is designed to handle common vector instructions with
 Vector instructions fall into one of the following categories
 
  * *Single-beat* vector instructions include arithmetic instructions and vector memory instructions for which the extent of the access can be bound to one physical page, at most. This includes unit-strided vector loads and stores that do not cross pages, as well as physically addressed accesses that access a large contiguous physical region. These are the most common vector instructions, and need to issue at high throughput through the VFU
- * *Multi-beat* vector instructions are vector instructions for which the extent of the instruction's memory access can be easily determine, but the range crosses pages. These are somewhat common vector instructions, and must not incur a substantial penalty
+ * *Multi-beat* vector instructions are vector instructions for which the extent of the instruction's memory access can be easily determined, but the range crosses pages. These are somewhat common vector instructions, and must not incur a substantial penalty
  * *Iterative* vector instructions include masked, indexed, or strided memory instructions that might access arbitrarily many pages. These instructions would fundamentally be performance-bound by the single-ported TLB, so the VFU can process these instructions iteratively
 
 In stage-0 (VF0), the PTC establishes which category a vector instruction belongs to.

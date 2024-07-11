@@ -5,10 +5,6 @@ Performant vector code on Saturn is generally not challenging to write and requi
 Still, some general guidelines for vector programming apply.
 This guide focuses primarily on maximizing the performance of kernels based on FMA and MAC-type operations that map to Saturn's SIMD functional units.
 
-//This guide aims to provide general guidance on writing performant vector code for Saturn.
-//This guide is not meant to document typical performance programming techniques as those are covered extensively elsewhere, but we will include some of these details where useful.
-//It is useful to first understand the Saturn microarchitecture as described in the other sections of this document before reviewing this guide.
-
 === Saturn Guidelines
 
 Saturn's implementation is built around the machine datapath width, `DLEN`.
@@ -34,14 +30,14 @@ In order to saturate the FMA units, either the chime length must exceed the pipe
 
 Refer to the xref:design-space.adoc[Design Space] section for more background on this topic.
 
-The configuration sequencers and depth of issue queues is parameterized.
+The configuration of the sequencers and the depth of the issue queues is parameterized.
 The number and type of sequencers will determine what kind of operations can run concurrently in Saturn.
 For instance, if there is just a single execute sequencer, then all vector arithmetic operations will execute on that sequencer.
 Thus, if a kernel requires multiple types of vector arithmetic operations, the machine will not be able to execute them concurrently.
-If the Saturn instance has multiple execute sequencers in the "Split" or "Shared" configuration, Saturn will be able execute floating-point and integer instructions in parallel.
+If the Saturn instance has multiple execute sequencers in the "Split" or "Shared" configuration, Saturn will be able execute floating-point and integer/permute instructions in parallel.
 
 The issue queues buffer vector operations behind each sequencer after leaving the VDQ.
-If too many successive vector instructions target a single sequencer, the instructions will saturate that sequences issue queue and backpressure dispatch, potentially resulting in a frontend stall, or starving other sequencers.
+If too many successive vector instructions target a single sequencer, the instructions will saturate that sequencer's issue queue and backpressure dispatch, potentially resulting in a frontend stall, or starving other sequencers.
 This should be avoided by scheduling instructions to naturally load-balance across the sequencers.
 Shallow 2-4 entry issue-queues are typically enough to ameliorate issues from poor load-balancing.
 
@@ -56,22 +52,17 @@ When operating on long vector lengths with long chimes, we find the performance 
 === Static Scheduling
 
 Saturn is designed to support efficient performance on vector length agnostic code that isn't optimized for a specific design point.
-//This includes the precise scheduling mechanism that enables limited out-of-order execution of vector operations and the `DAE`-style implementation of the machine.
-However, in many cases, some amount of static scheduling still provide some benefits, especially when the nature of the application becomes less favorable for dynamic hardware scheduling(eg. the application vector length becomes very short).
+However, in many cases, some amount of static scheduling still is beneficial, especially when the nature of the application becomes less favorable for dynamic hardware scheduling (eg. the application vector length becomes very short).
 Configurations of Saturn which downsize the dynamic scheduling components, like the issue queues, further benefit from statically scheduled code.
 
-//Similarly, as the chosen configuration of Saturn parameters becomes more minimal to save area or hardware complexity, more static scheduling may be required to acheive high performance.
 Classic static scheduling techniques, such as loop unrolling and software pipelining, are all directly applicable to writing more performant vector code for Saturn, but in many cases may not be necessary.
 Some examples can be found in https://github.com/ucb-bar/saturn-vector-impls/tree/master/benchmarks[benchmarks/].
-//As application vector lengths become sufficiently long, it becomes simpler to saturate the machine with less extensive static scheduling and kernels can be reduced in size.
 
 === Complex  Instructions
 
 Saturn's implementation strives to implement complex instructions efficiently.
 As a general rule, using a complex instruction should never induce a performance penalty over the equivalent longer sequence of simpler instructions.
-Thus, programmers should use complex instructions whereever possible, even if the kernel could be equivalently implemented by a sequence of simpler instructions.
-//This has positive implications for performance and code size.
-//As an example, programmers should make use of segment loads and stores where applicable, instead of using combinations of other instructions.
+Thus, programmers should use complex instructions wherever possible, even if the kernel could be equivalently implemented by a sequence of simpler instructions.
 
 === Other Notes
 

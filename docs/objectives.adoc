@@ -14,14 +14,7 @@ Saturn was developed with the following objectives:
  * Target deployment as part of a *DSP core* or similarly domain-specialized core, instead of general-purpose systems
 
 This chapter presents a background discussion of deployment scenarios for data-parallel systems as well as the dominant architectures in the commercial space for such systems.
-Saturn, as a implementation of a modern scalable vector ISA targeting deployment in specialized cores, fills an underexplored niche in the space of data-parallel microarchitectures.
-
-//=== Terminology
-
-//In this document, we use the term "DSP" extensively. This term is slightly overloaded, as it may refer in the literature to the domain of "Digital Signal Processing" or to "Digital Signal Processor" cores.
-//We generally use "DSP" in this document as a catch-all term to refer to the workloads and kernels in the digital signal processing domain, as well as adjacent domains that include image processing and machine learning.
-//We use this terminology because of the similarity of many of the underlying kernels across these domains and the paradigms that are used to compute them in modern SoCs.
-//We will be more precise and explicit where it is needed.
+Saturn, as an implementation of a modern scalable vector ISA targeting deployment in specialized cores, fills an underexplored niche in the space of data-parallel microarchitectures.
 
 === Data-parallel Workloads
 
@@ -51,7 +44,7 @@ The implications of Amdahl's Law dictate the design of these systems; exploiting
 Compared to the other domains, compiler and programmer-friendly ISAs are particularly important for these systems, as they must remain performant on the greatest diversity of workloads.
 
 [discrete]
-==== Digital Signal Processing and Domain-Specialized
+==== Digital Signal Processing and Domain-Specific Workloads
 
 Digital signal processing (DSP) and similar domain-specialized workloads feature a modest-to-high degree of data-level parallelism, and additionally often have strict latency requirements.
 These workloads are often offloaded in modern SoCs to specialized "DSP cores" optimized towards power and area-efficient expoitation of data-level parallelism.
@@ -123,17 +116,15 @@ For these deployment scenarios, power and area constraints preclude the deployme
 Additionally, the regularity present in many DSP kernels are a good fit for the VLIW paradigm.
 Regular loops, rather than branch-dense control code, are easier to optimize on a VLIW microarchitecture.
 
-Furthermore, DSP applications often require more regularly behaved memory systems to achieve strict QoS requirements, leading to DSP cores often integrating with low-or-fixed-latency software-managed scratchpad memory, rather than caches with dynamically unpredictable behavior.
+Furthermore, DSP applications often require more regularly behaved memory systems to achieve strict QoS requirements, leading to DSP cores often integrating with low-or-fixed-latency software-managed scratchpad memories, rather than caches with dynamically unpredictable behavior.
 Applications and microarchitectures which prefer statically predictable memory systems are an especially good fit for VLIW ISAs.
 
-//A
-//and applications for domain-specialied cores benefit less from the compiler ergonomics afforded by general-purpose ISAs.
 However, VLIW-based ISAs are notoriously difficult to program, especially when compared to general-purpose ISAs or vector ISAs.
 Performant VLIW code can also suffer from issues such as large static code size due to the need for extensive static scheduling.
 Nonetheless, specialized VLIW ISAs provide a microarchitecturally simple and efficient programmer-visible mechanism for maintaining high instruction throughput into SIMD functional units.
 
-Cadence, CEVA, and Qualcomm all ship commercial VLIW DSPs with SIMD extensions.
-Cadence and CEVA cores are IP products typically integrated into a customer's SoC as an embedded core, while Qualcomm's Hexagon DSP Cores are integrated throughout their SoC line to provide DSP compute.
+Cadence, Synopsys, CEVA, and Qualcomm all ship commercial VLIW DSPs with SIMD extensions.
+Cadence, Synopsys, and CEVA cores are IP products typically integrated into a customer's SoC as an embedded core, while Qualcomm's Hexagon DSP Cores are integrated throughout their SoC line to provide DSP compute.
 
 [discrete]
 ==== Scalable Vector ISAs
@@ -275,12 +266,12 @@ Instruction throughput requirements are minimal and strict in-order execution is
 .Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with 1-cycle dead-time.
 image::diag/long-vectors-dead.png[Long-vector Pipeline,width=900,align=center,title-align=center]
 
-<<long-dead>> highlights how dead-time in a deeply-temporal vector-unit is amortized out over many cycles of temporal execution per instruction.
+<<long-dead>> highlights how dead-time in a deeply-temporal vector-unit is amortized over many cycles of temporal execution per instruction.
 This is in contrast to the Saturn-like short-vector machine, in which short chimes cannot hide dead-time as well.
 
-For DSP deployments specifically, the long-vectors paradigm is especially ill-suited when compared to short-vectors Saturn-like cores.
+For DSP deployments, the long-vectors paradigm is particularly ill-suited when compared to short-vectors Saturn-like cores.
 
- * Many DSP applications feature short and/or widely varying application vector lengths. This makes it difficult for long-vector to effectively utilize their resources as it precludes deep temporal execution. Short-vector machines can achieve higher utilization on these shorter application vector lengths.
+ * Many DSP applications feature short and/or widely varying application vector lengths. This makes it difficult for long-vector machines to effectively utilize their resources as it precludes deep temporal execution. Short-vector machines can achieve higher utilization on these shorter application vector lengths.
  * Short-vector machines use an inherently lower capacity vector register file, which has positive implications in terms of silcon area and power consumption.
  * Saturn efficiently implements the register grouping functionality of RVV, and thus can still achieve high performance on long application vector lengths when the kernel calls for it.
 
@@ -288,7 +279,7 @@ For DSP deployments specifically, the long-vectors paradigm is especially ill-su
 ==== Compared to General-purpose SIMD Cores
 
 SIMD datapaths in general-purpose out-of-order cores are typically deeply integrated into the scalar instruction execution pipeline.
-In these designs, dxisting capabilities for out-of-order execution, speculative execution, superscalar fetch, and register renaming are leveraged to maximize SIMD datapath utilization.
+In these designs, existing capabilities for out-of-order execution, speculative execution, superscalar fetch, and register renaming are leveraged to maximize SIMD datapath utilization.
 While these features are costly in power and area, they are fundamental necessary components of modern general-purpose cores, and thus are also leveraged when executing SIMD code.
 
 [.text-center]
