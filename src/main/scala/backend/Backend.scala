@@ -305,8 +305,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // vxs0-vrs2, vxs1-vrs1
   // vxs0-vrs3, vxs1-vrs1, vss-vrd
   // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
+  // Mask ports are
+  // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
   val vrf = Module(new RegisterFile(
-    reads = Seq(2 + vxs.size, vxs.size, 1 + vxs.size, 4 + vxs.size),
+    reads = Seq(2 + vxs.size, vxs.size, 1 + vxs.size),
+    maskReads = Seq(4 + vxs.size),
     pipeWrites = vxus.size,
     llWrites = vxus.size + 2 // vxus + load + reset
   ))
@@ -348,7 +351,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.read(0)(i) <> vxs(i).io.rvs1
     vrf.io.read(1)(i) <> vxs(i).io.rvs2
     vrf.io.read(2)(i) <> vxs(i).io.rvd
-    vrf.io.read(3)(i) <> vxs(i).io.rvm
+    vrf.io.mask_read(0)(i) <> vxs(i).io.rvm
   }
 
   vrf.io.read(0)(vxs.length) <> vps.io.rvs2
@@ -378,15 +381,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.vmu.sdata.bits    := vss.io.iss.bits
   vss.io.iss.ready     := io.vmu.sdata.ready
 
-  vrf.io.read(3)(vxs.length) <> vls.io.rvm
-  vrf.io.read(3)(vxs.length+1) <> vss.io.rvm
-  vrf.io.read(3)(vxs.length+2) <> vps.io.rvm
+  vrf.io.mask_read(0)(vxs.length) <> vls.io.rvm
+  vrf.io.mask_read(0)(vxs.length+1) <> vss.io.rvm
+  vrf.io.mask_read(0)(vxs.length+2) <> vps.io.rvm
   val vm_busy = Wire(Bool())
-  vrf.io.read(3)(vxs.length+3).req.valid    := io.mask_access.valid && !vm_busy
-  vrf.io.read(3)(vxs.length+3).req.bits.eg  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
-  vrf.io.read(3)(vxs.length+3).req.bits.oldest := false.B
-  io.mask_access.ready  := vrf.io.read(3)(vxs.length+3).req.ready && !vm_busy
-  io.mask_access.mask   := vrf.io.read(3)(vxs.length+3).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
+  vrf.io.mask_read(0)(vxs.length+3).req.valid    := io.mask_access.valid && !vm_busy
+  vrf.io.mask_read(0)(vxs.length+3).req.bits.eg  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
+  vrf.io.mask_read(0)(vxs.length+3).req.bits.oldest := false.B
+  io.mask_access.ready  := vrf.io.mask_read(0)(vxs.length+3).req.ready && !vm_busy
+  io.mask_access.mask   := vrf.io.mask_read(0)(vxs.length+3).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
   val vmu_index_q = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))

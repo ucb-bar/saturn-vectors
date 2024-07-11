@@ -252,8 +252,8 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     sgas.io.resp <> io.sgmem.get.resp
   }
 
-  las.io.maskindex.valid := maskindex_load && (io.vu.mask_pop.ready || !las.io.maskindex.needs_mask) && (io.vu.index_pop.ready || !las.io.maskindex.needs_index)
-  sas.io.maskindex.valid := maskindex_load && (io.vu.mask_pop.ready || !sas.io.maskindex.needs_mask) && (io.vu.index_pop.ready || !sas.io.maskindex.needs_index)
+  las.io.maskindex.valid :=  maskindex_load && (io.vu.mask_pop.ready || !las.io.maskindex.needs_mask) && (io.vu.index_pop.ready || !las.io.maskindex.needs_index)
+  sas.io.maskindex.valid := !maskindex_load && (io.vu.mask_pop.ready || !sas.io.maskindex.needs_mask) && (io.vu.index_pop.ready || !sas.io.maskindex.needs_index)
 
   // Load Addr Sequencing
   val las_order_block = (0 until vParams.vsiqEntries).map { i =>
