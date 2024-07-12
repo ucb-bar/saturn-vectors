@@ -28,7 +28,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   val rvs2_data = io.pipe(0).bits.rvs2_data
   val vd_eew = io.pipe(0).bits.vd_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
-  val eew_select = Seq(rvs2_eew === 3.U, rvs2_eew === 2.U, rvs2_eew === 1.U)
+  val eew_select = Seq(rvs2_eew === 1.U, rvs2_eew === 2.U, rvs2_eew === 3.U)
 
   val fTypes = Seq(FType.H, FType.S, FType.D)
 
