@@ -1,2 +1,0 @@
-[[decode]]
-== Vector Instruction Decode

@@ -35,6 +35,7 @@ Saturn relies on *post-commit-execution* of all vector instructions.
 That is, the VLSU and VU only receive committed instructions from the VFU.
 As physical addresses are passed from the VFU into the VLSU, the VLSU will never trap.
 This simplifies the microarchitecture of VLSU and VFUs, as all operations in these units are effectively non-speculative.
+To enforce precise traps ahead-of-commit, Saturn's VFU implements an aggressive, but precise mechanism that validates instructions are free-of-fault and reports any faults precisely if present.
 
 Saturn's microarchitecture is designed around *in-order execution* with many *latency-insensitive* interfaces.
 Notably, the load and store paths are designed as pipelines of blocks with latency-insensitive decoupled interface.
@@ -42,7 +43,7 @@ The load-response and store-data interfaces into the VU are also latency-insensi
 Within the VU, each execution path (load/store/arithmetic) execute instructions in-order.
 The in-order execution of the load/store paths align with the in-order load-response and store-data ports.
 
-Saturn is designed around a *decoupled access-execute (DAE)* architecture, where the VLSU acts as the "access processor" and the VU acts as the "execute processor".
+Saturn is organized around a *decoupled access-execute (DAE)* architecture, where the VLSU acts as the "access processor" and the VU acts as the "execute processor".
 Shallow instruction queues in the VU act as "decoupling" queues, and enable the VLSU's load-path to run many instructions ahead of the VU.
 Similarly, the VLSU's store path can run many cycles beind the VU through the decoupling enabled by the VSIQ.
 This approach can tolerate high memory latencies with minimal hardware cost.

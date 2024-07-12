@@ -100,7 +100,7 @@ All instructions in this window must advertise a precise set of element groups t
 
  * Instructions in the issue queues already contain their operand specifiers. Since these instructions have not-yet been sequenced, a conservative bound on the element groups that will be accessed can be easily computed using the LMUL and the base register operand.
  * The sequencers track a precise bit-vector of element groups that the currently-sequenced instruction may still access. For regular vector instructions that access their operands sequentially, the sequencers can clear these bits with each issued operation. For irregular vector instructions, the sequencers can conservatively leave these bits set.
- * Operations in the functional unit that have yet-to-write back track a single element group of the write destination, along with the age tag of the instruction that issued the operation.
+ * Operations in the functional unit that have yet-to-write back track a single element group of the write destination.
 
 The advertised information across the out-of-order window is aggregated into a pending-read and pending-write one-hot vector for each sequencer.
 These one-hot vectors each contain one element for each architectural element group in the VRF, which is 32xVLEN/DLEN.
@@ -119,7 +119,9 @@ The architectural register file is striped across the banks by element group ind
 Neighboring element groups reside in neighboring banks.
 Each bank contains 3 read ports and 1 write ports, to fulfill the minimum read requirements of a three-input fused-multiply-add.
 The generator currently supports generating VRFs with 1, 2, or 4 banks.
-Typically, more banks are desired with more independent sequencers since that will reduce structural hazards on VRF ports.
+Configurations which expect to keep multiple integer sequencers utilized simultaneously will prefer more banks to meet the increased read bandwidth requirements.
+
+A shadow copy of  vector mask register `v0` is maintained in a 1R1W memory to avoids provisioning an extra read port for the bulk banked register file.
 
 A read crossbar connects the issue port of the sequencers to the register file read ports.
 The read crossbar resolves structural hazards during the read stage, and stalls the sequencers if necessary.
