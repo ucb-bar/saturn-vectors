@@ -78,7 +78,7 @@ Concurrently, a more aggressive heterogeneous clustered multi-core of Saturns at
 === Contributions
 
 Jerry Zhao led the Saturn project and implemented the instruction scheduling mechanism, load-store unit, and scalar-core integration.
-Daniel Grubb led the implementation of the SIMD floating-point units and the Saturn phyiscal implementation, and contributed to the core subsystems of the vector backend.
+Daniel Grubb led the implementation of the SIMD floating-point units and the Saturn physical implementation, and contributed to the core subsystems of the vector backend.
 Miles Rusch implemented several variants of SIMD integer multipliers.
 Tianrui Wei assisted with early versions of Saturn and performed key work that would evolve into the 1.0 version.
 
