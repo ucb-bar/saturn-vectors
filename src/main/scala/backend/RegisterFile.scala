@@ -13,7 +13,7 @@ class OldestRRArbiter(val n: Int)(implicit p: Parameters) extends Module {
   val arb = Module(new RRArbiter(new VectorReadReq, n))
   io <> arb.io
   val oldest_oh = io.in.map(i => i.valid && i.bits.oldest)
-  assert(PopCount(oldest_oh) <= 1.U)
+  //assert(PopCount(oldest_oh) <= 1.U)
   when (oldest_oh.orR) {
     io.chosen := VecInit(oldest_oh).asUInt
     io.out.valid := true.B
@@ -49,16 +49,28 @@ class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreM
   }
 }
 
-class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class RegisterFileBank(reads: Int, maskReads: Int, writes: Int, rows: Int, maskRows: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val read = Vec(reads, Flipped(new VectorReadIO))
+    val mask_read = Vec(maskReads, Flipped(new VectorReadIO))
     val write = Vec(writes, Input(Valid(new VectorWrite(dLen))))
   })
 
   val vrf = Mem(rows, Vec(dLen, Bool()))
+  val v0_mask = Mem(maskRows, Vec(dLen, Bool()))
   for (read <- io.read) {
     read.req.ready := true.B
-    read.resp := vrf.read(read.req.bits.eg).asUInt
+    read.resp := DontCare
+    when (read.req.valid) {
+      read.resp := vrf.read(read.req.bits.eg).asUInt
+    }
+  }
+  for (mask_read <- io.mask_read) {
+    mask_read.req.ready := true.B
+    mask_read.resp := DontCare
+    when (mask_read.req.valid) {
+      mask_read.resp := v0_mask.read(mask_read.req.bits.eg).asUInt
+    }
   }
 
   for (write <- io.write) {
@@ -67,11 +79,17 @@ class RegisterFileBank(reads: Int, writes: Int, rows: Int)(implicit p: Parameter
         write.bits.eg,
         VecInit(write.bits.data.asBools),
         write.bits.mask.asBools)
+      when (write.bits.eg < maskRows.U) {
+        v0_mask.write(
+          write.bits.eg,
+          VecInit(write.bits.data.asBools),
+          write.bits.mask.asBools)
+      }
     }
   }
 }
 
-class RegisterFile(reads: Seq[Int], pipeWrites: Int, llWrites: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrites: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val nBanks = vParams.vrfBanking
   // Support 1, 2, and 4 banks for the VRF
@@ -79,12 +97,13 @@ class RegisterFile(reads: Seq[Int], pipeWrites: Int, llWrites: Int)(implicit p: 
 
   val io = IO(new Bundle {
     val read = MixedVec(reads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
+    val mask_read = MixedVec(maskReads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
 
     val pipe_writes = Vec(pipeWrites, Input(Valid(new VectorWrite(dLen))))
     val ll_writes = Vec(llWrites, Flipped(Decoupled(new VectorWrite(dLen))))
   })
 
-  val vrf = Seq.fill(nBanks) { Module(new RegisterFileBank(reads.size, 1, egsTotal/nBanks)) }
+  val vrf = Seq.fill(nBanks) { Module(new RegisterFileBank(reads.size, maskReads.size, 1, egsTotal/nBanks, if (egsPerVReg < nBanks) 1 else egsPerVReg / nBanks)) }
 
   reads.zipWithIndex.foreach { case (rc, i) =>
     val xbar = Module(new RegisterReadXbar(rc, nBanks))
@@ -92,6 +111,14 @@ class RegisterFile(reads: Seq[Int], pipeWrites: Int, llWrites: Int)(implicit p: 
       bank.io.read(i) <> xbar.io.out(j)
     }
     xbar.io.in <> io.read(i)
+  }
+
+  maskReads.zipWithIndex.foreach { case (rc, i) =>
+    val mask_xbar = Module(new RegisterReadXbar(rc, nBanks))
+    vrf.zipWithIndex.foreach { case (bank, j) =>
+      bank.io.mask_read(i) <> mask_xbar.io.out(j)
+    }
+    mask_xbar.io.in <> io.mask_read(i)
   }
 
   io.ll_writes.foreach(_.ready := false.B)

@@ -32,14 +32,14 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   val rvs2_data = io.pipe(0).bits.rvs2_data
   val rvs1_data = io.pipe(0).bits.rvs1_data
 
-  val fTypes = Seq(FType.S, FType.D)
-  val minmax_results = Wire(Vec(2, UInt(dLen.W)))       // results for vfmin/vfmax
+  val fTypes = Seq(FType.H, FType.S, FType.D)
+  val minmax_results = Wire(Vec(3, UInt(dLen.W)))       // results for vfmin/vfmax
   val comp_results_eew = Seq.tabulate(4)({sew => WireInit(0.U((dLenB >> sew).W))})
   val comp_results = (0 until 4).map({sew => Mux(rvd_eew === sew.U, Fill(1 << sew, comp_results_eew(sew)), 0.U(dLenB.W))}).reduce(_|_)
-  val exceptions = Wire(Vec(2, UInt(5.W)))
+  val exceptions = Wire(Vec(3, UInt(5.W)))
 
-  for (eew <- 2 until 4) {
-    val fType = fTypes(eew-2)
+  for (eew <- 1 until 4) {
+    val fType = fTypes(eew-1)
     val num_chunks = dLen / fType.ieeeWidth
     val compare_modules = Seq.fill(num_chunks)(Module(new hardfloat.CompareRecFN(fType.exp, fType.sig)))
 
@@ -70,7 +70,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
       }
       minmax_out
     }
-    minmax_results(eew - 2) := minmax.asUInt
+    minmax_results(eew - 1) := minmax.asUInt
 
     val comparisons = gen_compares.map{ case(comp, rvs2, rvs2_nan, rvs1, rvs1_nan) =>
       val comparison_out = Wire(UInt(1.W))
@@ -89,7 +89,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
     }
     comp_results_eew(eew) := comparisons.asUInt
 
-    exceptions(eew - 2) := gen_compares.map {case(comp, rvs2, rvs2_nan, rvs1, rvs1_nan) => comp.exceptionFlags}.reduce(_ | _)
+    exceptions(eew - 1) := gen_compares.map {case(comp, rvs2, rvs2_nan, rvs1, rvs1_nan) => comp.exceptionFlags}.reduce(_ | _)
   }
 
 
@@ -100,23 +100,29 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   val sgnj = rvs2_vals.zip(rvs1_vals).map{ case(rvs2, rvs1) =>
     val d_bit = Wire(Bool())
     val s_bit = Wire(Bool())
+    val h_bits = Wire(UInt(2.W))
 
     when (ctrl_sgnjn) {
       d_bit := !rvs1(63)
-      s_bit := !rvs1(31)
+      s_bit := Mux(rvd_eew === 2.U, !rvs1(31), rvs2(31))
+      h_bits := Mux(rvd_eew === 1.U, Cat(!rvs1(47), !rvs1(15)), Cat(rvs2(47), rvs2(15)))
     } .elsewhen (ctrl_sgnjx) {
       d_bit := rvs1(63) ^ rvs2(63)
-      s_bit := rvs1(31) ^ rvs2(31)
+      s_bit := Mux(rvd_eew === 2.U, rvs1(31) ^ rvs2(31), rvs2(31))
+      h_bits := Mux(rvd_eew === 1.U, Cat(rvs1(47) ^ rvs2(47), rvs1(15) ^ rvs2(15)), Cat(rvs2(47), rvs2(15)))
     } .otherwise {
       d_bit := rvs1(63)
-      s_bit := rvs1(31)
+      s_bit := Mux(rvd_eew === 2.U, rvs1(31), rvs2(31))
+      h_bits := Mux(rvd_eew === 1.U, Cat(rvs1(47), rvs1(15)), Cat(rvs2(47), rvs2(15)))
     }
-    Cat(d_bit,Cat(rvs2(62,32),Cat(Mux(io.pipe(0).bits.rvd_eew === 3.U, rvs2(31), s_bit), rvs2(30,0))))
+    d_bit ## rvs2(62,48) ## h_bits(1) ## rvs2(46, 32) ## s_bit ## rvs2(30,16) ## h_bits(0) ## rvs2(14,0) 
   }
 
   val out = Wire(UInt(dLen.W))
   when (ctrl.bool(FPComp)) {
     out := Mux(rvs1_eew === 3.U, minmax_results(1), minmax_results(0))
+    out := Mux1H(Seq(rvs1_eew === 3.U, rvs1_eew === 2.U, rvs1_eew === 1.U),
+                 Seq(minmax_results(2), minmax_results(1), minmax_results(0)))
   } .elsewhen (ctrl.bool(WritesAsMask)) {
     out := Fill(8, comp_results)
   } .otherwise {

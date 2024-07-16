@@ -79,7 +79,8 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
   hella_store_q.io.enq.bits.no_xcpt := true.B
 
   io.vec.store_ack.valid := hella_store.resp.valid
-  io.vec.store_ack.bits := hella_store.resp.bits.tag
+  io.vec.store_ack.bits.data := DontCare
+  io.vec.store_ack.bits.tag := hella_store.resp.bits.tag
 
   io.mem_busy := inflights =/= 0.U
 

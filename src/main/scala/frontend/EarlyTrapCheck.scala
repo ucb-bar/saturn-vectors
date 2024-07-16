@@ -12,13 +12,15 @@ import freechips.rocketchip.diplomacy._
 import saturn.common._
 import saturn.backend.{VectorBackend}
 
-class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val unified_addresses = AddressSet.unify(edge.manager.managers.map(_.address).flatten)
   require(unified_addresses.forall(_.alignment >= (1 << pgIdxBits)),
     "Memory devices on this system must be at least page-aligned")
 
   val io = IO(new Bundle {
+    val sg_base = Input(UInt(coreMaxAddrBits.W))
+
     val busy = Output(Bool())
     val s0 = new Bundle {
       val in = Input(Valid(new Bundle {
@@ -29,6 +31,7 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
         val vstart = UInt(log2Ceil(maxVLMax).W)
         val rs1 = UInt(xLen.W)
         val rs2 = UInt(xLen.W)
+        val phys = Bool()
       }))
       val tlb_req = Valid(new TLBReq(3))
     }
@@ -75,7 +78,9 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
   s0_inst.emul     := Mux(io.s0.in.bits.vconfig.vtype.vlmul_sign, 0.U, io.s0.in.bits.vconfig.vtype.vlmul_mag)
   s0_inst.page     := DontCare
   s0_inst.vat      := DontCare
+  s0_inst.debug_id := DontCare
   s0_inst.rm       := DontCare
+  s0_inst.fast_sg  := false.B
   when (s0_inst.vmu && s0_inst.mop === mopUnit) {
     val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
     val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) * (s0_inst.nf +& 1.U)
@@ -97,6 +102,10 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
   val s0_single_page = (s0_base >> pgIdxBits) === (s0_bound >> pgIdxBits)
   val s0_replay_next_page = s0_inst.vmu && s0_inst.mop === mopUnit && s0_inst.nf === 0.U && !s0_single_page
   val s0_iterative = (!s0_single_page || (s0_inst.mop =/= mopUnit) || s0_inst.umop === lumopFF) && !s0_replay_next_page
+  val s0_fast_sg = s0_iterative && io.s0.in.bits.phys && s0_inst.mop === mopUnordered && s0_inst.seg_nf === 0.U && sgSize.map { size =>
+    s0_base >= io.sg_base && s0_base < (io.sg_base + size.U)
+  }.getOrElse(false.B)
+
   val s0_tlb_valid = !s0_iterative && s0_inst.vmu && s0_inst.vstart < s0_inst.vconfig.vl
 
   io.s0.tlb_req.valid            := s0_tlb_valid && io.s0.in.valid
@@ -114,11 +123,16 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
   val s1_replay_next_page = RegEnable(s0_replay_next_page, io.s0.in.valid)
   val s1_base             = RegEnable(s0_base            , io.s0.in.valid)
   val s1_tlb_valid        = RegEnable(s0_tlb_valid       , io.s0.in.valid)
+  val s1_fast_sg          = RegEnable(s0_fast_sg         , io.s0.in.valid)
   val s1_tlb_resp         = WireInit(io.s1.tlb_resp)
 
   when (!s1_tlb_valid) {
     s1_tlb_resp := 0.U.asTypeOf(new TLBResp)
+    when (s1_fast_sg) {
+      s1_tlb_resp.paddr := s1_base
+    }
   }
+
   io.s1.inst := s1_inst
   io.s1.tlb_req.valid := RegNext(io.s0.tlb_req.valid, false.B)
   io.s1.tlb_req.bits  := RegEnable(io.s0.tlb_req.bits, s0_tlb_valid)
@@ -128,6 +142,7 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
   val s2_inst = Reg(new VectorIssueInst)
   val s2_base = RegEnable(s1_base, s1_valid)
   val s2_iterative        = RegEnable(s1_iterative       , s1_valid)
+  val s2_fast_sg          = RegEnable(s1_fast_sg         , s1_valid)
   val s2_replay_next_page = RegEnable(s1_replay_next_page, s1_valid)
   when (s1_valid) {
     s2_inst := s1_inst
@@ -188,6 +203,11 @@ class EarlyTrapCheck(edge: TLEdge)(implicit p: Parameters) extends CoreModule()(
       io.s2.replay := true.B
     } .elsewhen (s2_xcpt) {
       io.s2.xcpt.valid := true.B
+    } .elsewhen (s2_inst.vmu && s2_fast_sg) {
+      io.s2.retire := true.B
+      io.s2.issue.valid := true.B
+      io.s2.issue.bits.fast_sg := true.B
+      io.s2.vstart.valid := true.B
     } .elsewhen (s2_inst.vmu && s2_iterative) {
       io.s2.internal_replay.valid := true.B
     } .elsewhen (s2_replay_next_page) {

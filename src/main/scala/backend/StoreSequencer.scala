@@ -61,10 +61,10 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
 
   val oldest = inst.vat === io.vat_head
 
-  io.rvd.req.valid := valid
+  io.rvd.req.valid := valid && io.iss.ready
   io.rvd.req.bits.eg := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
   io.rvd.req.bits.oldest := oldest
-  io.rvm.req.valid := valid && renvm
+  io.rvm.req.valid := valid && renvm && io.iss.ready
   io.rvm.req.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
   io.rvm.req.bits.oldest := oldest
 
@@ -74,7 +74,9 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
   val vm_mask   = Mux(!renvm, ~(0.U(dLenB.W)), get_vm_mask(io.rvm.resp, eidx, inst.mem_elem_size))
   io.iss.bits.stmask := vm_mask
-  io.iss.bits.debug_vat := inst.vat
+  io.iss.bits.debug_id := inst.debug_id
+  io.iss.bits.tail := tail
+  io.iss.bits.vat := inst.vat
 
   when (io.iss.fire && !tail) {
     when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B) && vParams.enableChaining.B) {

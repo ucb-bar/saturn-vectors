@@ -9,8 +9,14 @@ import freechips.rocketchip.diplomacy._
 import saturn.common._
 import shuttle.common._
 
-class WithShuttleVectorUnit(vLen: Int = 128, dLen: Int = 64, params: VectorParams = VectorParams(), cores: Option[Seq[Int]] = None, location: HierarchicalLocation = InSubsystem) extends Config((site, here, up) => {
-  case TilesLocated(`location`) => up(TilesLocated(`location`), site) map {
+class WithShuttleVectorUnit(
+  vLen: Int = 128,
+  dLen: Int = 64,
+  params: VectorParams = VectorParams(),
+  cores: Option[Seq[Int]] = None,
+  location: HierarchicalLocation = InSubsystem
+) extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: ShuttleTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(

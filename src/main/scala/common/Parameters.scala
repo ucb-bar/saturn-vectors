@@ -19,8 +19,6 @@ object VectorParams {
   // For a standard modestly capable small vector unit with
   // SIMD functional units
   def refParams = minParams.copy(
-    vlifqEntries = 8,
-    vsifqEntries = 8,
     vlrobEntries = 4,
     vlissqEntries = 3,
     vsissqEntries = 3,
@@ -131,9 +129,14 @@ case class VectorParams(
   vsiqEntries: Int = 4,
 
   // Load store in-flight queues (in VLSU)
-  vlifqEntries: Int = 4,
-  vsifqEntries: Int = 4,
+  vlifqEntries: Int = 8,
+  vsifqEntries: Int = 8,
   vlrobEntries: Int = 2,
+
+  // Scatter-gather engine params
+  vsgPorts: Int = 8,
+  vsgifqEntries: Int = 4,
+  vsgBuffers: Int = 3,
 
   // Load/store/execute/permute/maskindex issue queues
   vlissqEntries: Int = 0,
@@ -175,10 +178,16 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
+  def sgmemTagBits = log2Ceil(vParams.vsgifqEntries)
   def egsPerVReg = vLen / dLen
   def egsTotal = (vLen / dLen) * 32
   def vrfBankBits = log2Ceil(vParams.vrfBanking)
   def lsiqIdBits = log2Ceil(vParams.vliqEntries.max(vParams.vsiqEntries))
+  val debugIdSz = 16
+  val nRelease = vParams.issStructure match {
+    case VectorIssueStructure.Unified => 3
+    case VectorIssueStructure.Shared | VectorIssueStructure.Split => 4
+  }
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)

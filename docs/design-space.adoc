@@ -1,12 +1,108 @@
 [[design-space]]
 == Design Space
 
-=== Parameterization Space
+Saturn is highly parameterized and capable of generating designs that target a wide range of the power/performance/area space.
+Several high-level parameter sets and defaults are provided, but a given implementation may be configured at a finer granularity.
+Five high-level parameter sets control parameters of the machine other than `VLEN` or `DLEN`.
 
-=== "vMIN" Minimal Configuration
+ * `vMIN` is a minimal, yet still V-profile compliant configuration. Performance is de-emphasized. If possible, scalar floating-point units are used
+ * `vREF` is a modest design with SIMD execution units, demonstrating the key scheduling mechanisms without minimal overhead. SIMD functional units are used, and issue queues are sized up/
+ * `vDSP` splits the floating point and integer units into two execution units, enabling higher throughput in tightly optimized kernels.
+ * `vGEN` generates separate issue queues for the floating point and integer sequencers, improving performance for suboptimally scheduled code.
+ * `vDMA` generates a design optimized around memory-to-memory transfers, deemphasizing compute throughput. The load-store unit is parameterized to tolerate higher latencies, but the datapath uses conservative functional units
 
-=== "vREF" Reference Configuration
+Each of these parameter groups aggregates settings across the much wider range of fine-grained parameters, which are listed below.
 
-=== "vDSP" DSP Configuration
+[cols="3,8,2"]
+|===
+|Parameter|Description|Range
 
-=== "vDMA" DMA Configuration
+|`vLen`
+|Architectural vector length, in bits
+|64+
+
+|`dLen`
+|Datapath and memory system width, in bits
+|64+
+
+|`vrfBanking`
+|Number of banks of the VRF
+|1+
+
+|`issStructure`
+|Issue queue organization
+|Unified/Shared/Split
+
+|`vdqEntries`
+|Number of entries in the VU's dispatch/decoupling queue
+|1+
+
+|`vliqEntries`
+|Number of entries in the vector load-instruction queue
+|1+
+
+|`vsiqEntries`
+|Number of entries in the vector store-instruction queue
+|1+
+
+|`vlrobEntries`
+|Number of entries in the vector load ordering buffer
+|1+
+
+|`vsgPorts`
+|Number of vector scatter-gather memory ports
+|0+
+
+|`vsgifqEntries`
+|Number of entries per port in the vector scatter-gather load path
+|1+
+
+|`vlissqEntries`
+|Number of entries in the load path's issue queue
+|0+
+
+|`vsissqEntries`
+|Number of entries in the store path's issue queue
+|0+
+
+|`vxissqEntries`
+|Number of entries in the arithmetic issue queeus
+|0+
+
+|`vpissqEntries`
+|Number of entries in the permute sequencer's issue queue
+|0+
+
+|`vatSz`
+|Width of the vector age tag
+|1+
+
+|`useSegmentedIMul`
+|Use the pipelined SIMD integer multiplier
+|True/False
+
+|`useIterativeIMul`
+|Use the elementwise iterative integer multiplier
+|True/False
+
+|`useScalarFMMisc`
+|Offload miscellaneous floating point operations to the host core's scalar FPU (if available)
+|True/False
+
+|`useScalarFPFMA`
+|Offload floating point FMA operations to the host core's scalar FPU
+|True/False
+
+|`fmaPipeDepth`
+|Pipeline depth of the floating-point FMA unit
+|2+
+
+|`imaPipeDepth`
+|Pipeline depth of the pipelined integer multiplier
+|2+
+
+|`doubleBufferSegments`
+|Double-buffer the segment buffers
+|True/False
+
+|===

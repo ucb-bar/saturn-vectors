@@ -19,7 +19,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     val resp = Decoupled(new Bundle {
       val data = UInt(dLen.W)
-      val debug_vat = UInt(vParams.vatSz.W)
+      val debug_id = UInt(debugIdSz.W)
     })
   })
 
@@ -60,7 +60,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   segbuf.io.in.bits.sidx_tail := sidx_tail
   segbuf.io.in.bits.tail := eidx_tail
   segbuf.io.in.bits.segstart := io.op.segstart
-  segbuf.io.in.bits.vat := io.op.vat
+  segbuf.io.in.bits.debug_id := io.op.debug_id
 
   segbuf.io.out.ready := io.resp.ready
 
@@ -68,7 +68,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
     segbuf.io.out.valid,
     io.compactor.ready && io.valid && io.op.seg_nf === 0.U)
   io.resp.bits.data := Mux(segbuf.io.busy, segbuf.io.out.bits.data, io.compactor_data)
-  io.resp.bits.debug_vat := Mux(segbuf.io.busy, segbuf.io.out.bits.debug_vat, io.op.vat)
+  io.resp.bits.debug_id := Mux(segbuf.io.busy, segbuf.io.out.bits.debug_id, io.op.debug_id)
 
 
   val seg_ready = Mux(io.op.seg_nf === 0.U,

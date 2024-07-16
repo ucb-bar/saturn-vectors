@@ -49,6 +49,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val vs2_eew = op.rvs2_eew
   val vd_eew  = op.vd_eew
   val vd_eew64 = op.vd_eew64
+  val vd_eew32 = op.vd_eew32
+  val vd_eew16 = op.vd_eew16
   val eidx = Mux(op.acc, 0.U, op.eidx)
 
   val ctrl_isDiv = op.opff6.isOneOf(OPFFunct6.fdiv, OPFFunct6.frdiv)
@@ -106,6 +108,14 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val rvs1_elem = op.rvs1_elem
   val rvd_elem  = op.rvd_elem
 
+  val h_rvs2_int = rvs2_elem(15,0)
+  val h_rvs2_fp = FType.H.recode(Mux(ctrl_funary0 && ctrl_truncating, rvs2_elem(15,9) << 9, rvs2_elem(15,0)))
+  val h_rvs2_unbox = unbox(box(h_rvs2_fp, FType.H), H, None)
+
+  val h_rvs1 = FType.H.recode(rvs1_elem(15,0))
+  val h_rvs1_unbox = unbox(box(h_rvs1, FType.H), H, None)
+  val h_rvd = FType.H.recode(rvd_elem(15,0))
+
   val s_rvs2_int = rvs2_elem(31,0)
   val s_rvs2_fp = FType.S.recode(rvs2_elem(31,0))
   val s_rvs2_unbox = unbox(box(s_rvs2_fp, FType.S), S, None)
@@ -120,25 +130,27 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val d_rvs1 = FType.D.recode(rvs1_elem)
   val d_rvd = FType.D.recode(rvd_elem)
 
+  val h_isNaN = FType.H.isNaN(h_rvs2_fp) || FType.H.isNaN(h_rvs1)
   val s_isNaN = FType.S.isNaN(s_rvs2_fp) || FType.S.isNaN(s_rvs1)
   val d_isNaN = FType.D.isNaN(d_rvs2_fp) || FType.D.isNaN(d_rvs1)
 
-  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (op.vd_eew32 && s_isNaN))
+  val mgt_NaN = ctrl.bool(WritesAsMask) && ctrl.bool(FPMGT) && ((vd_eew64 && d_isNaN) || (vd_eew32 && s_isNaN) || (vd_eew16 && h_isNaN))
+  val mgt_NaN_reg = RegInit(false.B)
 
   // Set req.in1
   when (ctrl_swap12) {
-    req.in1 := Mux(vd_eew64, d_rvs1, s_rvs1_unbox)
+    req.in1 := Mux(vd_eew64, d_rvs1, Mux(vd_eew32, s_rvs1_unbox, h_rvs1_unbox))
   } .elsewhen (ctrl_inttofp) {
-    req.in1 := Mux((vd_eew64 && !ctrl_widen) || (ctrl_funary0 && ctrl_narrow), d_rvs2_int, s_rvs2_int)
+    req.in1 := Mux(vd_eew64 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), d_rvs2_int, Mux(vd_eew32 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), s_rvs2_int, h_rvs2_int))
   } .otherwise {
-    req.in1 := Mux((vd_eew64 && !ctrl_widen) || (ctrl_funary0 && ctrl_narrow), d_rvs2_fp, s_rvs2_unbox)
+    req.in1 := Mux(vd_eew64 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), d_rvs2_fp, Mux(vd_eew32 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), s_rvs2_unbox, h_rvs2_unbox))
   }
 
   // Set req.in2
   when (ctrl_swap12) {
-    req.in2 := Mux(vd_eew64, d_rvs2_fp, s_rvs2_unbox)
+    req.in2 := Mux(vd_eew64, d_rvs2_fp, Mux(vd_eew32, s_rvs2_unbox, h_rvs2_unbox))
   } .otherwise {
-    req.in2 := Mux(vd_eew64, d_rvs1, s_rvs1_unbox)
+    req.in2 := Mux(vd_eew64, d_rvs1, Mux(vd_eew32, s_rvs1_unbox, h_rvs1_unbox))
   }
 
   // Set req.in3
@@ -176,7 +188,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     } .elsewhen (ctrl_fptoint) {
       wdata := Mux(vd_eew64, io_fp_resp.bits.data(63,0), Fill(2, io_fp_resp.bits.data(31,0)))
     } .otherwise {
-      wdata := Mux(vd_eew64, FType.D.ieee(io_fp_resp.bits.data), Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, 0.U, Some(FType.S)))))
+      wdata := Mux(vd_eew64, FType.D.ieee(io_fp_resp.bits.data), Mux(vd_eew32, Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, 0.U, Some(FType.S)))),
+                                                                               Fill(4, FType.H.ieee(unbox(io_fp_resp.bits.data, H, Some(FType.H))))))
     }
   }
 

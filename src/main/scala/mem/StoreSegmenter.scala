@@ -39,7 +39,7 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
   val eidx_tail = next_eidx >= io.op.vl
 
   when (io.valid && io.stdata.valid) {
-    assert(io.stdata.bits.debug_vat === io.op.vat)
+    assert(io.stdata.bits.debug_id === io.op.debug_id)
   }
 
   io.stdata.ready := io.valid && Mux(io.op.seg_nf === 0.U,
@@ -55,7 +55,7 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
   segbuf.io.in.bits.sidx := sidx
   segbuf.io.in.bits.segstart := io.op.segstart
   segbuf.io.in.bits.segend := io.op.seg_nf
-  segbuf.io.in.bits.vat := io.op.vat
+  segbuf.io.in.bits.debug_id := io.op.debug_id
 
   io.compactor.valid := Mux(segbuf.io.busy,
     segbuf.io.out.valid,

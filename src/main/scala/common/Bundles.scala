@@ -8,7 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
 class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val vat = UInt(vParams.vatSz.W)
+  val debug_id = UInt(debugIdSz.W)
 
   val base_offset = UInt(pgIdxBits.W)
   val page        = UInt((paddrBits - pgIdxBits).W)
@@ -27,6 +27,7 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val elem_size = UInt(2.W)
   val whole_reg = Bool()
   val store = Bool()
+  val fast_sg = Bool()
 
   def indexed = !mop.isOneOf(mopUnit, mopStrided)
   def seg_nf = Mux(whole_reg, 0.U, nf)
@@ -48,6 +49,8 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val vat = UInt(vParams.vatSz.W)
   val rm = UInt(3.W)
   val emul = UInt(2.W)
+  val fast_sg = Bool()
+  val debug_id = UInt(debugIdSz.W)
 
   def opcode = bits(6,0)
   def store = opcode(5)
@@ -69,8 +72,8 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def imm5 = bits(19,15)
   def imm5_sext = Cat(Fill(59, imm5(4)), imm5)
   def funct6 = bits(31,26)
-  def writes_xrf = (funct3 === OPMVV && opmf6 === OPMFunct6.wrxunary0) || (funct3 === OPFVV && opff6 === OPFFunct6.wrfunary0)
-  def writes_frf = funct3 === OPFVV
+  def writes_xrf = !vmu && ((funct3 === OPMVV && opmf6 === OPMFunct6.wrxunary0) || (funct3 === OPFVV && opff6 === OPFFunct6.wrfunary0))
+  def writes_frf = !vmu && (funct3 === OPFVV)
 
   def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)
   def isOpm = funct3.isOneOf(OPMVV, OPMVX)
@@ -144,7 +147,7 @@ class VectorMaskAccessIO(implicit p: Parameters) extends CoreBundle()(p) with Ha
 }
 
 class MaskedByte(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val debug_vat = UInt(vParams.vatSz.W)
+  val debug_id = UInt(debugIdSz.W)
   val data = UInt(8.W)
   val mask = Bool()
 }
@@ -207,13 +210,15 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
 class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val stdata = UInt(dLen.W)
   val stmask = UInt(dLenB.W)
-  val debug_vat = UInt(vParams.vatSz.W)
+  val debug_id = UInt(debugIdSz.W)
+  val tail = Bool()
+  val vat = UInt(vParams.vatSz.W)
   def asMaskedBytes = {
     val bytes = Wire(Vec(dLenB, new MaskedByte))
     for (i <- 0 until dLenB) {
       bytes(i).data := stdata(((i+1)*8)-1,i*8)
       bytes(i).mask := stmask(i)
-      bytes(i).debug_vat := debug_vat
+      bytes(i).debug_id := debug_id
     }
     bytes
   }
@@ -223,10 +228,13 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val wvd_eg = UInt(log2Ceil(egsTotal).W)
   val wmask = UInt(dLenB.W)
   val tail = Bool()
+  val debug_id = UInt(debugIdSz.W)
   val vat = UInt(vParams.vatSz.W)
 }
 
 class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val renv2 = Bool()
+  val renvm = Bool()
   val rvs2_data = UInt(dLen.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val rvs2_eew = UInt(2.W)

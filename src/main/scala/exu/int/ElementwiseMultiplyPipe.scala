@@ -71,7 +71,7 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   io.write.bits.data := wdata
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
 
-  io.set_vxsat := io.pipe(depth-1).valid && pipe_vxsat
+  io.set_vxsat := io.pipe(depth-1).valid && pipe_vxsat && (io.pipe(depth-1).bits.wmask =/= 0.U)
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
 }

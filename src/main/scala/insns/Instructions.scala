@@ -143,8 +143,8 @@ object REMU      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.remu))
 
 object MV_S_X    extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVX), RS2( 0.U(5.W)), ReadsVS2.N, VMBitReadsVM.N, ScalarToVD0.Y) }
 object MV_X_S    extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVV), RS1( 0.U(5.W)), ReadsVS2.Y, VMBitReadsVM.N, WritesScalar.Y, WritesVD.N) }
-object POPC      extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVV), RS1(16.U(5.W)), ReadsVS2.Y, VMBitReadsVM.N, WritesScalar.Y, WritesVD.N, ReadsVS2AsMask.Y) }
-object FIRST     extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVV), RS1(17.U(5.W)), ReadsVS2.Y, VMBitReadsVM.N, WritesScalar.Y, WritesVD.N, ReadsVS2AsMask.Y) }
+object POPC      extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVV), RS1(16.U(5.W)), ReadsVS2.Y, VMBitReadsVM.Y, WritesScalar.Y, WritesVD.N, ReadsVS2AsMask.Y) }
+object FIRST     extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVV), RS1(17.U(5.W)), ReadsVS2.Y, VMBitReadsVM.Y, WritesScalar.Y, WritesVD.N, ReadsVS2AsMask.Y) }
 object FMV_S_F   extends VectorInstruction { val props = Seq(F6(OPFFunct6.wrfunary0), F3(VectorConsts.OPFVF), RS2( 0.U(5.W)), ReadsVS2.N, VMBitReadsVM.N, ScalarToVD0.Y) }
 object FMV_F_S   extends VectorInstruction { val props = Seq(F6(OPFFunct6.wrfunary0), F3(VectorConsts.OPFVV), RS1( 0.U(5.W)), ReadsVS2.Y, VMBitReadsVM.N, WritesScalar.Y, WritesVD.N) }
 object MSBF      extends VectorInstruction { val props = Seq(F6(OPMFunct6.munary0)  , F3(VectorConsts.OPMVV), RS1( 1.U(5.W)), ReadsVS2AsMask.Y, WritesAsMask.Y) }
