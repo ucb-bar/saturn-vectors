@@ -50,7 +50,7 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
     vu.io.vmu <> vmu.io.vu
     vu.io.vat_tail := dis.io.vat_tail
     vu.io.vat_head := dis.io.vat_head
-    vu.io.dis := dis.io.dis
+    vu.io.dis <> dis.io.dis
     dis.io.vat_release := vu.io.vat_release
     vmu.io.enq <> dis.io.mem
 
