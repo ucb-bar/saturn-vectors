@@ -158,7 +158,7 @@ Since neither `vtype` nor `vl` require many bits to encode, this state can be re
 
 Furthermore, since `vtype` and `vl` affect the generation of precise traps by vector memory instructions, it is insufficient to update these registers only at commit, since precise traps must be generated ahead-of-commit.
 Doing so would introduce an interlock between a `vset` and a subsequent vector memory operation, which must stall until the `vset` commits before using the updated `vtype`/`vl` to check for precise traps.
-Instead, performant scalar core implementations should bypass updates of `vtype` and `vset` to an early stage in the pipeline to avoid this interlock.
+Instead, performant scalar core implementations should bypass updates of `vtype` and `vset` to an early stage in the pipeline.
 
 [discrete]
 ==== Memory Disambiguation
@@ -186,14 +186,18 @@ Performant implementations should expediently commit vector memory instructions 
 [discrete]
 ==== `LMUL` Register Grouping
 
-The `LMUL` (length multiplier) register grouping field of `VTYPE` enables grouping consecutive vector registers into a single longer vector register.
+The `LMUL` (length multiplier) register grouping field of `vtype` enables grouping consecutive vector registers into a single longer vector register.
 In addition to enabling mixed-precision operations, this feature also allows kernels that do not induce vector register pressure to access an effectively longer hardware vector length.
 Generally, performance programmers for RISC-V will use this feature to reduce the dynamic instruction count of their loops and potentially improve the utilization of hardware compute resources.
 For example, vector `memcpy` induces no register pressure and can trivially set a high `LMUL` to reduce dynamic instruction count.
 
-Thus, implementations should not penalize code which uses high LMUL, as long as the underlying application vector lengths are long enough to support it.
-One approach to implementing this functionality would be to treat LMUL > 1 operations as individual operations by cracking them early in the pipeline.
-While this strategy is easy and low-cost to implement, it may cause performance issues, as the many micro-ops from cracked high-`LMUL` instructions would induce greater pressure on datapath scheduling resources.
+Thus, implementations should not penalize code which uses high `LMUL` to reduce instruction fetch pressure.
+The general intuition around vector code should be to use the highest `LMUL` setting while avoiding register spills.
+Implementations should avoid violating this intuition.
+
+One tempting approach to implementing this behavior would be to treat `LMUL > 1` instructions as individual operations by cracking them early in the pipeline.
+While this strategy is easy and low-cost to implement, it may cause performance issues.
+The many micro-ops from cracked high-`LMUL` instructions would induce greater pressure on datapath scheduling resources.
 
 [discrete]
 ==== Segmented Memory Operations
@@ -206,7 +210,7 @@ Segmented memory access instructions can also be used to perform on-the-fly refo
 These operations can significantly reduce programmer burden, and thus performant RVV implementations should not impose an excess performance overhead from their execution.
 To match the performance programming model, vector code which uses these memory operations to reduce dynamic instruction count should perform no worse than the equivalent code which explicitly transforms the data over many vector instructions.
 
-=== Instruction Scheduling in Short-Vector Units
+=== Comparing Short-Vector Units
 
 Saturn's instruction scheduling mechanism differentiates it from the relevant comparable archetypes for data-parallel microarchitectures.
 Fundamentally, Saturn relies on efficient dynamic scheduling of short-chime short-vectors, without relying on costly register renaming.
@@ -214,7 +218,7 @@ When `LMUL` is short (1/2), vector chimes may be only 2-4 cycles long, requiring
 
 [.text-center]
 [#short]
-.Pipeline diagram of instruction execution with short vector lengths, zero dead-time, limited out-of-order execution, and chaining.
+.Pipeline diagram of instruction execution with short vector lengths, zero dead-time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other
 image::diag/short-vectors.png[Saturn Pipeline,width=50%,align=center,title-align=center]
 
 <<short>> depicts a simplified pipeline visualization of a short vector loop, consisting of a load and dependent arithmetic instruction, executing on a simplified Saturn datapath.
@@ -225,7 +229,7 @@ Instruction throughput requirements are moderate, but can still be fulfilled wit
 
 [.text-center]
 [#short-dead]
-.Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead-time, limited out-of-order execution, and chaining.
+.Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead-time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other
 image::diag/short-vectors-dead.png[Saturn Dead-time Pipeline,width=55%,align=center,title-align=center]
 
 <<short-dead>> highlights the importance of zero dead-time for short-vector microarchitectures like Saturn.
@@ -234,7 +238,7 @@ Notably, a single cycle of dead-time in a short-chime machine substantially degr
 
 [.text-center]
 [#short-inorder]
-.Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead-time, strict in-order execution, and chaining.
+.Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead-time, strict in-order execution, and chaining. Instructions in the `X` and `M` pipelines must begin execution in-order
 image::diag/short-vectors-in-order.png[Saturn In-order Pipeline,width=60%,align=center,title-align=center]
 
 <<short-inorder>> highlights the importance of limited out-of-order execution for short-vector microarchitectures like Saturn.

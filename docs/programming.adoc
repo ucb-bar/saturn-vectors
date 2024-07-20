@@ -70,7 +70,7 @@ Generally, performant code should use the highest `LMUL` possible that avoids ve
 Refer to <<execute>> for details on each of the vector functional units and their default pipeline depths.
 
 
-=== Optimizing Complex Memory Accesses
+=== Optimizing Segmented Memory Accesses
 
 Saturn's implementation strives to implement complex instructions efficiently.
 In particular, the vector segmented loads and stores that reformat memory into vector registers are implemented to be able to fully utilize the wide memory port.

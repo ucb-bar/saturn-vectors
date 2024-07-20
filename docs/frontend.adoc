@@ -17,8 +17,8 @@ Rocket and Shuttle expose nearly identical interfaces to the vector unit.
 The scalar pipeline dispatches vector instructions to the VFU pipeline at the X stage, immediately after scalar operands are read from the scalar register files.
 The scalar pipeline also must provide these instructions with up-to-date values of `vtype`, `vl`, and `vstart`.
 The `M` stage exposes a port through which the `VFU` can access the host core's TLB and MMU.
-The `W` stage contains interfaces for synchronizing committing or faulting vector instructions with the scalar core's instruction scheme and stalling scalar instruction commit if necessary.
-The `W` stage also exposes interfaces for modifying `vstart` and `vconfig` as vector instructions commit.
+The `WB` stage contains interfaces for synchronizing committing or faulting vector instructions with the scalar core's instruction scheme and stalling scalar instruction commit if necessary.
+The `WB` stage also exposes interfaces for modifying `vstart` and `vconfig` as vector instructions commit.
 
 [discrete]
 ==== Rocket
@@ -29,8 +29,8 @@ The `W` stage also exposes interfaces for modifying `vstart` and `vconfig` as ve
 image::diag/rocketpipe.png[Rocket Pipeline Stages,width=50%,align=center,title-align=center]
 
 Rocket is a 5-stage in-order single-issue core.
-As shown in <<rocket>>, the Saturn VFU integrates into execute (X), memory (M), and write-back (W) stages of Rocket, where the W stage is the commit point.
-At the W stage, vector instructions which cannot retire due to ongoing activity in the ITC can kill all younger instructions in the earlier pipeline stages, and request the core to re-fetch and replay the instruction at the next PC.
+As shown in <<rocket>>, the Saturn VFU integrates into execute (`X`), memory (`M`), and write-back (`WB`) stages of Rocket, where the `WB` stage is the commit point.
+At the `WB` stage, vector instructions which cannot retire due to ongoing activity in the ITC can kill all younger instructions in the earlier pipeline stages, and request the core to re-fetch and replay the instruction at the next PC.
 
 [.text-center]
 [#rocket-vset]
@@ -64,9 +64,9 @@ Similar to Rocket, vector instructions which cannot retire at the W stage will k
 image::diag/shuttlevset.png[Shuttle VSET,width=45%,align=center,title-align=center]
 
 
-Unlike Rocket, Shuttle implements a bypass network for `vset` instructions modifying `VTYPE` or `VL`.
-Vector instructions following a `vset` instruction do not need to stall, as the `VTYPE` and `VL` operands can be accessed through the bypass network.
-However, a vector instruction cannot follow a `vset` on the same cycle; it must proceed on the next cycle instead.
+Unlike Rocket, Shuttle implements a bypass network for `vset` instructions modifying `vtype` or `vl`.
+Vector instructions following a `vset` instruction do not need to stall, as the `vtype` and `vl` operands can be accessed through the bypass network.
+However, a vector instruction cannot proceed be issued in the same instruction packet as a `vset`; it must proceed on the next cycle instead.
 <<shuttle-vset>> shows how Shuttle can dynamically stall a partial instruction packet with the `vadd` to issue it with a younger `vset` on the next cycle.
 This example also depicts how stalling the `vadd` maintains 2 IPC through Shuttle, and 1 IPC into the vector unit.
 

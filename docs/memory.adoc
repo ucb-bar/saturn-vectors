@@ -70,7 +70,7 @@ This TCM should be tile-local and globally addressable, but not necessarily cach
 Saturn's integration with Shuttle supports these tile-local TCMs.
 
 [.text-center]
-[#mem-sgtcm[]
+[#mem-sgtcm]
 .Example Saturn memory system with high-bandwidth local TCM and scatter-gather TCM (SGTCM)
 image::diag/memsgtcm.png[SGTCM memory system,width=60%,align=center,title-align=center]
 
@@ -106,7 +106,8 @@ Furthermore, the VLIQ and VSIQ track the accessed regions with byte-level precis
 Upon dispatch from the VFU into the VLSU, a vector memory instruction is written into either the load instruction queue (VLIQ) or store instruction queue (VSIQ).
 
 Each entry in this queue contains the base offset, physical page index, and stride, as well as a bit-mask of older vector loads or stores.
-As a consequence of the VFU cracking memory instructions into single-page accesses, the base offset and stride are stored as 12 bits of page offset.
+The VFU guarantees that all instructions dispatched into the VLSU have been cracked into operations with single-page access extents.
+As a result, the base offset and stride are stored as 12 bits of page offset, while a physical page index provides the upper bits of the address.
 Each entry additionally contains the `vstart`, `vl`, `segstart`, and `segend` settings of this instruction, along with all the fields for addressing mode, element width, index width, and mask control.
 
 The entry also contains a bound (extent) for the instruction's memory access within its accessed page.

@@ -7,7 +7,7 @@ The VU is organized around independent "sequencing paths", which issue instructi
 
 The datapath is organized around a "vector element group" as the base unit of register access and compute.
 An element group is a fixed-width `DLEN`-bits-wide contiguous slice of the architectural register file space.
-DLEN guides the parameterization of most critical components in the backend.
+`DLEN` guides the parameterization of most critical components in the backend.
 The register file, load-path, store-path, and most functional units are designed to process DLEN bits per cycle (or 1 element group/cycle), regardless of element width (`ELEN`).
 
 === Issue Queues

@@ -14,7 +14,7 @@ Saturn is organized into three main components, as shown in <<overview>>.
 
 The *Vector Frontend (VFU)* integrates into the pipeline of the host RISC-V core.
 In in-order cores, the stages of the VFU align with the pre-commit pipeline stages of the host core.
-All vector instructions except `vset` instructions, are passed into the vector frontend.
+All vector instructions are passed into the vector frontend.
 The VFU performs early decode of vector instructions and checks vector instructions for the possibility of generating a trap, through performing address translation of vector memory address operands.
 Instructions that do not trap are passed to the other vector components once they have also passed the commit stage of the scalar core.
 
@@ -34,7 +34,7 @@ Several key principles drive the design of Saturn's microarchitecture.
 Saturn relies on *post-commit-execution* of all vector instructions.
 That is, the VLSU and VU only receive committed instructions from the VFU.
 As physical addresses are passed from the VFU into the VLSU, the VLSU will never trap.
-This simplifies the microarchitecture of VLSU and VFUs, as all operations in these units are effectively non-speculative.
+This simplifies the microarchitecture of the VLSU and VU, as all operations in these units are effectively non-speculative.
 To enforce precise traps ahead-of-commit, Saturn's VFU implements an aggressive, but precise mechanism that validates instructions are free-of-fault and reports any faults precisely if present.
 
 Saturn's microarchitecture is designed around *in-order execution* with many *latency-insensitive* interfaces.
@@ -52,7 +52,7 @@ Saturn still supports a limited, but sufficient capability for *out-of-order exe
 The load, store, and execute paths in the VU execute independently of each other, dynamically stalling for structural and data hazards without requiring full in-order execution.
 Allowing dynamic "slip" between these paths naturally implies out-of-order execution.
 To track data hazards, all vector instructions in the VU and VLSU are tagged with a "vector age tag (VAT)".
-The VATs are aggressively allocated and freed, and referenced in the machine wherever the relative age of two instructions is ambiguous.
+The VATs are eagerly allocated and freed, and referenced in the machine wherever the relative age of two instructions is ambiguous.
 
 To decode vector instructions, the Saturn generator implements an *decode-generator*-driven methodology for vector decode.
 The Saturn generator tabularly describes a concise list of all vector control signals for all vector instructions.
