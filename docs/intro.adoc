@@ -2,11 +2,11 @@
 == Introduction
 
 [.text-center]
-.High level overview of the Saturn Vector Unit
+.A high-level overview of the Saturn Vector Unit
 image::diag/overview.png[Overview of Saturn,width=75%,align=center,title-align=center]
 
-This manual describes in detail the Saturn Vector Unit, a parameterized and extensible vector microarchitecture executing the RISC-V vector extension.
-Saturn was developed to address an academic need for a representative, compliant, and highly-flexible generator of RISC-V vector units targeting deployment in domain-specialized cores.
+This manual describes the Saturn Vector Unit, a parameterized and extensible vector microarchitecture executing the RISC-V vector extension.
+Saturn was developed to address an academic need for a representative, compliant, and flexible generator of RISC-V vector units targeting deployment in domain-specialized cores.
 //Saturn is divided into a vector frontend (VFU), vector load-store unit (VLSU), and vector datapath (VU).
 //These components are designed to integrate into existing area-efficient scalar RISC-V cores.
 Saturn is implemented as a parameterized Chisel RTL generator, enabling a range of possible Saturn configurations across many target deployment scenarios.
