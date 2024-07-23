@@ -38,7 +38,7 @@ In the "Shared" and "Split" structures, independent sequencers drive the integer
 In the "Shared" configuration, since the sequencers share a single in-order issue queue, interleaving vector instructions across the integer and floating-point paths is critical.
 In the "Split" configuration, each sequencer has its own issue queue, reducing the importance of software-scheduled load balancing.
 
-When the issue queue sizes are shallow, the issue queues may fill up and back-pressure the decoupling queue, and consequently, the scalar core's frontend.
+When the issue queue sizes are shallow, the issue queues may fill up and back-pressure the decoupling queue and, consequently, the scalar core's frontend.
 Even modest configurations of Saturn should contain enough buffering within the issue queues and decoupling queue to avoid back-pressure for well-load-balanced code.
 
 
@@ -64,7 +64,7 @@ A single vector instruction requires `VLEN/DLEN` (the chime length) cycles of oc
 When this chime length is less than the pipeline depth of the relevant functional unit, the proceeding instruction will stall due to a data dependency on the yet-to-be-produced writeback data.
 This situation is rare due to the support for chaining, but might still appear in a sequence of low-`LMUL` floating point instructions.
 
-To saturate the FMA units in this scenario, either a longer `LMUL` should be used, or independent FMAs must be scheduled back-to-back.
+To saturate the FMA units in this scenario, either a longer `LMUL` should be used or independent FMAs must be scheduled back-to-back.
 Generally, performant code should use the highest `LMUL` possible that avoids vector register spilling to maximize performance.
 
 Refer to <<execute>> for details on each of the vector functional units and their default pipeline depths.

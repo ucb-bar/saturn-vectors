@@ -114,7 +114,7 @@ Instructions in the sequencer are inherently older than instructions from the fe
 Sequenced operations in the VFUs are inherently the oldest writes to any element group, so no age filter is needed for these either.
 
 Each sequencer computes the element groups that will be accessed or written to by the next operation to be issued, and determines if a pending older read or write to those element groups would induce a RAW, WAR or WAR hazard.
-If there is no data hazard and there is no structural hazard, the operation can be issued, with the sequencer incrementing its internal element index counter, or draining the instruction.
+If there is no data hazard and there is no structural hazard, the operation can be issued, with the sequencer incrementing its internal element index counter or draining the instruction.
 
 For vector instructions with regular consecutive access patterns, the last issued operation that accesses some element group can clear the sequencer's internal bit-vector of pending reads and/or writes.
 This frees younger vector instructions in other sequencers to chain off this element group as soon as possible.
@@ -217,7 +217,7 @@ Once an iterative functional unit has completed its operation on a given element
 
 |===
 
-For slide and register-gather instructions, a separate permute-sequencer reads out the source operand for slides, and index operand for register-gather.
+For slide and register-gather instructions, a separate permute-sequencer reads out the source operand for slides and index operand for register-gather.
 These operands enter a permute-buffer, which is read by the main arithmetic sequencer to generate aligned operands for slides, and read addresses for register-gathers.
 
 

@@ -30,7 +30,7 @@ image::diag/rocketpipe.png[Rocket Pipeline Stages,width=50%,align=center,title-a
 
 Rocket is a 5-stage in-order single-issue core.
 As shown in <<rocket>>, the Saturn VFU integrates into execute (`X`), memory (`M`), and write-back (`WB`) stages of Rocket, where the `WB` stage is the commit point.
-At the `WB` stage, vector instructions which cannot retire due to ongoing activity in the ITC can kill all younger instructions in the earlier pipeline stages, and request the core to re-fetch and replay the instruction at the next PC.
+At the `WB` stage, vector instructions which cannot retire due to ongoing activity in the ITC can kill all younger instructions in the earlier pipeline stages and request the core to re-fetch and replay the instruction at the next PC.
 
 [.text-center]
 [#rocket-vset]
@@ -55,7 +55,7 @@ The Saturn VFU integrates into the execute (X), memory (M), and write-back (W) s
 Only one of the execution pipes in Shuttle can dispatch into the VFU, but any of the pipes can execute a `vset` operation.
 However, during steady-state operation, Shuttle can dynamically construct instruction packets at the `D` stage to maximize instruction throughput given structural hazards by stalling partial instruction packets.
 
-Similar to Rocket, vector instructions which cannot retire at the W stage will kill younger instructions in the pipeline, and request a refetch and replay of the subsequent instruction.
+Similar to Rocket, vector instructions which cannot retire at the W stage will kill younger instructions in the pipeline and request a refetch and replay of the subsequent instruction.
 
 
 [.text-center]
@@ -66,9 +66,9 @@ image::diag/shuttlevset.png[Shuttle VSET,width=45%,align=center,title-align=cent
 
 Unlike Rocket, Shuttle implements a bypass network for `vset` instructions modifying `vtype` or `vl`.
 Vector instructions following a `vset` instruction do not need to stall, as the `vtype` and `vl` operands can be accessed through the bypass network.
-However, a vector instruction cannot proceed be issued in the same instruction packet as a `vset`; it must proceed on the next cycle instead.
+However, a vector instruction cannot be issued in the same instruction packet as a `vset`: it must proceed on the next cycle instead.
 <<shuttle-vset>> shows how Shuttle can dynamically stall a partial instruction packet with the `vadd` to issue it with a younger `vset` on the next cycle.
-This example also depicts how stalling the `vadd` maintains 2 IPC through Shuttle, and 1 IPC into the vector unit.
+This example also depicts how stalling the `vadd` maintains 2 IPC through Shuttle and 1 IPC into the vector unit.
 
 
 === Memory Translation and Traps
@@ -95,7 +95,7 @@ Vector instructions fall into one of the following categories
  * *Iterative* vector instructions include masked, indexed, or strided memory instructions that might access arbitrarily many pages. These instructions would fundamentally be performance-bound by the single-ported TLB, so the VFU can process these instructions iteratively
 
 In stage-0 (VF0), the PTC establishes which category a vector instruction belongs to.
-Note that this does not require memory translation, and can be quickly determined from the instruction opcode, base address offset, and current settings of `vtype` and `vl`.
+Note that this does not require memory translation and can be quickly determined from the instruction opcode, base address offset, and current settings of `vtype` and `vl`.
 
 Single-beat instructions execute down the PTC pipeline with no stalls.
 In stage-1 (VF1), the accessed page for single-beat memory operations is checked through the TLB port.

@@ -49,10 +49,10 @@ Similarly, the VLSU's store path can run many cycles behind the VU through the d
 This approach can tolerate high memory latencies with minimal hardware cost.
 
 Saturn still supports a limited, but sufficient capability for *out-of-order execution*.
-The load, store, and execute paths in the VU execute independently of each other, dynamically stalling for structural and data hazards without requiring full in-order execution.
+The load, store, and execute paths in the VU operate independently of each other, dynamically stalling for structural and data hazards without requiring full in-order execution.
 Allowing dynamic "slip" between these paths naturally implies out-of-order execution.
 To track data hazards, all vector instructions in the VU and VLSU are tagged with a "vector age tag (VAT)".
-The VATs are eagerly allocated and freed, and referenced in the machine wherever the relative age of two instructions is ambiguous.
+The VATs are eagerly allocated and freed, and they are referenced in the machine wherever the relative age of two instructions is ambiguous.
 
 To decode vector instructions, the Saturn generator implements an *decode-generator*-driven methodology for vector decode.
 The Saturn generator tabularly describes a concise list of all vector control signals for all vector instructions.

@@ -113,7 +113,7 @@ All Intel and AMD out-of-order cores support some form of the SSE or AVX extensi
 *VLIW ISAs with SIMD extensions* have traditionally dominated the space of DSP and similar domain-specialized cores, as well as embedded cores.
 For these deployment scenarios, power and area constraints preclude the deployment of costly microarchitectural features towards high instruction throughput in a general-purpose ISA, such as speculative execution and register renaming.
 
-Additionally, the regularity present in many DSP kernels are a good fit for the VLIW paradigm.
+Additionally, the regularity present in many DSP kernels is a good fit for the VLIW paradigm.
 Regular loops, rather than branch-dense control code, are easier to optimize on a VLIW microarchitecture.
 
 Furthermore, DSP applications often require more regularly behaved memory systems to achieve strict QoS requirements, leading to DSP cores often integrating with low-or-fixed-latency software-managed scratchpad memories, rather than caches with dynamically unpredictable behavior.

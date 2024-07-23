@@ -27,7 +27,7 @@ Like Saturn, Hwacha was implemented in Chisel and could integrate with Rocket as
 
 Notably, Hwacha executes a unique "decoupled vector fetch" ISA.
 In Hwacha's ISA, vector code is encoded in "vector fetch blocks".
-These vector fetch blocks are, independently fetched and executed by a limited frontend in the vector unit, instead of being embedded in the same sequential instruction stream as scalar code.
+These vector fetch blocks are independently fetched and executed by a limited frontend in the vector unit, instead of being embedded in the same sequential instruction stream as scalar code.
 Programmers are expected to describe stripmine loops as these vector fetch blocks, and dispatch pointers to these blocks to the vector unit via "vector fetch" instructions.
 Hwacha's ISA also does not require scala-vector memory ordering or support precise traps.
 

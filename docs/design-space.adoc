@@ -5,11 +5,11 @@ Saturn is highly parameterized and capable of generating designs that target a w
 Several high-level parameter groups and defaults are provided, but a given implementation may be configured at a finer granularity.
 Five high-level parameter groups control parameters of the machine other than `VLEN` or `DLEN`.
 
- * `vMIN` is a minimal, yet still V-profile compliant configuration. Performance is de-emphasized. If possible, scalar floating-point units are used
- * `vREF` is a modest design with SIMD execution units, demonstrating the key scheduling mechanisms without minimal overhead. SIMD functional units are used, and issue queues are sized up/
+ * `vMIN` is a minimal, yet still V-profile compliant configuration. Performance is de-emphasized. If possible, scalar floating-point units are used.
+ * `vREF` is a modest design with SIMD execution units, demonstrating the key scheduling mechanisms without minimal overhead. SIMD functional units are used, and issue queues are sized up.
  * `vDSP` splits the floating point and integer units into two execution units, enabling higher throughput in tightly optimized kernels.
  * `vGEN` generates separate issue queues for the floating point and integer sequencers, improving performance for suboptimally scheduled code.
- * `vDMA` generates a design optimized around memory-to-memory transfers, deemphasizing compute throughput. The load-store unit is parameterized to tolerate higher latencies, but the datapath uses conservative functional units
+ * `vDMA` generates a design optimized around memory-to-memory transfers, deemphasizing compute throughput. The load-store unit is parameterized to tolerate higher latencies, but the datapath uses conservative functional units.
 
 Each parameter group aggregates settings across the wider range of fine-grained parameters, which are listed below.
 
