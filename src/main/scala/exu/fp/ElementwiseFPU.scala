@@ -248,7 +248,7 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
 
   when (io.iss.ready && io.iss.valid && mgt_NaN) {
     mgt_NaN_reg := true.B
-  } .elsewhen (io.write.fire()) {
+  } .elsewhen (io.write.fire) {
     mgt_NaN_reg := false.B
   }
 
@@ -312,10 +312,10 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.write.valid := (has_wdata || vfrsqrt7_inst || vfrec7_inst || mgt_NaN_reg) && valid
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), ((1.U(dLen.W) & mask_bit) << (op.eidx % dLen.U)), FillInterleaved(8, op.wmask))
-  io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io_fp_resp.fire()),
+  io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, io_fp_resp.fire),
                               Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, wdata)))
 
-  last := io.write.fire()
+  last := io.write.fire
 
   io.set_fflags := DontCare
   io.scalar_write.valid := false.B

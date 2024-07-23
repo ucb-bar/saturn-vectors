@@ -102,7 +102,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
     }
     when (mul_ctrl.matched) {
       write_elem := mul_wdata
-      io.set_vxsat := is_smul && smul_sat && io.write.fire() && op.wmask =/= 0.U
+      io.set_vxsat := is_smul && smul_sat && io.write.fire && op.wmask =/= 0.U
     }
   }
 
@@ -115,7 +115,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
 
-  last := io.write.fire()
+  last := io.write.fire
 
   io.acc := false.B
   io.tail := false.B

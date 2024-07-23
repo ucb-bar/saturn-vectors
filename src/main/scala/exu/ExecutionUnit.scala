@@ -170,19 +170,19 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
     iter_write_arb.io.in.zip(iter_fus.map(_.io.write)).foreach { case (l,r) => l <> r }
     iter_write_arb.io.out.ready := !pipe_write && io.iter_write.ready
 
-    val acc = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.acc))
-    val tail = Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.tail))
+    val acc = Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.acc))
+    val tail = Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.tail))
     io.iter_write.valid     := iter_write_arb.io.out.valid && (!acc || tail) && !pipe_write
     io.iter_write.bits.eg   := iter_write_arb.io.out.bits.eg
     io.iter_write.bits.mask := iter_write_arb.io.out.bits.mask
     io.iter_write.bits.data := iter_write_arb.io.out.bits.data
     when (!pipe_write) {
       io.acc_write.valid := iter_write_arb.io.out.valid && acc
-      io.acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.eg))
-      io.acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.data))
-      io.acc_write.bits.mask := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.write.bits.mask))
+      io.acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.write.bits.eg))
+      io.acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.write.bits.data))
+      io.acc_write.bits.mask := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.write.bits.mask))
       io.vat_release.valid := iter_write_arb.io.out.fire && Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.vat.valid))
-      io.vat_release.bits  := Mux1H(iter_write_arb.io.in.map(_.fire()), iter_fus.map(_.io.vat.bits))
+      io.vat_release.bits  := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.vat.bits))
     }
     when (iter_fus.map(_.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {

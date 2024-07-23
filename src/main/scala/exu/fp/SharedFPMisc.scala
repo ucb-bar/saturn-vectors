@@ -206,7 +206,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   io.write.bits.data := Mux1H(Seq(vfrsqrt7_inst, vfrec7_inst, has_wdata),
                               Seq(Fill(dLenB >> 3, recSqrt7.io.out), Fill(dLenB >> 3, rec7.io.out), Fill(dLenB >> 3, wdata)))
 
-  last := io.write.fire()
+  last := io.write.fire
 
   io.set_fflags := DontCare
   io.scalar_write.valid := false.B
