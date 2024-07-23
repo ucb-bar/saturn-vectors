@@ -29,6 +29,8 @@ class WithShuttleVectorUnit(
                 useScalarFPMisc = false
               )
             })),
+            vfLen = 64,
+            vfh = true,
             vLen = vLen,
             decoder = ((p: Parameters) => {
               val decoder = Module(new EarlyVectorDecode()(p))
