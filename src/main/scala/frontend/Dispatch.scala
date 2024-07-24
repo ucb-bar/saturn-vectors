@@ -106,11 +106,16 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
   io.mem.bits.vm := issue_inst.vm
   io.mem.bits.nf := issue_inst.nf
   io.mem.bits.idx_size := issue_inst.mem_idx_size
-  io.mem.bits.elem_size := Mux(issue_inst.bits(26), issue_inst.vconfig.vtype.vsew, issue_inst.bits(13,12))
+  io.mem.bits.elem_size := issue_inst.mem_elem_size
   io.mem.bits.whole_reg := issue_inst.umop === lumopWhole && issue_inst.mop === mopUnit
   io.mem.bits.store := issue_inst.bits(5)
   io.mem.bits.fast_sg := issue_inst.fast_sg
   io.mem.bits.debug_id := issue_inst.debug_id
+
+  // Strided with stride = 1 << eew is just unit-strided
+  when (issue_inst.mop === mopStrided && issue_inst.rs2_data === (1.U << issue_inst.mem_elem_size)) {
+    io.mem.bits.mop := mopUnit
+  }
 
   for (r <- io.vat_release) {
     when (r.valid) {

@@ -92,16 +92,13 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
     }
   }
 
-  val s0_stride = MuxLookup(s0_inst.mop, 0.U)(Seq(
-    (mopUnit    -> ((s0_inst.nf +& 1.U) << s0_inst.mem_elem_size)),
-    (mopStrided -> io.s0.in.bits.rs2)
-  ))
+  val s0_unit = s0_inst.mop === mopUnit || (s0_inst.mop === mopStrided && io.s0.in.bits.rs2 === (1.U << s0_inst.mem_elem_size))
   val s0_indexed = s0_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val s0_base  = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vstart    ) << s0_inst.mem_elem_size)
   val s0_bound = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vconfig.vl) << s0_inst.mem_elem_size) - 1.U
   val s0_single_page = (s0_base >> pgIdxBits) === (s0_bound >> pgIdxBits)
-  val s0_replay_next_page = s0_inst.vmu && s0_inst.mop === mopUnit && s0_inst.nf === 0.U && !s0_single_page
-  val s0_iterative = (!s0_single_page || (s0_inst.mop =/= mopUnit) || s0_inst.umop === lumopFF) && !s0_replay_next_page
+  val s0_replay_next_page = s0_inst.vmu && s0_unit && s0_inst.nf === 0.U && !s0_single_page
+  val s0_iterative = (!s0_single_page || !s0_unit || s0_inst.umop === lumopFF) && !s0_replay_next_page
   val s0_fast_sg = s0_iterative && io.s0.in.bits.phys && s0_inst.mop === mopUnordered && s0_inst.seg_nf === 0.U && sgSize.map { size =>
     s0_base >= io.sg_base && s0_base < (io.sg_base + size.U)
   }.getOrElse(false.B)
