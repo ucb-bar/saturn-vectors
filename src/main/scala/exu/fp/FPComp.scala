@@ -104,15 +104,15 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
 
     when (ctrl_sgnjn) {
       d_bit := !rvs1(63)
-      s_bit := Mux(rvd_eew === 2.U, !rvs1(31), rvs2(31))
+      s_bit := Mux(rvd_eew <= 2.U, !rvs1(31), rvs2(31))
       h_bits := Mux(rvd_eew === 1.U, Cat(!rvs1(47), !rvs1(15)), Cat(rvs2(47), rvs2(15)))
     } .elsewhen (ctrl_sgnjx) {
       d_bit := rvs1(63) ^ rvs2(63)
-      s_bit := Mux(rvd_eew === 2.U, rvs1(31) ^ rvs2(31), rvs2(31))
+      s_bit := Mux(rvd_eew <= 2.U, rvs1(31) ^ rvs2(31), rvs2(31))
       h_bits := Mux(rvd_eew === 1.U, Cat(rvs1(47) ^ rvs2(47), rvs1(15) ^ rvs2(15)), Cat(rvs2(47), rvs2(15)))
     } .otherwise {
       d_bit := rvs1(63)
-      s_bit := Mux(rvd_eew === 2.U, rvs1(31), rvs2(31))
+      s_bit := Mux(rvd_eew <= 2.U, rvs1(31), rvs2(31))
       h_bits := Mux(rvd_eew === 1.U, Cat(rvs1(47), rvs1(15)), Cat(rvs2(47), rvs2(15)))
     }
     d_bit ## rvs2(62,48) ## h_bits(1) ## rvs2(46, 32) ## s_bit ## rvs2(30,16) ## h_bits(0) ## rvs2(14,0) 
