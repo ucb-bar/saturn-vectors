@@ -32,7 +32,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     FCVT_SGL, FCVT_WID, FCVT_NRW
   ).map(_.elementWise)
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready 
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready
 
   val ctrl = new VectorDecoder(op.funct3, op.funct6, 0.U, 0.U, supported_insns, Seq(
     FPSwapVdV2, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
@@ -89,8 +89,8 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   req.ren3 := false.B
   req.swap12 := false.B
   req.swap23 := false.B
-  req.typeTagIn := Mux(((ctrl_single_wide || !ctrl_funary0) && vd_eew64) || (ctrl_inttofp && ctrl_widen) || (ctrl_fptofp && ctrl_narrow), D, S)
-  req.typeTagOut := Mux(((ctrl_single_wide || !ctrl_funary0) && vd_eew64) || (ctrl_fptoint && ctrl_narrow) || (ctrl_fptofp && ctrl_widen) || (ctrl_inttofp && ctrl_widen), D, S)
+  req.typeTagIn := Mux1H(UIntToOH(op.rvs2_eew), Seq(S, H, S, D))
+  req.typeTagOut := Mux1H(UIntToOH(op.rvd_eew), Seq(S, H, S, D))
   req.fromint := ctrl_inttofp
   req.toint := (ctrl_fptoint) || ctrl_vfclass || ctrl.bool(WritesAsMask)
   req.fastpipe := ctrl_fptofp || ctrl.bool(FPSgnj) || ctrl.bool(FPComp)
@@ -141,7 +141,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   when (ctrl_swap12) {
     req.in1 := Mux(vd_eew64, d_rvs1, Mux(vd_eew32, s_rvs1_unbox, h_rvs1_unbox))
   } .elsewhen (ctrl_inttofp) {
-    req.in1 := Mux(vd_eew64 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), d_rvs2_int, Mux(vd_eew32 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), s_rvs2_int, h_rvs2_int))
+    req.in1 := rvs2_elem
   } .otherwise {
     req.in1 := Mux(vd_eew64 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), d_rvs2_fp, Mux(vd_eew32 && (!ctrl_widen || (ctrl_funary0 && ctrl_narrow)), s_rvs2_unbox, h_rvs2_unbox))
   }

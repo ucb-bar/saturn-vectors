@@ -60,8 +60,8 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   req.ren3 := ctrl.bool(ReadsVD)
   req.swap12 := false.B
   req.swap23 := ctrl.bool(FPAdd) && !ctrl.bool(FPMul)
-  req.typeTagIn := Mux(vd_eew64, D, S)
-  req.typeTagOut := Mux(vd_eew64, D, S)
+  req.typeTagIn := Mux(vd_eew64, D, Mux(vd_eew32, S, H))
+  req.typeTagOut := Mux(vd_eew64, D, Mux(vd_eew32, S, H))
   req.fromint := false.B
   req.toint := false.B
   req.fastpipe := false.B
@@ -125,7 +125,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   } .elsewhen (ctrl.bool(Wide2VD) && vd_eew64) {
     req.in1 := s_widen_rvs2.io.out
   } .elsewhen (ctrl.bool(Wide2VD) && vd_eew32) {
-    req.in1 := h_widen_rvs2.io.out 
+    req.in1 := h_widen_rvs2.io.out
   } .elsewhen (vs2_eew === 2.U) {
     req.in1 := s_rvs2
   } .otherwise {
@@ -160,7 +160,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
-  io.write.bits.data := Fill(dLenB >> 3, Mux(io.pipe(depth-1).bits.vd_eew === 3.U, FType.D.ieee(io_fp_resp.bits.data), Mux(io.pipe(depth-1).bits.vd_eew === 2.U, 
+  io.write.bits.data := Fill(dLenB >> 3, Mux(io.pipe(depth-1).bits.vd_eew === 3.U, FType.D.ieee(io_fp_resp.bits.data), Mux(io.pipe(depth-1).bits.vd_eew === 2.U,
                         Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, S, Some(FType.S)))), Fill(4, FType.H.ieee(unbox(io_fp_resp.bits.data, H, Some(FType.H)))))))
 
   io.set_fflags := DontCare
