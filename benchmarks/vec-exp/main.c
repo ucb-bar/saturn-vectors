@@ -72,9 +72,10 @@ int check32(float* results) {
 }
 
 int main() {
+  printf("FEXP N_64=%ld N_32=%ld\n", N_f64, N_f32);
+
   if (N_F64 != N_f64 || N_F32 != N_f32) return 1;
 
-  printf("FEXP\n");
 
   int error = 0;
   unsigned long cycles1, cycles2, instr2, instr1;
