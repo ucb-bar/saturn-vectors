@@ -60,17 +60,6 @@ object VectorParams {
 
   // The parameters below are approximations
 
-  // spzParams:
-  // For a vector unit which is similar-ish to Spatz
-  def spzParams = VectorParams(
-    vdqEntries = 1,
-    useSegmentedIMul = true,
-    useScalarFPMisc = false,
-    useScalarFPFMA = false,
-    vrfBanking = 4,
-    vatSz = 2 // spatz supports up to 4 parallel insns
-  )
-
   // hwaParams
   // For a vector unit with limited sequencer slots akin to Hwacha
   def hwaParams = VectorParams(
