@@ -60,6 +60,13 @@ int main() {
   printf("Filter size: %dx%d\n", F, F);
   printf("Channels: %d\n", CH);
 
+#if PREALLOCATE
+  if (F == 7)
+    fconv3d_CHx7x7(o, i, f, M, N, CH, F);
+  else
+    printf("Error: the filter size is different from 7.\n");
+#endif
+
   unsigned long cycles1, cycles2, instr2, instr1;
   instr1 = read_csr(minstret);
   cycles1 = read_csr(mcycle);

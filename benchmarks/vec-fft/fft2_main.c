@@ -18,6 +18,10 @@
 
 int main( int argc, char* argv[] )
 {
+#if PREALLOCATE
+  fft2(input_Xr, input_Xi, input_Wr, input_Wi, DATA_SIZE, LOG2_DATA_SIZE);
+#endif
+  
   // Do the FFT
   setStats(1);
   fft2(input_Xr, input_Xi, input_Wr, input_Wi, DATA_SIZE, LOG2_DATA_SIZE);

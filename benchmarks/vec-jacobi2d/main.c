@@ -100,6 +100,10 @@ int main() {
   int error = 0;
   unsigned long cycles1, cycles2, instr2, instr1;
 
+#if PREALLOCATE
+  j2d_v(R, C, A_v, B_v, TSTEPS);
+#endif
+
   // Measure vector kernel execution
   printf("Processing the vector benchmark\n");
   instr1 = read_csr(minstret);

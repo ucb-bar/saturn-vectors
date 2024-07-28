@@ -44,6 +44,11 @@ int main() {
   double density = ((double)NZ) / (R * C);
   double nz_per_row = ((double)NZ) / R;
 
+#if PREALLOCATE
+  spmv_csr_idx32(R, CSR_PROW, CSR_INDEX, CSR_DATA, CSR_IN_VECTOR,
+                 CSR_OUT_VECTOR);
+#endif
+  
   printf(
       "Calculating a (%d x %d) x %d sparse matrix vector multiplication...\n",
       R, C, C);

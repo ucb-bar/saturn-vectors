@@ -307,7 +307,7 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
 
     // Main loop
     for (int k = 0; k < F / 2; ++k) {
-      double f42, f35, f28, f21, f14, f7, f0;
+      double f42, f35, f28, f21, f14, f7, f0, fs;
       f42 = f[42 + (2 * k)];
       f35 = f[35 + (2 * k)];
       f28 = f[28 + (2 * k)];
@@ -315,12 +315,13 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
       f14 = f[14 + (2 * k)];
       f7 = f[7 + (2 * k)];
       f0 = f[0 + (2 * k)];
+      fs = *i_slide_ptr_0++;
       asm volatile("" ::: "memory");
       // Calculate F contributions of the input rows, on F different output rows
       asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f42));
       asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f35));
       asm volatile("vfmacc.vf v20, %0, v0" ::"f"(f28));
-      asm volatile("vfslide1down.vf v2, v0, %0" ::"f"(*i_slide_ptr_0++));
+      asm volatile("vfslide1down.vf v2, v0, %0" ::"f"(fs));
       asm volatile("vfmacc.vf v22, %0, v0" ::"f"(f21));
       asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f14));
       asm volatile("vfmacc.vf v26, %0, v0" ::"f"(f7));
@@ -336,12 +337,13 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
       f14 = f[14 + (2 * k + 1)];
       f7 = f[7 + (2 * k + 1)];
       f0 = f[0 + (2 * k + 1)];
+      fs = *i_slide_ptr_0++;
       asm volatile("" ::: "memory");
       // Calculate F contributions of the input rows, on F different output rows
       asm volatile("vfmacc.vf v16, %0, v2" ::"f"(f42));
       asm volatile("vfmacc.vf v18, %0, v2" ::"f"(f35));
       asm volatile("vfmacc.vf v20, %0, v2" ::"f"(f28));
-      asm volatile("vfslide1down.vf v0, v2, %0" ::"f"(*i_slide_ptr_0++));
+      asm volatile("vfslide1down.vf v0, v2, %0" ::"f"(fs));
       asm volatile("vfmacc.vf v22, %0, v2" ::"f"(f21));
       asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f14));
       asm volatile("vfmacc.vf v26, %0, v2" ::"f"(f7));
@@ -383,7 +385,7 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
     asm volatile("vfmul.vf v28, v2, %0" ::"f"(f[0]));
 
     for (int k = 1; k < F; k += 2) {
-      double f42, f35, f28, f21, f14, f7, f0;
+      double f42, f35, f28, f21, f14, f7, f0, fs;
       f42 = f[42 + k];
       f35 = f[35 + k];
       f28 = f[28 + k];
@@ -391,11 +393,12 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
       f14 = f[14 + k];
       f7 = f[7 + k];
       f0 = f[0 + k];
+      fs = *i_slide_ptr_1++;
       asm volatile("" ::: "memory");
       asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f42));
       asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f35));
       asm volatile("vfmacc.vf v20, %0, v0" ::"f"(f28));
-      asm volatile("vfslide1down.vf v2, v0, %0" ::"f"(*i_slide_ptr_1++));
+      asm volatile("vfslide1down.vf v2, v0, %0" ::"f"(fs));
       asm volatile("vfmacc.vf v22, %0, v0" ::"f"(f21));
       asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f14));
       asm volatile("vfmacc.vf v26, %0, v0" ::"f"(f7));
@@ -411,11 +414,12 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
       f14 = f[14 + k + 1];
       f7 = f[7 + k + 1];
       f0 = f[0 + k + 1];
+      fs = *i_slide_ptr_1++;
       asm volatile("" ::: "memory");
       asm volatile("vfmacc.vf v16, %0, v2" ::"f"(f42));
       asm volatile("vfmacc.vf v18, %0, v2" ::"f"(f35));
       asm volatile("vfmacc.vf v20, %0, v2" ::"f"(f28));
-      asm volatile("vfslide1down.vf v0, v2, %0" ::"f"(*i_slide_ptr_1++));
+      asm volatile("vfslide1down.vf v0, v2, %0" ::"f"(fs));
       asm volatile("vfmacc.vf v22, %0, v2" ::"f"(f21));
       asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f14));
       asm volatile("vfmacc.vf v26, %0, v2" ::"f"(f7));

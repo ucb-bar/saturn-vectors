@@ -129,6 +129,10 @@ void j2d_kernel_v(uint64_t r, uint64_t c, DATA_TYPE *A, DATA_TYPE *B) {
       }
       izq = A[i * c + j - 1];
       der = A[i * c + j + gvl];
+      if (i != size_y) {
+        asm volatile("ld x0, 0(%0)" : : "r"(A + (i + 1) * c + j - 1)  );
+        asm volatile("ld x0, 0(%0)" : : "r"(A + (i + 1) * c + j + gvl));
+      }
       xUleft = __riscv_vfslide1up_vf_f64m4(xU, izq, gvl);
       xUright = __riscv_vfslide1down_vf_f64m4(xU, der, gvl);
       xUtmp = __riscv_vfadd_vv_f64m4(xUleft, xUright, gvl);

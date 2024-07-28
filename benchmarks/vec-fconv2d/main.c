@@ -55,6 +55,15 @@ int verify_matrix(double *matrix, double *golden_matrix, int64_t R, int64_t C,
 int main() {
   printf("FCONV2D M=%ld N=%ld F=%ld\n", M, N, F);
 
+#if PREALLOCATE
+  if (F == 3)
+    fconv2d_3x3(o, i, f, M, N, F);
+  else if (F == 7)
+    fconv2d_7x7(o, i, f, M, N, F);
+  else
+    printf("Error: the filter size is different from 3 or 5 or 7.\n");
+#endif
+
   unsigned long cycles1, cycles2, instr2, instr1;
 
   instr1 = read_csr(minstret);
