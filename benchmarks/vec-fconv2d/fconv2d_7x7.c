@@ -307,28 +307,45 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
 
     // Main loop
     for (int k = 0; k < F / 2; ++k) {
+      double f42, f35, f28, f21, f14, f7, f0;
+      f42 = f[42 + (2 * k)];
+      f35 = f[35 + (2 * k)];
+      f28 = f[28 + (2 * k)];
+      f21 = f[21 + (2 * k)];
+      f14 = f[14 + (2 * k)];
+      f7 = f[7 + (2 * k)];
+      f0 = f[0 + (2 * k)];
+      asm volatile("" ::: "memory");
       // Calculate F contributions of the input rows, on F different output rows
-      asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f[42 + (2 * k)]));
-      asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f[35 + (2 * k)]));
-      asm volatile("vfmacc.vf v20, %0, v0" ::"f"(f[28 + (2 * k)]));
+      asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f42));
+      asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f35));
+      asm volatile("vfmacc.vf v20, %0, v0" ::"f"(f28));
       asm volatile("vfslide1down.vf v2, v0, %0" ::"f"(*i_slide_ptr_0++));
-      asm volatile("vfmacc.vf v22, %0, v0" ::"f"(f[21 + (2 * k)]));
-      asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f[14 + (2 * k)]));
-      asm volatile("vfmacc.vf v26, %0, v0" ::"f"(f[7 + (2 * k)]));
+      asm volatile("vfmacc.vf v22, %0, v0" ::"f"(f21));
+      asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f14));
+      asm volatile("vfmacc.vf v26, %0, v0" ::"f"(f7));
       if (k == 0)
-        asm volatile("vfmul.vf v28, v0, %0" ::"f"(f[0 + (2 * k)]));
+        asm volatile("vfmul.vf v28, v0, %0" ::"f"(f0));
       else
-        asm volatile("vfmacc.vf v28, %0, v0" ::"f"(f[0 + (2 * k)]));
+        asm volatile("vfmacc.vf v28, %0, v0" ::"f"(f0));
 
+      f42 = f[42 + (2 * k + 1)];
+      f35 = f[35 + (2 * k + 1)];
+      f28 = f[28 + (2 * k + 1)];
+      f21 = f[21 + (2 * k + 1)];
+      f14 = f[14 + (2 * k + 1)];
+      f7 = f[7 + (2 * k + 1)];
+      f0 = f[0 + (2 * k + 1)];
+      asm volatile("" ::: "memory");
       // Calculate F contributions of the input rows, on F different output rows
-      asm volatile("vfmacc.vf v16, %0, v2" ::"f"(f[42 + (2 * k + 1)]));
-      asm volatile("vfmacc.vf v18, %0, v2" ::"f"(f[35 + (2 * k + 1)]));
-      asm volatile("vfmacc.vf v20, %0, v2" ::"f"(f[28 + (2 * k + 1)]));
+      asm volatile("vfmacc.vf v16, %0, v2" ::"f"(f42));
+      asm volatile("vfmacc.vf v18, %0, v2" ::"f"(f35));
+      asm volatile("vfmacc.vf v20, %0, v2" ::"f"(f28));
       asm volatile("vfslide1down.vf v0, v2, %0" ::"f"(*i_slide_ptr_0++));
-      asm volatile("vfmacc.vf v22, %0, v2" ::"f"(f[21 + (2 * k + 1)]));
-      asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f[14 + (2 * k + 1)]));
-      asm volatile("vfmacc.vf v26, %0, v2" ::"f"(f[7 + (2 * k + 1)]));
-      asm volatile("vfmacc.vf v28, %0, v2" ::"f"(f[0 + (2 * k + 1)]));
+      asm volatile("vfmacc.vf v22, %0, v2" ::"f"(f21));
+      asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f14));
+      asm volatile("vfmacc.vf v26, %0, v2" ::"f"(f7));
+      asm volatile("vfmacc.vf v28, %0, v2" ::"f"(f0));
     }
 
     // Start calculating the next pointers to the elements to be slided in
@@ -366,26 +383,43 @@ void fconv2d_7x7_block(double *o, double *i, double *f, int64_t R, int64_t C,
     asm volatile("vfmul.vf v28, v2, %0" ::"f"(f[0]));
 
     for (int k = 1; k < F; k += 2) {
-      asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f[42 + k]));
-      asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f[35 + k]));
-      asm volatile("vfmacc.vf v20, %0, v0" ::"f"(f[28 + k]));
+      double f42, f35, f28, f21, f14, f7, f0;
+      f42 = f[42 + k];
+      f35 = f[35 + k];
+      f28 = f[28 + k];
+      f21 = f[21 + k];
+      f14 = f[14 + k];
+      f7 = f[7 + k];
+      f0 = f[0 + k];
+      asm volatile("" ::: "memory");
+      asm volatile("vfmacc.vf v16, %0, v0" ::"f"(f42));
+      asm volatile("vfmacc.vf v18, %0, v0" ::"f"(f35));
+      asm volatile("vfmacc.vf v20, %0, v0" ::"f"(f28));
       asm volatile("vfslide1down.vf v2, v0, %0" ::"f"(*i_slide_ptr_1++));
-      asm volatile("vfmacc.vf v22, %0, v0" ::"f"(f[21 + k]));
-      asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f[14 + k]));
-      asm volatile("vfmacc.vf v26, %0, v0" ::"f"(f[7 + k]));
-      asm volatile("vfmacc.vf v28, %0, v0" ::"f"(f[0 + k]));
+      asm volatile("vfmacc.vf v22, %0, v0" ::"f"(f21));
+      asm volatile("vfmacc.vf v24, %0, v0" ::"f"(f14));
+      asm volatile("vfmacc.vf v26, %0, v0" ::"f"(f7));
+      asm volatile("vfmacc.vf v28, %0, v0" ::"f"(f0));
 
       if (k == F - 2)
         break;
 
-      asm volatile("vfmacc.vf v16, %0, v2" ::"f"(f[42 + (k + 1)]));
-      asm volatile("vfmacc.vf v18, %0, v2" ::"f"(f[35 + (k + 1)]));
-      asm volatile("vfmacc.vf v20, %0, v2" ::"f"(f[28 + (k + 1)]));
+      f42 = f[42 + k + 1];
+      f35 = f[35 + k + 1];
+      f28 = f[28 + k + 1];
+      f21 = f[21 + k + 1];
+      f14 = f[14 + k + 1];
+      f7 = f[7 + k + 1];
+      f0 = f[0 + k + 1];
+      asm volatile("" ::: "memory");
+      asm volatile("vfmacc.vf v16, %0, v2" ::"f"(f42));
+      asm volatile("vfmacc.vf v18, %0, v2" ::"f"(f35));
+      asm volatile("vfmacc.vf v20, %0, v2" ::"f"(f28));
       asm volatile("vfslide1down.vf v0, v2, %0" ::"f"(*i_slide_ptr_1++));
-      asm volatile("vfmacc.vf v22, %0, v2" ::"f"(f[21 + (k + 1)]));
-      asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f[14 + (k + 1)]));
-      asm volatile("vfmacc.vf v26, %0, v2" ::"f"(f[7 + (k + 1)]));
-      asm volatile("vfmacc.vf v28, %0, v2" ::"f"(f[0 + (k + 1)]));
+      asm volatile("vfmacc.vf v22, %0, v2" ::"f"(f21));
+      asm volatile("vfmacc.vf v24, %0, v2" ::"f"(f14));
+      asm volatile("vfmacc.vf v26, %0, v2" ::"f"(f7));
+      asm volatile("vfmacc.vf v28, %0, v2" ::"f"(f0));
     }
 
     // Start calculating the next pointers to the elements to be slided in

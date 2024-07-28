@@ -112,7 +112,7 @@ int main() {
   // 2* since we have 2 jacobi kernels, one on A_fixed_v, one on B_fixed_v
   // TSTEPS*5*N*N is the number of DPFLOP to compute
   float performance = (2.0 * TSTEPS * 5.0 * (R - 1) * (C - 1) / runtime);
-  printf("operations = %ld\n", (size_t)(2.0 * TSTEPS * 5.0 * (R - 1) * (C - 1)));
+  printf("operations = %ld\n", (size_t)(TSTEPS * 5.0 * (R - 1) * (C - 1)));
   printf("Vector jacobi2d (R=%ld C=%ld) cycle count: %d\n", R, C, runtime);
   printf("The performance is %ld DPFLOP/1000 cycles\n",
          (uint64_t)(1000.0 * performance));
