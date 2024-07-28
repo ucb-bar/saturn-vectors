@@ -64,9 +64,6 @@ object VectorParams {
   // For a vector unit which is similar-ish to Spatz
   def spzParams = VectorParams(
     vdqEntries = 1,
-    vlifqEntries = 8, // match spatz params
-    vsifqEntries = 8,
-    vlrobEntries = 8,
     useSegmentedIMul = true,
     useScalarFPMisc = false,
     useScalarFPFMA = false,
@@ -129,8 +126,8 @@ case class VectorParams(
   vsiqEntries: Int = 4,
 
   // Load store in-flight queues (in VLSU)
-  vlifqEntries: Int = 8,
-  vsifqEntries: Int = 8,
+  vlifqEntries: Int = 16,
+  vsifqEntries: Int = 16,
   vlrobEntries: Int = 2,
 
   // Scatter-gather engine params
