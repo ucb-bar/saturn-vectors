@@ -147,6 +147,7 @@ case class VectorParams(
   hwachaLimiter: Option[Int] = None,
   enableChaining: Boolean = true,
   latencyInject: Boolean = false,
+  enableDAE: Boolean = true,
 
   doubleBufferSegments: Boolean = false,
 

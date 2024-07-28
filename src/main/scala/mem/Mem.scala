@@ -260,7 +260,9 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     val addr_conflict = siq(i).overlaps(liq(liq_las_ptr))
     siq_valids(i) && addr_conflict && liq(liq_las_ptr).st_dep_mask(i)
   }.orR
-  las.io.valid := liq_las_valid && !las_order_block && !liq(liq_las_ptr).op.fast_sg
+  val dae_block = !vParams.enableDAE.B && (!io.vu.lresp.ready ||
+    io.vu.lresp.bits.debug_id =/= liq(liq_las_ptr).op.debug_id)
+  las.io.valid := liq_las_valid && !las_order_block && !liq(liq_las_ptr).op.fast_sg && !dae_block
   las.io.lsiq_id := liq_las_ptr
   las.io.op := liq(liq_las_ptr).op
   liq_las_fire := Mux(liq(liq_las_ptr).op.fast_sg,
