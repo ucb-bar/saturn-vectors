@@ -83,7 +83,7 @@ class RegisterFileBank(reads: Int, maskReads: Int, rows: Int, maskRows: Int)(imp
       write.valid := ll_write_valid || io.ll_write.valid
       write.bits := Mux(ll_write_valid, ll_write_bits, io.ll_write.bits)
       ll_write_valid := false.B
-      when (io.ll_write.valid && !ll_write_valid) {
+      when (io.ll_write.valid && ll_write_valid) {
         ll_write_valid := true.B
         ll_write_bits := io.ll_write.bits
       }

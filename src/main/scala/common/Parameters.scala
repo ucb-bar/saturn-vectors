@@ -149,6 +149,7 @@ case class VectorParams(
   doubleBufferSegments: Boolean = false,
 
   vrfBanking: Int = 2,
+  vrfHiccupBuffer: Boolean = true,
 
   issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
