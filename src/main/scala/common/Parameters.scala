@@ -40,7 +40,9 @@ object VectorParams {
   // For a vector unit that performs better on less-optimized
   // code sequences
   def genParams = dspParams.copy(
-    issStructure = VectorIssueStructure.Split
+    issStructure = VectorIssueStructure.Split,
+    vlifqEntries = 16,
+    vlrobEntries = 16
   )
 
   // dmaParams:
@@ -115,7 +117,7 @@ case class VectorParams(
   vsiqEntries: Int = 4,
 
   // Load store in-flight queues (in VLSU)
-  vlifqEntries: Int = 16,
+  vlifqEntries: Int = 8,
   vsifqEntries: Int = 16,
   vlrobEntries: Int = 2,
 
