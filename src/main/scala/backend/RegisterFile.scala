@@ -49,42 +49,70 @@ class RegisterReadXbar(n: Int, banks: Int)(implicit p: Parameters) extends CoreM
   }
 }
 
-class RegisterFileBank(reads: Int, maskReads: Int, writes: Int, rows: Int, maskRows: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class RegisterFileBank(reads: Int, maskReads: Int, rows: Int, maskRows: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val read = Vec(reads, Flipped(new VectorReadIO))
     val mask_read = Vec(maskReads, Flipped(new VectorReadIO))
-    val write = Vec(writes, Input(Valid(new VectorWrite(dLen))))
+    val write = Input(Valid(new VectorWrite(dLen)))
+    val ll_write = Flipped(Decoupled(new VectorWrite(dLen)))
   })
+  val ll_write_valid = RegInit(false.B)
+  val ll_write_bits = Reg(new VectorWrite(dLen))
 
   val vrf = Mem(rows, Vec(dLen, Bool()))
   val v0_mask = Mem(maskRows, Vec(dLen, Bool()))
   for (read <- io.read) {
-    read.req.ready := true.B
+    read.req.ready := !(ll_write_valid && read.req.bits.eg === ll_write_bits.eg)
     read.resp := DontCare
     when (read.req.valid) {
       read.resp := vrf.read(read.req.bits.eg).asUInt
     }
   }
   for (mask_read <- io.mask_read) {
-    mask_read.req.ready := true.B
+    mask_read.req.ready := !(ll_write_valid && mask_read.req.bits.eg === ll_write_bits.eg)
     mask_read.resp := DontCare
     when (mask_read.req.valid) {
       mask_read.resp := v0_mask.read(mask_read.req.bits.eg).asUInt
     }
   }
 
-  for (write <- io.write) {
-    when (write.valid) {
-      vrf.write(
+  val write = WireInit(io.write)
+  io.ll_write.ready := false.B
+  if (vParams.vrfHiccupBuffer) {
+    when (!io.write.valid) { // drain hiccup buffer
+      write.valid := ll_write_valid || io.ll_write.valid
+      write.bits := Mux(ll_write_valid, ll_write_bits, io.ll_write.bits)
+      ll_write_valid := false.B
+      when (io.ll_write.valid && !ll_write_valid) {
+        ll_write_valid := true.B
+        ll_write_bits := io.ll_write.bits
+      }
+      io.ll_write.ready := true.B
+    } .elsewhen (!ll_write_valid) { // fill hiccup buffer
+      when (io.ll_write.valid) {
+        ll_write_valid := true.B
+        ll_write_bits := io.ll_write.bits
+      }
+      io.ll_write.ready := true.B
+    }
+  } else {
+    when (!io.write.valid) {
+      io.ll_write.ready := true.B
+      write.valid := io.ll_write.valid
+      write.bits := io.ll_write.bits
+    }
+  }
+
+  when (write.valid) {
+    vrf.write(
+      write.bits.eg,
+      VecInit(write.bits.data.asBools),
+      write.bits.mask.asBools)
+    when (write.bits.eg < maskRows.U) {
+      v0_mask.write(
         write.bits.eg,
         VecInit(write.bits.data.asBools),
         write.bits.mask.asBools)
-      when (write.bits.eg < maskRows.U) {
-        v0_mask.write(
-          write.bits.eg,
-          VecInit(write.bits.data.asBools),
-          write.bits.mask.asBools)
-      }
     }
   }
 }
@@ -103,7 +131,7 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
     val ll_writes = Vec(llWrites, Flipped(Decoupled(new VectorWrite(dLen))))
   })
 
-  val vrf = Seq.fill(nBanks) { Module(new RegisterFileBank(reads.size, maskReads.size, 1, egsTotal/nBanks, if (egsPerVReg < nBanks) 1 else egsPerVReg / nBanks)) }
+  val vrf = Seq.fill(nBanks) { Module(new RegisterFileBank(reads.size, maskReads.size, egsTotal/nBanks, if (egsPerVReg < nBanks) 1 else egsPerVReg / nBanks)) }
 
   reads.zipWithIndex.foreach { case (rc, i) =>
     val xbar = Module(new RegisterReadXbar(rc, nBanks))
@@ -124,30 +152,27 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
   io.ll_writes.foreach(_.ready := false.B)
 
   vrf.zipWithIndex.foreach { case (rf, i) =>
-    val arb = Module(new Arbiter(new VectorWrite(dLen), 1 + llWrites))
-    rf.io.write(0).valid := arb.io.out.valid
-    rf.io.write(0).bits  := arb.io.out.bits
-    arb.io.out.ready := true.B
-
     val bank_match = io.pipe_writes.map { w => (w.bits.bankId === i.U) && w.valid }
     val bank_write_data = Mux1H(bank_match, io.pipe_writes.map(_.bits.data))
     val bank_write_mask = Mux1H(bank_match, io.pipe_writes.map(_.bits.mask))
     val bank_write_eg   = Mux1H(bank_match, io.pipe_writes.map(_.bits.eg))
     val bank_write_valid = bank_match.orR
 
-    arb.io.in(0).valid := bank_write_valid
-    arb.io.in(0).bits.data := bank_write_data
-    arb.io.in(0).bits.mask := bank_write_mask
-    arb.io.in(0).bits.eg   := bank_write_eg >> vrfBankBits
+    rf.io.write.valid := bank_write_valid
+    rf.io.write.bits.data := bank_write_data
+    rf.io.write.bits.mask := bank_write_mask
+    rf.io.write.bits.eg := bank_write_eg >> vrfBankBits
+    when (bank_write_valid) { PopCount(bank_match) === 1.U }
 
-    when (bank_write_valid) { assert(arb.io.in(0).ready && PopCount(bank_match) === 1.U) }
+    val ll_arb = Module(new Arbiter(new VectorWrite(dLen), llWrites))
+    rf.io.ll_write <> ll_arb.io.out
 
     io.ll_writes.zipWithIndex.foreach { case (w, j) =>
-      arb.io.in(1+j).valid := w.valid && w.bits.bankId === i.U
-      arb.io.in(1+j).bits.eg   := w.bits.eg >> vrfBankBits
-      arb.io.in(1+j).bits.data := w.bits.data
-      arb.io.in(1+j).bits.mask := w.bits.mask
-      when (arb.io.in(1+j).ready && w.bits.bankId === i.U) {
+      ll_arb.io.in(j).valid := w.valid && w.bits.bankId === i.U
+      ll_arb.io.in(j).bits.eg   := w.bits.eg >> vrfBankBits
+      ll_arb.io.in(j).bits.data := w.bits.data
+      ll_arb.io.in(j).bits.mask := w.bits.mask
+      when (ll_arb.io.in(j).ready && w.bits.bankId === i.U) {
         w.ready := true.B
       }
     }
