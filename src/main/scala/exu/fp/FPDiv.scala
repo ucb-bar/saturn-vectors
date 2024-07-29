@@ -528,7 +528,6 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   divSqrt16.io.sqrtOp := !div_op
 
   io.hazard.valid := valid
-  io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
 
   when (op.rvs1_eew === 3.U) {

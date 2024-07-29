@@ -444,7 +444,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vss.io.iss.fire && vss.io.iss.bits.tail, vss.io.iss.bits.vat)
-  vxus.map(_.io.vat_release).foreach{ rel => clearVat(rel.valid, rel.bits) }
+  vxs.foreach(xs => clearVat(xs.io.iss.fire && xs.io.iss.bits.tail, xs.io.iss.bits.vat))
 
   // Signalling to frontend
   val seq_inflight_wv0 = (allSeqs.map(_.io.seq_hazard).map { h =>

@@ -75,7 +75,6 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U && valid
 
   io.hazard.valid := valid
-  io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
 
   io_fp_active := valid && issued

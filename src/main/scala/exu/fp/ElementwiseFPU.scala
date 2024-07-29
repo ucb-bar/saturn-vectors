@@ -189,7 +189,6 @@ class ElementwiseFPU(implicit p: Parameters) extends IterativeFunctionalUnit()(p
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready
 
   io.hazard.valid := valid
-  io.hazard.bits.vat := op.vat
   io.hazard.bits.eg := op.wvd_eg
 
   val has_wdata = Reg(Bool())

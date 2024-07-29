@@ -71,7 +71,6 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   div.io.kill := false.B
 
   io.hazard.valid       := valid
-  io.hazard.bits.vat    := op.vat
   io.hazard.bits.eg     := op.wvd_eg
 
 

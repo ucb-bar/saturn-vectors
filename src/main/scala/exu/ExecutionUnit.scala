@@ -34,7 +34,6 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
     val pipe_write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
     val scalar_write = Decoupled(new ScalarWrite)
-    val vat_release = Output(Valid(UInt(vParams.vatSz.W)))
 
     val pipe_hazards = Output(Vec(pipe_depth, Valid(new PipeHazard(pipe_depth))))
     val issue_pipe_latency = Output(UInt((log2Ceil(pipe_depth) + 1).W))
@@ -79,9 +78,6 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
   io.issue_pipe_latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
 
   val pipe_write = WireInit(false.B)
-
-  io.vat_release.valid := false.B
-  io.vat_release.bits := DontCare
 
   io.pipe_write.valid := false.B
   io.pipe_write.bits := DontCare
@@ -149,14 +145,11 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
       io.pipe_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
       io.acc_write.valid := acc && !tail
       io.acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
-      io.vat_release.valid := Mux1H(write_sel, pipe_bits.map(_.tail))
-      io.vat_release.bits := Mux1H(write_sel, pipe_bits.map(_.vat))
     }
 
     when (pipe_valids.orR) { io.busy := true.B }
     for (i <- 0 until pipe_depth) {
       io.pipe_hazards(i).valid       := pipe_valids(i)
-      io.pipe_hazards(i).bits.vat    := pipe_bits(i).vat
       io.pipe_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
       when (pipe_latencies(i) === 0.U) { // hack to deal with compress unit
         io.pipe_hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
@@ -181,8 +174,6 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
       io.acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.write.bits.eg))
       io.acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.write.bits.data))
       io.acc_write.bits.mask := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.write.bits.mask))
-      io.vat_release.valid := iter_write_arb.io.out.fire && Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.vat.valid))
-      io.vat_release.bits  := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_.io.vat.bits))
     }
     when (iter_fus.map(_.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {

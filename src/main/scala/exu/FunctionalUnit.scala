@@ -29,7 +29,6 @@ class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends Func
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {
   val write = Decoupled(new VectorWrite(dLen))
-  val vat = Output(Valid(UInt(vParams.vatSz.W)))
   val hazard = Output(Valid(new PipeHazard(10)))
   val acc = Output(Bool())
   val tail = Output(Bool())
@@ -68,8 +67,6 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   val op = Reg(new ExecuteMicroOp)
   val last = Wire(Bool())
 
-  io.vat.valid := valid && op.tail
-  io.vat.bits  := op.vat
   io.busy := valid
 
   io.hazard.bits.latency := DontCare

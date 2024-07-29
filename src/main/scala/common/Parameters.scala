@@ -148,6 +148,7 @@ case class VectorParams(
   enableChaining: Boolean = true,
   latencyInject: Boolean = false,
   enableDAE: Boolean = true,
+  enableOOO: Boolean = true,
 
   doubleBufferSegments: Boolean = false,
 
