@@ -356,4 +356,5 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   }
 
   io.busy := valid
+  io.head := head
 }

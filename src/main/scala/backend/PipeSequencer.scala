@@ -19,6 +19,7 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
     val older_reads  = Input(UInt(egsTotal.W))
 
     val busy = Output(Bool())
+    val head = Output(Bool())
 
     val rvs1 = new VectorReadIO
     val rvs2 = new VectorReadIO

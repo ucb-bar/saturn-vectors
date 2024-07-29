@@ -94,4 +94,5 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
   }
 
   io.busy := valid
+  io.head := head
 }

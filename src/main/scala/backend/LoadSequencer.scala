@@ -88,4 +88,5 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   }
 
   io.busy := valid
+  io.head := head
 }

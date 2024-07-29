@@ -102,4 +102,5 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   }
 
   io.busy := valid
+  io.head := head
 }
