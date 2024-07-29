@@ -64,21 +64,14 @@ object VectorParams {
 
   // hwaParams
   // For a vector unit with limited sequencer slots akin to Hwacha
-  def hwaParams = VectorParams(
-    vatSz = 3,
-    vlifqEntries = 32, // match VLTEntries
-    vsifqEntries = 32,
-    vlrobEntries = 32,
+  def hwaParams = genParams.copy(
+    vatSz = 3, // 8 mseq Entries
+    vdqEntries = 1,
     vlissqEntries = 8,
     vsissqEntries = 8,
     vxissqEntries = 8,
     vpissqEntries = 8,
-    useSegmentedIMul = true,
-    useScalarFPMisc = false,
-    useScalarFPFMA = false,
-    vrfBanking = 4,
     hwachaLimiter = Some(8), // sequencer slots
-    issStructure = VectorIssueStructure.Split
   )
 
   // lgvParams

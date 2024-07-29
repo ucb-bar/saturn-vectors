@@ -22,11 +22,14 @@ class HwachaLimiter(n: Int)(implicit p: Parameters) extends CoreModule()(p) with
   val slot_valids = RegInit(VecInit.fill(n)(false.B))
   val slot_vats = Reg(Vec(n, UInt(vatSz.W)))
   val head = RegInit(0.U(log2Ceil(n).W))
+  val head_p1 = incr(head)
+  val head_p2 = incr(head_p1)
 
   def incr(x: UInt) = Mux(x +& 1.U === n.U, 0.U, x + 1.U)
 
   val issue_2 = io.inst.vmu
-  val slots_available = !slot_valids(head) && (!issue_2 || !slot_valids(incr(head)))
+  val issue_3 = io.inst.vmu && io.inst.mop =/= mopUnit
+  val slots_available = !slot_valids(head) && (!issue_2 || !slot_valids(head_p1)) && (!issue_3 || !slot_valids(head_p2))
 
   io.block := !slots_available
 
@@ -35,9 +38,14 @@ class HwachaLimiter(n: Int)(implicit p: Parameters) extends CoreModule()(p) with
     slot_vats(head) := io.inst.vat
     head := incr(head)
     when (issue_2) {
-      slot_valids(incr(head)) := true.B
-      slot_vats(incr(head)) := io.inst.vat
-      head := incr(incr(head))
+      slot_valids(head_p1) := true.B
+      slot_vats(head_p1) := io.inst.vat
+      head := incr(head_p1)
+    }
+    when (issue_3) {
+      slot_valids(head_p2) := true.B
+      slot_vats(head_p2) := io.inst.vat
+      head := incr(head_p2)
     }
   }
 
