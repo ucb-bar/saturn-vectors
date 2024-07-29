@@ -31,8 +31,9 @@ int main( int argc, char* argv[] )
 #endif
 
   // Do the size sweeps
-  if (M_DIM >= 64 && N_DIM >= 64 && K_DIM >= 64) {
-    for (size_t t = 8; t <= 64; t += 7) {
+#define MAXSZ 85
+  if (M_DIM >= MAXSZ && N_DIM >= MAXSZ && K_DIM >= MAXSZ) {
+    for (size_t t = 8; t <= MAXSZ; t += 7) {
       size_t start, end;
       start = read_csr(mcycle);
       vec_sgemm_nn(t, t, t, a_matrix, t, b_matrix, t, results_data, t);
