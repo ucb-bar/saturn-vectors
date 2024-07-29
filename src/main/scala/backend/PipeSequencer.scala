@@ -10,6 +10,7 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
 
   val io = IO(new Bundle {
     val dis = Flipped(Decoupled(new BackendIssueInst))
+    val dis_stall = Input(Bool()) // used to disable OOO
 
     val seq_hazard = Output(Valid(new SequencerHazard))
 

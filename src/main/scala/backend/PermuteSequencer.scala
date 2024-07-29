@@ -32,7 +32,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, false.B, false.B)
   val tail = next_eidx === eff_vl
 
-  io.dis.ready := !valid || (tail && io.iss.fire)
+  io.dis.ready := !valid || (tail && io.iss.fire) && !io.dis_stall
 
   when (io.dis.fire) {
     val iss_inst = io.dis.bits

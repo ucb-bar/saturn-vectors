@@ -74,7 +74,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction, acc_tail && acc_last, eidx_tail)
 
-  io.dis.ready := (!valid || (tail && io.iss.fire))
+  io.dis.ready := (!valid || (tail && io.iss.fire)) && !io.dis_stall
 
   when (io.dis.fire) {
     val dis_inst = io.dis.bits

@@ -253,6 +253,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
       seq.io.older_writes := older_pipe_writes | older_iter_writes | older_wintents
       seq.io.older_reads := older_rintents
+
+      if (!vParams.enableOOO) {
+        // stall dispatch if any other sequencers are at the head and stalled
+        seq.io.dis_stall := otherSeqs.map { s =>
+          s.io.busy && s.io.head && !(s.io.iss.valid && s.io.iss.ready)
+        }.orR
+      } else {
+        seq.io.dis_stall := false.B // never stall dispatch
+      }
     }
 
     issq_stall(i) := group.seqs.map(_.accepts(vdq.io.deq.bits)).reduce(_ || _) && !group.issq.io.enq.ready

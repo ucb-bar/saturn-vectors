@@ -20,7 +20,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U, false.B, false.B)
   val tail      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
-  io.dis.ready := !valid || (tail && io.iss.fire)
+  io.dis.ready := !valid || (tail && io.iss.fire) && !io.dis_stall
 
   when (io.dis.fire) {
     val iss_inst = io.dis.bits
