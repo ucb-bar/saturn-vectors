@@ -142,6 +142,7 @@ case class VectorParams(
   latencyInject: Boolean = false,
   enableDAE: Boolean = true,
   enableOOO: Boolean = true,
+  enableScalarVectorAddrDisambiguation: Boolean = true,
 
   doubleBufferSegments: Boolean = false,
 

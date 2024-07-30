@@ -59,7 +59,7 @@ class ScalarMemOrderCheckIO(implicit p: Parameters) extends CoreBundle()(p) with
 }
 
 class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-   val load_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
+  val load_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
   val load_resp = Input(Valid(new MemResponse(dLenB, dmemTagBits)))
   val store_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
   val store_ack = Input(Valid(new MemResponse(dLenB, dmemTagBits)))
@@ -199,10 +199,10 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   when (siq_deq_fire) { liq.foreach(_.st_dep_mask(siq_deq_ptr) := false.B) }
 
   val scalar_store_conflict = (0 until vParams.vsiqEntries).map { i =>
-    siq_valids(i) && siq(i).containsBlock(io.scalar_check.addr)
+    siq_valids(i) && (siq(i).containsBlock(io.scalar_check.addr) || !vParams.enableScalarVectorAddrDisambiguation.B)
   }.orR
   val scalar_load_conflict = (0 until vParams.vliqEntries).map { i =>
-    liq_valids(i) && liq(i).containsBlock(io.scalar_check.addr)
+    liq_valids(i) && (liq(i).containsBlock(io.scalar_check.addr) || !vParams.enableScalarVectorAddrDisambiguation.B)
   }.orR
   io.scalar_check.conflict := scalar_store_conflict || (scalar_load_conflict && io.scalar_check.store)
 
