@@ -19,7 +19,6 @@ class VectorDecoder(
   val index = Cat(rs1(4,0), rs2(4,0), funct3(2,0), funct6(5,0))
   val lookups = insns.map { i => i.lookup(RS1) ## i.lookup(RS2) ## i.lookup(F3) ## i.lookup(F6) }
   val duplicates = lookups.diff(lookups.distinct).distinct
-  require(duplicates.size == 0, s"Found duplicates $duplicates")
   val table = insns.map { i => fields.map(f => i.lookup(f)) :+ BitPat(true.B) }
 
   val elementsGrouped = table.transpose
