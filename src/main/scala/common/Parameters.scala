@@ -45,6 +45,18 @@ object VectorParams {
     vlrobEntries = 16
   )
 
+  // multiFMAParams:
+  // Provides a second sequencer and set of functional units for FMA operations
+  def multiFMAParams = genParams.copy(
+    issStructure = VectorIssueStructure.MultiFMA
+  )
+
+  // multiMACParams:
+  // Provides a second sequencer and set of functional units for integer MAC operations
+  def multiMACParams = genParams.copy(
+    issStructure = VectorIssueStructure.MultiMAC
+  )
+
   // dmaParams:
   // For a vector unit that only does memcpys, and no arithmetic
   def dmaParams = VectorParams(
@@ -99,6 +111,8 @@ object VectorIssueStructure {
   case object Unified extends VectorIssueStructure
   case object Shared extends VectorIssueStructure
   case object Split extends VectorIssueStructure
+  case object MultiFMA extends VectorIssueStructure
+  case object MultiMAC extends VectorIssueStructure
 }
 
 case class VectorParams(
@@ -172,6 +186,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   val nRelease = vParams.issStructure match {
     case VectorIssueStructure.Unified => 3
     case VectorIssueStructure.Shared | VectorIssueStructure.Split => 4
+    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => 5
   }
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {

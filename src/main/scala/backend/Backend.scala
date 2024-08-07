@@ -56,16 +56,36 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     (() => new PermuteUnit, "vpermfu"),
   )
 
-  val integerMul = (!vParams.useIterativeIMul).option((if (vParams.useSegmentedIMul)
-    (() => new SegmentedMultiplyPipe(vParams.imaPipeDepth), "vsegmulfu")
-  else
-    (() => new ElementwiseMultiplyPipe(vParams.imaPipeDepth), "velemmulfu"))
-  )
+  val integerMul = if (!vParams.useIterativeIMul) {
+    if (vParams.useSegmentedIMul) {
+      vParams.issStructure match {
+        case VectorIssueStructure.MultiMAC => {
+          Seq((() => new SegmentedMultiplyPipe(vParams.imaPipeDepth), "vsegmulfu_0"),
+              (() => new SegmentedMultiplyPipe(vParams.imaPipeDepth), "vsegmulfu_1"))
+        }
+        case _ => {
+          Seq((() => new SegmentedMultiplyPipe(vParams.imaPipeDepth), "vsegmulfu"))
+        }
+      }
+    } else {
+      Seq((() => new ElementwiseMultiplyPipe(vParams.imaPipeDepth), "velemmulfu"))
+    }
+  } else {
+    Seq.empty
+  }
 
   val fpFMA = if (vParams.useScalarFPFMA) {
-    (() => new SharedScalarElementwiseFPFMA(vParams.fmaPipeDepth), "vsharedfpfma")
+    Seq((() => new SharedScalarElementwiseFPFMA(vParams.fmaPipeDepth), "vsharedfpfma"))
   } else {
-    (() => new FPFMAPipe(vParams.fmaPipeDepth), "vfpfma")
+    vParams.issStructure match {
+      case VectorIssueStructure.MultiFMA => {
+        Seq((() => new FPFMAPipe(vParams.fmaPipeDepth), "vfpfma_0"),
+            (() => new FPFMAPipe(vParams.fmaPipeDepth), "vfpfma_1"))
+      }
+      case _ => {
+        Seq((() => new FPFMAPipe(vParams.fmaPipeDepth), "vfpfma"))
+      }
+    }
   }
 
   val fpMISCs = if (vParams.useScalarFPMisc) Seq(
@@ -80,13 +100,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vxus = vParams.issStructure match {
     case VectorIssueStructure.Unified => {
-      Seq(ExecutionUnit.instantiate("", integerFUs ++ fpMISCs ++ Seq(fpFMA) ++ integerMul))
+      Seq(ExecutionUnit.instantiate("", integerFUs ++ fpMISCs ++ fpFMA ++ integerMul))
+    }
+    case VectorIssueStructure.MultiFMA => {
+      Seq(
+        ExecutionUnit.instantiate("_int", integerFUs ++ fpMISCs),
+        ExecutionUnit.instantiate("_fp0", Seq(fpFMA.head) ++ integerMul),
+        ExecutionUnit.instantiate("_fp1", fpFMA.tail))
+    }
+    case VectorIssueStructure.MultiMAC => {
+      Seq(
+        ExecutionUnit.instantiate("_int", integerFUs ++ fpMISCs),
+        ExecutionUnit.instantiate("_fp", fpFMA ++ Seq(integerMul.head)),
+        ExecutionUnit.instantiate("_mac1", integerMul.tail))
     }
     case _ => {
       require(!vParams.useScalarFPFMA)
       Seq(
         ExecutionUnit.instantiate("_int", integerFUs ++ fpMISCs),
-        ExecutionUnit.instantiate("_fp", Seq(fpFMA) ++ integerMul)
+        ExecutionUnit.instantiate("_fp", fpFMA ++ integerMul)
       )
     }
   }
@@ -97,6 +129,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     case VectorIssueStructure.Split => vxus.map { vxu =>
       Module(new IssueQueue(vParams.vxissqEntries, 1)).suggestName(s"vxissq${vxu.suffix}")
     }
+    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => Seq(Module(new IssueQueue(vParams.vxissqEntries, 1)), Module(new IssueQueue(vParams.vxissqEntries, 2)))
     case _ => Seq(Module(new IssueQueue(vParams.vxissqEntries, vxus.size)).suggestName("vxissq"))
   }
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 1))
@@ -132,6 +165,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     case VectorIssueStructure.Split => vxs.zip(vxissqs).map { case (seq, vxissq) =>
       IssueGroup(vxissq, Seq(seq))
     }
+    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => Seq(IssueGroup(vxissqs(0), Seq(vxs(0))), IssueGroup(vxissqs(1), vxs.tail))
     case _ => Seq(IssueGroup(vxissqs(0), vxs))
   })
   val issqs = issGroups.map(_.issq)
@@ -270,11 +304,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     group.issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
     group.issq.io.enq.bits.seq := VecInit(accepts).asUInt
 
+    // In case of multiple available sequencers, select the first ready one
+    val first_ready_seq = PriorityEncoder(group.seqs.map(_.io.dis.ready))
+
     group.seqs.zipWithIndex.foreach{ case(s, j) =>
-      s.io.dis.valid := group.issq.io.deq.valid && group.issq.io.deq.bits.seq(j)
+      s.io.dis.valid := group.issq.io.deq.valid && (first_ready_seq === j.U)
       s.io.dis.bits := group.issq.io.deq.bits.viewAsSupertype(new BackendIssueInst)
     }
-    group.issq.io.deq.ready := Mux1H(group.issq.io.deq.bits.seq, group.seqs.map(_.io.dis.ready))
+    group.issq.io.deq.ready := group.seqs.map(_.io.dis.ready).reduce(_ || _)
   }
 
   // Hazard checking for multi-VXS
