@@ -305,13 +305,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     group.issq.io.enq.bits.seq := VecInit(accepts).asUInt
 
     // In case of multiple available sequencers, select the first ready one
-    val first_ready_seq = PriorityEncoder(group.seqs.map(_.io.dis.ready))
+    val valid_seqs = group.issq.io.deq.bits.seq
+    val ready_seqs = VecInit(group.seqs.map(_.io.dis.ready)).asUInt
+    val chosen_seq = PriorityEncoder(valid_seqs & ready_seqs)
 
     group.seqs.zipWithIndex.foreach{ case(s, j) =>
-      s.io.dis.valid := group.issq.io.deq.valid && (first_ready_seq === j.U)
+      s.io.dis.valid := group.issq.io.deq.valid && chosen_seq === j.U
       s.io.dis.bits := group.issq.io.deq.bits.viewAsSupertype(new BackendIssueInst)
     }
-    group.issq.io.deq.ready := group.seqs.map(_.io.dis.ready).reduce(_ || _)
+    group.issq.io.deq.ready := (valid_seqs & ready_seqs) =/= 0.U
   }
 
   // Hazard checking for multi-VXS
