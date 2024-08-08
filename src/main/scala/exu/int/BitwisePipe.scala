@@ -13,7 +13,9 @@ class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val supported_insns = Seq(
     AND.VV, AND.VX, AND.VI, OR.VV, OR.VX, OR.VI, XOR.VV, XOR.VX, XOR.VI,
     MANDNOT.VV, MAND.VV, MOR.VV, MXOR.VV, MORNOT.VV, MNAND.VV, MNOR.VV, MXNOR.VV,
-    REDAND.VV, REDOR.VV, REDXOR.VV
+    REDAND.VV, REDOR.VV, REDXOR.VV,
+    // Zvbb
+    ANDN.VV, ANDN.VX
   )
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns,

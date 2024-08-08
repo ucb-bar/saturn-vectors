@@ -220,7 +220,7 @@ object MVNRR       extends VectorInstruction    { val props = Seq(F6(OPIFunct6.m
 
 
 // Zvbb instructions
-object ANDN       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.andn)     , BWAndN.Y) }
+object ANDN       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.andn)     , BWAnd.Y, BWInv1.Y) }
 object BREV8      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01000"))) }
 object REV8       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01001"))) }
 object BREV       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01010"))) }

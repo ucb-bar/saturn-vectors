@@ -63,7 +63,6 @@ object UsesSat           extends NDefaultInstructionField
 
 // Bitwise pipe control
 object BWAnd             extends NDefaultInstructionField
-object BWAndN            extends NDefaultInstructionField
 object BWOr              extends NDefaultInstructionField
 object BWXor             extends NDefaultInstructionField
 object BWInvOut          extends NDefaultInstructionField
