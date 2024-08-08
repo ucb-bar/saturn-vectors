@@ -63,7 +63,7 @@ object ADC       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.adc)  
 object MADC      extends OPIInstruction    { val props = Seq(F6(OPIFunct6.madc)    , DoSub.N, Averaging.N, CarryIn.Y, AlwaysCarryIn.N, SetsWMask.N, WritesAsMask.Y) }
 object SBC       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.sbc)     , DoSub.Y, Averaging.N, CarryIn.Y, AlwaysCarryIn.Y, SetsWMask.N) }
 object MSBC      extends OPIInstruction    { val props = Seq(F6(OPIFunct6.msbc)    , DoSub.Y, Averaging.N, CarryIn.Y, AlwaysCarryIn.N, SetsWMask.N, WritesAsMask.Y) }
-object NEXT      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0) , UsesNarrowingSext.Y) }
+object NEXT      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0) , RS1(BitPat("b00???")), UsesNarrowingSext.Y) }
 object SLL       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.sll)     , UsesShift.Y, ShiftsLeft.Y, ScalingShift.N) }
 object SRA       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.sra)     , UsesShift.Y, ShiftsLeft.N, ScalingShift.N) }
 object SRL       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.srl)     , UsesShift.Y, ShiftsLeft.N, ScalingShift.N) }
@@ -217,3 +217,16 @@ object RGATHER_VV  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.r
 object RGATHEREI16 extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgatherei16), F3(VectorConsts.OPIVV), UsesPermuteSeq.Y, Elementwise.Y) }
 object COMPRESS    extends OPMInstruction       { val props = Seq(F6(OPMFunct6.compress)   , ReadsVS1AsMask.Y, Elementwise.Y) }
 object MVNRR       extends VectorInstruction    { val props = Seq(F6(OPIFunct6.mvnrr)      , F3(VectorConsts.OPIVI)) }
+
+
+// Zvbb instructions
+object ANDN       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.andn)     , BWAndN.Y) }
+object BREV8      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01000"))) }
+object REV8       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01001"))) }
+object BREV       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01010"))) }
+object CLZ        extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01100"))) }
+object CTZ        extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01101"))) }
+object CPOP       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01110"))) }
+object ROL        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol)) }
+object ROR        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ror)) }
+object RORI       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol)) }

@@ -9,7 +9,7 @@ import chisel3.util.experimental.decode._
 
 object OPIFunct6 extends ChiselEnum {
   val add = Value
-  val _ = Value
+  val andn = Value
   val sub, rsub, minu, min, maxu, max = Value
   val _ = Value
   val and, or, xor, rgather = Value
@@ -19,7 +19,7 @@ object OPIFunct6 extends ChiselEnum {
 
   val adc = Value
   val madc, sbc, msbc = Value
-  val _, _, _ = Value
+  val ror, rol, _ = Value
   val merge, mseq, msne, msltu, mslt, msleu, msle, msgtu, msgt = Value
 
   val saddu, sadd, ssubu, ssub = Value
