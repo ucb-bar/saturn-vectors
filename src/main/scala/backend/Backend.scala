@@ -376,6 +376,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     get_vm_mask(vrf.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size),
     ~(0.U(dLenB.W)))
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.eidx_wmask & load_wmask)
+  load_write.bits.debug_id := vls.io.iss.bits.debug_id
   when (io.vmu.lresp.fire) {
     assert(io.vmu.lresp.bits.debug_id === vls.io.iss.bits.debug_id)
   }
@@ -544,4 +545,21 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val scalar_write_arb = Module(new Arbiter(new ScalarWrite, flat_vxus.size))
   vxus.flatten.map(_.io.scalar_write).zip(scalar_write_arb.io.in).foreach { case (i,o) => o <> i }
   io.scalar_resp <> scalar_write_arb.io.out
+
+  if (vParams.enablePipeView) {
+    val cycle = RegInit(0.U(32.W))
+    cycle := cycle + 1.U
+
+    for (xs <- flat_vxs) {
+      PipeView.ex(xs.io.iss, "vxsop", cycle)
+    }
+    PipeView.sdata(vss.io.iss, "vssop", cycle)
+
+    for (xu <- flat_vxus) {
+      PipeView.wb(xu.io.pipe_write, "write.v", cycle)
+      PipeView.wb(xu.io.iter_write, "write.v", cycle)
+      PipeView.wb(xu.io.acc_write, "write.va", cycle)
+    }
+    PipeView.wb(vrf.io.load_write, "write.v", cycle)
+  }
 }

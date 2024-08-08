@@ -320,6 +320,8 @@ case class VectorParams(
   issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
   tlBuffer: BufferParams = BufferParams.default,
+
+  enablePipeView: Boolean = true,
 ) {
   def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
 }

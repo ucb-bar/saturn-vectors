@@ -185,6 +185,7 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
     rf.io.write.bits.data := bank_write_data
     rf.io.write.bits.mask := bank_write_mask
     rf.io.write.bits.eg := bank_write_eg >> vrfBankBits
+    rf.io.write.bits.debug_id := DontCare
     when (bank_write_valid) { PopCount(bank_match) === 1.U }
 
     val ll_arb = Module(new Arbiter(new VectorWrite(dLen), llWrites))
@@ -195,6 +196,7 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
       ll_arb.io.in(j).bits.eg   := w.bits.eg >> vrfBankBits
       ll_arb.io.in(j).bits.data := w.bits.data
       ll_arb.io.in(j).bits.mask := w.bits.mask
+      ll_arb.io.in(j).bits.debug_id := DontCare
       when (ll_arb.io.in(j).ready && w.bits.bankId === i.U) {
         w.ready := true.B
       }

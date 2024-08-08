@@ -122,6 +122,7 @@ class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p
   def bankId = if (vrfBankBits == 0) 0.U else eg(vrfBankBits-1,0)
   val data = UInt(writeBits.W)
   val mask = UInt(writeBits.W)
+  val debug_id = UInt(debugIdSz.W)
 }
 
 class ScalarWrite extends Bundle {
@@ -223,6 +224,8 @@ class ExecuteMicroOp(nFUs: Int)(implicit p: Parameters) extends CoreBundle()(p) 
   val vat = UInt(vParams.vatSz.W)
   def vxrm = rm(1,0)
   def frm = rm
+
+  val debug_id = UInt(debugIdSz.W)
 }
 
 class ExecuteMicroOpWithData(nFUs: Int)(implicit p: Parameters) extends ExecuteMicroOp(nFUs) {
@@ -244,6 +247,7 @@ class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val elem_size = UInt(2.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val debug_id = UInt(debugIdSz.W)
+  val debug_eg = UInt(log2Ceil(egsTotal).W)
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
 }

@@ -126,4 +126,11 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
       hwacha_limiter.foreach(_.io.vat_release(r.bits) := true.B)
     }
   }
+
+  if (vParams.enablePipeView) {
+    val cycle = RegInit(0.U(32.W))
+    cycle := cycle + 1.U
+
+    PipeView.dispatch(io.dis, "dispatch", cycle)
+  }
 }

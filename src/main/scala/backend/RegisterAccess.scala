@@ -63,6 +63,7 @@ class RegisterAccess(exSeqs: Int, maxExuDepth: Int)(implicit p: Parameters) exte
   vrf.io.ll_writes(0).bits.eg := reset_ctr
   vrf.io.ll_writes(0).bits.data := 0.U
   vrf.io.ll_writes(0).bits.mask := ~(0.U(dLen.W))
+  vrf.io.ll_writes(0).bits.debug_id := DontCare
   vrf.io.ll_writes(1) <> io.load_write
   for (i <- 0 until exSeqs) {
     vrf.io.ll_writes(2+i) <> io.iter_writes(i)

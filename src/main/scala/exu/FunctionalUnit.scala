@@ -62,6 +62,8 @@ abstract class PipelinedFunctionalUnit(val depth: Int)(implicit p: Parameters) e
     }
     VecInit(narrow_eew.map(_.asUInt))(eew).asTypeOf(Vec(dLenB, UInt(8.W)))
   }
+
+  io.write.bits.debug_id := DontCare
 }
 
 abstract class IterativeFunctionalUnit(implicit p: Parameters) extends FunctionalUnit()(p) {
@@ -80,4 +82,6 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   } .elsewhen (last) {
     valid := false.B
   }
+
+  io.write.bits.debug_id := op.debug_id
 }

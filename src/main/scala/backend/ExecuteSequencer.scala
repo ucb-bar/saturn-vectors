@@ -254,6 +254,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.iterative := !pipelined
   io.iss.bits.pipe_depth := pipe_stages
   io.iss.bits.fu_sel    := fu_sel
+  io.iss.bits.debug_id  := inst.debug_id
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)

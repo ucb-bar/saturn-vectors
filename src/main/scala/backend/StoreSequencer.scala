@@ -80,6 +80,7 @@ class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]
   io.iss.bits.eidx := eidx
   io.iss.bits.elem_size := inst.mem_elem_size
   io.iss.bits.debug_id := inst.debug_id
+  io.iss.bits.debug_eg := io.rvd.bits.eg
   io.iss.bits.tail := tail
   io.iss.bits.vat := inst.vat
 
