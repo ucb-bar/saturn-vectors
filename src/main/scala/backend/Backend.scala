@@ -239,7 +239,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
-  vdq.io.deq.ready := !issq_stall.orR
+  val issq_accepts = Wire(Vec(issGroups.size, Bool()))
+  vdq.io.deq.ready := !(issq_stall & issq_accepts).orR
+  when (vdq.io.deq.valid) { assert(PopCount(issq_accepts) === 1.U) }
 
   for ((group, i) <- issGroups.zipWithIndex) {
     val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
@@ -298,9 +300,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       }
     }
 
-    issq_stall(i) := group.seqs.map(_.accepts(vdq.io.deq.bits)).reduce(_ || _) && !group.issq.io.enq.ready
     val accepts = group.seqs.map(_.accepts(vdq.io.deq.bits))
-    group.issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && accepts.orR
+    issq_accepts(i) := accepts.orR
+    issq_stall(i) := !group.issq.io.enq.ready
+
+    group.issq.io.enq.valid := vdq.io.deq.valid && accepts.orR
     group.issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
     group.issq.io.enq.bits.seq := VecInit(accepts).asUInt
 

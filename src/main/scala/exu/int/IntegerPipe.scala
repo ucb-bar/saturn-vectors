@@ -197,7 +197,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
     FMERGE.VF,
     // zvbb
-    BREV8.VV
+    BREV8.VV, BREV.VV
   )
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
@@ -290,13 +290,13 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     in := in_mul(sel)
     in
   }
-  val narrowing_ext_out = Mux1H((1 until 4).map { vd_eew => (0 until vd_eew).map { vs2_eew =>
-    (io.pipe(0).bits.vd_eew === vd_eew.U && rvs2_eew === vs2_eew.U) -> {
-      val mul = vd_eew - vs2_eew
-      val in = narrowing_ext_in(mul-1).asTypeOf(Vec(dLenB >> vd_eew, UInt((8 << vs2_eew).W)))
-      val out = Wire(Vec(dLenB >> vd_eew, UInt((8 << vd_eew).W)))
+  val narrowing_ext_out = Mux1H((1 until 4).map { eew => (0 until eew).map { vs2_eew =>
+    (vd_eew === eew.U && rvs2_eew === vs2_eew.U) -> {
+      val mul = eew - vs2_eew
+      val in = narrowing_ext_in(mul-1).asTypeOf(Vec(dLenB >> eew, UInt((8 << vs2_eew).W)))
+      val out = Wire(Vec(dLenB >> eew, UInt((8 << eew).W)))
       out.zip(in).foreach { case (l, r) => l := Cat(
-        Fill((8 << vd_eew) - (8 << vs2_eew), io.pipe(0).bits.rs1(0) && r((8 << vs2_eew)-1)),
+        Fill((8 << eew) - (8 << vs2_eew), io.pipe(0).bits.rs1(0) && r((8 << vs2_eew)-1)),
         r)
       }
       out.asUInt
@@ -304,7 +304,10 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   }}.flatten)
 
   val brev_bytes = VecInit(in2_bytes.map(b => Reverse(b))).asUInt
-  val brev_out = brev_bytes
+  val brev_elements = Mux1H((0 until 4).map { eew => (vd_eew === eew.U) -> {
+    VecInit(in2_bytes.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(b => Reverse(b))).asUInt
+  }})
+  val brev_out = Mux(io.pipe(0).bits.rs1(1), brev_elements, brev_bytes)
 
   val outs = Seq(
     (ctrl.bool(UsesNarrowingSext)        , narrowing_ext_out),

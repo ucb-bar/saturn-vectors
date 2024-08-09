@@ -34,12 +34,14 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_tail  = Reg(Bool())
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
 
+  val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
+    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise, UsesNarrowingSext))
+
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
   val compress = inst.opmf6 === OPMFunct6.compress
   val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew)
-  val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(inst.opmf6 === OPMFunct6.xunary0,
-    ~inst.rs1(2,1) + 1.U, 0.U)
+  val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(ctrl.bool(UsesNarrowingSext), ~inst.rs1(2,1) + 1.U, 0.U)
   val vs3_eew  = inst.vconfig.vtype.vsew + inst.wide_vd
   val vd_eew   = inst.vconfig.vtype.vsew + inst.wide_vd
   val incr_eew = Seq(
@@ -63,8 +65,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val renvd    = inst.renvd
   val renvm    = inst.renvm
   val renacc   = inst.reduction
-  val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
-    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise))
 
   val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
