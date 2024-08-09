@@ -58,7 +58,7 @@ object UsesNarrowingSext extends NDefaultInstructionField
 object UsesMinMax        extends NDefaultInstructionField
 object UsesMerge         extends NDefaultInstructionField
 object UsesSat           extends NDefaultInstructionField
-object UsesBitRev        extends NDefaultInstructionField
+object UsesBitSwap       extends NDefaultInstructionField
 
 // Bitwise pipe control
 object BWAnd             extends NDefaultInstructionField

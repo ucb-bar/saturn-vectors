@@ -197,7 +197,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
     FMERGE.VF,
     // zvbb
-    BREV8.VV, BREV.VV
+    BREV8.VV, BREV.VV, REV8.VV
   )
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
@@ -209,7 +209,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     supported_insns,
     Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
       DoSub, WideningSext, Averaging,
-      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask, UsesBitRev))
+      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask, UsesBitSwap))
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
@@ -307,7 +307,14 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val brev_elements = Mux1H((0 until 4).map { eew => (vd_eew === eew.U) -> {
     VecInit(in2_bytes.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(b => Reverse(b))).asUInt
   }})
-  val brev_out = Mux(io.pipe(0).bits.rs1(1), brev_elements, brev_bytes)
+  val rev8_elements = Mux1H((0 until 4).map { eew => (vd_eew === eew.U) -> {
+    VecInit(in2_bytes.asTypeOf(Vec(dLenB >> eew, Vec(1 << eew, UInt(8.W)))).map(b => VecInit(b.reverse))).asUInt
+  }})
+  val swap_out = Mux1H(Seq(
+    (io.pipe(0).bits.rs1(1,0) === 0.U) -> brev_bytes,
+    (io.pipe(0).bits.rs1(1,0) === 1.U) -> rev8_elements,
+    (io.pipe(0).bits.rs1(1,0) === 2.U) -> brev_elements
+  ))
 
   val outs = Seq(
     (ctrl.bool(UsesNarrowingSext)        , narrowing_ext_out),
@@ -315,7 +322,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     (ctrl.bool(UsesMinMax)               , minmax_out),
     (ctrl.bool(UsesMerge)                , merge_out),
     (ctrl.bool(UsesSat)                  , sat_out),
-    (ctrl.bool(UsesBitRev)               , brev_out)
+    (ctrl.bool(UsesBitSwap)              , swap_out)
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 

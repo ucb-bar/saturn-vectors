@@ -221,9 +221,9 @@ object MVNRR       extends VectorInstruction    { val props = Seq(F6(OPIFunct6.m
 
 // Zvbb instructions
 object ANDN       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.andn)     , BWAnd.Y, BWInv1.Y) }
-object BREV8      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01000")), UsesBitRev.Y) }
-object REV8       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01001"))) }
-object BREV       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01010")), UsesBitRev.Y) }
+object BREV8      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01000")), UsesBitSwap.Y) }
+object REV8       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01001")), UsesBitSwap.Y) }
+object BREV       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01010")), UsesBitSwap.Y) }
 object CLZ        extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01100"))) }
 object CTZ        extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01101"))) }
 object CPOP       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01110"))) }
