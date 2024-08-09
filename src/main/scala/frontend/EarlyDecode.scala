@@ -1,9 +1,10 @@
-package saturn.common
+package saturn.frontend
 
 import chisel3._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
+import saturn.common._
 
 class EarlyVectorDecode(implicit p: Parameters) extends RocketVectorDecoder()(p) with HasVectorConsts {
 

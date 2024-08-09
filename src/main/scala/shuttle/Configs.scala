@@ -7,6 +7,7 @@ import freechips.rocketchip.subsystem._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy._
 import saturn.common._
+import saturn.frontend.{EarlyVectorDecode}
 import shuttle.common._
 
 class WithShuttleVectorUnit(
