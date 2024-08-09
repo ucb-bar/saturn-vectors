@@ -195,7 +195,9 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     ASUBU.VV, ASUBU.VX, ASUB.VV, ASUB.VX,
     REDSUM.VV, WREDSUM.VV, WREDSUMU.VV,
     REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
-    FMERGE.VF
+    FMERGE.VF,
+    // zvbb
+    BREV8.VV
   )
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
@@ -203,11 +205,11 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val vd_eew   = io.pipe(0).bits.vd_eew
 
   val ctrl = new VectorDecoder(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
+    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, io.pipe(0).bits.rs1, io.pipe(0).bits.rs2,
     supported_insns,
     Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
       DoSub, WideningSext, Averaging,
-      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask))
+      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask, UsesBitRev))
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
@@ -279,8 +281,8 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   sat_arr.io.signed   := io.pipe(0).bits.funct6(0)
   val sat_out = sat_arr.io.out.asUInt
 
-  val xunary0_eew_mul = io.pipe(0).bits.vd_eew - rvs2_eew
-  val xunary0_in = (1 until 4).map { m =>
+  val narrowing_ext_eew_mul = io.pipe(0).bits.vd_eew - rvs2_eew
+  val narrowing_ext_in = (1 until 4).map { m =>
     val w = dLen >> m
     val in = Wire(UInt(w.W))
     val in_mul = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(1 << m, UInt(w.W)))
@@ -288,10 +290,10 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     in := in_mul(sel)
     in
   }
-  val xunary0_out = Mux1H((1 until 4).map { vd_eew => (0 until vd_eew).map { vs2_eew =>
+  val narrowing_ext_out = Mux1H((1 until 4).map { vd_eew => (0 until vd_eew).map { vs2_eew =>
     (io.pipe(0).bits.vd_eew === vd_eew.U && rvs2_eew === vs2_eew.U) -> {
       val mul = vd_eew - vs2_eew
-      val in = xunary0_in(mul-1).asTypeOf(Vec(dLenB >> vd_eew, UInt((8 << vs2_eew).W)))
+      val in = narrowing_ext_in(mul-1).asTypeOf(Vec(dLenB >> vd_eew, UInt((8 << vs2_eew).W)))
       val out = Wire(Vec(dLenB >> vd_eew, UInt((8 << vd_eew).W)))
       out.zip(in).foreach { case (l, r) => l := Cat(
         Fill((8 << vd_eew) - (8 << vs2_eew), io.pipe(0).bits.rs1(0) && r((8 << vs2_eew)-1)),
@@ -301,12 +303,16 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     }
   }}.flatten)
 
+  val brev_bytes = VecInit(in2_bytes.map(b => Reverse(b))).asUInt
+  val brev_out = brev_bytes
+
   val outs = Seq(
-    (ctrl.bool(UsesNarrowingSext)        , xunary0_out),
+    (ctrl.bool(UsesNarrowingSext)        , narrowing_ext_out),
     (ctrl.bool(WritesAsMask)             , mask_out),
     (ctrl.bool(UsesMinMax)               , minmax_out),
     (ctrl.bool(UsesMerge)                , merge_out),
-    (ctrl.bool(UsesSat)                  , sat_out)
+    (ctrl.bool(UsesSat)                  , sat_out),
+    (ctrl.bool(UsesBitRev)               , brev_out)
   )
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
 

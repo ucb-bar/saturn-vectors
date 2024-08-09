@@ -55,11 +55,10 @@ object UsesCmp           extends NDefaultInstructionField
 object CmpLess           extends XDefaultInstructionField
 
 object UsesNarrowingSext extends NDefaultInstructionField
-
 object UsesMinMax        extends NDefaultInstructionField
-
 object UsesMerge         extends NDefaultInstructionField
 object UsesSat           extends NDefaultInstructionField
+object UsesBitRev        extends NDefaultInstructionField
 
 // Bitwise pipe control
 object BWAnd             extends NDefaultInstructionField
