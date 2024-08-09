@@ -59,6 +59,7 @@ object UsesMinMax        extends NDefaultInstructionField
 object UsesMerge         extends NDefaultInstructionField
 object UsesSat           extends NDefaultInstructionField
 object UsesBitSwap       extends NDefaultInstructionField
+object UsesCountZeros    extends NDefaultInstructionField
 
 // Bitwise pipe control
 object BWAnd             extends NDefaultInstructionField
