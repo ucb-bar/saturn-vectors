@@ -317,16 +317,35 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     (io.pipe(0).bits.rs1(1,0) === 2.U) -> brev_elements
   ))
 
-  val cpop_8b = in2_bytes.map(b => PopCount(b))
-  val cpop_16b: Seq[UInt]  = cpop_8b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpop_32b: Seq[UInt] = cpop_16b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpop_64b: Seq[UInt] = cpop_32b.grouped(2).toSeq.map(_.reduce(_ +& _))
+  val tz_in = Mux(io.pipe(0).bits.rs1(0), in2_bytes, brev_elements.asTypeOf(Vec(dLenB, UInt(8.W))))
+  val tz_8b = tz_in.map(b => (b === 0.U, (PriorityEncoderOH(1.U ## b) - 1.U)(7,0)))
+  val tz_16b = tz_8b.grouped(2).toSeq.map(t =>
+    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(8.W)), t(0)._2))
+  )
+  val tz_32b = tz_16b.grouped(2).toSeq.map(t =>
+    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(16.W)), t(0)._2))
+  )
+  val tz_64b = tz_32b.grouped(2).toSeq.map(t =>
+    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(32.W)), t(0)._2))
+  )
+  val tz_out = WireInit(VecInit(
+    VecInit(tz_8b.map(_._2)).asUInt,
+    VecInit(tz_16b.map(_._2)).asUInt,
+    VecInit(tz_32b.map(_._2)).asUInt,
+    VecInit(tz_64b.map(_._2)).asUInt
+  )(vd_eew).asTypeOf(Vec(dLenB, UInt(8.W))))
+
+  val cpop_in = Mux(io.pipe(0).bits.rs1(1), in2_bytes, tz_out)
+  val cpop_8b = cpop_in.map(b => PopCount(b))
+  val cpop_16b = cpop_8b.grouped(2).toSeq.map(_.reduce(_ +& _))
+  val cpop_32b = cpop_16b.grouped(2).toSeq.map(_.reduce(_ +& _))
+  val cpop_64b = cpop_32b.grouped(2).toSeq.map(_.reduce(_ +& _))
   val cpops = Seq(cpop_8b, cpop_16b, cpop_32b, cpop_64b)
-  val count_out = VecInit((0 until 4).map { eew =>
+  val count_out = WireInit(VecInit((0 until 4).map { eew =>
     val out = Wire(Vec(dLenB >> eew, UInt((8 << eew).W)))
     out := VecInit(cpops(eew))
     out.asUInt
-  })(vd_eew)
+  })(vd_eew))
 
   val outs = Seq(
     (ctrl.bool(UsesNarrowingSext)        , narrowing_ext_out),
