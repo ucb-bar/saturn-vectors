@@ -151,7 +151,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
   )
 
   def count_leading_zeros(in: UInt, width: Int): UInt = {
-    width.U - PriorityEncoder(Reverse(in))
+    PriorityEncoder(Reverse(in))
   }
 
   val rvs2_bits = io.rvs2_input
