@@ -227,6 +227,7 @@ object BREV       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunar
 object CLZ        extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01100")), UsesCountZeros.Y) }
 object CTZ        extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01101")), UsesCountZeros.Y) }
 object CPOP       extends OPMInstruction    { val props = Seq(F6(OPMFunct6.xunary0)  , RS1(BitPat("b01110")), UsesCountZeros.Y) }
-object ROL        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol)) }
-object ROR        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ror)) }
-object RORI       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol)) }
+object ROL        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol)      , UsesShift.Y, ShiftsLeft.Y, ScalingShift.N) }
+object RORI       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol)      , UsesShift.Y, ShiftsLeft.Y, ScalingShift.N) }
+object ROR        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ror)      , UsesShift.Y, ShiftsLeft.N, ScalingShift.N) }
+

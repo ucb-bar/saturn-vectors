@@ -86,6 +86,7 @@ class ShiftArray(dLenB: Int) extends Module {
     val in_eew    = Input(UInt(2.W))
     val in        = Input(UInt(dLen.W))
     val shamt     = Input(UInt(dLen.W))
+    val rori_hi   = Input(Bool())
     val rot       = Input(Bool())
     val shl       = Input(Bool())
     val signed    = Input(Bool())
@@ -108,7 +109,7 @@ class ShiftArray(dLenB: Int) extends Module {
     val shifter = Module(new ShiftUnit)
     shifter.io.in_eew := io.in_eew
     shifter.io.in := io.in((i+1)*64-1,i*64)
-    shifter.io.shamt := io.shamt((i+1)*64-1,i*64)
+    shifter.io.shamt := io.shamt((i+1)*64-1,i*64) | Mux(io.rori_hi, 0x20.U, 0.U)
     shifter.io.rot := io.rot
     shifter.io.shl := io.shl
     shifter.io.signed := io.signed
@@ -204,6 +205,7 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
   shift_arr.io.in_eew := rvs2_eew
   shift_arr.io.in     := io.pipe(0).bits.rvs2_data
   shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes).asUInt
+  shift_arr.io.rori_hi   := io.pipe(0).bits.opif6 === OPIFunct6.rol && io.pipe(0).bits.funct3 === OPIVI
   shift_arr.io.rot       := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.rol, OPIFunct6.ror)
   shift_arr.io.shl       := ctrl.bool(ShiftsLeft)
   shift_arr.io.signed    := io.pipe(0).bits.funct6(0)
