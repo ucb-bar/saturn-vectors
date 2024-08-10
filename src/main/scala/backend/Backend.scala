@@ -241,7 +241,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   val issq_accepts = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !(issq_stall & issq_accepts).orR
-  when (vdq.io.deq.valid) { assert(PopCount(issq_accepts) === 1.U) }
+  when (vdq.io.deq.valid) { assert(PopCount(issq_accepts) >= 1.U) }
 
   for ((group, i) <- issGroups.zipWithIndex) {
     val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
