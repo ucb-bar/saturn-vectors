@@ -129,7 +129,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     case VectorIssueStructure.Split => vxus.map { vxu =>
       Module(new IssueQueue(vParams.vxissqEntries, 1)).suggestName(s"vxissq${vxu.suffix}")
     }
-    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => Seq(Module(new IssueQueue(vParams.vxissqEntries, 1)), Module(new IssueQueue(vParams.vxissqEntries, 2)))
+    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => Seq(
+      Module(new IssueQueue(vParams.vxissqEntries, 1)),
+      Module(new IssueQueue(vParams.vxissqEntries, 2))
+    )
     case _ => Seq(Module(new IssueQueue(vParams.vxissqEntries, vxus.size)).suggestName("vxissq"))
   }
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 1))
@@ -165,7 +168,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     case VectorIssueStructure.Split => vxs.zip(vxissqs).map { case (seq, vxissq) =>
       IssueGroup(vxissq, Seq(seq))
     }
-    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => Seq(IssueGroup(vxissqs(0), Seq(vxs(0))), IssueGroup(vxissqs(1), vxs.tail))
+    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => Seq(
+      IssueGroup(vxissqs(0), Seq(vxs(0))),
+      IssueGroup(vxissqs(1), vxs.tail)
+    )
     case _ => Seq(IssueGroup(vxissqs(0), vxs))
   })
   val issqs = issGroups.map(_.issq)
@@ -239,9 +245,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
-  val issq_accepts = Wire(Vec(issGroups.size, Bool()))
-  vdq.io.deq.ready := !(issq_stall & issq_accepts).orR
-  when (vdq.io.deq.valid) { assert(PopCount(issq_accepts) >= 1.U) }
+  vdq.io.deq.ready := !issq_stall.orR
 
   for ((group, i) <- issGroups.zipWithIndex) {
     val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
@@ -301,10 +305,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
 
     val accepts = group.seqs.map(_.accepts(vdq.io.deq.bits))
-    issq_accepts(i) := accepts.orR
-    issq_stall(i) := !group.issq.io.enq.ready
+    issq_stall(i) := !group.issq.io.enq.ready && accepts.orR
 
-    group.issq.io.enq.valid := vdq.io.deq.valid && accepts.orR
+    group.issq.io.enq.valid := vdq.io.deq.valid && !issq_stall.orR && accepts.orR
     group.issq.io.enq.bits.viewAsSupertype(new VectorIssueInst) := vdq.io.deq.bits
     group.issq.io.enq.bits.seq := VecInit(accepts).asUInt
 
