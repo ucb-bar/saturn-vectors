@@ -35,7 +35,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_tail_id = Reg(UInt(log2Ceil(dLenB).W))
 
   val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
-    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise, UsesNarrowingSext))
+    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise, UsesNarrowingSext, ZextImm5))
 
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
@@ -266,7 +266,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
 
   when (inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF)) {
     io.iss.bits.rvs1_elem := sscalar
-    io.iss.bits.rvs1_data := dLenSplat(sscalar, vs1_eew)
+    io.iss.bits.rvs1_data := dLenSplat(Mux(ctrl.bool(ZextImm5), uscalar, sscalar), vs1_eew)
   }
 
   when (inst.reduction) {

@@ -30,6 +30,8 @@ object OPIFunct6 extends ChiselEnum {
   def mvnrr = smul
   val srl, sra, ssrl, ssra, nsrl, nsra, nclipu, nclip = Value
   val wredsumu, wredsum = Value
+  val _, _, _ = Value
+  val wsll = Value
 
   val illegal = Value(0x40.U)
 }

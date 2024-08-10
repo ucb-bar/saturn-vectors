@@ -183,7 +183,7 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
     NCLIPU.VV, NCLIPU.VX, NCLIPU.VI, NCLIP.VV, NCLIP.VX, NCLIP.VI,
     SSRL.VV, SSRL.VX, SSRL.VI, SSRA.VV, SSRA.VX, SSRA.VI,
     // Zvbb
-    ROL.VV, ROL.VX, ROR.VV, ROR.VX, ROR.VI, RORI.VI
+    ROL.VV, ROL.VX, ROR.VV, ROR.VX, ROR.VI, RORI.VI, WSLL.VV, WSLL.VX, WSLL.VI
   )
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
@@ -197,14 +197,20 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
-  val rvs1_bytes = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
-  val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew, (io.pipe(0).bits.eidx >> (dLenOffBits.U - rvs2_eew))(0), false.B)
+  val shift_narrowing = vd_eew < rvs2_eew
+  val shift_widening = vd_eew > rvs2_eew
 
-  val shift_narrowing = io.pipe(0).bits.opif6.isOneOf(OPIFunct6.nclip, OPIFunct6.nclipu, OPIFunct6.nsra, OPIFunct6.nsrl)
+  val rvs1_bytes = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  val rvs2_bytes = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew,
+    (io.pipe(0).bits.eidx >> (dLenOffBits.U - Mux(shift_narrowing, rvs2_eew, vd_eew)))(0), false.B)
+  val narrow_vs2 = narrow2_expand(rvs2_bytes, rvs2_eew,
+    (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0), false.B)
+
   val shift_arr = Module(new ShiftArray(dLenB))
-  shift_arr.io.in_eew := rvs2_eew
-  shift_arr.io.in     := io.pipe(0).bits.rvs2_data
-  shift_arr.io.shamt     := Mux(shift_narrowing, narrow_vs1, rvs1_bytes).asUInt
+  shift_arr.io.in_eew    := Mux(shift_widening, vd_eew, rvs2_eew)
+  shift_arr.io.in        := Mux(shift_widening, narrow_vs2, rvs2_bytes).asUInt
+  shift_arr.io.shamt     := Mux(shift_narrowing || shift_widening, narrow_vs1, rvs1_bytes).asUInt
   shift_arr.io.rori_hi   := io.pipe(0).bits.opif6 === OPIFunct6.rol && io.pipe(0).bits.funct3 === OPIVI
   shift_arr.io.rot       := io.pipe(0).bits.opif6.isOneOf(OPIFunct6.rol, OPIFunct6.ror)
   shift_arr.io.shl       := ctrl.bool(ShiftsLeft)
