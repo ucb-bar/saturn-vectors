@@ -7,7 +7,7 @@ import saturn.common._
 import saturn.insns._
 
 class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new PermuteMicroOp)(p) {
-  def accepts(inst: VectorIssueInst) = inst.vmu && ((!inst.vm && inst.mop =/= mopUnit) || inst.mop(0)) || new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns.filter(_.props.contains(UsesPermuteSeq.Y)), Nil).matched
+  def accepts(inst: VectorIssueInst) = inst.vmu && ((!inst.vm && inst.mop =/= mopUnit) || inst.mop(0)) || (!inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns.filter(_.props.contains(UsesPermuteSeq.Y)), Nil).matched)
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
