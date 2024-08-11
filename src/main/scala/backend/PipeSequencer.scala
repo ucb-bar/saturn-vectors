@@ -43,8 +43,8 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
   def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask >> (0.U(dLenOffBits.W) - (eidx << eew)(dLenOffBits-1,0))
   def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {
     val vm_off  = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
-    val vm_eidx = eidx & ~(vm_off >> eew)(log2Ceil(dLen)-1,0)
-    val vm_resp = mask_resp >> vm_eidx
+    val vm_eidx = (eidx & ~(vm_off >> eew))(log2Ceil(dLen)-1,0)
+    val vm_resp = (mask_resp >> vm_eidx)(dLenB-1,0)
     Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
   }
   def get_next_eidx(vl: UInt, eidx: UInt, eew: UInt, sub_dlen: UInt, reads_mask: Bool, elementwise: Bool) = {
