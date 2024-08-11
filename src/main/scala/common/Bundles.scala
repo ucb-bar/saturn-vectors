@@ -51,12 +51,12 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val emul = UInt(2.W)
   val fast_sg = Bool()
   val debug_id = UInt(debugIdSz.W)
+  val mop = UInt(2.W) // stored separately from bits since dispatch may need to set this
 
   def opcode = bits(6,0)
   def store = opcode(5)
   def mem_idx_size = bits(13,12)
   def mem_elem_size = Mux(mop(0), vconfig.vtype.vsew, bits(13,12))
-  def mop = bits(27,26)
   def vm = bits(25)
   def umop = bits(24,20)
   def nf = bits(31,29)

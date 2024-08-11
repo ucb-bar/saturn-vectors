@@ -74,6 +74,11 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
     issue_inst.vstart := 0.U
   }
 
+  // Strided with stride = 1 << eew is just unit-strided
+  when (io.issue.bits.mop === mopStrided && io.issue.bits.rs2_data === (1.U << io.issue.bits.mem_elem_size)) {
+    issue_inst.mop := mopUnit
+  }
+
   io.scalar_resp.valid := false.B
   io.scalar_resp.bits.fp := false.B
   io.scalar_resp.bits.rd := io.issue.bits.rd
@@ -112,10 +117,6 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
   io.mem.bits.fast_sg := issue_inst.fast_sg
   io.mem.bits.debug_id := issue_inst.debug_id
 
-  // Strided with stride = 1 << eew is just unit-strided
-  when (issue_inst.mop === mopStrided && issue_inst.rs2_data === (1.U << issue_inst.mem_elem_size)) {
-    io.mem.bits.mop := mopUnit
-  }
 
   for (r <- io.vat_release) {
     when (r.valid) {
