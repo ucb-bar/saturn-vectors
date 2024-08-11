@@ -16,3 +16,9 @@ Saturn supports the entire RVV 1.0 application-profile specification, including
  * Virtual memory with precise traps
  * Full chaining with zero dead-time
  * Configurable SIMD datapath width (64/128/256/512+)
+
+Using Saturn
+-------------
+
+This repository cannot be used stand-alone.
+Saturn is intended to be used to generate vector-enabled RISC-V cores and SoCs through the [Chipyard](https://github.com/ucb-bar/chipyard) SoC design framework.
