@@ -75,7 +75,7 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
   }
 
   // Strided with stride = 1 << eew is just unit-strided
-  when (io.issue.bits.mop === mopStrided && io.issue.bits.rs2_data === (1.U << io.issue.bits.mem_elem_size)) {
+  when (io.issue.bits.mop === mopStrided && io.issue.bits.rs2_data === ((io.issue.bits.nf +& 1.U) << io.issue.bits.mem_elem_size)) {
     issue_inst.mop := mopUnit
   }
 
