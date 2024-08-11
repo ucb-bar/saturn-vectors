@@ -160,6 +160,15 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   )
   val s2_xcpt  = s2_xcpts.map(_._1).orR
   val s2_cause = PriorityMux(s2_xcpts)
+  val s2_go_to_itc = WireInit(s2_inst.vmu && s2_iterative)
+  val s2_generate_xcpt = WireInit(s2_xcpt)
+
+  // masked checks, even in the fast case, need to
+  // to to ITC to get the precise element+address of the trap
+  when (s2_inst.vmu && s2_xcpt && !s2_inst.vm) {
+    s2_go_to_itc := true.B
+    s2_generate_xcpt := false.B
+  }
 
   io.s2.inst.valid   := s2_valid
   io.s2.inst.bits    := s2_inst
@@ -199,14 +208,14 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
       io.s2.vstart.valid := true.B
     } .elsewhen (s2_tlb_resp.miss) {
       io.s2.replay := true.B
-    } .elsewhen (s2_xcpt) {
+    } .elsewhen (s2_generate_xcpt) {
       io.s2.xcpt.valid := true.B
     } .elsewhen (s2_inst.vmu && s2_fast_sg) {
       io.s2.retire := true.B
       io.s2.issue.valid := true.B
       io.s2.issue.bits.fast_sg := true.B
       io.s2.vstart.valid := true.B
-    } .elsewhen (s2_inst.vmu && s2_iterative) {
+    } .elsewhen (s2_go_to_itc) {
       io.s2.internal_replay.valid := true.B
     } .elsewhen (s2_replay_next_page) {
       io.s2.replay := true.B
