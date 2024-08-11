@@ -93,7 +93,7 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
     }
   }
 
-  val s0_unit = s0_inst.mop === mopUnit || (s0_inst.mop === mopStrided && io.s0.in.bits.rs2 === (1.U << s0_inst.mem_elem_size))
+  val s0_unit = s0_inst.mop === mopUnit || (s0_inst.mop === mopStrided && io.s0.in.bits.rs2 === ((s0_inst.nf +& 1.U) << s0_inst.mem_elem_size))
   val s0_indexed = s0_inst.mop.isOneOf(mopOrdered, mopUnordered)
   val s0_base  = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vstart    ) << s0_inst.mem_elem_size)
   val s0_bound = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vconfig.vl) << s0_inst.mem_elem_size) - 1.U
