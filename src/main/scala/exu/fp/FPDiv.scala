@@ -19,8 +19,7 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
     val exc = Output(UInt(5.W))
   })
 
-  val default_bits = BitPat("b0000000")
-  val vfrec7_table = Seq(
+  val table = Seq(
     127, 125, 123, 121, 119, 117, 116, 114, 112, 110, // 0-9
     109, 107, 105, 104, 102, 100, 99, 97, 96, 94,
     93, 91, 90, 88, 87, 85, 84, 83, 81, 80,
@@ -35,119 +34,97 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
     9, 9, 8, 8, 7, 7, 6, 5, 5, 4,
     4, 3, 3, 2, 2, 1, 1, 0)
 
-  def count_leading_zeros(in: UInt, width: Int): UInt = {
+  def count_leading_zeros(in: UInt): UInt = {
     PriorityEncoder(Reverse(in))
   }
 
   val rvs2_bits = io.rvs2_input
   val fTypes = Seq(FType.H, FType.S, FType.D)
-  val is_negative = Wire(Vec(3, Bool()))
-  val is_pos_zero = Wire(Vec(3, Bool()))
-  val is_neg_zero = Wire(Vec(3, Bool()))
-  val is_pos_inf = Wire(Vec(3, Bool()))
-  val is_neg_inf = Wire(Vec(3, Bool()))
-  val is_sNaN = Wire(Vec(3, Bool()))
-  val is_qNaN = Wire(Vec(3, Bool()))
-  val is_subnormal = Wire(Vec(3, Bool()))
-  val more_than_1_leading_sign_zero = Wire(Vec(3, Bool()))
-  val output_sign = Wire(Vec(3, UInt(1.W)))
-  val output_significand_index = Wire(Vec(3, UInt(7.W)))
-  val output_exponent = fTypes.map(f => Wire(UInt(f.exp.W)))
-  val is_subnormal_output = Wire(Vec(3, Bool()))
 
-  val mux_select = (1 to 3).map(_.U === io.eew).asUInt
+  val eew_sel = (1 to 3).map(_.U === io.eew)
+  val classify = Mux1H(eew_sel, fTypes.map(f => f.classify(f.recode(rvs2_bits(f.ieeeWidth-1,0)))))
 
-  fTypes.zipWithIndex.foreach { case(fType, i) =>
-    val rvs2_classify = fType.classify(fType.recode(rvs2_bits(fType.ieeeWidth-1, 0)))
-    is_negative(i) := rvs2_classify(2,0).orR
-    is_pos_zero(i) := rvs2_classify(4)
-    is_neg_zero(i) := rvs2_classify(3)
-    is_pos_inf(i) := rvs2_classify(7)
-    is_neg_inf(i) := rvs2_classify(0)
-    is_sNaN(i) := rvs2_classify(8)
-    is_qNaN(i) := rvs2_classify(9)
-    is_subnormal(i) := rvs2_classify(2) || rvs2_classify(5)
+  val dz = WireInit(false.B)
+  val nv = WireInit(false.B)
+  val of = WireInit(false.B)
+  val nx = WireInit(false.B)
 
-    val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-1, 0), fType.sig)
-    more_than_1_leading_sign_zero(i) := num_leading_significand_zeros > 1.U
-
-    val is_normal = rvs2_classify(1) || rvs2_classify(6)
-
-    val normalized_exponent = Wire(UInt(fType.exp.W))
-    val normalized_significand = Wire(UInt((fType.sig - 1).W))
-    normalized_exponent := Mux(is_normal,
-                               rvs2_bits(fType.ieeeWidth-2, fType.ieeeWidth-2-fType.exp+1),
-                               (0.U - num_leading_significand_zeros))
-    normalized_significand := Mux(is_normal,
-                                  rvs2_bits(fType.sig-2, 0),
-                                  rvs2_bits(fType.sig-2, 0) << (1.U - normalized_exponent))
-
-    output_exponent(i) := (2.U * ((1 << (fType.exp - 1)) - 1).U) - 1.U - normalized_exponent
-
-    is_subnormal_output(i) := (output_exponent(i) === 0.U) || (output_exponent(i).asSInt === -1.S)
-    output_significand_index(i) := normalized_significand(fType.sig - 2, fType.sig - 8)
-    output_sign(i) := rvs2_bits(fType.ieeeWidth - 1)
-  }
-
-  val significand_bits = WireInit(VecInit(vfrec7_table.map(_.U(7.W)))(Mux1H(mux_select, output_significand_index)))
-  dontTouch(output_significand_index)
-  dontTouch(significand_bits)
-
-  val out_bits = fTypes.zipWithIndex.map{ case(fType, i) =>
-    val out_exponent = Wire(UInt(fType.exp.W))
-    val out_significand = Wire(UInt((fType.sig - 1).W))
-
-    dontTouch(out_exponent)
-    dontTouch(out_significand)
-
-    when (is_subnormal_output(i)) {
-      out_exponent := 0.U
-      when (output_exponent(i) === 0.U) {
-        out_significand := 1.U ## significand_bits ## 0.U((fType.sig - 9).W)
-      } .otherwise {
-        out_significand := Cat(Cat(1.U, significand_bits), 0.U((fType.sig - 9).W)) >> 1
-      }
-    }
-    // special case where the input is a very small subnormal and the output depends on the rounding mode
-    .elsewhen (is_subnormal(i) && more_than_1_leading_sign_zero(i)) {
-      when ((output_sign(i).asBool && (io.frm === 3.U || io.frm === 1.U)) || (!output_sign(i) && (io.frm === 2.U || io.frm === 1.U))) {
-        out_exponent := ~(1.U(fType.exp.W))
-        out_significand := ~(0.U(fType.sig.W))
-      } .otherwise {
-        out_exponent := ~(0.U(fType.exp.W))
-        out_significand := 0.U
-      }
-    }
-    .otherwise {
-      out_exponent := output_exponent(i)
-      out_significand := Cat(significand_bits, 0.U((fType.sig - 8).W))
-    }
-
-    Fill(64 / fType.ieeeWidth, output_sign(i) ## out_exponent ## out_significand)
-  }
-
-  val eew_sel = io.eew - 1.U
-
-  when (is_sNaN(eew_sel) || is_qNaN(eew_sel)) {
-    io.out := Mux1H(mux_select, fTypes.map{ fType => Fill(64 / fType.ieeeWidth, fType.ieeeQNaN) })
-  } .elsewhen (is_pos_inf(eew_sel)) {
-    io.out := 0.U
-  } .elsewhen (is_neg_inf(eew_sel)) {
-    io.out := Mux1H(mux_select, Seq("h8000800080008000".U, "h8000000080000000".U, "h8000000000000000".U)) 
-  } .elsewhen (is_pos_zero(eew_sel)) {
-    io.out := Mux1H(mux_select, Seq("h7C007C007C007C00".U, "h7F8000007F800000".U, "h7FF0000000000000".U))
-  } .elsewhen (is_neg_zero(eew_sel)) {
-    io.out := Mux1H(mux_select, Seq("hFC00FC00FC00FC00".U, "hFF800000FF800000".U, "hFFF0000000000000".U))
+  val ret = Wire(UInt(64.W))
+  ret := 0.U // it should not be possible to fall into this case
+  when (classify(0)) { // -inf
+    ret := Mux1H(eew_sel, fTypes.map(f => 1.U ## 0.U((f.ieeeWidth-1).W)))
+  } .elsewhen (classify(7)) { // +inf
+    ret := 0.U
+  } .elsewhen (classify(3)) { // -0
+    ret := Mux1H(eew_sel, fTypes.map(f => 1.U(1.W) ## ~(0.U((f.exp).W)) ## 0.U((f.sig-1).W)))
+    dz := true.B
+  } .elsewhen (classify(4)) { // +0
+    ret := Mux1H(eew_sel, fTypes.map(f => 0.U(1.W) ## ~(0.U((f.exp).W)) ## 0.U((f.sig-1).W)))
+    dz := true.B
+  } .elsewhen (classify(8)) { // sNaN
+    ret := Mux1H(eew_sel, fTypes.map(f => f.ieeeQNaN))
+    nv := true.B
+  } .elsewhen (classify(9)) { // qNaN
+    ret := Mux1H(eew_sel, fTypes.map(f => f.ieeeQNaN))
   } .otherwise {
-    io.out := Mux1H(mux_select, out_bits)
+    val sub = classify(2) || classify(5)
+    val exp = Mux1H(eew_sel, fTypes.map(f => (rvs2_bits >> (f.sig - 1))(f.exp-1,0)))
+    val sig = Mux1H(eew_sel, fTypes.map(f => rvs2_bits(f.sig-2,0)))
+    val sign = Mux1H(eew_sel, fTypes.map(f => rvs2_bits(f.ieeeWidth-1)))
+
+    val norm_exp = WireInit(exp)
+    val norm_sig = WireInit(sig)
+    val round_abnormal = WireInit(false.B)
+
+    when (sub) {
+      val leading_zeros = Mux1H(eew_sel, fTypes.map(f => count_leading_zeros(sig(f.sig-2,0))))
+
+      val exp_new = exp - leading_zeros
+      val sig_new = (sig << (leading_zeros +& 1.U)) & Mux1H(eew_sel, fTypes.map(f => ~(0.U((f.sig-1).W))))
+      norm_exp := exp_new
+      norm_sig := sig_new
+
+      when (exp_new =/= 0.U && ~exp_new =/= 0.U) {
+        round_abnormal := true.B
+        when (io.frm === 1.U ||
+          (io.frm === 2.U && !sign) ||
+          (io.frm === 3.U && sign)) {
+          ret := Mux1H(eew_sel, fTypes.map(f => (sign << (f.sig + f.exp - 1)) | (~(0.U(f.exp.W)) << (f.sig - 1)))) - 1.U
+        } .otherwise {
+          ret := Mux1H(eew_sel, fTypes.map(f => (sign << (f.sig + f.exp - 1)) | (~(0.U(f.exp.W)) << (f.sig - 1))))
+        }
+      }
+    }
+
+    when (!round_abnormal) {
+      val idx = Mux1H(eew_sel, fTypes.map(f => norm_sig >> (f.sig - 1 - 7)))(6,0)
+      val lookup = VecInit(table.map(_.U(7.W)))(idx)
+      val default_out_sig = Mux1H(eew_sel, fTypes.map(f => lookup << (f.sig - 1 - 7)))
+      val biases = fTypes.map(f => (1 << (f.exp - 1)) - 1)
+      val default_out_exp = Mux1H(eew_sel, fTypes.zip(biases).map { case (f, b) =>
+        (2 * b).U + ~exp
+      })
+
+      val out_sig = WireInit(default_out_sig)
+      val out_exp = WireInit(default_out_exp)
+      when (default_out_exp === 0.U || (~default_out_exp === 0.U)) {
+        out_sig := (default_out_sig >> 1) | Mux1H(eew_sel, fTypes.map(f => 1.U << (f.sig - 1 - 1)))
+        when (~default_out_exp === 0.U) {
+          out_sig := default_out_sig >> 1;
+          out_exp := 0.U
+        }
+      }
+      ret := Mux1H(eew_sel, fTypes.map(f => sign ## out_exp(f.exp-1,0) ## out_sig(f.sig-2,0)))
+    }
+
+    when (round_abnormal) {
+      of := true.B
+      nx := true.B
+    }
   }
 
-  val NV = is_negative(eew_sel) || is_sNaN(eew_sel)
-  val DZ = is_pos_zero(eew_sel) || is_neg_zero(eew_sel)
-  val OF = is_subnormal(eew_sel) && more_than_1_leading_sign_zero(eew_sel)
-  val NX = is_subnormal(eew_sel) && more_than_1_leading_sign_zero(eew_sel)
-
-  io.exc := Seq(NV, DZ, OF, false.B, NX).asUInt
+  io.out := Mux1H(eew_sel, fTypes.map(f => Fill(64 / f.ieeeWidth, ret(f.ieeeWidth-1,0))))
+  io.exc := nv ## dz ## of ## false.B ## nx
 }
 
 
@@ -290,8 +267,8 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     (BitPat("b1111111") , BitPat(53.U(7.W))),
   )
 
-  def count_leading_zeros(in: UInt, width: Int): UInt = {
-    width.U - PriorityEncoder(Reverse(in))
+  def count_leading_zeros(in: UInt): UInt = {
+    PriorityEncoder(Reverse(in))
   }
 
   val rvs2_bits = io.rvs2_input
@@ -320,7 +297,7 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     is_sNaN(i) := rvs2_classify(8)
     is_qNaN(i) := rvs2_classify(9)
 
-    val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-2, 0), fType.sig)
+    val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-2, 0))
     val is_pos_normal = rvs2_classify(6)
     val normalized_exponent = Wire(UInt(fType.exp.W))
     val normalized_significand = Wire(UInt((fType.sig - 1).W))
