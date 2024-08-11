@@ -137,210 +137,90 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
     val exc = Output(UInt(5.W))
   })
 
-  val default_bits = BitPat("b0000000")
-  val vfrsqrt7_table = Seq(
-    (BitPat("b0000000") , BitPat(52.U(7.W))),
-    (BitPat("b0000001") , BitPat(51.U(7.W))),
-    (BitPat("b0000010") , BitPat(50.U(7.W))),
-    (BitPat("b0000011") , BitPat(48.U(7.W))),
-    (BitPat("b0000100") , BitPat(47.U(7.W))),
-    (BitPat("b0000101") , BitPat(46.U(7.W))),
-    (BitPat("b0000110") , BitPat(44.U(7.W))),
-    (BitPat("b0000111") , BitPat(43.U(7.W))),
-    (BitPat("b0001000") , BitPat(42.U(7.W))),
-    (BitPat("b0001001") , BitPat(41.U(7.W))),
-    (BitPat("b0001010") , BitPat(40.U(7.W))),
-    (BitPat("b0001011") , BitPat(39.U(7.W))),
-    (BitPat("b0001100") , BitPat(38.U(7.W))),
-    (BitPat("b0001101") , BitPat(36.U(7.W))),
-    (BitPat("b0001110") , BitPat(35.U(7.W))),
-    (BitPat("b0001111") , BitPat(34.U(7.W))),
-    (BitPat("b0010000") , BitPat(33.U(7.W))),
-    (BitPat("b0010001") , BitPat(32.U(7.W))),
-    (BitPat("b0010010") , BitPat(31.U(7.W))),
-    (BitPat("b0010011") , BitPat(30.U(7.W))),
-    (BitPat("b0010100") , BitPat(30.U(7.W))),
-    (BitPat("b0010101") , BitPat(29.U(7.W))),
-    (BitPat("b0010110") , BitPat(28.U(7.W))),
-    (BitPat("b0010111") , BitPat(27.U(7.W))),
-    (BitPat("b0011000") , BitPat(26.U(7.W))),
-    (BitPat("b0011001") , BitPat(25.U(7.W))),
-    (BitPat("b0011010") , BitPat(24.U(7.W))),
-    (BitPat("b0011011") , BitPat(23.U(7.W))),
-    (BitPat("b0011100") , BitPat(23.U(7.W))),
-    (BitPat("b0011101") , BitPat(22.U(7.W))),
-    (BitPat("b0011110") , BitPat(21.U(7.W))),
-    (BitPat("b0011111") , BitPat(20.U(7.W))),
-    (BitPat("b0100000") , BitPat(19.U(7.W))),
-    (BitPat("b0100001") , BitPat(19.U(7.W))),
-    (BitPat("b0100010") , BitPat(18.U(7.W))),
-    (BitPat("b0100011") , BitPat(17.U(7.W))),
-    (BitPat("b0100100") , BitPat(16.U(7.W))),
-    (BitPat("b0100101") , BitPat(16.U(7.W))),
-    (BitPat("b0100110") , BitPat(15.U(7.W))),
-    (BitPat("b0100111") , BitPat(14.U(7.W))),
-    (BitPat("b0101000") , BitPat(14.U(7.W))),
-    (BitPat("b0101001") , BitPat(13.U(7.W))),
-    (BitPat("b0101010") , BitPat(12.U(7.W))),
-    (BitPat("b0101011") , BitPat(12.U(7.W))),
-    (BitPat("b0101100") , BitPat(11.U(7.W))),
-    (BitPat("b0101101") , BitPat(10.U(7.W))),
-    (BitPat("b0101110") , BitPat(10.U(7.W))),
-    (BitPat("b0101111") , BitPat(9.U(7.W))),
-    (BitPat("b0110000") , BitPat(9.U(7.W))),
-    (BitPat("b0110001") , BitPat(8.U(7.W))),
-    (BitPat("b0110010") , BitPat(7.U(7.W))),
-    (BitPat("b0110011") , BitPat(7.U(7.W))),
-    (BitPat("b0110100") , BitPat(6.U(7.W))),
-    (BitPat("b0110101") , BitPat(6.U(7.W))),
-    (BitPat("b0110110") , BitPat(5.U(7.W))),
-    (BitPat("b0110111") , BitPat(4.U(7.W))),
-    (BitPat("b0111000") , BitPat(4.U(7.W))),
-    (BitPat("b0111001") , BitPat(3.U(7.W))),
-    (BitPat("b0111010") , BitPat(3.U(7.W))),
-    (BitPat("b0111011") , BitPat(2.U(7.W))),
-    (BitPat("b0111100") , BitPat(2.U(7.W))),
-    (BitPat("b0111101") , BitPat(1.U(7.W))),
-    (BitPat("b0111110") , BitPat(1.U(7.W))),
-    (BitPat("b0111111") , BitPat(0.U(7.W))),
-    (BitPat("b1000001") , BitPat(127.U(7.W))),
-    (BitPat("b1000010") , BitPat(125.U(7.W))),
-    (BitPat("b1000011") , BitPat(123.U(7.W))),
-    (BitPat("b1000100") , BitPat(121.U(7.W))),
-    (BitPat("b1000101") , BitPat(119.U(7.W))),
-    (BitPat("b1000110") , BitPat(118.U(7.W))),
-    (BitPat("b1000111") , BitPat(116.U(7.W))),
-    (BitPat("b1001000") , BitPat(114.U(7.W))),
-    (BitPat("b1001001") , BitPat(113.U(7.W))),
-    (BitPat("b1001010") , BitPat(111.U(7.W))),
-    (BitPat("b1001011") , BitPat(109.U(7.W))),
-    (BitPat("b1001100") , BitPat(108.U(7.W))),
-    (BitPat("b1001101") , BitPat(106.U(7.W))),
-    (BitPat("b1001110") , BitPat(105.U(7.W))),
-    (BitPat("b1001111") , BitPat(103.U(7.W))),
-    (BitPat("b1010000") , BitPat(102.U(7.W))),
-    (BitPat("b1010001") , BitPat(100.U(7.W))),
-    (BitPat("b1010010") , BitPat(99.U(7.W))),
-    (BitPat("b1010011") , BitPat(97.U(7.W))),
-    (BitPat("b1010100") , BitPat(96.U(7.W))),
-    (BitPat("b1010101") , BitPat(95.U(7.W))),
-    (BitPat("b1010110") , BitPat(93.U(7.W))),
-    (BitPat("b1010111") , BitPat(92.U(7.W))),
-    (BitPat("b1011000") , BitPat(91.U(7.W))),
-    (BitPat("b1011001") , BitPat(90.U(7.W))),
-    (BitPat("b1011010") , BitPat(88.U(7.W))),
-    (BitPat("b1011011") , BitPat(87.U(7.W))),
-    (BitPat("b1011100") , BitPat(86.U(7.W))),
-    (BitPat("b1011101") , BitPat(85.U(7.W))),
-    (BitPat("b1011110") , BitPat(84.U(7.W))),
-    (BitPat("b1011111") , BitPat(83.U(7.W))),
-    (BitPat("b1100000") , BitPat(82.U(7.W))),
-    (BitPat("b1100001") , BitPat(80.U(7.W))),
-    (BitPat("b1100010") , BitPat(79.U(7.W))),
-    (BitPat("b1100011") , BitPat(78.U(7.W))),
-    (BitPat("b1100100") , BitPat(77.U(7.W))),
-    (BitPat("b1100101") , BitPat(76.U(7.W))),
-    (BitPat("b1100110") , BitPat(75.U(7.W))),
-    (BitPat("b1100111") , BitPat(74.U(7.W))),
-    (BitPat("b1101000") , BitPat(73.U(7.W))),
-    (BitPat("b1101001") , BitPat(72.U(7.W))),
-    (BitPat("b1101010") , BitPat(71.U(7.W))),
-    (BitPat("b1101011") , BitPat(70.U(7.W))),
-    (BitPat("b1101100") , BitPat(70.U(7.W))),
-    (BitPat("b1101101") , BitPat(69.U(7.W))),
-    (BitPat("b1101110") , BitPat(68.U(7.W))),
-    (BitPat("b1101111") , BitPat(67.U(7.W))),
-    (BitPat("b1110000") , BitPat(66.U(7.W))),
-    (BitPat("b1110001") , BitPat(65.U(7.W))),
-    (BitPat("b1110010") , BitPat(64.U(7.W))),
-    (BitPat("b1110011") , BitPat(63.U(7.W))),
-    (BitPat("b1110100") , BitPat(62.U(7.W))),
-    (BitPat("b1110101") , BitPat(61.U(7.W))),
-    (BitPat("b1110110") , BitPat(60.U(7.W))),
-    (BitPat("b1110111") , BitPat(59.U(7.W))),
-    (BitPat("b1111000") , BitPat(59.U(7.W))),
-    (BitPat("b1111001") , BitPat(58.U(7.W))),
-    (BitPat("b1111010") , BitPat(57.U(7.W))),
-    (BitPat("b1111011") , BitPat(56.U(7.W))),
-    (BitPat("b1111100") , BitPat(56.U(7.W))),
-    (BitPat("b1111101") , BitPat(55.U(7.W))),
-    (BitPat("b1111110") , BitPat(54.U(7.W))),
-    (BitPat("b1111111") , BitPat(53.U(7.W))),
+  val table = Seq(
+    52, 51, 50, 48, 47, 46, 44, 43,
+    42, 41, 40, 39, 38, 36, 35, 34,
+    33, 32, 31, 30, 30, 29, 28, 27,
+    26, 25, 24, 23, 23, 22, 21, 20,
+    19, 19, 18, 17, 16, 16, 15, 14,
+    14, 13, 12, 12, 11, 10, 10, 9,
+    9, 8, 7, 7, 6, 6, 5, 4,
+    4, 3, 3, 2, 2, 1, 1, 0,
+    127, 125, 123, 121, 119, 118, 116, 114,
+    113, 111, 109, 108, 106, 105, 103, 102,
+    100, 99, 97, 96, 95, 93, 92, 91,
+    90, 88, 87, 86, 85, 84, 83, 82,
+    80, 79, 78, 77, 76, 75, 74, 73,
+    72, 71, 70, 70, 69, 68, 67, 66,
+    65, 64, 63, 63, 62, 61, 60, 59,
+    59, 58, 57, 56, 56, 55, 54, 53
   )
 
   def count_leading_zeros(in: UInt): UInt = {
     PriorityEncoder(Reverse(in))
   }
 
+
   val rvs2_bits = io.rvs2_input
   val fTypes = Seq(FType.H, FType.S, FType.D)
-  val is_negative = Wire(Vec(3, Bool()))
-  val is_pos_zero = Wire(Vec(3, Bool()))
-  val is_neg_zero = Wire(Vec(3, Bool()))
-  val is_pos_inf = Wire(Vec(3, Bool()))
-  val is_sNaN = Wire(Vec(3, Bool()))
-  val is_qNaN = Wire(Vec(3, Bool()))
-  val output_sign = Wire(Vec(3, UInt(1.W)))
-  val output_significand_index = Wire(Vec(3, UInt(7.W)))
-  val output_exponent = fTypes.map(f => Wire(UInt(f.exp.W)))
 
-  val mux_select = (1 to 3).map(_.U === io.eew).asUInt
+  val eew_sel = (1 to 3).map(_.U === io.eew)
+  val classify = Mux1H(eew_sel, fTypes.map(f => f.classify(f.recode(rvs2_bits(f.ieeeWidth-1,0)))))
 
-  fTypes.zipWithIndex.foreach { case(fType, i) =>
-    val rvs2_rec = fType.recode(rvs2_bits(fType.ieeeWidth-1, 0))
+  val dz = WireInit(false.B)
+  val nv = WireInit(false.B)
+  val of = WireInit(false.B)
+  val nx = WireInit(false.B)
 
-    val rvs2_classify = fType.classify(rvs2_rec)
+  val ret = Wire(UInt(64.W))
+  ret := 0.U // it should not be possible to fall into this case
 
-    is_negative(i) := rvs2_classify(2,0).orR
-    is_pos_zero(i) := rvs2_classify(4)
-    is_neg_zero(i) := rvs2_classify(3)
-    is_pos_inf(i) := rvs2_classify(7)
-    is_sNaN(i) := rvs2_classify(8)
-    is_qNaN(i) := rvs2_classify(9)
-
-    val num_leading_significand_zeros = count_leading_zeros(rvs2_bits(fType.sig-2, 0))
-    val is_pos_normal = rvs2_classify(6)
-    val normalized_exponent = Wire(UInt(fType.exp.W))
-    val normalized_significand = Wire(UInt((fType.sig - 1).W))
-    normalized_exponent := Mux(is_pos_normal,
-                               rvs2_bits(fType.ieeeWidth-2, fType.ieeeWidth-2-fType.exp+1),
-                               (0.U - num_leading_significand_zeros))
-    normalized_significand := Mux(is_pos_normal,
-                                  rvs2_bits(fType.sig-2, 0),
-                                  rvs2_bits(fType.sig-2, 0) << (1.U - normalized_exponent))
-
-    output_exponent(i) := (((3.U * ((1 << (fType.exp - 1)) - 1).U) - normalized_exponent) >> 1)
-
-    output_significand_index(i) := Cat(normalized_exponent(0), normalized_significand(fType.sig - 2, fType.sig - 7))
-    output_sign(i) := rvs2_bits(fType.ieeeWidth - 1)
-  }
-
-  val truthTable = TruthTable(vfrsqrt7_table, default_bits)
-  val significand_bits = chisel3.util.experimental.decode.decoder(EspressoMinimizer, Mux1H(mux_select, output_significand_index), truthTable)
-
-  val out_bits = fTypes.zipWithIndex.map{ case(fType, i) =>
-    val out = WireInit(output_sign(i) ## output_exponent(i) ## significand_bits ## 0.U((fType.sig - 8).W))
-    Fill(64 / fType.ieeeWidth, out)
-  }
-
-  val eew_sel = io.eew - 1.U
-
-  when (is_negative(eew_sel) || is_sNaN(eew_sel) || is_qNaN(eew_sel)) {
-    io.out := Mux1H(mux_select, fTypes.map{ fType => Fill(64 / fType.ieeeWidth, fType.ieeeQNaN) })
-  } .elsewhen (is_pos_inf(eew_sel)) {
-    io.out := 0.U
-  } .elsewhen (is_pos_zero(eew_sel)) {
-    io.out := Mux1H(mux_select, Seq("h7C007C007C007C00".U, "h7F8000007F800000".U, "h7FF0000000000000".U))
-  } .elsewhen (is_neg_zero(eew_sel)) {
-    io.out := Mux1H(mux_select, Seq("hFC00FC00FC00FC00".U, "hFF800000FF800000".U, "hFFF0000000000000".U))
+  when (classify(0) || classify(1) || classify(2) || classify(8)) { // -inf, -normal, -subnormal, sNaN
+    nv := true.B
+    ret := Mux1H(eew_sel, fTypes.map(f => f.ieeeQNaN))
+  } .elsewhen (classify(9)) { // qNaN
+    ret := Mux1H(eew_sel, fTypes.map(f => f.ieeeQNaN))
+  } .elsewhen (classify(3)) { // -0
+    ret := Mux1H(eew_sel, fTypes.map(f => 1.U(1.W) ## ~(0.U((f.exp).W)) ## 0.U((f.sig-1).W)))
+    dz := true.B
+  } .elsewhen (classify(4)) { // +0
+    ret := Mux1H(eew_sel, fTypes.map(f => 0.U(1.W) ## ~(0.U((f.exp).W)) ## 0.U((f.sig-1).W)))
+    dz := true.B
+  } .elsewhen (classify(7)) { // +inf
+    ret := 0.U
   } .otherwise {
-    io.out := Mux1H(mux_select, out_bits)
+    val sub = classify(5)
+
+    val exp = Mux1H(eew_sel, fTypes.map(f => (rvs2_bits >> (f.sig - 1))(f.exp-1,0)))
+    val sig = Mux1H(eew_sel, fTypes.map(f => rvs2_bits(f.sig-2,0)))
+    val sign = Mux1H(eew_sel, fTypes.map(f => rvs2_bits(f.ieeeWidth-1)))
+
+    val norm_exp = Wire(UInt((1+fTypes.map(_.exp).max).W))
+    norm_exp := exp
+    val norm_sig = WireInit(sig)
+
+    when (sub) {
+      val leading_zeros = Mux1H(eew_sel, fTypes.map(f => count_leading_zeros(sig(f.sig-2,0))))
+      val exp_new = (0.U(1.W) ## exp) - leading_zeros
+      val sig_new = (sig << (leading_zeros +& 1.U)) & Mux1H(eew_sel, fTypes.map(f => ~(0.U((f.sig-1).W))))
+      norm_exp := exp_new
+      norm_sig := sig_new
+    }
+
+    val idx = ((norm_exp(0) << 6) | Mux1H(eew_sel, fTypes.map(f => norm_sig >> (f.sig - 1 - 7 + 1))))(6,0)
+    val lookup = VecInit(table.map(_.U(7.W)))(idx)
+    val out_sig = Mux1H(eew_sel, fTypes.map(f => lookup << (f.sig - 1 - 7)))
+    val biases = fTypes.map(f => (1 << (f.exp - 1)) - 1)
+    val out_exp = Mux1H(eew_sel, fTypes.zip(biases).map { case (f, b) =>
+      val bias3 = ((3 * b).S((f.exp + 2).W) - norm_exp.asSInt - 1.S).asUInt
+      bias3 >> 1
+    })
+
+    ret := Mux1H(eew_sel, fTypes.map(f => sign ## out_exp(f.exp-1,0) ## out_sig(f.sig-2,0)))
   }
+  io.out := Mux1H(eew_sel, fTypes.map(f => Fill(64 / f.ieeeWidth, ret(f.ieeeWidth-1,0))))
+  io.exc := nv ## dz ## of ## false.B ## nx
 
-  val NV = is_negative(eew_sel) || is_sNaN(eew_sel)
-  val DZ = is_pos_zero(eew_sel) || is_neg_zero(eew_sel)
-
-  io.exc := Cat(NV, Cat(DZ, 0.U(3.W)))
 }
 
 
