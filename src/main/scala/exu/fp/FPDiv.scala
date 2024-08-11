@@ -102,11 +102,12 @@ class VFREC7(implicit p: Parameters) extends FPUModule()(p) {
       val default_out_sig = Mux1H(eew_sel, fTypes.map(f => lookup << (f.sig - 1 - 7)))
       val biases = fTypes.map(f => (1 << (f.exp - 1)) - 1)
       val default_out_exp = Mux1H(eew_sel, fTypes.zip(biases).map { case (f, b) =>
-        (2 * b).U + ~exp
+        (2 * b).U + ~norm_exp
       })
 
       val out_sig = WireInit(default_out_sig)
       val out_exp = WireInit(default_out_exp)
+
       when (default_out_exp === 0.U || (~default_out_exp === 0.U)) {
         out_sig := (default_out_sig >> 1) | Mux1H(eew_sel, fTypes.map(f => 1.U << (f.sig - 1 - 1)))
         when (~default_out_exp === 0.U) {
