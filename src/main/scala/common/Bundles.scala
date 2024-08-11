@@ -58,9 +58,10 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def mem_idx_size = bits(13,12)
   def mem_elem_size = Mux(mop(0), vconfig.vtype.vsew, bits(13,12))
   def vm = bits(25)
+  def orig_mop = bits(27,26)
   def umop = bits(24,20)
   def nf = bits(31,29)
-  def wr = mop === mopUnit && umop === lumopWhole
+  def wr = orig_mop === mopUnit && umop === lumopWhole
   def seg_nf = Mux(wr, 0.U, nf)
   def wr_nf = Mux(wr, nf, 0.U)
   def vmu = opcode.isOneOf(opcLoad, opcStore)

@@ -112,7 +112,7 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
   io.mem.bits.nf := issue_inst.nf
   io.mem.bits.idx_size := issue_inst.mem_idx_size
   io.mem.bits.elem_size := issue_inst.mem_elem_size
-  io.mem.bits.whole_reg := issue_inst.umop === lumopWhole && issue_inst.mop === mopUnit
+  io.mem.bits.whole_reg := issue_inst.umop === lumopWhole && issue_inst.orig_mop === mopUnit
   io.mem.bits.store := issue_inst.bits(5)
   io.mem.bits.fast_sg := issue_inst.fast_sg
   io.mem.bits.debug_id := issue_inst.debug_id

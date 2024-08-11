@@ -81,7 +81,7 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   s0_inst.debug_id := DontCare
   s0_inst.rm       := DontCare
   s0_inst.fast_sg  := false.B
-  s0_inst.mop      := io.s0.in.bits.inst(27,26)
+  s0_inst.mop      := s0_inst.orig_mop
   when (s0_inst.vmu && s0_inst.mop === mopUnit) {
     val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
     val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) * (s0_inst.nf +& 1.U)
