@@ -439,14 +439,18 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     Fill(2, Cat(0.U((fType.ieeeWidth-10).W), fType.classify(fType.recode(rvs2_bits(fType.ieeeWidth-1,0)))))
   }
 
+  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
+  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
+  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
+
   // Reciprocal Sqrt Approximation
   val recSqrt7 = Module(new VFRSQRT7)
-  recSqrt7.io.rvs2_input := rvs2_bits
+  recSqrt7.io.rvs2_input := Mux(valid && vfrsqrt7_inst, rvs2_bits, 0.U)
   recSqrt7.io.eew := op.rvs2_eew
 
   // Reciprocal Approximation
   val rec7 = Module(new VFREC7)
-  rec7.io.rvs2_input := rvs2_bits
+  rec7.io.rvs2_input := Mux(valid && vfrec7_inst, rvs2_bits, 0.U)
   rec7.io.eew := op.rvs2_eew
   rec7.io.frm := op.frm
 
@@ -459,9 +463,6 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     out16_toWrite := true.B
   }
 
-  val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
-  val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
-  val vfrec7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 5.U
   val out = Mux1H(
     Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, out_toWrite || divSqrt_out_valid || divSqrt16_out_valid),
     Seq(Mux1H(Seq(op.rvs2_eew === 3.U, op.rvs2_eew === 2.U, op.rvs2_eew === 1.U), Seq(gen_vfclass(2), gen_vfclass(1), gen_vfclass(0))), recSqrt7.io.out, rec7.io.out, divSqrt_write)
