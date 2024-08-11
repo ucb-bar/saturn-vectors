@@ -37,7 +37,8 @@ class WithShuttleVectorUnit(
               val decoder = Module(new EarlyVectorDecode()(p))
               decoder
             }),
-            issueVConfig = false
+            issueVConfig = false,
+            vExts = Seq("zvbb")
           )),
         )
       )) else tp

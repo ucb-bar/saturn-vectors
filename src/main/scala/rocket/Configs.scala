@@ -34,7 +34,8 @@ class WithRocketVectorUnit(
               decoder
             }),
             useDCache = true,
-            issueVConfig = false
+            issueVConfig = false,
+            vExts = Seq("zvbb")
           )),
           fpu = (if (params.useScalarFPFMA) { tp.tileParams.core.fpu.map(_.copy(
             sfmaLatency = params.fmaPipeDepth - 1,
