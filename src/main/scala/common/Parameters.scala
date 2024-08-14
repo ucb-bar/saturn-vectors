@@ -7,6 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy.{BufferParams}
+import saturn.exu._
 
 object VectorParams {
 
@@ -103,6 +104,145 @@ object VectorParams {
     vrfBanking = 4,
     issStructure = VectorIssueStructure.Split
   )
+}
+
+case class VXSequencerParams(
+  name: String,
+  fus: Seq[Parameters => FunctionalUnit]
+)
+
+case class VXIssuePathParams(
+  name: String,
+  depth: Int,
+  fus: Seq[VXSequencerParams]
+)
+
+object VXFunctionalUnitGroups {
+  def integerFUs(idivDoesImul: Boolean = false) = Seq(
+    ((p: Parameters) => new IntegerPipe()(p)),
+    ((p: Parameters) => new ShiftPipe()(p)),
+    ((p: Parameters) => new BitwisePipe()(p)),
+    ((p: Parameters) => new IterativeIntegerDivider(idivDoesImul)(p)),
+    ((p: Parameters) => new MaskUnit()(p)),
+    ((p: Parameters) => new PermuteUnit()(p))
+  )
+  def integerSIMDMAC(pipeDepth: Int) = Seq(
+    ((p: Parameters) => new SegmentedMultiplyPipe(pipeDepth)(p))
+  )
+  def integerElemMAC(pipeDepth: Int) = Seq(
+    ((p: Parameters) => new ElementwiseMultiplyPipe(pipeDepth)(p))
+  )
+
+  def sharedFPs(pipeDepth: Int) = Seq(
+    ((p: Parameters) => new SharedScalarElementwiseFPFMA(pipeDepth)(p)),
+    ((p: Parameters) => new SharedScalarElementwiseFPMisc()(p))
+  )
+  def fpFMA(pipeDepth: Int) = Seq(
+    ((p: Parameters) => new FPFMAPipe(pipeDepth)(p))
+  )
+  def fpMisc = Seq(
+    ((p: Parameters) => new FPDivSqrt()(p)),
+    ((p: Parameters) => new FPCompPipe()(p)),
+    ((p: Parameters) => new FPConvPipe()(p)),
+  )
+}
+
+object VXIssuePathParams {
+  import VXFunctionalUnitGroups._
+
+  def UnifiedUltraMinimal(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
+    VXIssuePathParams(
+      name = "fp_int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("fp_int", integerFUs(true) ++ sharedFPs(fpDepth) ++ fpMisc)
+      )
+    )
+  )
+
+  def UnifiedMinimal(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
+    VXIssuePathParams(
+      name = "fp_int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("fp_int", integerFUs() ++ integerElemMAC(imulDepth) ++ sharedFPs(fpDepth) ++ fpMisc)
+      )
+    )
+  )
+
+  def Unified(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
+    VXIssuePathParams(
+      name = "fp_int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("fp_int", integerFUs() ++ integerSIMDMAC(imulDepth) ++ fpFMA(fpDepth) ++ fpMisc)
+      )
+    )
+  )
+
+  def Shared(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
+    VXIssuePathParams(
+      name = "fp_int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("int", integerSIMDMAC(imulDepth) ++ integerFUs()),
+        VXSequencerParams("fp", fpFMA(fpDepth) ++ fpMisc)
+      )
+    )
+  )
+
+  def Split(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
+    VXIssuePathParams(
+      name = "int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("int", integerSIMDMAC(imulDepth) ++ integerFUs())
+      )
+    ),
+    VXIssuePathParams(
+      name = "int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("fp", fpFMA(fpDepth) ++ fpMisc)
+      )
+    )
+  )
+
+  def MultiFMA(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
+    VXIssuePathParams(
+      name = "int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("int", integerSIMDMAC(imulDepth) ++ integerFUs())
+      )
+    ),
+    VXIssuePathParams(
+      name = "int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("fp0", fpFMA(fpDepth) ++ fpMisc),
+        VXSequencerParams("fp1", fpFMA(fpDepth))
+      )
+    )
+  )
+
+  def MultiMAC(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
+    VXIssuePathParams(
+      name = "int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("int0", integerSIMDMAC(imulDepth) ++ integerFUs()),
+        VXSequencerParams("int1", integerSIMDMAC(imulDepth))
+      )
+    ),
+    VXIssuePathParams(
+      name = "int",
+      depth = iqDepth,
+      fus = Seq(
+        VXSequencerParams("fp0", fpFMA(fpDepth) ++ fpMisc)
+      )
+    )
+  )
 
 }
 
@@ -141,6 +281,7 @@ case class VectorParams(
 
   dLen: Int = 64,
   vatSz: Int = 3,
+
 
   useSegmentedIMul: Boolean = false,
   useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions
