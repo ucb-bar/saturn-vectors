@@ -9,8 +9,8 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
-  val supported_insns = Seq(
+case class IntegerMultiplyFactory(depth: Int, segmented: Boolean) extends FunctionalUnitFactory {
+  def base_insns = Seq(
     MUL.VV, MUL.VX, MULH.VV, MULH.VX,
     MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
     WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
@@ -20,6 +20,17 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
     WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
     SMUL.VV, SMUL.VX)
+  def insns = if (segmented) base_insns else base_insns.map(_.elementWise)
+  def generate(implicit p: Parameters) = if (segmented) {
+    new SegmentedMultiplyPipe(depth)(p)
+  } else {
+    new ElementwiseMultiplyPipe(depth)(p)
+  }
+}
+
+class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
+  val supported_insns = IntegerMultiplyFactory(depth, true).insns
+
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B

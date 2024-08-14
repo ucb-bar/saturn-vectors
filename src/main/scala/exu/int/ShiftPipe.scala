@@ -176,8 +176,8 @@ class ShiftArray(dLenB: Int) extends Module {
   io.set_vxsat := Mux(narrowing_pipe && scaling_pipe, Fill(2, narrow_mask), 0.U)
 }
 
-class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
-  val supported_insns = Seq(
+case object ShiftPipeFactory extends FunctionalUnitFactory {
+  def insns = Seq(
     SLL.VV, SLL.VX, SLL.VI, SRL.VV, SRL.VX, SRL.VI, SRA.VV, SRA.VX, SRA.VI,
     NSRA.VV, NSRA.VX, NSRA.VI, NSRL.VV, NSRL.VX, NSRL.VI,
     NCLIPU.VV, NCLIPU.VX, NCLIPU.VI, NCLIP.VV, NCLIP.VX, NCLIP.VI,
@@ -185,6 +185,11 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
     // Zvbb
     ROL.VV, ROL.VX, ROR.VV, ROR.VX, ROR.VI, RORI.VI, WSLL.VV, WSLL.VX, WSLL.VI
   )
+  def generate(implicit p: Parameters) = new ShiftPipe()(p)
+}
+
+class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
+  val supported_insns = ShiftPipeFactory.insns
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew

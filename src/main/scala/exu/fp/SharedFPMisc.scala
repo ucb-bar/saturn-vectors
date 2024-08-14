@@ -9,14 +9,8 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
-    with HasFPUParameters
-    with HasSharedFPUIO {
-
-  val fp_req = Wire(Decoupled(new FPInput))
-  io_fp_req <> fp_req
-
-  val supported_insns = Seq(
+case object SharedFPMiscFactory extends FunctionalUnitFactory {
+  def insns = Seq(
     FDIV.VV, FDIV.VF,
     FRDIV.VF,
     FSQRT_V,
@@ -31,6 +25,17 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
     FREDMIN.VV, FREDMAX.VV,
     FCVT_SGL, FCVT_WID, FCVT_NRW
   ).map(_.elementWise)
+  def generate(implicit p: Parameters) = new SharedScalarElementwiseFPMisc()(p)
+}
+
+class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFunctionalUnit()(p)
+    with HasFPUParameters
+    with HasSharedFPUIO {
+
+  val fp_req = Wire(Decoupled(new FPInput))
+  io_fp_req <> fp_req
+
+  val supported_insns = SharedFPMiscFactory.insns
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready
 

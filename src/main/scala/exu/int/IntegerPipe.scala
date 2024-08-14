@@ -174,8 +174,8 @@ class SaturatedSumArray(dLenB: Int) extends Module {
   io.set_vxsat := mask
 }
 
-class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
-  val supported_insns = Seq(
+case object IntegerPipeFactory extends FunctionalUnitFactory {
+  def insns = Seq(
     ADD.VV, ADD.VX, ADD.VI, SUB.VV, SUB.VX, RSUB.VX, RSUB.VI,
     WADDU.VV, WADDU.VX, WADD.VV, WADD.VX, WSUBU.VV, WSUBU.VX, WSUB.VV, WSUB.VX,
     WADDUW.VV, WADDUW.VX, WADDW.VV, WADDW.VX, WSUBUW.VV, WSUBUW.VX, WSUBW.VV, WSUBW.VX,
@@ -199,6 +199,11 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     // zvbb
     BREV8.VV, BREV.VV, REV8.VV, CLZ.VV, CTZ.VV, CPOP.VV
   )
+  def generate(implicit p: Parameters) = new IntegerPipe()(p)
+}
+
+class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+  val supported_insns = IntegerPipeFactory.insns
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew

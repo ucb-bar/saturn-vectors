@@ -8,9 +8,8 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
 
-class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit)])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
-  val fus = genFUs.map(gen => Module(gen()))
-  val supported_insns = fus.map(_.supported_insns).flatten
+class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  val fus = genFUs.map(gen => Module(gen.generate(p)))
 
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }

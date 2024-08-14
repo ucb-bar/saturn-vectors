@@ -80,9 +80,8 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   io.exc := Mux1H(out_sel_oh, fma_results.map(_._2))
 }
 
-
-class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
-  val supported_insns = Seq(
+case class FPFMAFactory(depth: Int, sharedScalar: Boolean) extends FunctionalUnitFactory {
+  def base_insns = Seq(
     FADD.VV, FADD.VF, FSUB.VV, FSUB.VF, FRSUB.VF,
     FMUL.VV, FMUL.VF,
     FMACC.VV, FMACC.VF, FNMACC.VV, FNMACC.VF,
@@ -96,6 +95,16 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV
   )
+  def insns = if (sharedScalar) base_insns.map(_.elementWise) else base_insns
+  def generate(implicit p: Parameters) = if (sharedScalar) {
+    new SharedScalarElementwiseFPFMA(depth)(p)
+  } else {
+    new FPFMAPipe(depth)(p)
+  }
+}
+
+class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
+  val supported_insns = FPFMAFactory(depth, false).insns
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 

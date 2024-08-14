@@ -9,8 +9,13 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
+case object FPConvFactory extends FunctionalUnitFactory {
+  def insns = Seq(FCVT_SGL, FCVT_NRW, FCVT_WID)
+  def generate(implicit p: Parameters) = new FPConvPipe()(p)
+}
+
 class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) with HasFPUParameters {
-  val supported_insns = Seq(FCVT_SGL, FCVT_NRW, FCVT_WID)
+  val supported_insns = FPConvFactory.insns
 
   io.set_vxsat := false.B
 

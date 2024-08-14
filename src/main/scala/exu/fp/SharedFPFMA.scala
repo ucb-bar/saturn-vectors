@@ -20,20 +20,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
     with HasFPUParameters
     with HasSharedFPUIO {
 
-  val supported_insns = Seq(
-    FADD.VV, FADD.VF, FSUB.VV, FSUB.VF, FRSUB.VF,
-    FMUL.VV, FMUL.VF,
-    FMACC.VV, FMACC.VF, FNMACC.VV, FNMACC.VF,
-    FMSAC.VV, FMSAC.VF, FNMSAC.VV, FNMSAC.VF,
-    FMADD.VV, FMADD.VF, FNMADD.VV, FNMADD.VF,
-    FMSUB.VV, FMSUB.VF, FNMSUB.VV, FNMSUB.VF,
-    FWADD.VV, FWADD.VF, FWSUB.VV, FWSUB.VF,
-    FWADDW.VV, FWADDW.VF, FWSUBW.VV, FWSUBW.VF,
-    FWMUL.VV, FWMUL.VF,
-    FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
-    FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
-    FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV,
-  ).map(_.elementWise)
+  val supported_insns = FPFMAFactory(depth, true).insns
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, FPSpecRM, Wide2VD, Wide2VS2, Reduction))

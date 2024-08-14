@@ -223,9 +223,8 @@ class VFRSQRT7(implicit p: Parameters) extends FPUModule()(p) {
 
 }
 
-
-class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
-  val supported_insns = Seq(
+case object FPDivSqrtFactory extends FunctionalUnitFactory {
+  def insns = Seq(
     FDIV.VV, FDIV.VF,
     FRDIV.VF,
     FSQRT_V,
@@ -234,6 +233,11 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
     FCLASS_V
   ).map(_.elementWise)
 
+  def generate(implicit p: Parameters) = new FPDivSqrt()(p)
+}
+
+class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) with HasFPUParameters {
+  val supported_insns = FPDivSqrtFactory.insns
   io.set_vxsat := false.B
 
   val divSqrt = Module(new hardfloat.DivSqrtRecF64)

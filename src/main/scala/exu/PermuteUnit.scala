@@ -9,14 +9,20 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
-  val supported_insns = Seq(
+case object PermuteUnitFactory extends FunctionalUnitFactory {
+  def insns = Seq(
     SLIDEUP.VI, SLIDEUP.VX, SLIDEDOWN.VI, SLIDEDOWN.VX,
     SLIDE1UP.VX, SLIDE1DOWN.VX, FSLIDE1UP.VF, FSLIDE1DOWN.VF,
     RGATHER_VV, RGATHER_VI, RGATHER_VX,
     RGATHEREI16, COMPRESS.VV,
     MVNRR
   )
+
+  def generate(implicit p: Parameters) = new PermuteUnit()(p)
+}
+
+class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+  val supported_insns = PermuteUnitFactory.insns
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
     supported_insns, Nil).matched

@@ -9,14 +9,19 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
-  val supported_insns = Seq(
+case object BitwisePipeFactory extends FunctionalUnitFactory {
+  def insns = Seq(
     AND.VV, AND.VX, AND.VI, OR.VV, OR.VX, OR.VI, XOR.VV, XOR.VX, XOR.VI,
     MANDNOT.VV, MAND.VV, MOR.VV, MXOR.VV, MORNOT.VV, MNAND.VV, MNOR.VV, MXNOR.VV,
     REDAND.VV, REDOR.VV, REDXOR.VV,
     // Zvbb
     ANDN.VV, ANDN.VX
   )
+  def generate(implicit p: Parameters) = new BitwisePipe()(p)
+}
+
+class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+  val supported_insns = BitwisePipeFactory.insns
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns,
     Seq(BWAnd, BWOr, BWXor, BWInvOut, BWInv1))

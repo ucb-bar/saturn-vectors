@@ -108,30 +108,30 @@ object VectorParams {
 
 case class VXSequencerParams(
   name: String,
-  fus: Seq[Parameters => FunctionalUnit]
-)
+  fus: Seq[FunctionalUnitFactory]
+) {
+  def insns = fus.map(_.insns).flatten
+}
 
 case class VXIssuePathParams(
   name: String,
   depth: Int,
   seqs: Seq[VXSequencerParams]
-)
+) {
+  def insns = seqs.map(_.insns).flatten
+}
 
 object VXFunctionalUnitGroups {
   def integerFUs(idivDoesImul: Boolean = false) = Seq(
-    ((p: Parameters) => new IntegerPipe()(p)),
-    ((p: Parameters) => new ShiftPipe()(p)),
-    ((p: Parameters) => new BitwisePipe()(p)),
-    ((p: Parameters) => new IterativeIntegerDivider(idivDoesImul)(p)),
-    ((p: Parameters) => new MaskUnit()(p)),
-    ((p: Parameters) => new PermuteUnit()(p))
+    IntegerPipeFactory,
+    ShiftPipeFactory,
+    BitwisePipeFactory,
+    IntegerDivideFactory(idivDoesImul),
+    MaskUnitFactory,
+    PermuteUnitFactory
   )
   def integerMAC(pipeDepth: Int, useSegmented: Boolean) = Seq(
-    if (useSegmented) {
-      ((p: Parameters) => new SegmentedMultiplyPipe(pipeDepth)(p))
-    } else {
-      ((p: Parameters) => new ElementwiseMultiplyPipe(pipeDepth)(p))
-    }
+    IntegerMultiplyFactory(pipeDepth, useSegmented)
   )
 
   def allIntegerFUs(idivDoesImul: Boolean, imaDepth: Int, useSegmentedImul: Boolean) = (
@@ -139,18 +139,18 @@ object VXFunctionalUnitGroups {
   )
 
   def sharedFPFMA(pipeDepth: Int) = Seq(
-    ((p: Parameters) => new SharedScalarElementwiseFPFMA(pipeDepth)(p))
+    FPFMAFactory(pipeDepth, true)
   )
   def sharedFPMisc = Seq(
-    ((p: Parameters) => new SharedScalarElementwiseFPMisc()(p))
+    SharedFPMiscFactory
   )
   def fpFMA(pipeDepth: Int) = Seq(
-    ((p: Parameters) => new FPFMAPipe(pipeDepth)(p))
+    FPFMAFactory(pipeDepth, false)
   )
   def fpMisc = Seq(
-    ((p: Parameters) => new FPDivSqrt()(p)),
-    ((p: Parameters) => new FPCompPipe()(p)),
-    ((p: Parameters) => new FPConvPipe()(p)),
+    FPDivSqrtFactory,
+    FPCmpFactory,
+    FPConvFactory
   )
 
   def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, useScalarFPMisc: Boolean) = (

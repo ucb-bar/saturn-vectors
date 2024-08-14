@@ -9,8 +9,13 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
+case object MaskUnitFactory extends FunctionalUnitFactory {
+  def insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID)
+  def generate(implicit p: Parameters) = new MaskUnit()(p)
+}
+
 class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
-  val supported_insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID)
+  val supported_insns = MaskUnitFactory.insns
 
   val scalar_wb_busy = RegInit(false.B)
   val scalar_wb_data = Reg(UInt(64.W))

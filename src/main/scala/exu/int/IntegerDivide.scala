@@ -10,8 +10,8 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) extends IterativeFunctionalUnit()(p) {
-  val mul_insns = Seq(
+case class IntegerDivideFactory(supportsMul: Boolean) extends FunctionalUnitFactory {
+  def mul_insns = Seq(
     MUL.VV, MUL.VX, MULH.VV, MULH.VX,
     MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
     WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
@@ -21,16 +21,26 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
     WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
     SMUL.VV, SMUL.VX
-  )
-  val supported_insns = (Seq(
+  ).map(_.elementWise)
+
+  def div_insns = Seq(
     DIVU.VV, DIVU.VX,
     DIV.VV, DIV.VX,
     REMU.VV, REMU.VX,
     REM.VV, REM.VX
-  ) ++ (if (supportsMul) mul_insns else Nil)).map(_.elementWise)
+  ).map(_.elementWise)
+
+  def insns = (div_insns ++ (if (supportsMul) mul_insns else Nil))
+
+  def generate(implicit p: Parameters) = new IterativeIntegerDivider(supportsMul)(p)
+}
+
+class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) extends IterativeFunctionalUnit()(p) {
+  val div_insns = IntegerDivideFactory(supportsMul).div_insns
+  val mul_insns = IntegerDivideFactory(supportsMul).mul_insns
 
   val div = Module(new MulDiv(MulDivParams(mulUnroll = if (supportsMul) 8 else 0), 64, 1)) // 128 to make smul work
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && div.io.req.ready && (!valid || last)
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, div_insns, Nil).matched && div.io.req.ready && (!valid || last)
 
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B

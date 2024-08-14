@@ -49,24 +49,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
 
   val xissParams = vParams.issStructure.generate(vParams)
-
-  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus.map(f => () => f(p)))).suggestName(s"vxu${s.name}")))
+  val all_supported_insns = xissParams.map(_.insns).flatten
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries, 1))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries, 1))
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 1))
   val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size)).suggestName(s"vxissq_${q.name}"))
 
-  val all_supported_insns = vxus.map(_.map(_.supported_insns)).flatten.flatten
-
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vps = Module(new PermuteSequencer(all_supported_insns))
-  val vxs = (0 until xissParams.size).map { i => (0 until xissParams(i).seqs.size).map { j =>
-    Module(new ExecuteSequencer(vxus(i)(j).supported_insns)).suggestName(s"vxs${xissParams(i).seqs(j).name}")
-  }}
+  val vps = Module(new PermuteSequencer(xissParams.map(_.insns).flatten))
+  val vxs = xissParams.map(q => q.seqs.map(s =>
+    Module(new ExecuteSequencer(s.insns)).suggestName(s"vxs${s.name}")
+  ))
+
   val allSeqs = Seq(vls, vss, vps) ++ vxs.flatten
   val allIssQs = Seq(vlissq, vsissq, vpissq) ++ vxissqs
+
+  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus)).suggestName(s"vxu${s.name}")))
+
 
   io.fp_req.valid := false.B
   io.fp_req.bits := DontCare

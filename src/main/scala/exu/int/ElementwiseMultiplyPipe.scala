@@ -10,16 +10,7 @@ import saturn.common._
 import saturn.insns._
 
 class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
-  val supported_insns = Seq(
-    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
-    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
-    WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
-    WMULSU.VV, WMULSU.VX,
-    MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
-    MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
-    WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
-    WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
-    SMUL.VV, SMUL.VX).map(_.elementWise)
+  val supported_insns = IntegerMultiplyFactory(depth, false).insns
 
   io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
   io.set_vxsat := false.B
@@ -47,7 +38,7 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val ctrl_MULHi = Pipe(io.pipe(0).valid, ctrl.bool(MULHi), depth-2).bits 
   val ctrl_smul = io.pipe(depth-2).bits.isOpi
   val out_eew = io.pipe(depth-2).bits.vd_eew
-  
+
   val hi = VecInit.tabulate(4)({ eew => prod_pipe >> (8 << eew) })(out_eew)(63,0)
   val lo = VecInit.tabulate(4)({ eew => prod_pipe((8 << eew)-1,0)})(out_eew)(63,0)
   val madd = Mux(ctrl_MULSub, ~lo, lo) + ctrl_MULSub + Mux(ctrl_MULSwapVdV2, in_vs2_pipe, in_vd_pipe)
