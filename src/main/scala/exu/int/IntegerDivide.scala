@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
+import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
@@ -37,8 +38,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
 
   div.io.req.valid := io.iss.valid && io.iss.ready
 
-  lazy val aluFn = new ALUFN
-  val ctrl_fn = WireInit(VecInit(Seq(aluFn.FN_DIVU, aluFn.FN_DIV, aluFn.FN_REMU, aluFn.FN_REM))(io.iss.op.funct6(1,0)))
+  val ctrl_fn = WireInit(VecInit(Seq(FN_DIVU, FN_DIV, FN_REMU, FN_REM))(io.iss.op.funct6(1,0)))
   val ctrl_sign1 = WireInit(io.iss.op.funct6(0))
   val ctrl_sign2 = WireInit(io.iss.op.funct6(0))
   val ctrl_swapvdv2 = WireInit(false.B)
@@ -48,10 +48,10 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
       MULHi, MULSign1, MULSign2, MULSwapVdV2))
     when (mul_ctrl.matched) {
       ctrl_fn       := Mux(mul_ctrl.bool(MULHi),
-        Mux(mul_ctrl.bool(MULSign2) && mul_ctrl.bool(MULSign1), aluFn.FN_MULH,
-          Mux(mul_ctrl.bool(MULSign2), aluFn.FN_MULHSU, aluFn.FN_MULHU)),
-        aluFn.FN_MUL)
-      when (io.iss.op.isOpi) { ctrl_fn := aluFn.FN_MULH }
+        Mux(mul_ctrl.bool(MULSign2) && mul_ctrl.bool(MULSign1), FN_MULH,
+          Mux(mul_ctrl.bool(MULSign2), FN_MULHSU, FN_MULHU)),
+        FN_MUL)
+      when (io.iss.op.isOpi) { ctrl_fn := FN_MULH }
       ctrl_sign1    := mul_ctrl.bool(MULSign1)
       ctrl_sign2    := mul_ctrl.bool(MULSign2)
       ctrl_swapvdv2 := mul_ctrl.bool(MULSwapVdV2)
