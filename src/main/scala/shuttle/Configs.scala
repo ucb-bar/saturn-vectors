@@ -20,21 +20,22 @@ class WithShuttleVectorUnit(
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: ShuttleTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
+      val vParams = params.copy(
+        dLen=dLen,
+        useScalarFPFMA = false,
+        useScalarFPMisc = false
+      )
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
         core = tp.tileParams.core.copy(
           vector = Some(ShuttleCoreVectorParams(
             build = ((p: Parameters) => new SaturnShuttleUnit()(p.alterPartial {
-              case VectorParamsKey => params.copy(
-                dLen=dLen,
-                useScalarFPFMA = false,
-                useScalarFPMisc = false
-              )
+              case VectorParamsKey => vParams
             })),
             vfLen = 64,
             vfh = true,
             vLen = vLen,
             decoder = ((p: Parameters) => {
-              val decoder = Module(new EarlyVectorDecode()(p))
+              val decoder = Module(new EarlyVectorDecode(vParams.supported_ex_insns)(p))
               decoder
             }),
             issueVConfig = false,

@@ -30,7 +30,7 @@ class WithRocketVectorUnit(
             eLen = 64,
             vMemDataBits = if (useL1DCache) dLen else 0,
             decoder = ((p: Parameters) => {
-              val decoder = Module(new EarlyVectorDecode()(p))
+              val decoder = Module(new EarlyVectorDecode(params.supported_ex_insns)(p))
               decoder
             }),
             useDCache = true,

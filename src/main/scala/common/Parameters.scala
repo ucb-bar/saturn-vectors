@@ -313,7 +313,9 @@ case class VectorParams(
   issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
   tlBuffer: BufferParams = BufferParams.default,
-)
+) {
+  def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
+}
 
 case object VectorParamsKey extends Field[VectorParams]
 
