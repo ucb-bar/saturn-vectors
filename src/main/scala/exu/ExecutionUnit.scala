@@ -8,18 +8,8 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
 
-object ExecutionUnit {
-  def instantiate(
-    suffix: String,
-    genFUs: Seq[(() => FunctionalUnit, String)]
-  )(implicit p: Parameters): ExecutionUnit = {
-    val vxu = Module(new ExecutionUnit(suffix, genFUs)).suggestName(s"vxu${suffix}")
-    vxu
-  }
-}
-
-class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, String)])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
-  val fus = genFUs.map{ case(gen, suggested_name) => Module(gen()).suggestName(suggested_name) }
+class ExecutionUnit(genFUs: Seq[(() => FunctionalUnit)])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  val fus = genFUs.map(gen => Module(gen()))
   val supported_insns = fus.map(_.supported_insns).flatten
 
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
@@ -47,6 +37,7 @@ class ExecutionUnit(val suffix: String, genFUs: Seq[(() => FunctionalUnit, Strin
   })
 
   val sharedFPUnits = fus.collect { case fp: HasSharedFPUIO => fp }
+  val hasSharedFPUnits = sharedFPUnits.size > 0
 
   io.shared_fp_req.valid := false.B
   io.shared_fp_req.bits := DontCare

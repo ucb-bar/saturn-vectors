@@ -114,7 +114,7 @@ case class VXSequencerParams(
 case class VXIssuePathParams(
   name: String,
   depth: Int,
-  fus: Seq[VXSequencerParams]
+  seqs: Seq[VXSequencerParams]
 )
 
 object VXFunctionalUnitGroups {
@@ -126,15 +126,22 @@ object VXFunctionalUnitGroups {
     ((p: Parameters) => new MaskUnit()(p)),
     ((p: Parameters) => new PermuteUnit()(p))
   )
-  def integerSIMDMAC(pipeDepth: Int) = Seq(
-    ((p: Parameters) => new SegmentedMultiplyPipe(pipeDepth)(p))
-  )
-  def integerElemMAC(pipeDepth: Int) = Seq(
-    ((p: Parameters) => new ElementwiseMultiplyPipe(pipeDepth)(p))
+  def integerMAC(pipeDepth: Int, useSegmented: Boolean) = Seq(
+    if (useSegmented) {
+      ((p: Parameters) => new SegmentedMultiplyPipe(pipeDepth)(p))
+    } else {
+      ((p: Parameters) => new ElementwiseMultiplyPipe(pipeDepth)(p))
+    }
   )
 
-  def sharedFPs(pipeDepth: Int) = Seq(
-    ((p: Parameters) => new SharedScalarElementwiseFPFMA(pipeDepth)(p)),
+  def allIntegerFUs(idivDoesImul: Boolean, imaDepth: Int, useSegmentedImul: Boolean) = (
+    integerFUs(idivDoesImul) ++ integerMAC(imaDepth, useSegmentedImul)
+  )
+
+  def sharedFPFMA(pipeDepth: Int) = Seq(
+    ((p: Parameters) => new SharedScalarElementwiseFPFMA(pipeDepth)(p))
+  )
+  def sharedFPMisc = Seq(
     ((p: Parameters) => new SharedScalarElementwiseFPMisc()(p))
   )
   def fpFMA(pipeDepth: Int) = Seq(
@@ -145,114 +152,113 @@ object VXFunctionalUnitGroups {
     ((p: Parameters) => new FPCompPipe()(p)),
     ((p: Parameters) => new FPConvPipe()(p)),
   )
+
+  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, useScalarFPMisc: Boolean) = (
+    (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth)) ++
+    (if (useScalarFPMisc) sharedFPMisc else fpMisc)
+  )
 }
 
-object VXIssuePathParams {
+sealed trait VectorIssueStructure {
+  def generate(params: VectorParams): Seq[VXIssuePathParams]
+}
+
+object VectorIssueStructure {
   import VXFunctionalUnitGroups._
 
-  def UnifiedUltraMinimal(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
-    VXIssuePathParams(
-      name = "fp_int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("fp_int", integerFUs(true) ++ sharedFPs(fpDepth) ++ fpMisc)
+  case object Unified extends VectorIssueStructure {
+    def generate(params: VectorParams) = {
+      val fp_int_path = VXIssuePathParams(
+        name = "fp_int",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("fp_int", (
+            allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc)
+          ))
+        )
       )
-    )
-  )
+      Seq(fp_int_path)
+    }
+  }
 
-  def UnifiedMinimal(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
-    VXIssuePathParams(
-      name = "fp_int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("fp_int", integerFUs() ++ integerElemMAC(imulDepth) ++ sharedFPs(fpDepth) ++ fpMisc)
+  case object Shared extends VectorIssueStructure {
+    def generate(params: VectorParams) = {
+      val fp_int_path = VXIssuePathParams(
+        name = "fp_int",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("int", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc))
+        )
       )
-    )
-  )
+      Seq(fp_int_path)
+    }
+  }
 
-  def Unified(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
-    VXIssuePathParams(
-      name = "fp_int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("fp_int", integerFUs() ++ integerSIMDMAC(imulDepth) ++ fpFMA(fpDepth) ++ fpMisc)
+  case object Split extends VectorIssueStructure {
+    def generate(params: VectorParams) = {
+      val int_path = VXIssuePathParams(
+        name = "int",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("int", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
+        )
       )
-    )
-  )
+      val fp_path = VXIssuePathParams(
+        name = "fp",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc))
+        )
+      )
+      Seq(int_path, fp_path)
+    }
+  }
 
-  def Shared(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
-    VXIssuePathParams(
-      name = "fp_int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("int", integerSIMDMAC(imulDepth) ++ integerFUs()),
-        VXSequencerParams("fp", fpFMA(fpDepth) ++ fpMisc)
+  case object MultiFMA extends VectorIssueStructure {
+    def generate(params: VectorParams) = {
+      require(!params.useScalarFPFMA)
+      val int_path = VXIssuePathParams(
+        name = "int",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("int", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
+        )
       )
-    )
-  )
+      val fp_path = VXIssuePathParams(
+        name = "fp",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("fp0", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc)),
+          VXSequencerParams("fp1", fpFMA(params.fmaPipeDepth))
+        )
+      )
+      Seq(int_path, fp_path)
+    }
+  }
 
-  def Split(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
-    VXIssuePathParams(
-      name = "int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("int", integerSIMDMAC(imulDepth) ++ integerFUs())
+  case object MultiMAC extends VectorIssueStructure {
+    def generate(params: VectorParams) = {
+      require(!params.useIterativeIMul && params.useSegmentedIMul)
+      val int_path = VXIssuePathParams(
+        name = "int",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("int0", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
+          VXSequencerParams("int1", integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
+        )
       )
-    ),
-    VXIssuePathParams(
-      name = "int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("fp", fpFMA(fpDepth) ++ fpMisc)
+      val fp_path = VXIssuePathParams(
+        name = "fp",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc))
+        )
       )
-    )
-  )
-
-  def MultiFMA(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
-    VXIssuePathParams(
-      name = "int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("int", integerSIMDMAC(imulDepth) ++ integerFUs())
-      )
-    ),
-    VXIssuePathParams(
-      name = "int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("fp0", fpFMA(fpDepth) ++ fpMisc),
-        VXSequencerParams("fp1", fpFMA(fpDepth))
-      )
-    )
-  )
-
-  def MultiMAC(iqDepth: Int, imulDepth: Int, fpDepth: Int) = Seq(
-    VXIssuePathParams(
-      name = "int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("int0", integerSIMDMAC(imulDepth) ++ integerFUs()),
-        VXSequencerParams("int1", integerSIMDMAC(imulDepth))
-      )
-    ),
-    VXIssuePathParams(
-      name = "int",
-      depth = iqDepth,
-      fus = Seq(
-        VXSequencerParams("fp0", fpFMA(fpDepth) ++ fpMisc)
-      )
-    )
-  )
-
-}
-
-sealed trait VectorIssueStructure
-object VectorIssueStructure {
-  case object Unified extends VectorIssueStructure
-  case object Shared extends VectorIssueStructure
-  case object Split extends VectorIssueStructure
-  case object MultiFMA extends VectorIssueStructure
-  case object MultiMAC extends VectorIssueStructure
+      Seq(int_path, fp_path)
+    }
+  }
 }
 
 case class VectorParams(
@@ -284,8 +290,8 @@ case class VectorParams(
 
 
   useSegmentedIMul: Boolean = false,
-  useScalarFPMisc: Boolean = true,       // Use shared scalar FPU for all non-FMA FP instructions
-  useScalarFPFMA: Boolean = true,        // Use shared scalar FPU for FMA instructions
+  useScalarFPFMA: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
+  useScalarFPMisc: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
   imaPipeDepth: Int = 3,

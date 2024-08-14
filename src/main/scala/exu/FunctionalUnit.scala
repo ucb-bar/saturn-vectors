@@ -36,6 +36,11 @@ class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO
   val busy = Output(Bool())
 }
 
+abstract class FunctionalUnitFactory {
+  def insns: Seq[VectorInstruction]
+  def generate: FunctionalUnit
+}
+
 abstract class FunctionalUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io: FunctionalUnitIO
   val supported_insns: Seq[VectorInstruction]
