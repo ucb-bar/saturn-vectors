@@ -226,8 +226,11 @@ class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
 }
 
 class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val eidx_wmask = UInt(dLenB.W)
+  val use_rmask = Bool()
   val wvd_eg = UInt(log2Ceil(egsTotal).W)
-  val wmask = UInt(dLenB.W)
+  val elem_size = UInt(2.W)
+  val eidx = UInt(log2Ceil(maxVLMax).W)
   val tail = Bool()
   val debug_id = UInt(debugIdSz.W)
   val vat = UInt(vParams.vatSz.W)

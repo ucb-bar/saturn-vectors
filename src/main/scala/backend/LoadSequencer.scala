@@ -66,11 +66,14 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   io.iss.bits.tail       := tail
   io.iss.bits.vat        := inst.vat
   io.iss.bits.debug_id   := inst.debug_id
+  io.iss.bits.eidx       := eidx
 
   val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
-  val vm_mask   = Mux(!renvm, ~(0.U(dLenB.W)), get_vm_mask(io.rvm.resp, eidx, inst.mem_elem_size))
-  io.iss.bits.wmask := Mux(sidx > inst.segend && inst.seg_nf =/= 0.U, 0.U, head_mask & tail_mask & vm_mask)
+
+  io.iss.bits.eidx_wmask := Mux(sidx > inst.segend && inst.seg_nf =/= 0.U, 0.U, head_mask & tail_mask)
+  io.iss.bits.use_rmask := renvm
+  io.iss.bits.elem_size := inst.mem_elem_size
 
   when (io.iss.fire && !tail) {
     when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B) && vParams.enableChaining.B) {

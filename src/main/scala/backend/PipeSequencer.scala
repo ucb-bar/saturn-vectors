@@ -41,12 +41,6 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
   def get_max_offset(offset: UInt): UInt = min(offset, maxVLMax.U)(log2Ceil(maxVLMax),0)
   def get_head_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask << (eidx << eew)(dLenOffBits-1,0)
   def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask >> (0.U(dLenOffBits.W) - (eidx << eew)(dLenOffBits-1,0))
-  def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {
-    val vm_off  = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
-    val vm_eidx = (eidx & ~(vm_off >> eew))(log2Ceil(dLen)-1,0)
-    val vm_resp = (mask_resp >> vm_eidx)(dLenB-1,0)
-    Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
-  }
   def get_next_eidx(vl: UInt, eidx: UInt, eew: UInt, sub_dlen: UInt, reads_mask: Bool, elementwise: Bool) = {
     val next = Wire(UInt((1+log2Ceil(maxVLMax)).W))
     next := Mux(elementwise, eidx +& 1.U, Mux(reads_mask,

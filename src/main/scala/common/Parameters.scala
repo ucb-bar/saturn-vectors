@@ -401,4 +401,11 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
       Fill(1 << vParams.hazardingMultiplier, g.orR)
     }.toSeq).asUInt
   }
+
+  def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {
+    val vm_off  = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
+    val vm_eidx = (eidx & ~(vm_off >> eew))(log2Ceil(dLen)-1,0)
+    val vm_resp = (mask_resp >> vm_eidx)(dLenB-1,0)
+    Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
+  }
 }
