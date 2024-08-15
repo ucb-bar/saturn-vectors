@@ -210,19 +210,12 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
 
 class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val stdata = UInt(dLen.W)
-  val stmask = UInt(dLenB.W)
+  val use_stmask = Bool()
+  val elem_size = UInt(2.W)
+  val eidx = UInt(log2Ceil(maxVLMax).W)
   val debug_id = UInt(debugIdSz.W)
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
-  def asMaskedBytes = {
-    val bytes = Wire(Vec(dLenB, new MaskedByte))
-    for (i <- 0 until dLenB) {
-      bytes(i).data := stdata(((i+1)*8)-1,i*8)
-      bytes(i).mask := stmask(i)
-      bytes(i).debug_id := debug_id
-    }
-    bytes
-  }
 }
 
 class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

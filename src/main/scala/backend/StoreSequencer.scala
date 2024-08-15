@@ -70,10 +70,9 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && io.rvd.req.ready
   io.iss.bits.stdata  := io.rvd.resp
-  val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
-  val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
-  val vm_mask   = Mux(!renvm, ~(0.U(dLenB.W)), get_vm_mask(io.rvm.resp, eidx, inst.mem_elem_size))
-  io.iss.bits.stmask := vm_mask
+  io.iss.bits.use_stmask := renvm
+  io.iss.bits.eidx := eidx
+  io.iss.bits.elem_size := inst.mem_elem_size
   io.iss.bits.debug_id := inst.debug_id
   io.iss.bits.tail := tail
   io.iss.bits.vat := inst.vat
