@@ -273,21 +273,33 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     flat_vxs(i).io.acc := flat_vxus(i).io.acc_write
   }
 
-  // Read ports are
-  // vxs0-vrs1, vxs1-vrs1, vmu-index, frontend-index
-  // vxs0-vrs2, vxs1-vrs2
-  // vxs0-vrs3, vxs1-vrs3, vss-vrd
-  // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
-  // Mask ports are
-  // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
-  val vrf = Module(new RegisterFile(
-    reads = Seq(2 + flat_vxs.size, flat_vxs.size, 1 + flat_vxs.size),
-    maskReads = Seq(4 + flat_vxs.size),
-    pipeWrites = flat_vxus.size,
-    llWrites = flat_vxus.size + 2 // vxus + load + reset
-  ))
+  val reg_access = Module(new RegisterAccess(flat_vxs.size))
+  reg_access.io.vls.rvm <> vls.io.rvm
+  reg_access.io.vss.rvd <> vss.io.rvd
+  reg_access.io.vss.rvm <> vss.io.rvm
+  reg_access.io.vps.rvs2 <> vps.io.rvs2
+  reg_access.io.vps.rvm <> vps.io.rvm
+
+  for (i <- 0 until flat_vxs.size) {
+    reg_access.io.vxs(i).rvs1 <> flat_vxs(i).io.rvs1
+    reg_access.io.vxs(i).rvs2 <> flat_vxs(i).io.rvs2
+    reg_access.io.vxs(i).rvd <> flat_vxs(i).io.rvd
+    reg_access.io.vxs(i).rvm <> flat_vxs(i).io.rvm
+
+    reg_access.io.pipe_writes(i) <> flat_vxus(i).io.pipe_write
+    reg_access.io.iter_writes(i) <> flat_vxus(i).io.iter_write
+  }
+
+  val frontend_rindex = Wire(new VectorReadIO)
+  val frontend_rmask  = Wire(new VectorReadIO)
+  reg_access.io.frontend.rindex <> frontend_rindex
+  reg_access.io.frontend.rmask <> frontend_rmask
+
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
+  reg_access.io.load_write <> load_write
+
+
   io.vmu.lresp.ready := vls.io.iss.valid && load_write.ready
   vls.io.iss.ready := io.vmu.lresp.valid && load_write.ready
   load_write.valid := vls.io.iss.valid && io.vmu.lresp.valid
@@ -297,38 +309,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   when (io.vmu.lresp.fire) {
     assert(io.vmu.lresp.bits.debug_id === vls.io.iss.bits.debug_id)
   }
-
-  val resetting = RegInit(true.B)
-  val reset_ctr = RegInit(0.U(log2Ceil(egsTotal).W))
-  when (resetting) {
-    reset_ctr := reset_ctr + 1.U
-    io.dis.ready := false.B
-  }
-  when (~reset_ctr === 0.U) { resetting := false.B }
-
-  // Write ports
-  vrf.io.pipe_writes.zip(vxus.flatten).foreach { case (w,vxu) =>
-    w := vxu.io.pipe_write
-  }
-
-  vrf.io.ll_writes(0) <> load_write
-  vrf.io.ll_writes(1).valid     := resetting
-  vrf.io.ll_writes(1).bits.eg   := reset_ctr
-  vrf.io.ll_writes(1).bits.data := 0.U
-  vrf.io.ll_writes(1).bits.mask := ~(0.U(dLen.W))
-  vxus.flatten.zipWithIndex.foreach { case (vxu,i) =>
-    vrf.io.ll_writes(2+i) <> vxu.io.iter_write
-  }
-
-  flat_vxs.zipWithIndex.foreach { case(xs, i) =>
-    vrf.io.read(0)(i) <> xs.io.rvs1
-    vrf.io.read(1)(i) <> xs.io.rvs2
-    vrf.io.read(2)(i) <> xs.io.rvd
-    vrf.io.mask_read(0)(i) <> xs.io.rvm
-  }
-
-  vrf.io.read(0)(flat_vxs.length) <> vps.io.rvs2
-  vps.io.rvs1.req.ready := true.B
 
   val index_access_eg = getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
   val index_access_eg_oh = UIntToOH(index_access_eg)
@@ -343,26 +323,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }).orR || vdq.io.peek.map(i => i.valid && !(i.bits.vmu && i.bits.store)).orR
   // TODO: this conservatively assumes a index data hazard against anything in the vdq
 
-  vrf.io.read(0)(flat_vxs.size+1).req.valid := io.index_access.valid && !index_access_hazard
-  io.index_access.ready := vrf.io.read(0)(flat_vxs.size+1).req.ready && !index_access_hazard
-  vrf.io.read(0)(flat_vxs.size+1).req.bits.eg  := index_access_eg
-  vrf.io.read(0)(flat_vxs.size+1).req.bits.oldest  := false.B
-  io.index_access.idx   := vrf.io.read(0)(flat_vxs.size+1).resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
+  frontend_rindex.req.valid := io.index_access.valid && !index_access_hazard
+  io.index_access.ready := frontend_rindex.req.ready && !index_access_hazard
+  frontend_rindex.req.bits.eg  := index_access_eg
+  frontend_rindex.req.bits.oldest  := false.B
+  io.index_access.idx   := frontend_rindex.resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
-  vrf.io.read(2)(flat_vxs.size) <> vss.io.rvd
-  io.vmu.sdata.valid   := vss.io.iss.valid
-  io.vmu.sdata.bits    := vss.io.iss.bits
-  vss.io.iss.ready     := io.vmu.sdata.ready
-
-  vrf.io.mask_read(0)(flat_vxs.length) <> vls.io.rvm
-  vrf.io.mask_read(0)(flat_vxs.length+1) <> vss.io.rvm
-  vrf.io.mask_read(0)(flat_vxs.length+2) <> vps.io.rvm
   val vm_busy = Wire(Bool())
-  vrf.io.mask_read(0)(flat_vxs.length+3).req.valid    := io.mask_access.valid && !vm_busy
-  vrf.io.mask_read(0)(flat_vxs.length+3).req.bits.eg  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
-  vrf.io.mask_read(0)(flat_vxs.length+3).req.bits.oldest := false.B
-  io.mask_access.ready  := vrf.io.mask_read(0)(flat_vxs.length+3).req.ready && !vm_busy
-  io.mask_access.mask   := vrf.io.mask_read(0)(flat_vxs.length+3).resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
+  frontend_rmask.req.valid    := io.mask_access.valid && !vm_busy
+  frontend_rmask.req.bits.eg  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
+  frontend_rmask.req.bits.oldest := false.B
+  io.mask_access.ready  := frontend_rmask.req.ready && !vm_busy
+  io.mask_access.mask   := frontend_rmask.resp >> io.mask_access.eidx(log2Ceil(dLen)-1,0)
 
 
   val vmu_index_q = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
@@ -386,6 +358,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vmu_index_q.io.push.valid := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renv2 && vps.io.iss.ready
   vmu_mask_q.io.push.valid  := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renvm && vps.io.iss.ready
+
+  io.vmu.sdata.valid   := vss.io.iss.valid
+  io.vmu.sdata.bits    := vss.io.iss.bits
+  vss.io.iss.ready     := io.vmu.sdata.ready
 
   io.vmu.mask_pop   <> vmu_mask_q.io.pop
   io.vmu.mask_data  := vmu_mask_q.io.pop_data
@@ -434,7 +410,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }.orR
 
   vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.busy := vdq.io.deq.valid || allSeqs.map(_.io.busy).orR || vxus.flatten.map(_.io.busy).asUInt.orR || resetting
+  io.busy := vdq.io.deq.valid || allSeqs.map(_.io.busy).orR || vxus.flatten.map(_.io.busy).asUInt.orR
   io.set_vxsat := vxus.flatten.map(_.io.set_vxsat).asUInt.orR
   io.set_fflags.valid := vxus.flatten.map(_.io.set_fflags.valid).asUInt.orR
   io.set_fflags.bits  := vxus.flatten.map( xu => Mux(xu.io.set_fflags.valid, xu.io.set_fflags.bits, 0.U)).reduce(_|_)
