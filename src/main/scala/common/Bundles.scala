@@ -209,7 +209,6 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
 }
 
 class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val stdata = UInt(dLen.W)
   val use_stmask = Bool()
   val elem_size = UInt(2.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)

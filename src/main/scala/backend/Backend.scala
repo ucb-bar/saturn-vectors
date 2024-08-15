@@ -364,7 +364,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.vmu.sdata.valid   := vss.io.iss.valid
   vss.io.iss.ready     := io.vmu.sdata.ready
-  io.vmu.sdata.bits.stdata    := vss.io.iss.bits.stdata
+  io.vmu.sdata.bits.stdata    := reg_access.io.vss.rvd.resp
   io.vmu.sdata.bits.stmask    := Mux(vss.io.iss.bits.use_stmask,
     get_vm_mask(reg_access.io.vss.rvm.resp, vss.io.iss.bits.eidx, vss.io.iss.bits.elem_size),
     ~(0.U(dLenB.W))

@@ -69,7 +69,6 @@ class StoreSequencer(implicit p: Parameters) extends PipeSequencer(new StoreData
   io.rvm.req.bits.oldest := oldest
 
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && io.rvd.req.ready
-  io.iss.bits.stdata  := io.rvd.resp
   io.iss.bits.use_stmask := renvm
   io.iss.bits.eidx := eidx
   io.iss.bits.elem_size := inst.mem_elem_size
