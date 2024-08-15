@@ -180,6 +180,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       seq.io.perm := DontCare
       seq.io.acc.valid := false.B
       seq.io.acc.bits := DontCare
+      seq.io.acc_init_resp := DontCare
       seq.io.vat_head := io.vat_head
 
       val older_issq_wintents = FillInterleaved(egsPerVReg, otherIssqs.map { i =>
@@ -285,6 +286,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     reg_access.io.vxs(i).rvs2 <> flat_vxs(i).io.rvs2
     reg_access.io.vxs(i).rvd <> flat_vxs(i).io.rvd
     reg_access.io.vxs(i).rvm <> flat_vxs(i).io.rvm
+    flat_vxs(i).io.acc_init_resp := reg_access.io.vxs(i).rvs2.resp
 
     reg_access.io.pipe_writes(i) <> flat_vxus(i).io.pipe_write
     reg_access.io.iter_writes(i) <> flat_vxus(i).io.iter_write
@@ -351,9 +353,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     0.U)
 
   vmu_mask_q.io.push_data       := Mux(vps.io.iss.bits.renvm,
-    (reg_access.io.vps.rvm.resp >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(dLenB-1,0).asBools,
+    (reg_access.io.vps.rvm.resp >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(dLenB-1,0),
     ~(0.U(dLenB.W))
-  )
+  ).asBools
   vmu_mask_q.io.push.bits.head  := 0.U
   vmu_mask_q.io.push.bits.tail  := Mux(vps.io.iss.bits.tail, vps.io.iss.bits.vl, 0.U) - vps.io.iss.bits.eidx
 

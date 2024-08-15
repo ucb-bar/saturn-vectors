@@ -314,7 +314,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
 
   when (iss_valid && inst.reduction && reduction_head) {
     val v0_mask = eewBitMask(vd_eew)
-    acc := ((acc_init & ~v0_mask.pad(dLen)) | (io.rvs1.resp & v0_mask)).asTypeOf(Vec(dLenB, UInt(8.W)))
+    acc := ((acc_init & ~v0_mask.pad(dLen)) | (io.acc_init_resp & v0_mask)).asTypeOf(Vec(dLenB, UInt(8.W)))
     reduction_head := false.B
   }
 

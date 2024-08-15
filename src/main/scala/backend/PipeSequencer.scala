@@ -31,6 +31,8 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
       val data = Input(UInt(dLen.W))
     }
 
+    val acc_init_resp = Input(UInt(dLen.W))
+
     val iss = Decoupled(issType)
 
     val acc = Input(Valid(new VectorWrite(dLen)))
