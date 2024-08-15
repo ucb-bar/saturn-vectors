@@ -1,3 +1,6 @@
 [submodule "benchmarks/env"]
 	path = benchmarks/env
 	url = git@github.com:riscv/riscv-test-env.git
+[submodule "riscv-vector-tests"]
+	path = riscv-vector-tests
+	url = git@github.com:chipsalliance/riscv-vector-tests.git
