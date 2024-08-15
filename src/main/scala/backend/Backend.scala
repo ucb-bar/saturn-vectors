@@ -342,15 +342,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vmu_index_q = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
   val vmu_mask_q = Module(new Compactor(dLenB, dLenB, Bool(), false))
-  val perm_q = Module(new DCEQueue(new PermuteMicroOp, 2))
+  val perm_q = Module(new DCEQueue(new PermuteMicroOpWithData, 2))
 
-  vmu_index_q.io.push_data      := vps.io.iss.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  vmu_index_q.io.push_data      := reg_access.io.vps.rvs2.resp.asTypeOf(Vec(dLenB, UInt(8.W)))
   vmu_index_q.io.push.bits.head := vps.io.iss.bits.eidx << vps.io.iss.bits.rvs2_eew
   vmu_index_q.io.push.bits.tail := Mux(vps.io.iss.bits.tail,
     vps.io.iss.bits.vl << vps.io.iss.bits.rvs2_eew,
     0.U)
 
-  vmu_mask_q.io.push_data       := (vps.io.iss.bits.rvm_data >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(dLenB-1,0).asBools
+  vmu_mask_q.io.push_data       := Mux(vps.io.iss.bits.renvm,
+    (reg_access.io.vps.rvm.resp >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(dLenB-1,0).asBools,
+    ~(0.U(dLenB.W))
+  )
   vmu_mask_q.io.push.bits.head  := 0.U
   vmu_mask_q.io.push.bits.tail  := Mux(vps.io.iss.bits.tail, vps.io.iss.bits.vl, 0.U) - vps.io.iss.bits.eidx
 
@@ -378,7 +381,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.vmu.index_data := vmu_index_q.io.pop_data
 
   perm_q.io.enq.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
-  perm_q.io.enq.bits := vps.io.iss.bits
+  perm_q.io.enq.bits.viewAsSupertype(new PermuteMicroOp) := vps.io.iss.bits
+  perm_q.io.enq.bits.rvs2_data := reg_access.io.vps.rvs2.resp
 
   perm_q.io.deq.ready := perm_buffer.io.push.ready
   perm_buffer.io.push.valid := perm_q.io.deq.valid

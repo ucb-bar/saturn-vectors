@@ -231,13 +231,15 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val renv2 = Bool()
   val renvm = Bool()
-  val rvs2_data = UInt(dLen.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val rvs2_eew = UInt(2.W)
-  val rvm_data = UInt(dLen.W)
   val vmu = Bool()
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
   val tail = Bool()
+}
+
+class PermuteMicroOpWithData(implicit p: Parameters) extends PermuteMicroOp {
+  val rvs2_data = UInt(dLen.W)
 }
 
 class PipeHazard(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

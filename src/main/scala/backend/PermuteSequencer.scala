@@ -88,11 +88,9 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && (!renv2 || io.rvs2.req.ready)
   io.iss.bits.renv2     := renv2
   io.iss.bits.renvm     := renvm
-  io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvs2_eew  := incr_eew
   io.iss.bits.eidx      := eidx
   io.iss.bits.vl        := eff_vl
-  io.iss.bits.rvm_data  := Mux(renvm, io.rvm.resp, ~(0.U(dLen.W)))
   io.iss.bits.vmu       := inst.vmu
   io.iss.bits.tail      := tail
 
