@@ -43,6 +43,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   def vatOlder(i0: UInt, i1: UInt) = cqOlder(i0, i1, io.vat_tail)
 
+  // ====================================================================
+  // Set up the dispatch queue, issue queues, sequencers, execution units
+
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
   vdq.io.enq <> io.dis
 
@@ -58,7 +61,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vps = Module(new PermuteSequencer(xissParams.map(_.insns).flatten))
+  val vps = Module(new PermuteSequencer(all_supported_insns))
   val vxs = xissParams.map(q => q.seqs.map(s =>
     Module(new ExecuteSequencer(s.insns)).suggestName(s"vxs${s.name}")
   ))
@@ -89,66 +92,61 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val issGroups = Seq(
     IssueGroup(vlissq, Seq(vls)),
     IssueGroup(vsissq, Seq(vss)),
-    IssueGroup(vpissq, Seq(vps))
+    IssueGroup(vpissq, Seq(vps)),
   ) ++ (vxissqs.zip(vxs).map { case (q, seqs) =>
     IssueGroup(q, seqs)
   })
 
-  vlissq.io.enq.bits.reduction := false.B
-  vlissq.io.enq.bits.wide_vd := false.B
-  vlissq.io.enq.bits.wide_vs2 := false.B
-  vlissq.io.enq.bits.writes_mask := false.B
-  vlissq.io.enq.bits.reads_vs1_mask := false.B
-  vlissq.io.enq.bits.reads_vs2_mask := false.B
+  // ======================================
+  // Set inputs to each issq/sequencer pair
+
+  // Set common defaults
+  for (issq <- allIssQs) {
+    issq.io.enq.bits.reduction := false.B
+    issq.io.enq.bits.wide_vd := false.B
+    issq.io.enq.bits.wide_vs2 := false.B
+    issq.io.enq.bits.writes_mask := false.B
+    issq.io.enq.bits.reads_vs1_mask := false.B
+    issq.io.enq.bits.reads_vs2_mask := false.B
+    issq.io.enq.bits.nf_log2 := 0.U
+    issq.io.enq.bits.renv1 := false.B
+    issq.io.enq.bits.renv2 := false.B
+    issq.io.enq.bits.renvd := false.B
+    issq.io.enq.bits.renvm := false.B
+    issq.io.enq.bits.wvd   := false.B
+    issq.io.enq.bits.scalar_to_vd0 := false.B
+    issq.io.enq.bits.rs1_is_rs2 := false.B
+  }
+
+  // Load sequencer
   vlissq.io.enq.bits.nf_log2 := log2_up(vdq.io.deq.bits.nf, 8)
-  vlissq.io.enq.bits.renv1 := false.B
-  vlissq.io.enq.bits.renv2 := false.B
-  vlissq.io.enq.bits.renvd := false.B
   vlissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm
   vlissq.io.enq.bits.wvd   := true.B
-  vlissq.io.enq.bits.scalar_to_vd0 := false.B
-  vlissq.io.enq.bits.rs1_is_rs2 := false.B
 
-  vsissq.io.enq.bits.reduction := false.B
-  vsissq.io.enq.bits.wide_vd := false.B
-  vsissq.io.enq.bits.wide_vs2 := false.B
-  vsissq.io.enq.bits.writes_mask := false.B
-  vsissq.io.enq.bits.reads_vs1_mask := false.B
-  vsissq.io.enq.bits.reads_vs2_mask := false.B
+  // Store sequencer
   vsissq.io.enq.bits.nf_log2 := log2_up(vdq.io.deq.bits.nf, 8)
-  vsissq.io.enq.bits.renv1 := false.B
-  vsissq.io.enq.bits.renv2 := false.B
   vsissq.io.enq.bits.renvd := true.B
   vsissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
-  vsissq.io.enq.bits.wvd   := false.B
-  vsissq.io.enq.bits.scalar_to_vd0 := false.B
-  vsissq.io.enq.bits.rs1_is_rs2 := false.B
 
-  vpissq.io.enq.bits.reduction := false.B
-  vpissq.io.enq.bits.wide_vd := false.B
-  vpissq.io.enq.bits.wide_vs2 := false.B
-  vpissq.io.enq.bits.writes_mask := false.B
-  vpissq.io.enq.bits.reads_vs1_mask := false.B
-  vpissq.io.enq.bits.reads_vs2_mask := false.B
-  vpissq.io.enq.bits.nf_log2 := 0.U
-  vpissq.io.enq.bits.renv1 := false.B
+  // Permute source sequencer
   vpissq.io.enq.bits.renv2 := vdq.io.deq.bits.mop(0) || !vdq.io.deq.bits.vmu
   vpissq.io.enq.bits.renvd := true.B
   vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit && vdq.io.deq.bits.vmu
-  vpissq.io.enq.bits.wvd   := false.B
-  vpissq.io.enq.bits.scalar_to_vd0 := false.B
   vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && (vdq.io.deq.bits.opif6 === OPIFunct6.rgather || (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.opif6 === OPIFunct6.rgatherei16))
 
-  val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6, vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, all_supported_insns,
-    Seq(Reduction, Wide2VD, Wide2VS2, WritesAsMask, ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
-      VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0))
+  val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6,
+    vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, all_supported_insns, Seq(
+      Reduction, Wide2VD, Wide2VS2, WritesAsMask,
+      ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
+      VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0
+    )
+  )
   vxissqs.foreach { vxissq =>
     vxissq.io.enq.bits.wide_vd := xdis_ctrl.bool(Wide2VD)
     vxissq.io.enq.bits.wide_vs2 := xdis_ctrl.bool(Wide2VS2)
     vxissq.io.enq.bits.writes_mask := xdis_ctrl.bool(WritesAsMask)
     vxissq.io.enq.bits.reads_vs1_mask := xdis_ctrl.bool(ReadsVS1AsMask)
     vxissq.io.enq.bits.reads_vs2_mask := xdis_ctrl.bool(ReadsVS2AsMask)
-    vxissq.io.enq.bits.nf_log2 := 0.U
     vxissq.io.enq.bits.renv1 := xdis_ctrl.bool(ReadsVS1)
     vxissq.io.enq.bits.renv2 := xdis_ctrl.bool(ReadsVS2)
     vxissq.io.enq.bits.renvd := xdis_ctrl.bool(ReadsVD)
@@ -156,7 +154,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxissq.io.enq.bits.wvd := !xdis_ctrl.bool(WritesScalar)
     vxissq.io.enq.bits.scalar_to_vd0 := xdis_ctrl.bool(ScalarToVD0)
     vxissq.io.enq.bits.reduction := xdis_ctrl.bool(Reduction)
-    vxissq.io.enq.bits.rs1_is_rs2 := false.B
   }
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
