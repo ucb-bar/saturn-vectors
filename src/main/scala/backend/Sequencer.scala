@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config._
 import freechips.rocketchip.tile.{CoreModule, CoreBundle}
 import saturn.common._
 
-class PipeSequencerIO[T <: Data](issType: T)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class SequencerIO[T <: Data](issType: T)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val dis = Flipped(Decoupled(new BackendIssueInst))
   val dis_stall = Input(Bool()) // used to disable OOO
 
@@ -36,9 +36,9 @@ class PipeSequencerIO[T <: Data](issType: T)(implicit p: Parameters) extends Cor
   val acc = Input(Valid(new VectorWrite(dLen)))
 }
 
-abstract class PipeSequencer[T <: Data](implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+abstract class Sequencer[T <: Data](implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
-  val io: PipeSequencerIO[T]
+  val io: SequencerIO[T]
 
   def accepts(inst: VectorIssueInst): Bool
 

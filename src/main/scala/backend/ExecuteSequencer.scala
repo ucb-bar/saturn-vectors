@@ -10,10 +10,10 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer[ExecuteMicroOp]()(p) {
+class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
   def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
 
-  val io = IO(new PipeSequencerIO(new ExecuteMicroOp))
+  val io = IO(new SequencerIO(new ExecuteMicroOp))
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)

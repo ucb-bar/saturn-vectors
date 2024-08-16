@@ -86,7 +86,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   case class IssueGroup(
     issq: IssueQueue,
-    seqs: Seq[PipeSequencer[_]])
+    seqs: Seq[Sequencer[_]])
 
 
   val issGroups = Seq(
