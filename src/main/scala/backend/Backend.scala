@@ -249,29 +249,31 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   //  from another VXS (check that it's actually a valid hazard)
   val inflight_hazards = WireInit(VecInit(Seq.fill(flat_vxs.length)(false.B)))
   for (i <- 0 until flat_vxs.length) {
+    val vxs = flat_vxs(i)
+    val vxu = flat_vxus(i)
     val other_vxu_idx = (0 until flat_vxs.length).filter(_ != i)
 
     val inflight_hazard = other_vxu_idx.map(flat_vxus(_).io.pipe_hazards).flatten.map { hazard =>
       hazard.valid &&
-      (hazard.bits.latency === flat_vxus(i).io.issue_pipe_latency) &&
-      (hazard.bits.eg(vrfBankBits-1,0) === flat_vxs(i).io.iss.bits.wvd_eg(vrfBankBits-1,0))
+      (hazard.bits.latency === vxu.io.issue_pipe_latency) &&
+      (hazard.bits.eg(vrfBankBits-1,0) === vxs.io.iss.bits.wvd_eg(vrfBankBits-1,0))
     }.reduceOption(_ || _).getOrElse(false.B)
 
     inflight_hazards(i) := inflight_hazard
 
     val issue_hazard = other_vxu_idx.map { other_iss =>
-      (flat_vxus(other_iss).io.issue_pipe_latency === flat_vxus(i).io.issue_pipe_latency) &&
-      (flat_vxs(other_iss).io.iss.bits.wvd_eg(vrfBankBits-1,0) === flat_vxs(i).io.iss.bits.wvd_eg(vrfBankBits-1,0)) &&
-      vatOlder(flat_vxs(other_iss).io.iss.bits.vat, flat_vxs(i).io.iss.bits.vat) &&
+      (flat_vxus(other_iss).io.issue_pipe_latency === vxu.io.issue_pipe_latency) &&
+      (flat_vxs(other_iss).io.iss.bits.wvd_eg(vrfBankBits-1,0) === vxs.io.iss.bits.wvd_eg(vrfBankBits-1,0)) &&
+      vatOlder(flat_vxs(other_iss).io.iss.bits.vat, vxs.io.iss.bits.vat) &&
       !inflight_hazards(other_iss) &&
       flat_vxs(other_iss).io.iss.valid &&
       flat_vxus(other_iss).io.iss.ready
     }.reduceOption(_ || _).getOrElse(false.B)
 
-    flat_vxus(i).io.iss.valid := flat_vxs(i).io.iss.valid && !inflight_hazard && !issue_hazard
-    flat_vxs(i).io.iss.ready := flat_vxus(i).io.iss.ready && !inflight_hazard && !issue_hazard
-    flat_vxus(i).io.iss.bits := flat_vxs(i).io.iss.bits
-    flat_vxs(i).io.acc := flat_vxus(i).io.acc_write
+    vxu.io.iss.valid := vxs.io.iss.valid && !inflight_hazard && !issue_hazard
+    vxs.io.iss.ready := vxu.io.iss.ready && !inflight_hazard && !issue_hazard
+    vxu.io.iss.bits := vxs.io.iss.bits
+    vxs.io.acc := vxu.io.acc_write
   }
 
   val reg_access = Module(new RegisterAccess(flat_vxs.size))
