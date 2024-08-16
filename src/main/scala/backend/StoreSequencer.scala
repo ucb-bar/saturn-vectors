@@ -5,10 +5,15 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import saturn.common._
 
+class StoreSequencerIO(implicit p: Parameters) extends SequencerIO(new StoreDataMicroOp) {
+  val rvd  = new VectorReadIO
+  val rvm  = new VectorReadIO
+}
+
 class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]()(p) {
   def accepts(inst: VectorIssueInst) = inst.vmu && inst.opcode(5)
 
-  val io = IO(new SequencerIO(new StoreDataMicroOp))
+  val io = IO(new StoreSequencerIO)
 
   val valid    = RegInit(false.B)
   val inst     = Reg(new VectorIssueInst)

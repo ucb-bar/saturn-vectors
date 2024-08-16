@@ -6,6 +6,11 @@ import org.chipsalliance.cde.config._
 import saturn.common._
 import saturn.insns._
 
+class PermuteSequencerIO(implicit p: Parameters) extends SequencerIO(new PermuteMicroOp) {
+  val rvs2 = new VectorReadIO
+  val rvm  = new VectorReadIO
+}
+
 class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends Sequencer[PermuteMicroOp]()(p) {
   def accepts(inst: VectorIssueInst) = {
     val needs_mask = inst.vmu && (!inst.vm && inst.mop =/= mopUnit)
@@ -14,7 +19,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
     needs_mask || needs_index || arith
   }
 
-  val io = IO(new SequencerIO(new PermuteMicroOp))
+  val io = IO(new PermuteSequencerIO)
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)

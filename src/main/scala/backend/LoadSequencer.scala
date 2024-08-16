@@ -5,10 +5,14 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import saturn.common._
 
+class LoadSequencerIO(implicit p: Parameters) extends SequencerIO(new LoadRespMicroOp) {
+  val rvm  = new VectorReadIO
+}
+
 class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()(p) {
   def accepts(inst: VectorIssueInst) = inst.vmu && !inst.opcode(5)
 
-  val io = IO(new SequencerIO(new LoadRespMicroOp))
+  val io = IO(new LoadSequencerIO)
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)

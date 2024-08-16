@@ -175,14 +175,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
       val vat = seq.io.vat
 
-      seq.io.rvs1 := DontCare
-      seq.io.rvs2 := DontCare
-      seq.io.rvd := DontCare
-      seq.io.rvm := DontCare
-      seq.io.perm := DontCare
-      seq.io.acc.valid := false.B
-      seq.io.acc.bits := DontCare
-      seq.io.acc_init_resp := DontCare
       seq.io.vat_head := io.vat_head
 
       val older_issq_wintents = FillInterleaved(egsPerVReg, otherIssqs.map { i =>
@@ -401,8 +393,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     0.U)
   perm_buffer.io.push_data := perm_q.io.deq.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  perm_buffer.io.pop <> vxs.head.head.io.perm.req
-  vxs.head.head.io.perm.data := perm_buffer.io.pop_data.asUInt
+  // Only the first VSU can handle permutations TODO clean this up
+  flat_vxs.foreach(_.io.perm.req.ready := false.B)
+  flat_vxs.foreach(_.io.perm.data := DontCare)
+
+  perm_buffer.io.pop <> flat_vxs.head.io.perm.req
+  flat_vxs.head.io.perm.data := perm_buffer.io.pop_data.asUInt
+
 
   // Clear the age tags
   var r_idx = 0

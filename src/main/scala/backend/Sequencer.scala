@@ -7,33 +7,26 @@ import freechips.rocketchip.tile.{CoreModule, CoreBundle}
 import saturn.common._
 
 class SequencerIO[T <: Data](issType: T)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  // From issue queue
   val dis = Flipped(Decoupled(new BackendIssueInst))
   val dis_stall = Input(Bool()) // used to disable OOO
 
+  // Emits pending reads/writes + age
   val seq_hazard = Output(Valid(new SequencerHazard))
-
   val vat = Output(UInt(vParams.vatSz.W))
-  val vat_head = Input(UInt(vParams.vatSz.W))
+
+  // Consumes older reads/writes
   val older_writes = Input(UInt(egsTotal.W))
   val older_reads  = Input(UInt(egsTotal.W))
+
+  // Used to determine when this is the oldest insn
+  val vat_head = Input(UInt(vParams.vatSz.W))
 
   val busy = Output(Bool())
   val head = Output(Bool())
 
-  val rvs1 = new VectorReadIO
-  val rvs2 = new VectorReadIO
-  val rvd  = new VectorReadIO
-  val rvm  = new VectorReadIO
-  val perm = new Bundle {
-    val req = Decoupled(new CompactorReq(dLenB))
-    val data = Input(UInt(dLen.W))
-  }
-
-  val acc_init_resp = Input(UInt(dLen.W))
-
+  // Issued operation
   val iss = Decoupled(issType)
-
-  val acc = Input(Valid(new VectorWrite(dLen)))
 }
 
 abstract class Sequencer[T <: Data](implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
