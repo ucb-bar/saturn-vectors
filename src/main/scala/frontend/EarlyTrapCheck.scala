@@ -92,6 +92,9 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
       s0_inst.emul := VecInit.tabulate(8)(nf => log2Ceil(nf+1).U)(s0_inst.nf)
     }
   }
+  when (!s0_inst.vmu && s0_inst.funct3 === OPIVI && s0_inst.funct6 === OPIFunct6.mvnrr.litValue.U) {
+    s0_inst.emul := log2_up(s0_inst.imm5, 8)
+  }
 
   val s0_unit = s0_inst.mop === mopUnit || (s0_inst.mop === mopStrided && io.s0.in.bits.rs2 === ((s0_inst.nf +& 1.U) << s0_inst.mem_elem_size))
   val s0_indexed = s0_inst.mop.isOneOf(mopOrdered, mopUnordered)

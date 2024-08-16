@@ -157,9 +157,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxissq.io.enq.bits.scalar_to_vd0 := xdis_ctrl.bool(ScalarToVD0)
     vxissq.io.enq.bits.reduction := xdis_ctrl.bool(Reduction)
     vxissq.io.enq.bits.rs1_is_rs2 := false.B
-    when (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.funct6 === OPIFunct6.mvnrr.litValue.U) {
-      vxissq.io.enq.bits.emul := log2_up(vdq.io.deq.bits.nf, 8)
-    }
   }
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
