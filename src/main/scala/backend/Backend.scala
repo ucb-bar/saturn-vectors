@@ -134,6 +134,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit && vdq.io.deq.bits.vmu
   vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && (vdq.io.deq.bits.opif6 === OPIFunct6.rgather || (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.opif6 === OPIFunct6.rgatherei16))
 
+  // Execute sequencers
   val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6,
     vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, all_supported_insns, Seq(
       Reduction, Wide2VD, Wide2VS2, WritesAsMask,
@@ -155,6 +156,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxissq.io.enq.bits.scalar_to_vd0 := xdis_ctrl.bool(ScalarToVD0)
     vxissq.io.enq.bits.reduction := xdis_ctrl.bool(Reduction)
   }
+
+  // ======================================
+  // Connect VDQ to issue queues
+  // Connect issue queues to sequencers
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR
@@ -272,6 +277,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxu.io.iss.bits := vxs.io.iss.bits
     vxs.io.acc := vxu.io.acc_write
   }
+
+  // ======================================
+  // Connect sequencers to VRF
 
   val vrf = Module(new RegisterAccess(flat_vxs.size))
   vrf.io.vls.rvm <> vls.io.rvm

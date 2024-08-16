@@ -3,40 +3,43 @@ package saturn.common
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
-import freechips.rocketchip.tile.{CoreModule}
+import freechips.rocketchip.tile.{CoreModule, CoreBundle}
 import saturn.common._
 
-abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class PipeSequencerIO[T <: Data](issType: T)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val dis = Flipped(Decoupled(new BackendIssueInst))
+  val dis_stall = Input(Bool()) // used to disable OOO
 
-  val io = IO(new Bundle {
-    val dis = Flipped(Decoupled(new BackendIssueInst))
-    val dis_stall = Input(Bool()) // used to disable OOO
+  val seq_hazard = Output(Valid(new SequencerHazard))
 
-    val seq_hazard = Output(Valid(new SequencerHazard))
+  val vat = Output(UInt(vParams.vatSz.W))
+  val vat_head = Input(UInt(vParams.vatSz.W))
+  val older_writes = Input(UInt(egsTotal.W))
+  val older_reads  = Input(UInt(egsTotal.W))
 
-    val vat = Output(UInt(vParams.vatSz.W))
-    val vat_head = Input(UInt(vParams.vatSz.W))
-    val older_writes = Input(UInt(egsTotal.W))
-    val older_reads  = Input(UInt(egsTotal.W))
+  val busy = Output(Bool())
+  val head = Output(Bool())
 
-    val busy = Output(Bool())
-    val head = Output(Bool())
+  val rvs1 = new VectorReadIO
+  val rvs2 = new VectorReadIO
+  val rvd  = new VectorReadIO
+  val rvm  = new VectorReadIO
+  val perm = new Bundle {
+    val req = Decoupled(new CompactorReq(dLenB))
+    val data = Input(UInt(dLen.W))
+  }
 
-    val rvs1 = new VectorReadIO
-    val rvs2 = new VectorReadIO
-    val rvd  = new VectorReadIO
-    val rvm  = new VectorReadIO
-    val perm = new Bundle {
-      val req = Decoupled(new CompactorReq(dLenB))
-      val data = Input(UInt(dLen.W))
-    }
+  val acc_init_resp = Input(UInt(dLen.W))
 
-    val acc_init_resp = Input(UInt(dLen.W))
+  val iss = Decoupled(issType)
 
-    val iss = Decoupled(issType)
+  val acc = Input(Valid(new VectorWrite(dLen)))
+}
 
-    val acc = Input(Valid(new VectorWrite(dLen)))
-  })
+abstract class PipeSequencer[T <: Data](implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+
+  val io: PipeSequencerIO[T]
+
   def accepts(inst: VectorIssueInst): Bool
 
   def min(a: UInt, b: UInt) = Mux(a > b, b, a)
@@ -55,16 +58,4 @@ abstract class PipeSequencer[T <: Data](issType: T)(implicit p: Parameters) exte
     val offset = Mux(masked, log2Ceil(dLen).U, dLenOffBits.U - eew)
     (next_eidx >> offset) =/= (eidx >> offset)
   }
-
-
-  io.rvs1.req.valid := false.B
-  io.rvs1.req.bits := DontCare
-  io.rvs2.req.valid := false.B
-  io.rvs2.req.bits := DontCare
-  io.rvd.req.valid := false.B
-  io.rvd.req.bits := DontCare
-  io.rvm.req.valid := false.B
-  io.rvm.req.bits := DontCare
-  io.perm.req.valid := false.B
-  io.perm.req.bits := DontCare
 }

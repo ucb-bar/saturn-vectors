@@ -6,13 +6,15 @@ import org.chipsalliance.cde.config._
 import saturn.common._
 import saturn.insns._
 
-class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new PermuteMicroOp)(p) {
+class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer[PermuteMicroOp]()(p) {
   def accepts(inst: VectorIssueInst) = {
     val needs_mask = inst.vmu && (!inst.vm && inst.mop =/= mopUnit)
     val needs_index = inst.vmu && inst.mop(0)
     val arith = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns.filter(_.props.contains(UsesPermuteSeq.Y)), Nil).matched
     needs_mask || needs_index || arith
   }
+
+  val io = IO(new PipeSequencerIO(new PermuteMicroOp))
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
