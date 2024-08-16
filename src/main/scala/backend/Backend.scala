@@ -276,32 +276,32 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxs.io.acc := vxu.io.acc_write
   }
 
-  val reg_access = Module(new RegisterAccess(flat_vxs.size))
-  reg_access.io.vls.rvm <> vls.io.rvm
-  reg_access.io.vss.rvd <> vss.io.rvd
-  reg_access.io.vss.rvm <> vss.io.rvm
-  reg_access.io.vps.rvs2 <> vps.io.rvs2
-  reg_access.io.vps.rvm <> vps.io.rvm
+  val vrf = Module(new RegisterAccess(flat_vxs.size))
+  vrf.io.vls.rvm <> vls.io.rvm
+  vrf.io.vss.rvd <> vss.io.rvd
+  vrf.io.vss.rvm <> vss.io.rvm
+  vrf.io.vps.rvs2 <> vps.io.rvs2
+  vrf.io.vps.rvm <> vps.io.rvm
 
   for (i <- 0 until flat_vxs.size) {
-    reg_access.io.vxs(i).rvs1 <> flat_vxs(i).io.rvs1
-    reg_access.io.vxs(i).rvs2 <> flat_vxs(i).io.rvs2
-    reg_access.io.vxs(i).rvd <> flat_vxs(i).io.rvd
-    reg_access.io.vxs(i).rvm <> flat_vxs(i).io.rvm
-    flat_vxs(i).io.acc_init_resp := reg_access.io.vxs(i).rvs2.resp
+    vrf.io.vxs(i).rvs1 <> flat_vxs(i).io.rvs1
+    vrf.io.vxs(i).rvs2 <> flat_vxs(i).io.rvs2
+    vrf.io.vxs(i).rvd <> flat_vxs(i).io.rvd
+    vrf.io.vxs(i).rvm <> flat_vxs(i).io.rvm
+    flat_vxs(i).io.acc_init_resp := vrf.io.vxs(i).rvs2.resp
 
-    reg_access.io.pipe_writes(i) <> flat_vxus(i).io.pipe_write
-    reg_access.io.iter_writes(i) <> flat_vxus(i).io.iter_write
+    vrf.io.pipe_writes(i) <> flat_vxus(i).io.pipe_write
+    vrf.io.iter_writes(i) <> flat_vxus(i).io.iter_write
   }
 
   val frontend_rindex = Wire(new VectorReadIO)
   val frontend_rmask  = Wire(new VectorReadIO)
-  reg_access.io.frontend.rindex <> frontend_rindex
-  reg_access.io.frontend.rmask <> frontend_rmask
+  vrf.io.frontend.rindex <> frontend_rindex
+  vrf.io.frontend.rmask <> frontend_rmask
 
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
-  reg_access.io.load_write <> load_write
+  vrf.io.load_write <> load_write
 
 
   io.vmu.lresp.ready := vls.io.iss.valid && load_write.ready
@@ -310,7 +310,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   load_write.bits.eg   := vls.io.iss.bits.wvd_eg
   load_write.bits.data := io.vmu.lresp.bits.data
   val load_wmask = Mux(vls.io.iss.bits.use_rmask,
-    get_vm_mask(reg_access.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size),
+    get_vm_mask(vrf.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size),
     ~(0.U(dLenB.W)))
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.eidx_wmask & load_wmask)
   when (io.vmu.lresp.fire) {
@@ -348,14 +348,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vmu_mask_q = Module(new Compactor(dLenB, dLenB, Bool(), false))
   val perm_q = Module(new DCEQueue(new PermuteMicroOpWithData, 2))
 
-  vmu_index_q.io.push_data      := reg_access.io.vps.rvs2.resp.asTypeOf(Vec(dLenB, UInt(8.W)))
+  vmu_index_q.io.push_data      := vrf.io.vps.rvs2.resp.asTypeOf(Vec(dLenB, UInt(8.W)))
   vmu_index_q.io.push.bits.head := vps.io.iss.bits.eidx << vps.io.iss.bits.rvs2_eew
   vmu_index_q.io.push.bits.tail := Mux(vps.io.iss.bits.tail,
     vps.io.iss.bits.vl << vps.io.iss.bits.rvs2_eew,
     0.U)
 
   vmu_mask_q.io.push_data       := Mux(vps.io.iss.bits.renvm,
-    (reg_access.io.vps.rvm.resp >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(dLenB-1,0),
+    (vrf.io.vps.rvm.resp >> vps.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(dLenB-1,0),
     ~(0.U(dLenB.W))
   ).asBools
   vmu_mask_q.io.push.bits.head  := 0.U
@@ -371,9 +371,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.vmu.sdata.valid   := vss.io.iss.valid
   vss.io.iss.ready     := io.vmu.sdata.ready
-  io.vmu.sdata.bits.stdata    := reg_access.io.vss.rvd.resp
+  io.vmu.sdata.bits.stdata    := vrf.io.vss.rvd.resp
   io.vmu.sdata.bits.stmask    := Mux(vss.io.iss.bits.use_stmask,
-    get_vm_mask(reg_access.io.vss.rvm.resp, vss.io.iss.bits.eidx, vss.io.iss.bits.elem_size),
+    get_vm_mask(vrf.io.vss.rvm.resp, vss.io.iss.bits.eidx, vss.io.iss.bits.elem_size),
     ~(0.U(dLenB.W))
   )
   io.vmu.sdata.bits.debug_id := vss.io.iss.bits.debug_id
@@ -386,7 +386,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   perm_q.io.enq.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
   perm_q.io.enq.bits.viewAsSupertype(new PermuteMicroOp) := vps.io.iss.bits
-  perm_q.io.enq.bits.rvs2_data := reg_access.io.vps.rvs2.resp
+  perm_q.io.enq.bits.rvs2_data := vrf.io.vps.rvs2.resp
 
   perm_q.io.deq.ready := perm_buffer.io.push.ready
   perm_buffer.io.push.valid := perm_q.io.deq.valid
