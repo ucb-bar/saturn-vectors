@@ -42,6 +42,7 @@ object VectorParams {
   // code sequences
   def genParams = dspParams.copy(
     issStructure = VectorIssueStructure.Split,
+    vrissqEntries = 1,
     vlifqEntries = 16,
     vlrobEntries = 16
   )
@@ -284,6 +285,7 @@ case class VectorParams(
   vsissqEntries: Int = 0,
   vxissqEntries: Int = 0,
   vpissqEntries: Int = 0,
+  vrissqEntries: Int = 0,
 
   dLen: Int = 64,
   vatSz: Int = 3,

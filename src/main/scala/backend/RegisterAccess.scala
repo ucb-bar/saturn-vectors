@@ -26,6 +26,9 @@ class RegisterAccess(exSeqs: Int)(implicit p: Parameters) extends CoreModule()(p
       val rvs2 = Flipped(new VectorReadIO)
       val rvm = Flipped(new VectorReadIO)
     }
+    val vrs = new Bundle {
+      val rvs = Flipped(new VectorReadIO)
+    }
     val frontend = new Bundle {
       val rindex = Flipped(new VectorReadIO)
       val rmask = Flipped(new VectorReadIO)
@@ -39,12 +42,12 @@ class RegisterAccess(exSeqs: Int)(implicit p: Parameters) extends CoreModule()(p
   // 3R1W banks
   //  read0 arbitrates between <- [vxs-rs1], vmu-index
   //  read1 arbitrates between <- [vxs-rs2], frontend-index
-  //  read2 arbitrates between <- [vxs-rs3], vss-vrd
+  //  read2 arbitrates between <- [vxs-rs3], vss-vrd, vrs-vss
 
   // Mask read arbitrates between <- [vxs], vls, vss, vps, frontend-mask
 
   val vrf = Module(new RegisterFile(
-    reads = Seq(1 + exSeqs, 1 + exSeqs, 1 + exSeqs),
+    reads = Seq(1 + exSeqs, 1 + exSeqs, 2 + exSeqs),
     maskReads = Seq(4 + exSeqs),
     pipeWrites = exSeqs,
     llWrites = exSeqs + 2 // load + reset
@@ -79,6 +82,7 @@ class RegisterAccess(exSeqs: Int)(implicit p: Parameters) extends CoreModule()(p
   vrf.io.read(0)(exSeqs) <> io.vps.rvs2
   vrf.io.read(1)(exSeqs) <> io.frontend.rindex
   vrf.io.read(2)(exSeqs) <> io.vss.rvd
+  vrf.io.read(2)(exSeqs+1) <> io.vrs.rvs
 
   vrf.io.mask_read(0)(exSeqs)   <> io.vls.rvm
   vrf.io.mask_read(0)(exSeqs+1) <> io.vss.rvm
