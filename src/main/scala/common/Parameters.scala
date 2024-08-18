@@ -44,7 +44,9 @@ object VectorParams {
     issStructure = VectorIssueStructure.Split,
     vrissqEntries = 1,
     vlifqEntries = 16,
-    vlrobEntries = 16
+    vlrobEntries = 16,
+    vliqEntries = 4,
+    vsiqEntries = 6
   )
 
   // multiFMAParams:

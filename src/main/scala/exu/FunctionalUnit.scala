@@ -12,7 +12,7 @@ import saturn.insns.{VectorInstruction}
 abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val iss = new Bundle {
     val valid = Input(Bool())
-    val op = Input(new ExecuteMicroOp)
+    val op = Input(new ExecuteMicroOpWithData)
     val ready = Output(Bool())
   }
 
@@ -23,7 +23,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
 
 class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends FunctionalUnitIO {
   val write = Valid(new VectorWrite(dLen))
-  val pipe = Input(Vec(depth, Valid(new ExecuteMicroOp)))
+  val pipe = Input(Vec(depth, Valid(new ExecuteMicroOpWithData)))
   val pipe0_stall = Output(Bool())
 }
 
@@ -68,7 +68,7 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
   val io = IO(new IterativeFunctionalUnitIO)
 
   val valid = RegInit(false.B)
-  val op = Reg(new ExecuteMicroOp)
+  val op = Reg(new ExecuteMicroOpWithData)
   val last = Wire(Bool())
 
   io.busy := valid

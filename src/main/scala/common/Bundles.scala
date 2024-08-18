@@ -7,6 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
+// Per-instruction bundle in the VLSU
 class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val debug_id = UInt(debugIdSz.W)
 
@@ -34,7 +35,7 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   def wr_nf = Mux(whole_reg, nf, 0.U)
 }
 
-
+// Bundle between VDQ and Backend
 class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val pc = UInt(vaddrBitsExtended.W)
   val bits = UInt(32.W)
@@ -157,24 +158,29 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
 
-  val rvs1_data = UInt(dLen.W)
-  val rvs2_data = UInt(dLen.W)
-  val rvd_data  = UInt(dLen.W)
-  val rvm_data  = UInt(dLen.W)
-
-  val rvs1_elem = UInt(64.W)
-  val rvs2_elem = UInt(64.W)
-  val rvd_elem  = UInt(64.W)
-
   val rvs1_eew = UInt(2.W)
   val rvs2_eew = UInt(2.W)
   val rvd_eew = UInt(2.W)
   val vd_eew  = UInt(2.W)
 
-  val rmask   = UInt(dLenB.W)
-  val wmask   = UInt(dLenB.W)
+  val scalar = UInt(64.W)
 
+  val use_scalar_rvs1 = Bool()
+  def use_normal_rvs1 = !use_scalar_rvs1
+
+  val use_zero_rvs2 = Bool()
+  val use_slide_rvs2 = Bool()
+  def use_normal_rvs2 = !use_zero_rvs2 && !use_slide_rvs2
+
+  val slide_data = UInt(dLen.W)
+  val use_wmask = Bool()
+  val eidx_mask = UInt(dLenB.W)
   val full_tail_mask = UInt(dLen.W)
+  val rm       = UInt(3.W)
+  val acc      = Bool()
+  val acc_fold = Bool()
+  val acc_fold_id = UInt(log2Ceil(dLenB).W)
+  val acc_ew   = Bool()
 
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
 
@@ -201,11 +207,24 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val head = Bool()
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
-  val acc = Bool()
-
-  val rm = UInt(3.W)
   def vxrm = rm(1,0)
   def frm = rm
+}
+
+class ExecuteMicroOpWithData(implicit p: Parameters) extends ExecuteMicroOp {
+  val rmask   = UInt(dLenB.W)
+  val wmask   = UInt(dLenB.W)
+
+  val rvs1_data = UInt(dLen.W)
+  val rvs2_data = UInt(dLen.W)
+  val rvd_data  = UInt(dLen.W)
+  val rvm_data  = UInt(dLen.W)
+
+  val rvs1_elem = UInt(64.W)
+  val rvs2_elem = UInt(64.W)
+  val rvd_elem  = UInt(64.W)
+
+
 }
 
 class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -243,7 +262,7 @@ class PermuteMicroOpWithData(implicit p: Parameters) extends PermuteMicroOp {
 }
 
 class PipeHazard(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val latency = UInt(log2Ceil(pipe_depth).W)  
+  val latency = UInt(log2Ceil(pipe_depth).W)
   val eg = UInt(log2Ceil(egsTotal).W)
   def eg_oh = UIntToOH(eg)
 }

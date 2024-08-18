@@ -17,7 +17,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
   val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
 
   val io = IO(new Bundle {
-    val iss = Flipped(Decoupled(new ExecuteMicroOp))
+    val iss = Flipped(Decoupled(new ExecuteMicroOpWithData))
     val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(pipe_depth))))
     val iter_write = Decoupled(new VectorWrite(dLen))
     val pipe_write = Output(Valid(new VectorWrite(dLen)))
@@ -90,7 +90,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
 
     val pipe_valids    = Seq.fill(pipe_depth)(RegInit(false.B))
     val pipe_sels      = Seq.fill(pipe_depth)(Reg(UInt(pipe_fus.size.W)))
-    val pipe_bits      = Seq.fill(pipe_depth)(Reg(new ExecuteMicroOp))
+    val pipe_bits      = Seq.fill(pipe_depth)(Reg(new ExecuteMicroOpWithData))
     val pipe_latencies = Seq.fill(pipe_depth)(Reg(UInt(log2Ceil(pipe_depth).W)))
 
     pipe_stall := Mux1H(pipe_sels.head, pipe_fus.map(_.io.pipe0_stall))
@@ -121,7 +121,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
       for (i <- 0 until fu.depth) {
         fu.io.pipe(i).valid := pipe_valids(i) && pipe_sels(i)(j)
         fu.io.pipe(i).bits  := Mux(pipe_valids(i) && pipe_sels(i)(j),
-          pipe_bits(i), 0.U.asTypeOf(new ExecuteMicroOp))
+          pipe_bits(i), 0.U.asTypeOf(new ExecuteMicroOpWithData))
       }
     }
 

@@ -275,7 +275,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     vxu.io.iss.valid := vxs.io.iss.valid && !inflight_hazard && !issue_hazard
     vxs.io.iss.ready := vxu.io.iss.ready && !inflight_hazard && !issue_hazard
-    vxu.io.iss.bits := vxs.io.iss.bits
+    vxu.io.iss.bits.viewAsSupertype(new ExecuteMicroOp) := vxs.io.iss.bits
   }
 
   // ======================================
@@ -291,10 +291,74 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrs.io.acc_init_resp := vrf.io.vrs.rvs.resp
 
   for (i <- 0 until flat_vxs.size) {
-    vrf.io.vxs(i).rvs1 <> flat_vxs(i).io.rvs1
-    vrf.io.vxs(i).rvs2 <> flat_vxs(i).io.rvs2
-    vrf.io.vxs(i).rvd <> flat_vxs(i).io.rvd
-    vrf.io.vxs(i).rvm <> flat_vxs(i).io.rvm
+    val vxs = flat_vxs(i)
+    val vxu = flat_vxus(i)
+
+    vrf.io.vxs(i).rvs1 <> vxs.io.rvs1
+    vrf.io.vxs(i).rvs2 <> vxs.io.rvs2
+    vrf.io.vxs(i).rvd <> vxs.io.rvd
+    vrf.io.vxs(i).rvm <> vxs.io.rvm
+
+    val rvs1_data = Mux1H(Seq(
+      vxs.io.iss.bits.use_scalar_rvs1 -> dLenSplat(vxs.io.iss.bits.scalar, vxs.io.iss.bits.rvs1_eew),
+      vxs.io.iss.bits.use_normal_rvs1 -> vrf.io.vxs(i).rvs1.resp))
+    val rvs2_data = Mux1H(Seq(
+      vxs.io.iss.bits.use_zero_rvs2 -> 0.U,
+      vxs.io.iss.bits.use_slide_rvs2 -> vxs.io.iss.bits.slide_data,
+      vxs.io.iss.bits.use_normal_rvs2 -> vrf.io.vxs(i).rvs2.resp))
+    val rvd_data = vrf.io.vxs(i).rvd.resp
+
+    vxu.io.iss.bits.rvs1_data := rvs1_data
+    vxu.io.iss.bits.rvs2_data := rvs2_data
+    vxu.io.iss.bits.rvd_data := rvd_data
+
+    val rvs1_elem = extractElem(rvs1_data, vxs.io.iss.bits.rvs1_eew, vxs.io.iss.bits.eidx)
+    val rvs2_elem = extractElem(rvs2_data, vxs.io.iss.bits.rvs2_eew, vxs.io.iss.bits.eidx)
+    val rvd_elem = extractElem(rvd_data, vxs.io.iss.bits.rvd_eew, vxs.io.iss.bits.eidx)
+
+    vxu.io.iss.bits.rvs1_elem := rvs1_elem
+    vxu.io.iss.bits.rvs2_elem := rvs2_elem
+    vxu.io.iss.bits.rvd_elem := rvd_elem
+
+    val vm_off    = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
+    val vm_eidx   = (vxs.io.iss.bits.eidx & ~(vm_off >> vxs.io.iss.bits.vd_eew))(log2Ceil(dLen)-1,0)
+    val vm_resp   = (vrf.io.vxs(i).rvm.resp >> vm_eidx)(dLenB-1,0)
+    val vm_mask   = Mux(vxs.io.iss.bits.use_wmask,
+      VecInit.tabulate(4)({ sew => FillInterleaved(1 << sew, vm_resp)(dLenB-1,0) })(vxs.io.iss.bits.vd_eew),
+      ~(0.U(dLenB.W))
+    )
+    vxu.io.iss.bits.wmask := vxs.io.iss.bits.eidx_mask & vm_mask
+    vxu.io.iss.bits.rmask := Mux(vxs.io.iss.bits.vm, ~(0.U(dLenB.W)), vm_resp)
+    vxu.io.iss.bits.rvm_data := Mux(vxs.io.iss.bits.vm, ~(0.U(dLen.W)), vrf.io.vxs(i).rvm.resp)
+
+
+    when (vxs.io.iss.bits.acc) {
+      val acc_data = vrs.io.acc_data.bits
+      when (vxs.io.iss.bits.acc_fold) {
+        val acc_fold_id = vxs.io.iss.bits.acc_fold_id
+        val folded = VecInit.tabulate(log2Ceil(dLenB))(i => acc_data((dLen >> i) - 1, dLen >> (i + 1)))(acc_fold_id)
+
+        vxu.io.iss.bits.wmask := Mux(vxs.io.iss.bits.tail, eewByteMask(vxs.io.iss.bits.vd_eew), ~(0.U(dLenB.W)))
+        vxu.io.iss.bits.rvs1_elem := folded
+        vxu.io.iss.bits.rvs1_data := folded
+        vxu.io.iss.bits.rvs1_eew := vxs.io.iss.bits.vd_eew
+        vxu.io.iss.bits.rvs2_elem := acc_data
+        vxu.io.iss.bits.rvs2_data := acc_data
+        vxu.io.iss.bits.rvs2_eew  := vxs.io.iss.bits.vd_eew
+      } .otherwise {
+        when (vxs.io.iss.bits.acc_ew) {
+          val mask_bit = Mux(vxs.io.iss.bits.use_wmask, (vrf.io.vxs(i).rvm.resp >> vxs.io.iss.bits.eidx(log2Ceil(dLen)-1,0))(0), true.B)
+          vxu.io.iss.bits.wmask := Mux(mask_bit, eewByteMask(vxs.io.iss.bits.vd_eew), 0.U)
+          vxu.io.iss.bits.rvs1_elem := acc_data
+          vxu.io.iss.bits.rvs1_data := acc_data
+          vxu.io.iss.bits.rvs1_eew  := vxs.io.iss.bits.vd_eew
+          vxu.io.iss.bits.rvs2_data := rvs2_elem
+        } .otherwise {
+          vxu.io.iss.bits.rvs1_data := acc_data
+          vxu.io.iss.bits.rvs1_eew := vxs.io.iss.bits.vd_eew
+        }
+      }
+    }
   }
 
   val frontend_rindex = Wire(new VectorReadIO)
