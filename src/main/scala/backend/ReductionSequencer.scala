@@ -14,9 +14,6 @@ class ReductionSequencerIO(implicit p: Parameters) extends SequencerIO(Bool()) {
   val rvs = new VectorReadIO
 
   val acc_data = Decoupled(UInt(dLen.W))
-  // val acc_req = Vec(nExSeqs, Flipped(Decoupled(new ReductionRegisterReq)))
-  // val acc_resp = Output(UInt(dLen.W))
-
   val acc_init_resp = Input(UInt(dLen.W))
   val acc_fu_resp = Input(Valid(new VectorWrite(dLen)))
 

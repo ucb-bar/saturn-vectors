@@ -6,7 +6,7 @@ import org.chipsalliance.cde.config._
 import saturn.common._
 
 class LoadSequencerIO(implicit p: Parameters) extends SequencerIO(new LoadRespMicroOp) {
-  val rvm  = new VectorReadIO
+  val rvm  = Decoupled(new VectorReadReq)
 }
 
 class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()(p) {
@@ -55,7 +55,7 @@ class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()
   io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
   io.seq_hazard.bits.vat     := inst.vat
 
-  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits.eg), 0.U)
+  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.bits.eg), 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
   val raw_hazard = (vm_read_oh & io.older_writes) =/= 0.U
@@ -63,11 +63,11 @@ class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-  io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
-  io.rvm.req.bits.oldest := inst.vat === io.vat_head
+  io.rvm.valid := valid && renvm
+  io.rvm.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
+  io.rvm.bits.oldest := inst.vat === io.vat_head
 
-  io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready)
+  io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.ready)
   io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
   io.iss.bits.tail       := tail
   io.iss.bits.vat        := inst.vat
@@ -86,7 +86,7 @@ class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()
       wvd_mask := wvd_mask & ~vd_write_oh
     }
     when (next_is_new_eg(eidx, next_eidx, 0.U, true.B) && vParams.enableChaining.B) {
-      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits.eg)
+      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.bits.eg)
     }
     when (sidx === inst.seg_nf) {
       sidx := 0.U

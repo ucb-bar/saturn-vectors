@@ -11,16 +11,17 @@ import saturn.common._
 import saturn.insns._
 
 class ExecuteSequencerIO(implicit p: Parameters) extends SequencerIO(new ExecuteMicroOp) {
-  val rvs1 = new VectorReadIO
-  val rvs2 = new VectorReadIO
-  val rvd  = new VectorReadIO
-  val rvm  = new VectorReadIO
+  val rvs1 = Decoupled(new VectorReadReq)
+  val rvs2 = Decoupled(new VectorReadReq)
+  val rvd  = Decoupled(new VectorReadReq)
+  val rvm  = Decoupled(new VectorReadReq)
   val perm = new Bundle {
     val req = Decoupled(new CompactorReq(dLenB))
     val data = Input(UInt(dLen.W))
   }
 
-  val acc_data = Flipped(Decoupled(UInt(dLen.W)))
+  val acc_valid = Input(Bool())
+  val acc_ready = Output(Bool())
 }
 
 class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
@@ -145,10 +146,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
   io.seq_hazard.bits.vat := inst.vat
 
-  val vs1_read_oh = Mux(renv1   , UIntToOH(io.rvs1.req.bits.eg), 0.U)
-  val vs2_read_oh = Mux(renv2   , UIntToOH(io.rvs2.req.bits.eg), 0.U)
-  val vd_read_oh  = Mux(renvd   , UIntToOH(io.rvd.req.bits.eg ), 0.U)
-  val vm_read_oh  = Mux(renvm   , UIntToOH(io.rvm.req.bits.eg ), 0.U)
+  val vs1_read_oh = Mux(renv1   , UIntToOH(io.rvs1.bits.eg), 0.U)
+  val vs2_read_oh = Mux(renv2   , UIntToOH(io.rvs2.bits.eg), 0.U)
+  val vd_read_oh  = Mux(renvd   , UIntToOH(io.rvd.bits.eg ), 0.U)
+  val vm_read_oh  = Mux(renvm   , UIntToOH(io.rvm.bits.eg ), 0.U)
   val vd_write_oh = Mux(inst.wvd, UIntToOH(io.iss.bits.wvd_eg), 0.U)
 
   val raw_hazard = ((vs1_read_oh | vs2_read_oh | vd_read_oh | vm_read_oh) & io.older_writes) =/= 0.U
@@ -162,22 +163,22 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val rgather_eidx = get_max_offset(Mux(rgather_ix && rgather, uscalar, io.perm.data & eewBitMask(vs1_eew)))
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
   val rvs2_eidx = Mux(rgather || rgatherei16, rgather_eidx, eidx)
-  io.rvs1.req.bits.eg := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_vs1_mask)
-  io.rvs2.req.bits.eg := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_vs2_mask)
-  io.rvd.req.bits.eg  := getEgId(inst.rd , eidx     , vs3_eew, false.B)
-  io.rvm.req.bits.eg  := getEgId(0.U     , eidx     , 0.U    , true.B)
+  io.rvs1.bits.eg := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_vs1_mask)
+  io.rvs2.bits.eg := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_vs2_mask)
+  io.rvd.bits.eg  := getEgId(inst.rd , eidx     , vs3_eew, false.B)
+  io.rvm.bits.eg  := getEgId(0.U     , eidx     , 0.U    , true.B)
 
-  io.rvs1.req.valid := valid && renv1
-  io.rvs2.req.valid := valid && renv2
-  io.rvd.req.valid  := valid && renvd
-  io.rvm.req.valid  := valid && renvm
+  io.rvs1.valid := valid && renv1
+  io.rvs2.valid := valid && renv2
+  io.rvd.valid  := valid && renvd
+  io.rvm.valid  := valid && renvm
 
   // Oldest read requests get priority
   val oldest = inst.vat === io.vat_head
-  io.rvs1.req.bits.oldest := oldest
-  io.rvs2.req.bits.oldest := oldest
-  io.rvd.req.bits.oldest  := oldest
-  io.rvm.req.bits.oldest  := oldest
+  io.rvs1.bits.oldest := oldest
+  io.rvs2.bits.oldest := oldest
+  io.rvd.bits.oldest  := oldest
+  io.rvm.bits.oldest  := oldest
 
   val read_perm_buffer = ctrl.bool(UsesPermuteSeq) && (!slide || Mux(slide_up,
     next_eidx > slide_offset,
@@ -188,16 +189,16 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
 
   val iss_valid = (valid &&
     !data_hazard &&
-    !(renv1 && !io.rvs1.req.ready) &&
-    !(renv2 && !io.rvs2.req.ready) &&
-    !(renvd && !io.rvd.req.ready) &&
-    !(renvm && !io.rvm.req.ready) &&
+    !(renv1 && !io.rvs1.ready) &&
+    !(renv2 && !io.rvs2.ready) &&
+    !(renvd && !io.rvd.ready) &&
+    !(renvm && !io.rvm.ready) &&
     !(read_perm_buffer && !io.perm.req.ready) &&
-    !(renacc && !io.acc_data.valid)
+    !(renacc && !io.acc_valid)
   )
   io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready
   io.iss.valid := iss_valid
-  io.acc_data.ready := iss_valid && renacc
+  io.acc_ready := iss_valid && renacc
 
   io.iss.bits.rvs1_eew  := vs1_eew
   io.iss.bits.rvs2_eew  := vs2_eew
@@ -260,19 +261,19 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
       wvd_mask  := wvd_mask  & ~wvd_clr_mask
     }
     when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_vs2_mask) && !(inst.reduction && head) && !rgather_v && !rgatherei16 && vParams.enableChaining.B) {
-      rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.req.bits.eg)
+      rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.bits.eg)
     }
     when (rgather_ix && vParams.enableChaining.B) {
       rvs2_mask := 0.U
     }
     when (next_is_new_eg(eidx, next_eidx, vs1_eew, inst.reads_vs1_mask) && vParams.enableChaining.B) {
-      rvs1_mask := rvs1_mask & ~UIntToOH(io.rvs1.req.bits.eg)
+      rvs1_mask := rvs1_mask & ~UIntToOH(io.rvs1.bits.eg)
     }
     when (next_is_new_eg(eidx, next_eidx, vs3_eew, false.B) && vParams.enableChaining.B) {
-      rvd_mask  := rvd_mask  & ~UIntToOH(io.rvd.req.bits.eg)
+      rvd_mask  := rvd_mask  & ~UIntToOH(io.rvd.bits.eg)
     }
     when (next_is_new_eg(eidx, next_eidx, 0.U    , true.B) && vParams.enableChaining.B) {
-      rvm_mask  := rvm_mask  & ~UIntToOH(io.rvm.req.bits.eg)
+      rvm_mask  := rvm_mask  & ~UIntToOH(io.rvm.bits.eg)
     }
     when (eidx_tail) { acc_fold := true.B }
     when (acc_fold) { acc_fold_id := acc_fold_id + 1.U }

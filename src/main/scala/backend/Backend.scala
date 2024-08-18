@@ -282,11 +282,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Connect reads to VRF
 
   val vrf = Module(new RegisterAccess(flat_vxs.size))
-  vrf.io.vls.rvm <> vls.io.rvm
-  vrf.io.vss.rvd <> vss.io.rvd
-  vrf.io.vss.rvm <> vss.io.rvm
-  vrf.io.vps.rvs2 <> vps.io.rvs2
-  vrf.io.vps.rvm <> vps.io.rvm
+  vrf.io.vls.rvm.req <> vls.io.rvm
+  vrf.io.vss.rvd.req <> vss.io.rvd
+  vrf.io.vss.rvm.req <> vss.io.rvm
+  vrf.io.vps.rvs2.req <> vps.io.rvs2
+  vrf.io.vps.rvm.req <> vps.io.rvm
   vrs.io.rvs <> vrf.io.vrs.rvs
   vrs.io.acc_init_resp := vrf.io.vrs.rvs.resp
 
@@ -294,10 +294,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val vxs = flat_vxs(i)
     val vxu = flat_vxus(i)
 
-    vrf.io.vxs(i).rvs1 <> vxs.io.rvs1
-    vrf.io.vxs(i).rvs2 <> vxs.io.rvs2
-    vrf.io.vxs(i).rvd <> vxs.io.rvd
-    vrf.io.vxs(i).rvm <> vxs.io.rvm
+    vrf.io.vxs(i).rvs1.req <> vxs.io.rvs1
+    vrf.io.vxs(i).rvs2.req <> vxs.io.rvs2
+    vrf.io.vxs(i).rvd.req <> vxs.io.rvd
+    vrf.io.vxs(i).rvm.req <> vxs.io.rvm
 
     val rvs1_data = Mux1H(Seq(
       vxs.io.iss.bits.use_scalar_rvs1 -> dLenSplat(vxs.io.iss.bits.scalar, vxs.io.iss.bits.rvs1_eew),
@@ -494,12 +494,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrs.io.acc_data.ready := false.B
   vrs.io.done := false.B
   for (vxs <- flat_vxs) {
-    vxs.io.acc_data.valid := false.B
-    vxs.io.acc_data.bits := vrs.io.acc_data.bits
+    vxs.io.acc_valid := false.B
     if (vxs.uses_acc) {
       when (vxs.io.vat === vrs.io.vat && vxs.io.busy) {
-        vrs.io.acc_data.ready := vxs.io.acc_data.ready
-        vxs.io.acc_data.valid := vrs.io.acc_data.valid
+        vrs.io.acc_data.ready := vxs.io.acc_ready
+        vxs.io.acc_valid := vrs.io.acc_data.valid
         when (vxs.io.iss.fire && vxs.io.iss.bits.tail) {
           vrs.io.done := true.B
         }
