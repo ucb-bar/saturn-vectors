@@ -485,7 +485,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   flat_vxs.foreach(_.io.perm.req.ready := false.B)
   flat_vxs.foreach(_.io.perm.data := DontCare)
 
-  val perm_vxs = flat_vxs.filter(_.uses_perm)
+  val perm_vxs = flat_vxs.filter(_.usesPerm)
   require(perm_vxs.size == 1)
   perm_buffer.io.pop <> perm_vxs.head.io.perm.req
   perm_vxs.head.io.perm.data := perm_buffer.io.pop_data.asUInt
@@ -498,7 +498,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrs.io.done := false.B
   for (vxs <- flat_vxs) {
     vxs.io.acc_valid := false.B
-    if (vxs.uses_acc) {
+    if (vxs.usesAcc) {
       when (vxs.io.vat === vrs.io.vat && vxs.io.busy) {
         vrs.io.acc_data.ready := vxs.io.acc_ready
         vxs.io.acc_valid := vrs.io.acc_data.valid
