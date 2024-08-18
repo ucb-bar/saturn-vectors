@@ -19,7 +19,7 @@ case class IntegerMultiplyFactory(depth: Int, segmented: Boolean) extends Functi
     MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
     WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
-    SMUL.VV, SMUL.VX)
+    SMUL.VV, SMUL.VX).map(_.pipelined(depth))
   def insns = if (segmented) base_insns else base_insns.map(_.elementWise)
   def generate(implicit p: Parameters) = if (segmented) {
     new SegmentedMultiplyPipe(depth)(p)

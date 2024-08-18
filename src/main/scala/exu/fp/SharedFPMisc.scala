@@ -24,7 +24,7 @@ case object SharedFPMiscFactory extends FunctionalUnitFactory {
     MFGT.VF, MFGE.VF,
     FREDMIN.VV, FREDMAX.VV,
     FCVT_SGL, FCVT_WID, FCVT_NRW
-  ).map(_.elementWise)
+  ).map(_.elementWise.iterative)
   def generate(implicit p: Parameters) = new SharedScalarElementwiseFPMisc()(p)
 }
 

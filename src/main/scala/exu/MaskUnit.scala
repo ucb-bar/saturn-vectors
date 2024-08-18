@@ -10,7 +10,7 @@ import saturn.common._
 import saturn.insns._
 
 case object MaskUnitFactory extends FunctionalUnitFactory {
-  def insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID)
+  def insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID).map(_.pipelined(1))
   def generate(implicit p: Parameters) = new MaskUnit()(p)
 }
 

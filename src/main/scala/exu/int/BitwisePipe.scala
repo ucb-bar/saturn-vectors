@@ -16,7 +16,7 @@ case object BitwisePipeFactory extends FunctionalUnitFactory {
     REDAND.VV, REDOR.VV, REDXOR.VV,
     // Zvbb
     ANDN.VV, ANDN.VX
-  )
+  ).map(_.pipelined(1))
   def generate(implicit p: Parameters) = new BitwisePipe()(p)
 }
 

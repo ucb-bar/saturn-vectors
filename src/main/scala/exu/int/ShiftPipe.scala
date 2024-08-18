@@ -184,7 +184,7 @@ case object ShiftPipeFactory extends FunctionalUnitFactory {
     SSRL.VV, SSRL.VX, SSRL.VI, SSRA.VV, SSRA.VX, SSRA.VI,
     // Zvbb
     ROL.VV, ROL.VX, ROR.VV, ROR.VX, ROR.VI, RORI.VI, WSLL.VV, WSLL.VX, WSLL.VI
-  )
+  ).map(_.pipelined(2))
   def generate(implicit p: Parameters) = new ShiftPipe()(p)
 }
 

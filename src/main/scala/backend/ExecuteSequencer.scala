@@ -299,5 +299,5 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.busy := valid
   io.head := head
 
-  if (!useRvd) { rvd_mask := 0.U }
+  if (!usesRvd) { rvd_mask := 0.U }
 }

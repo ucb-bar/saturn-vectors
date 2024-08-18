@@ -94,7 +94,7 @@ case class FPFMAFactory(depth: Int, sharedScalar: Boolean) extends FunctionalUni
     FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV
-  )
+  ).map(_.pipelined(depth))
   def insns = if (sharedScalar) base_insns.map(_.elementWise) else base_insns
   def generate(implicit p: Parameters) = if (sharedScalar) {
     new SharedScalarElementwiseFPFMA(depth)(p)

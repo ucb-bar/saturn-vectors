@@ -30,7 +30,7 @@ case class IntegerDivideFactory(supportsMul: Boolean) extends FunctionalUnitFact
     REM.VV, REM.VX
   ).map(_.elementWise)
 
-  def insns = (div_insns ++ (if (supportsMul) mul_insns else Nil))
+  def insns = (div_insns ++ (if (supportsMul) mul_insns else Nil)).map(_.iterative)
 
   def generate(implicit p: Parameters) = new IterativeIntegerDivider(supportsMul)(p)
 }

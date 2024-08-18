@@ -22,6 +22,7 @@ abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) 
 }
 
 class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends FunctionalUnitIO {
+  require(depth <= 8)
   val write = Valid(new VectorWrite(dLen))
   val pipe = Input(Vec(depth, Valid(new ExecuteMicroOpWithData)))
   val pipe0_stall = Output(Bool())

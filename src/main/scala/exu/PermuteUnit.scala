@@ -16,7 +16,7 @@ case object PermuteUnitFactory extends FunctionalUnitFactory {
     RGATHER_VV, RGATHER_VI, RGATHER_VX,
     RGATHEREI16, COMPRESS.VV,
     MVNRR
-  )
+  ).map(_.pipelined(1))
 
   def generate(implicit p: Parameters) = new PermuteUnit()(p)
 }

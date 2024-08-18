@@ -27,7 +27,7 @@ class ElementwiseFPUFMA(depth: Int)(implicit p: Parameters) extends PipelinedFun
     FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV,
-  ).map(_.elementWise)
+  ).map(_.elementWise.pipelined(depth))
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, FPSpecRM, Wide2VD, Wide2VS2, Reduction))

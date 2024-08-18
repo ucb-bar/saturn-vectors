@@ -198,7 +198,7 @@ case object IntegerPipeFactory extends FunctionalUnitFactory {
     FMERGE.VF,
     // zvbb
     BREV8.VV, BREV.VV, REV8.VV, CLZ.VV, CTZ.VV, CPOP.VV
-  )
+  ).map(_.pipelined(1))
   def generate(implicit p: Parameters) = new IntegerPipe()(p)
 }
 

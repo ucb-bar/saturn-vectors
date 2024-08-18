@@ -231,7 +231,7 @@ case object FPDivSqrtFactory extends FunctionalUnitFactory {
     FRSQRT7_V,
     FREC7_V,
     FCLASS_V
-  ).map(_.elementWise)
+  ).map(_.elementWise.iterative)
 
   def generate(implicit p: Parameters) = new FPDivSqrt()(p)
 }
