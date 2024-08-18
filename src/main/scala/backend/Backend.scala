@@ -256,22 +256,33 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val vxu = flat_vxus(i)
     val other_vxu_idx = (0 until flat_vxs.length).filter(_ != i)
 
+    val iterative = vxs.io.iss.bits.iterative
+    val write_latency = vxs.io.iss.bits.pipe_depth +& 1.U
+    val write_bank = vxs.io.iss.bits.wvd_eg(vrfBankBits-1,0)
+
     val inflight_hazard = other_vxu_idx.map(flat_vxus(_).io.pipe_hazards).flatten.map { hazard =>
       hazard.valid &&
-      (hazard.bits.latency === vxu.io.issue_pipe_latency) &&
-      (hazard.bits.eg(vrfBankBits-1,0) === vxs.io.iss.bits.wvd_eg(vrfBankBits-1,0))
-    }.reduceOption(_ || _).getOrElse(false.B)
+      (hazard.bits.latency === write_latency) &&
+      (hazard.bits.eg(vrfBankBits-1,0) === write_bank)
+    }.reduceOption(_ || _).getOrElse(false.B) && !iterative
 
     inflight_hazards(i) := inflight_hazard
 
-    val issue_hazard = other_vxu_idx.map { other_iss =>
-      (flat_vxus(other_iss).io.issue_pipe_latency === vxu.io.issue_pipe_latency) &&
-      (flat_vxs(other_iss).io.iss.bits.wvd_eg(vrfBankBits-1,0) === vxs.io.iss.bits.wvd_eg(vrfBankBits-1,0)) &&
-      vatOlder(flat_vxs(other_iss).io.iss.bits.vat, vxs.io.iss.bits.vat) &&
-      !inflight_hazards(other_iss) &&
-      flat_vxs(other_iss).io.iss.valid &&
-      flat_vxus(other_iss).io.iss.ready
-    }.reduceOption(_ || _).getOrElse(false.B)
+    val issue_hazard = other_vxu_idx.map { j =>
+      val other_iss = flat_vxs(j).io.iss
+      val other_depth = other_iss.bits.pipe_depth
+      val other_iterative = other_iss.bits.iterative
+      val other_bank = other_iss.bits.wvd_eg(vrfBankBits-1,0)
+      val other_vat = other_iss.bits.vat
+
+      ((other_depth === vxs.io.iss.bits.pipe_depth) &&
+        !other_iterative &&
+        !iterative &&
+        (other_bank === write_bank) &&
+        other_iss.valid &&
+        vatOlder(other_iss.bits.vat, vxs.io.iss.bits.vat)
+      )
+    }.reduceOption(_ || _).getOrElse(false.B) && vxs.io.iss.valid && vxu.io.iss.ready
 
     vxu.io.iss.valid := vxs.io.iss.valid && !inflight_hazard && !issue_hazard
     vxs.io.iss.ready := vxu.io.iss.ready && !inflight_hazard && !issue_hazard

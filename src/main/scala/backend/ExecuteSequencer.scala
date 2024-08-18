@@ -52,7 +52,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val acc_fold_id = Reg(UInt(log2Ceil(dLenB).W))
 
   val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
-    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise, UsesNarrowingSext, ZextImm5))
+    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise, UsesNarrowingSext, ZextImm5, PipelinedExecution, PipelineStagesMinus1))
 
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
@@ -215,6 +215,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.bits.vat       := inst.vat
   io.iss.bits.vm        := inst.vm
   io.iss.bits.rm        := inst.rm
+  io.iss.bits.iterative := !ctrl.bool(PipelinedExecution)
+  io.iss.bits.pipe_depth := ctrl.uint(PipelineStagesMinus1)
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)

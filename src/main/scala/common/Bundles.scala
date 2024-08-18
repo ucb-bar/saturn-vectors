@@ -182,6 +182,9 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val acc_fold_id = UInt(log2Ceil(dLenB).W)
   val acc_ew   = Bool()
 
+  val iterative = Bool()
+  val pipe_depth = UInt(3.W)
+
   val wvd_eg   = UInt(log2Ceil(egsTotal).W)
 
   val funct3 = UInt(3.W)
