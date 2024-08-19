@@ -105,26 +105,26 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     val pipe_valids    = Seq.fill(maxPipeDepth)(RegInit(false.B))
     val pipe_sels      = Seq.fill(maxPipeDepth)(Reg(UInt(pipe_fus.size.W)))
     val pipe_bits      = Seq.fill(maxPipeDepth)(Reg(new ExecuteMicroOpWithData))
-    val pipe_latencies = Seq.fill(maxPipeDepth)(Reg(UInt(log2Ceil(maxPipeDepth).W)))
+    val pipe_tracker   = RegInit(0.U(maxPipeDepth.W))
 
-    pipe_write_hazard := (0 until maxPipeDepth).map { i =>
-      pipe_valids(i) && pipe_latencies(i) === pipe_iss_depth
-    }.orR
+    pipe_write_hazard := (pipe_tracker & UIntToOH(pipe_iss_depth)) =/= 0.U
+
+    when (pipe_tracker =/= 0.U || io.iss.fire) {
+      pipe_tracker := (pipe_tracker | UIntToOH(pipe_iss_depth)) >> 1
+    }
 
     val pipe_iss = io.iss.fire && pipe_fus.map(_.io.iss.ready).orR
     pipe_valids.head := pipe_iss
     when (pipe_iss) {
       pipe_bits.head      := io.iss.bits
-      pipe_latencies.head := pipe_iss_depth - 1.U
       pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
     }
 
     for (i <- 1 until maxPipeDepth) {
-      val fire = pipe_valids(i-1) && pipe_latencies(i-1) =/= 0.U
+      val fire = pipe_valids(i-1)
       pipe_valids(i) := fire
       when (fire) {
         pipe_bits(i)      := pipe_bits(i-1)
-        pipe_latencies(i) := pipe_latencies(i-1) - 1.U
         pipe_sels(i)      := pipe_sels(i-1)
       }
     }
@@ -136,23 +136,21 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
       }
     }
 
-    val write_sel = pipe_valids.zip(pipe_latencies).map { case (v,l) => v && l === 0.U }
-    val fu_sel = Mux1H(write_sel, pipe_sels)
-    pipe_write := write_sel.orR
+    val write_sel = pipe_fus.map(_.io.pipe.last.valid)
+    assert(PopCount(write_sel) <= 1.U)
     when (write_sel.orR) {
-      val acc = Mux1H(write_sel, pipe_bits.map(_.acc))
-      val tail = Mux1H(write_sel, pipe_bits.map(_.tail))
-      io.pipe_write.valid := Mux1H(fu_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
-      io.pipe_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+      val acc = Mux1H(write_sel, pipe_fus.map(_.io.pipe.last.bits.acc))
+      val tail = Mux1H(write_sel, pipe_fus.map(_.io.pipe.last.bits.tail))
+      io.pipe_write.valid := Mux1H(write_sel, pipe_fus.map(_.io.write.valid)) && (!acc || tail)
+      io.pipe_write.bits := Mux1H(write_sel, pipe_fus.map(_.io.write.bits))
       io.acc_write.valid := acc && !tail
-      io.acc_write.bits := Mux1H(fu_sel, pipe_fus.map(_.io.write.bits))
+      io.acc_write.bits := Mux1H(write_sel, pipe_fus.map(_.io.write.bits))
     }
 
     when (pipe_valids.orR) { io.busy := true.B }
     for (i <- 0 until maxPipeDepth) {
       io.pipe_hazards(i).valid       := pipe_valids(i)
       io.pipe_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
-      io.pipe_hazards(i).bits.latency := pipe_latencies(i)
     }
   }
 

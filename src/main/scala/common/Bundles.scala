@@ -272,7 +272,6 @@ class PermuteMicroOpWithData(implicit p: Parameters) extends PermuteMicroOp {
 }
 
 class PipeHazard(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val latency = UInt(log2Ceil(pipe_depth).W)
   val eg = UInt(log2Ceil(egsTotal).W)
   def eg_oh = UIntToOH(eg)
 }

@@ -73,8 +73,6 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
 
   io.busy := valid
 
-  io.hazard.bits.latency := DontCare
-
   when (io.iss.valid && io.iss.ready) {
     valid := true.B
     op := io.iss.op
