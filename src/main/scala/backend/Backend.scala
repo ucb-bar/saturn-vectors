@@ -69,7 +69,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vps = Module(new PermuteSequencer(all_supported_insns))
   val vrs = Module(new ReductionSequencer(all_supported_insns))
   val vxs = xissParams.map(q => q.seqs.map(s =>
-    Module(new ExecuteSequencer(s.insns, maxPipeDepth)).suggestName(s"vxs${s.name}")
+    Module(new ExecuteSequencer(s.insns, maxPipeDepth, s.fus.size)).suggestName(s"vxs${s.name}")
   ))
 
   val allSeqs = Seq(vls, vss, vps, vrs) ++ vxs.flatten
@@ -304,7 +304,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     vxu.io.iss.valid := vxs.io.iss.valid
     vxs.io.iss.ready := vxu.io.iss.ready
-    vxu.io.iss.bits.viewAsSupertype(new ExecuteMicroOp) := vxs.io.iss.bits
+    vxu.io.iss.bits.viewAsSupertype(new ExecuteMicroOp(vxu.nFUs)) := vxs.io.iss.bits
 
     when (vxs_iss.acc) {
       val acc_data = vrs.io.acc_data.bits

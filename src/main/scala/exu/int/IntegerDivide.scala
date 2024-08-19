@@ -40,7 +40,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   val mul_insns = IntegerDivideFactory(supportsMul).mul_insns
 
   val div = Module(new MulDiv(MulDivParams(mulUnroll = if (supportsMul) 8 else 0), 64, 1)) // 128 to make smul work
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, div_insns, Nil).matched && div.io.req.ready && (!valid || last)
+  io.iss.ready := div.io.req.ready && (!valid || last)
 
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B

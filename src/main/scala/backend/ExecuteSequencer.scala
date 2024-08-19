@@ -10,7 +10,7 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class ExecuteSequencerIO(maxDepth: Int)(implicit p: Parameters) extends SequencerIO(new ExecuteMicroOp) {
+class ExecuteSequencerIO(maxDepth: Int, nFUs: Int)(implicit p: Parameters) extends SequencerIO(new ExecuteMicroOp(nFUs)) {
   val rvs1 = Decoupled(new VectorReadReq)
   val rvs2 = Decoupled(new VectorReadReq)
   val rvd  = Decoupled(new VectorReadReq)
@@ -25,14 +25,14 @@ class ExecuteSequencerIO(maxDepth: Int)(implicit p: Parameters) extends Sequence
   val acc_ready = Output(Bool())
 }
 
-class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: Int)(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
+class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: Int, nFUs: Int)(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
   def usesPerm = supported_insns.count(_.props.contains(UsesPermuteSeq.Y)) > 0
   def usesAcc = supported_insns.count(_.props.contains(Reduction.Y)) > 0
   def usesRvd = supported_insns.count(_.props.contains(ReadsVD.Y)) > 0
 
   def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
 
-  val io = IO(new ExecuteSequencerIO(maxPipeDepth))
+  val io = IO(new ExecuteSequencerIO(maxPipeDepth, nFUs))
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
@@ -55,6 +55,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val zext_imm5 = Reg(Bool())
   val pipelined = Reg(Bool())
   val pipe_stages = Reg(UInt(log2Ceil(maxPipeDepth).W))
+  val fu_sel = Reg(UInt(nFUs.W))
 
   val acc_fold  = Reg(Bool())
   val acc_fold_id = Reg(UInt(log2Ceil(dLenB).W))
@@ -98,7 +99,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_inst = io.dis.bits
 
     val dis_ctrl = new VectorDecoder(dis_inst.funct3, dis_inst.funct6, dis_inst.rs1, dis_inst.rs2, supported_insns,
-      Seq(SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5, PipelinedExecution, PipelineStagesMinus1))
+      Seq(SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5, PipelinedExecution, PipelineStagesMinus1, FUSel(nFUs)))
     valid := true.B
     inst := io.dis.bits
     assert(dis_inst.vstart === 0.U)
@@ -123,6 +124,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     zext_imm5   := dis_ctrl.bool(ZextImm5)
     pipelined   := dis_ctrl.bool(PipelinedExecution)
     pipe_stages := dis_ctrl.uint(PipelineStagesMinus1)
+    fu_sel      := dis_ctrl.uint(FUSel(nFUs))
 
     val dis_slide = (dis_inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
       && dis_inst.funct3 =/= OPIVV)
@@ -250,6 +252,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.rm        := inst.rm
   io.iss.bits.iterative := !pipelined
   io.iss.bits.pipe_depth := pipe_stages
+  io.iss.bits.fu_sel    := fu_sel
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)

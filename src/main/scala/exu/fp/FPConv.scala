@@ -19,8 +19,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
 
   io.set_vxsat := false.B
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U,
-    supported_insns, Nil).matched
+  io.iss.ready := true.B
 
   val rs1 = io.pipe(0).bits.rs1
   val ctrl_widen = rs1(3)

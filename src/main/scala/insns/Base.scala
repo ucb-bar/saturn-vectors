@@ -48,8 +48,7 @@ trait VectorInstruction {
       field.default
     }
   }
-  private def append(add_props: InstructionProperty*) = new AppendedVectorInstruction(props, add_props)
-
+  def append(add_props: InstructionProperty*) = new AppendedVectorInstruction(props, add_props)
   def elementWise: VectorInstruction = append(Elementwise.Y)
   def pipelined(depth: Int): VectorInstruction = { require(depth >= 1); append(PipelinedExecution.Y, PipelineStagesMinus1((depth-1).U)) }
   def iterative: VectorInstruction = append(PipelinedExecution.N)

@@ -163,7 +163,8 @@ class MaskedByte(implicit p: Parameters) extends CoreBundle()(p) with HasVectorP
   val mask = Bool()
 }
 
-class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class ExecuteMicroOp(nFUs: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val fu_sel = UInt(nFUs.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
 
@@ -223,7 +224,7 @@ class ExecuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   def frm = rm
 }
 
-class ExecuteMicroOpWithData(implicit p: Parameters) extends ExecuteMicroOp {
+class ExecuteMicroOpWithData(nFUs: Int)(implicit p: Parameters) extends ExecuteMicroOp(nFUs) {
   val rmask   = UInt(dLenB.W)
   val wmask   = UInt(dLenB.W)
 

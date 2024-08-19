@@ -217,7 +217,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
       CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask,
       UsesBitSwap, UsesCountZeros))
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+  io.iss.ready := true.B
 
   val carry_in = ctrl.bool(CarryIn) && (!io.pipe(0).bits.vm || ctrl.bool(AlwaysCarryIn))
 

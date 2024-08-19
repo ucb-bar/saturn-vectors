@@ -356,7 +356,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Fill(dLenB >> 3, out)
-  io.iss.ready := accept_inst.matched && ((divSqrt_ready && io.iss.op.vd_eew >= 2.U) || (divSqrt16_ready && io.iss.op.vd_eew === 1.U)) && (!valid || last)
+  io.iss.ready := ((divSqrt_ready && io.iss.op.vd_eew >= 2.U) || (divSqrt16_ready && io.iss.op.vd_eew === 1.U)) && (!valid || last)
   last := io.write.fire
 
   io.set_fflags.valid := divSqrt_out_valid || divSqrt16_out_valid || (vfrsqrt7_inst && io.write.fire) || (vfrec7_inst && io.write.fire)

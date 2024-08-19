@@ -8,6 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy.{BufferParams}
 import saturn.exu._
+import saturn.insns.{FUSel}
 
 object VectorParams {
 
@@ -113,7 +114,9 @@ case class VXSequencerParams(
   name: String,
   fus: Seq[FunctionalUnitFactory]
 ) {
-  def insns = fus.map(_.insns).flatten
+  def insns = fus.zipWithIndex.map { case (fu, i) =>
+    fu.insns.map(_.append(FUSel(fus.size)((1 << i).U)))
+  }.flatten
 }
 
 case class VXIssuePathParams(

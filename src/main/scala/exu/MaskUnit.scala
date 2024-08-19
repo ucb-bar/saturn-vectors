@@ -26,7 +26,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
 
   def accepts(op: ExecuteMicroOp): Bool = (op.opff6.isOneOf(OPFFunct6.wrfunary0) || op.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)) && !scalar_wb_busy
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2, supported_insns, Nil).matched && !scalar_wb_busy && !io.pipe(0).bits.tail
+  io.iss.ready := !scalar_wb_busy && !io.pipe(0).bits.tail
 
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B

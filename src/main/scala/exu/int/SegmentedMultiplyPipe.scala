@@ -31,7 +31,7 @@ case class IntegerMultiplyFactory(depth: Int, segmented: Boolean) extends Functi
 class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
   val supported_insns = IntegerMultiplyFactory(depth, true).insns
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+  io.iss.ready := true.B
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare

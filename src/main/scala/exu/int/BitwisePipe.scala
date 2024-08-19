@@ -25,7 +25,7 @@ class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns,
     Seq(BWAnd, BWOr, BWXor, BWInvOut, BWInv1))
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+  io.iss.ready := true.B
 
   val in1 = Mux(ctrl.bool(BWInv1), ~io.pipe(0).bits.rvs1_data, io.pipe(0).bits.rvs1_data)
   val in2 = io.pipe(0).bits.rvs2_data

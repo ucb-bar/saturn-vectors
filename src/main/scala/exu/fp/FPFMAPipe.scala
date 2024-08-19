@@ -106,7 +106,7 @@ case class FPFMAFactory(depth: Int, sharedScalar: Boolean) extends FunctionalUni
 class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
   val supported_insns = FPFMAFactory(depth, false).insns
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+  io.iss.ready := true.B
 
   io.set_vxsat := false.B
 
