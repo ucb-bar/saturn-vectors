@@ -83,7 +83,6 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
-  io.pipe0_stall     := false.B
   io.write.valid := io.pipe(0).valid && (!compress || compress_bit)
   io.write.bits.eg := Mux(compress,
     getEgId(compress_wvd, compress_eidx, io.pipe(0).bits.rvs2_eew, false.B),

@@ -14,18 +14,18 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
   val pipe_fus: Seq[PipelinedFunctionalUnit] = fus.collect { case p: PipelinedFunctionalUnit => p }
   val iter_fus: Seq[IterativeFunctionalUnit] = fus.collect { case i: IterativeFunctionalUnit => i }
 
-  val pipe_depth = (pipe_fus.map(_.depth) :+ 0).max
+  val maxPipeDepth = (pipe_fus.map(_.depth) :+ 0).max
 
   val io = IO(new Bundle {
     val iss = Flipped(Decoupled(new ExecuteMicroOpWithData))
-    val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(pipe_depth))))
+    val iter_hazards = Output(Vec(iter_fus.size, Valid(new PipeHazard(maxPipeDepth))))
     val iter_write = Decoupled(new VectorWrite(dLen))
     val pipe_write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
     val scalar_write = Decoupled(new ScalarWrite)
 
-    val pipe_hazards = Output(Vec(pipe_depth, Valid(new PipeHazard(pipe_depth))))
-    val issue_pipe_latency = Output(UInt((log2Ceil(pipe_depth) + 1).W))
+    val pipe_hazards = Output(Vec(maxPipeDepth, Valid(new PipeHazard(maxPipeDepth))))
+    val issue_pipe_latency = Output(UInt((log2Ceil(maxPipeDepth) + 1).W))
 
     val shared_fp_req = Decoupled(new FPInput())
     val shared_fp_resp = Flipped(Valid(new FPResult()))
@@ -41,28 +41,42 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
   io.shared_fp_req.valid := false.B
   io.shared_fp_req.bits := DontCare
   if (sharedFPUnits.size > 0) {
-    val shared_fp_arb = Module(new Arbiter(new FPInput, sharedFPUnits.size))
-    for ((u, i) <- sharedFPUnits.zipWithIndex) {
-      val otherUnits = sharedFPUnits.zipWithIndex.filter(_._2 != i).map(_._1)
-      val other_busy = otherUnits.map(_.io_fp_active).orR
-      u.io_fp_req.ready := shared_fp_arb.io.in(i).ready && !other_busy
-      shared_fp_arb.io.in(i).valid := u.io_fp_req.valid && !other_busy
-      shared_fp_arb.io.in(i).bits := u.io_fp_req.bits
-      u.io_fp_resp := io.shared_fp_resp
+    val pipe_fp_units = sharedFPUnits.collect { case p: PipelinedFunctionalUnit with HasSharedFPUIO => p }
+    val iter_fp_units = sharedFPUnits.collect { case i: IterativeFunctionalUnit with HasSharedFPUIO => i }
+    require(pipe_fp_units.size <= 1 && iter_fp_units.size <= 1)
+    val pu = pipe_fp_units.headOption
+    val iu = iter_fp_units.headOption
+
+    if (pu.isEmpty) {
+      iu.foreach { iu => io.shared_fp_req <> iu.io_fp_req }
+    } else {
+      pu.map { pu =>
+        io.shared_fp_req <> pu.io_fp_req
+        iu.foreach { iu =>
+          val use_iu = !pu.io.pipe.map(_.valid).orR && iu.io.busy
+          val use_pu = !iu.io.busy
+          io.shared_fp_req.valid := (use_iu && iu.io_fp_req.valid) || (use_pu && pu.io_fp_req.valid)
+          io.shared_fp_req.bits := Mux1H(Seq(
+            use_iu -> iu.io_fp_req.bits,
+            use_pu -> pu.io_fp_req.bits
+          ))
+          iu.io_fp_req.ready := use_iu && io.shared_fp_req.ready
+          pu.io_fp_req.ready := use_pu && io.shared_fp_req.ready
+        }
+      }
     }
-    io.shared_fp_req <> shared_fp_arb.io.out
+    sharedFPUnits.foreach(_.io_fp_resp := io.shared_fp_resp)
   }
 
-  val pipe_stall = WireInit(false.B)
-
-  fus.foreach { fu =>
-    fu.io.iss.op := io.iss.bits
-    fu.io.iss.valid := io.iss.valid && !pipe_stall
-  }
 
   val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
-  io.iss.ready := readies.orR && !pipe_write_hazard && !pipe_stall
+  io.iss.ready := readies.orR && !pipe_write_hazard
+  fus.foreach { fu =>
+    fu.io.iss.op := io.iss.bits
+    fu.io.iss.valid := io.iss.valid && !pipe_write_hazard
+  }
+
   when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
 
   io.issue_pipe_latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
@@ -88,28 +102,25 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
   if (pipe_fus.size > 0) {
     val pipe_iss_depth = Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
 
-    val pipe_valids    = Seq.fill(pipe_depth)(RegInit(false.B))
-    val pipe_sels      = Seq.fill(pipe_depth)(Reg(UInt(pipe_fus.size.W)))
-    val pipe_bits      = Seq.fill(pipe_depth)(Reg(new ExecuteMicroOpWithData))
-    val pipe_latencies = Seq.fill(pipe_depth)(Reg(UInt(log2Ceil(pipe_depth).W)))
+    val pipe_valids    = Seq.fill(maxPipeDepth)(RegInit(false.B))
+    val pipe_sels      = Seq.fill(maxPipeDepth)(Reg(UInt(pipe_fus.size.W)))
+    val pipe_bits      = Seq.fill(maxPipeDepth)(Reg(new ExecuteMicroOpWithData))
+    val pipe_latencies = Seq.fill(maxPipeDepth)(Reg(UInt(log2Ceil(maxPipeDepth).W)))
 
-    pipe_stall := Mux1H(pipe_sels.head, pipe_fus.map(_.io.pipe0_stall))
-
-    pipe_write_hazard := (0 until pipe_depth).map { i =>
+    pipe_write_hazard := (0 until maxPipeDepth).map { i =>
       pipe_valids(i) && pipe_latencies(i) === pipe_iss_depth
     }.orR
 
     val pipe_iss = io.iss.fire && pipe_fus.map(_.io.iss.ready).orR
-    when (!pipe_stall) {
-      pipe_valids.head := pipe_iss
-      when (pipe_iss) {
-        pipe_bits.head      := io.iss.bits
-        pipe_latencies.head := pipe_iss_depth - 1.U
-        pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
-      }
+    pipe_valids.head := pipe_iss
+    when (pipe_iss) {
+      pipe_bits.head      := io.iss.bits
+      pipe_latencies.head := pipe_iss_depth - 1.U
+      pipe_sels.head      := VecInit(pipe_fus.map(_.io.iss.ready)).asUInt
     }
-    for (i <- 1 until pipe_depth) {
-      val fire = pipe_valids(i-1) && pipe_latencies(i-1) =/= 0.U && !((i == 1).B && pipe_stall)
+
+    for (i <- 1 until maxPipeDepth) {
+      val fire = pipe_valids(i-1) && pipe_latencies(i-1) =/= 0.U
       pipe_valids(i) := fire
       when (fire) {
         pipe_bits(i)      := pipe_bits(i-1)
@@ -138,12 +149,9 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     }
 
     when (pipe_valids.orR) { io.busy := true.B }
-    for (i <- 0 until pipe_depth) {
+    for (i <- 0 until maxPipeDepth) {
       io.pipe_hazards(i).valid       := pipe_valids(i)
       io.pipe_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
-      when (pipe_latencies(i) === 0.U) { // hack to deal with compress unit
-        io.pipe_hazards(i).bits.eg   := Mux1H(pipe_sels(i), pipe_fus.map(_.io.write.bits.eg))
-      }
       io.pipe_hazards(i).bits.latency := pipe_latencies(i)
     }
   }

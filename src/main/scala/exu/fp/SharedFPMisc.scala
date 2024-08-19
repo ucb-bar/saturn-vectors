@@ -37,7 +37,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
 
   val supported_insns = SharedFPMiscFactory.insns
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid && io_fp_req.ready
+  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched && !valid
 
   val ctrl = new VectorDecoder(op.funct3, op.funct6, 0.U, 0.U, supported_insns, Seq(
     FPSwapVdV2, ReadsVD, WritesAsMask, FPSgnj, FPComp, FPSpecRM, FPMNE, FPMGT, Wide2VD, Wide2VS2, Reduction))
@@ -177,7 +177,7 @@ class SharedScalarElementwiseFPMisc(implicit p: Parameters) extends IterativeFun
   rec7.io.eew := op.rvs2_eew
   rec7.io.frm := op.frm
 
-  when (io_fp_resp.valid) {
+  when (io_fp_resp.valid && valid && issued) {
     has_wdata := true.B
     when (ctrl.bool(WritesAsMask)) {
       when (ctrl.bool(FPMNE) || (ctrl.bool(FPMGT) && !mgt_NaN)) {

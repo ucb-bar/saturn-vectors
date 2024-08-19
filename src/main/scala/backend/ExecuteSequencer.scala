@@ -10,11 +10,12 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-class ExecuteSequencerIO(implicit p: Parameters) extends SequencerIO(new ExecuteMicroOp) {
+class ExecuteSequencerIO(maxDepth: Int)(implicit p: Parameters) extends SequencerIO(new ExecuteMicroOp) {
   val rvs1 = Decoupled(new VectorReadReq)
   val rvs2 = Decoupled(new VectorReadReq)
   val rvd  = Decoupled(new VectorReadReq)
   val rvm  = Decoupled(new VectorReadReq)
+  val pipe_write_req  = new VectorPipeWriteReqIO(maxDepth)
   val perm = new Bundle {
     val req = Decoupled(new CompactorReq(dLenB))
     val data = Input(UInt(dLen.W))
@@ -24,14 +25,14 @@ class ExecuteSequencerIO(implicit p: Parameters) extends SequencerIO(new Execute
   val acc_ready = Output(Bool())
 }
 
-class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
+class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: Int)(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
   def usesPerm = supported_insns.count(_.props.contains(UsesPermuteSeq.Y)) > 0
   def usesAcc = supported_insns.count(_.props.contains(Reduction.Y)) > 0
   def usesRvd = supported_insns.count(_.props.contains(ReadsVD.Y)) > 0
 
   def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
 
-  val io = IO(new ExecuteSequencerIO)
+  val io = IO(new ExecuteSequencerIO(maxPipeDepth))
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
@@ -78,6 +79,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   val renvd    = inst.renvd && usesRvd.B
   val renvm    = inst.renvm
   val renacc   = inst.reduction && usesAcc.B
+  val pipe_write = ctrl.bool(PipelinedExecution)
 
   val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
@@ -178,6 +180,17 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.rvd.bits.oldest  := oldest
   io.rvm.bits.oldest  := oldest
 
+  val wvd_eg = getEgId(inst.rd, Mux(inst.reduction, 0.U, eidx), vd_eew, inst.writes_mask)
+  io.pipe_write_req.request := valid && pipe_write
+  io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits-1,0)))
+  io.pipe_write_req.pipe_depth := ctrl.uint(PipelineStagesMinus1)
+  io.pipe_write_req.oldest := oldest
+  io.pipe_write_req.fire := io.iss.fire
+
+  when (compress) { // The destination is not known at this poit
+    io.pipe_write_req.bank_sel := ~(0.U(vParams.vrfBanking.W))
+  }
+
   val read_perm_buffer = usesPerm.B && ctrl.bool(UsesPermuteSeq) && (!slide || Mux(slide_up,
     next_eidx > slide_offset,
     eidx +& slide_offset < inst.vconfig.vtype.vlMax))
@@ -192,6 +205,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
     !(renvd && !io.rvd.ready) &&
     !(renvm && !io.rvm.ready) &&
     !(read_perm_buffer && !io.perm.req.ready) &&
+    !(pipe_write && !io.pipe_write_req.available) &&
     !(renacc && !io.acc_valid)
   )
   io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready && usesPerm.B
@@ -204,7 +218,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Para
   io.iss.bits.vd_eew    := vd_eew
   io.iss.bits.eidx      := eidx
   io.iss.bits.vl        := inst.vconfig.vl
-  io.iss.bits.wvd_eg    := getEgId(inst.rd, Mux(inst.reduction, 0.U, eidx), vd_eew, inst.writes_mask)
+  io.iss.bits.wvd_eg    := wvd_eg
   io.iss.bits.rs1       := inst.rs1
   io.iss.bits.rs2       := inst.rs2
   io.iss.bits.rd        := inst.rd

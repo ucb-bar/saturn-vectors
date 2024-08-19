@@ -56,7 +56,6 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val pipe_out = Pipe(io.pipe(depth-2).valid, out(63,0), 1).bits
   val pipe_vxsat = Pipe(io.pipe(depth-2).valid, smul_sat && ctrl_smul, 1).bits
   val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, pipe_out((8<<eew)-1,0)) })(io.pipe(depth-1).bits.vd_eew)
-  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.data := wdata

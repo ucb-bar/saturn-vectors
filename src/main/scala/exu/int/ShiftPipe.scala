@@ -224,7 +224,6 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
   shift_arr.io.scaling   := ctrl.bool(ScalingShift)
   shift_arr.io.narrowing := shift_narrowing
 
-  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)

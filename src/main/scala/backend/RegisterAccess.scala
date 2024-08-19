@@ -7,7 +7,7 @@ import freechips.rocketchip.tile.{CoreModule}
 import freechips.rocketchip.util._
 import saturn.common._
 
-class RegisterAccess(exSeqs: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class RegisterAccess(exSeqs: Int, maxExuDepth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val vls = new Bundle {
       val rvm = Flipped(new VectorReadIO)
@@ -21,6 +21,7 @@ class RegisterAccess(exSeqs: Int)(implicit p: Parameters) extends CoreModule()(p
       val rvs2 = Flipped(new VectorReadIO)
       val rvd = Flipped(new VectorReadIO)
       val rvm = Flipped(new VectorReadIO)
+      val pipe_write_req = Flipped(new VectorPipeWriteReqIO(maxExuDepth))
     })
     val vps = new Bundle {
       val rvs2 = Flipped(new VectorReadIO)
@@ -50,7 +51,8 @@ class RegisterAccess(exSeqs: Int)(implicit p: Parameters) extends CoreModule()(p
     reads = Seq(1 + exSeqs, 1 + exSeqs, 2 + exSeqs),
     maskReads = Seq(4 + exSeqs),
     pipeWrites = exSeqs,
-    llWrites = exSeqs + 2 // load + reset
+    llWrites = exSeqs + 2, // load + reset
+    maxExuDepth
   ))
 
   val resetting = RegInit(true.B)
@@ -68,6 +70,7 @@ class RegisterAccess(exSeqs: Int)(implicit p: Parameters) extends CoreModule()(p
 
   // Pipe writes
   for (i <- 0 until exSeqs) {
+    vrf.io.pipe_write_reqs(i) <> io.vxs(i).pipe_write_req
     vrf.io.pipe_writes(i) <> io.pipe_writes(i)
   }
 

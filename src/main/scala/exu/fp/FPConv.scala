@@ -172,5 +172,4 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   io.set_fflags := DontCare
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
-  io.pipe0_stall := false.B
 }

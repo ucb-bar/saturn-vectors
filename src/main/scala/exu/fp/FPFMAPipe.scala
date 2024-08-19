@@ -201,5 +201,4 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   io.set_fflags.bits := fma_pipes.map(pipe => pipe.exc).reduce(_ | _)
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
-  io.pipe0_stall := false.B
 }

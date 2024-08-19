@@ -113,7 +113,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val vxsat = Mux(ctrl_smul, smul_sat, 0.U) & io.pipe(depth-2).bits.wmask
   val pipe_vxsat = Pipe(io.pipe(depth-2).valid, vxsat, 1).bits
 
-  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.data := pipe_out

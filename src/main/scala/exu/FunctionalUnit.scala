@@ -25,7 +25,6 @@ class PipelinedFunctionalUnitIO(depth: Int)(implicit p: Parameters) extends Func
   require(depth <= 8)
   val write = Valid(new VectorWrite(dLen))
   val pipe = Input(Vec(depth, Valid(new ExecuteMicroOpWithData)))
-  val pipe0_stall = Output(Bool())
 }
 
 class IterativeFunctionalUnitIO(implicit p: Parameters) extends FunctionalUnitIO {

@@ -60,19 +60,23 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vrissq = Module(new IssueQueue(vParams.vrissqEntries, 1))
   val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size)).suggestName(s"vxissq_${q.name}"))
 
+  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus)).suggestName(s"vxu${s.name}")))
+  val flat_vxus = vxus.flatten
+  val maxPipeDepth = flat_vxus.map(_.maxPipeDepth).max
+
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
   val vps = Module(new PermuteSequencer(all_supported_insns))
   val vrs = Module(new ReductionSequencer(all_supported_insns))
   val vxs = xissParams.map(q => q.seqs.map(s =>
-    Module(new ExecuteSequencer(s.insns)).suggestName(s"vxs${s.name}")
+    Module(new ExecuteSequencer(s.insns, maxPipeDepth)).suggestName(s"vxs${s.name}")
   ))
 
   val allSeqs = Seq(vls, vss, vps, vrs) ++ vxs.flatten
   val allIssQs = Seq(vlissq, vsissq, vpissq, vrissq) ++ vxissqs
 
-  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus)).suggestName(s"vxu${s.name}")))
-
+  val flat_vxs = vxs.flatten
+  require(flat_vxs.size == flat_vxus.size)
 
   io.fp_req.valid := false.B
   io.fp_req.bits := DontCare
@@ -242,57 +246,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     group.issq.io.deq.ready := (valid_seqs & ready_seqs) =/= 0.U
   }
 
-  val flat_vxs = vxs.flatten
-  val flat_vxus = vxus.flatten
-  require(flat_vxs.size == flat_vxus.size)
-
-  // Hazard checking for multi-VXS
-  // Check if there is a VRF write port hazard against the in-flight insns in other VXUs
-  // Check if there is a VRF write port hazard against a simultaneously issuing insn
-  //  from another VXS (check that it's actually a valid hazard)
-  val inflight_hazards = WireInit(VecInit(Seq.fill(flat_vxs.length)(false.B)))
-  for (i <- 0 until flat_vxs.length) {
-    val vxs = flat_vxs(i)
-    val vxu = flat_vxus(i)
-    val other_vxu_idx = (0 until flat_vxs.length).filter(_ != i)
-
-    val iterative = vxs.io.iss.bits.iterative
-    val write_latency = vxs.io.iss.bits.pipe_depth +& 1.U
-    val write_bank = vxs.io.iss.bits.wvd_eg(vrfBankBits-1,0)
-
-    val inflight_hazard = other_vxu_idx.map(flat_vxus(_).io.pipe_hazards).flatten.map { hazard =>
-      hazard.valid &&
-      (hazard.bits.latency === write_latency) &&
-      (hazard.bits.eg(vrfBankBits-1,0) === write_bank)
-    }.reduceOption(_ || _).getOrElse(false.B) && !iterative
-
-    inflight_hazards(i) := inflight_hazard
-
-    val issue_hazard = other_vxu_idx.map { j =>
-      val other_iss = flat_vxs(j).io.iss
-      val other_depth = other_iss.bits.pipe_depth
-      val other_iterative = other_iss.bits.iterative
-      val other_bank = other_iss.bits.wvd_eg(vrfBankBits-1,0)
-      val other_vat = other_iss.bits.vat
-
-      ((other_depth === vxs.io.iss.bits.pipe_depth) &&
-        !other_iterative &&
-        !iterative &&
-        (other_bank === write_bank) &&
-        other_iss.valid &&
-        vatOlder(other_iss.bits.vat, vxs.io.iss.bits.vat)
-      )
-    }.reduceOption(_ || _).getOrElse(false.B) && vxs.io.iss.valid && vxu.io.iss.ready
-
-    vxu.io.iss.valid := vxs.io.iss.valid && !inflight_hazard && !issue_hazard
-    vxs.io.iss.ready := vxu.io.iss.ready && !inflight_hazard && !issue_hazard
-    vxu.io.iss.bits.viewAsSupertype(new ExecuteMicroOp) := vxs.io.iss.bits
-  }
-
   // ======================================
   // Connect reads to VRF
 
-  val vrf = Module(new RegisterAccess(flat_vxs.size))
+  val vrf = Module(new RegisterAccess(flat_vxs.size, maxPipeDepth))
   vrf.io.vls.rvm.req <> vls.io.rvm
   vrf.io.vss.rvd.req <> vss.io.rvd
   vrf.io.vss.rvm.req <> vss.io.rvm
@@ -345,6 +302,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxu_iss.rmask := Mux(vxs_iss.vm, ~(0.U(dLenB.W)), vm_resp)
     vxu_iss.rvm_data := Mux(vxs_iss.vm, ~(0.U(dLen.W)), vrf.io.vxs(i).rvm.resp)
 
+    vxu.io.iss.valid := vxs.io.iss.valid
+    vxs.io.iss.ready := vxu.io.iss.ready
+    vxu.io.iss.bits.viewAsSupertype(new ExecuteMicroOp) := vxs.io.iss.bits
 
     when (vxs_iss.acc) {
       val acc_data = vrs.io.acc_data.bits
@@ -383,6 +343,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // ============================
   // Connect writes to VRF
   for (i <- 0 until flat_vxs.size) {
+    vrf.io.vxs(i).pipe_write_req <> flat_vxs(i).io.pipe_write_req
     vrf.io.pipe_writes(i) <> flat_vxus(i).io.pipe_write
     vrf.io.iter_writes(i) <> flat_vxus(i).io.iter_write
   }

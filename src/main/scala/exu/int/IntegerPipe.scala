@@ -370,7 +370,6 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
   })(rvs1_eew) << mask_write_offset)(dLen-1,0)
 
-  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(0).valid
   io.write.bits.eg   := io.pipe(0).bits.wvd_eg
   io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))

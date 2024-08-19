@@ -108,6 +108,15 @@ class IssueQueueInst(nSeqs: Int)(implicit p: Parameters) extends BackendIssueIns
   val seq = UInt(nSeqs.W)
 }
 
+class VectorPipeWriteReqIO(maxPipeDepth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val request = Output(Bool())
+  val available = Input(Bool())
+  val fire = Output(Bool())
+  val bank_sel = Output(UInt(vParams.vrfBanking.W))
+  val pipe_depth = Output(UInt((log2Ceil(maxPipeDepth) max 1).W))
+  val oldest = Output(Bool())
+}
+
 class VectorWrite(writeBits: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(32 * vLen / writeBits).W)
   def bankId = if (vrfBankBits == 0) 0.U else eg(vrfBankBits-1,0)
@@ -226,8 +235,6 @@ class ExecuteMicroOpWithData(implicit p: Parameters) extends ExecuteMicroOp {
   val rvs1_elem = UInt(64.W)
   val rvs2_elem = UInt(64.W)
   val rvd_elem  = UInt(64.W)
-
-
 }
 
 class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
