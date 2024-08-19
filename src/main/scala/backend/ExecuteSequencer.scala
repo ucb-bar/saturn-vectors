@@ -48,18 +48,22 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val slide_offset = Reg(UInt((1+log2Ceil(maxVLMax)).W))
   val perm_head = Reg(UInt(dLenOffBits.W))
   val perm_tail = Reg(UInt(dLenOffBits.W))
+  val sets_wmask = Reg(Bool())
+  val uses_perm = Reg(Bool())
+  val elementwise = Reg(Bool())
+  val narrowing_ext = Reg(Bool())
+  val zext_imm5 = Reg(Bool())
+  val pipelined = Reg(Bool())
+  val pipe_stages = Reg(UInt(log2Ceil(maxPipeDepth).W))
 
   val acc_fold  = Reg(Bool())
   val acc_fold_id = Reg(UInt(log2Ceil(dLenB).W))
-
-  val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
-    Seq(SetsWMask, UsesPermuteSeq, FPAdd, FPComp, Elementwise, UsesNarrowingSext, ZextImm5, PipelinedExecution, PipelineStagesMinus1))
 
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
   val compress = inst.opmf6 === OPMFunct6.compress
   val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew + Mux(inst.reduction && inst.wide_vd, 1.U, 0.U))
-  val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(ctrl.bool(UsesNarrowingSext), ~inst.rs1(2,1) + 1.U, 0.U)
+  val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(narrowing_ext, ~inst.rs1(2,1) + 1.U, 0.U)
   val vs3_eew  = inst.vconfig.vtype.vsew + inst.wide_vd
   val vd_eew   = inst.vconfig.vtype.vsew + inst.wide_vd
   val incr_eew = Seq(
@@ -67,7 +71,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     Mux(inst.renv2, vs2_eew, 0.U),
     Mux(inst.renvd, vs3_eew, 0.U),
     vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
-  val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || ctrl.bool(Elementwise)
+  val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || elementwise
   val acc_last = acc_fold_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
   val sscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5_sext)
@@ -79,13 +83,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val renvd    = inst.renvd && usesRvd.B
   val renvm    = inst.renvm
   val renacc   = inst.reduction && usesAcc.B
-  val pipe_write = ctrl.bool(PipelinedExecution)
 
-  val use_wmask = !inst.vm && ctrl.bool(SetsWMask)
+  val use_wmask = !inst.vm && sets_wmask
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val eff_vl    = Mux(mvnrr, ((vLen/8).U >> vd_eew) << inst.emul, Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl))
   val increments_as_mask = (!inst.renv1 || inst.reads_vs1_mask) && (!inst.renv2 || inst.reads_vs2_mask) && (!inst.wvd || inst.writes_mask)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, increments_as_mask, ctrl.bool(Elementwise))
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, increments_as_mask, elementwise)
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction && usesAcc.B, acc_fold && acc_last, eidx_tail)
 
@@ -93,6 +96,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
 
   when (io.dis.fire) {
     val dis_inst = io.dis.bits
+
+    val dis_ctrl = new VectorDecoder(dis_inst.funct3, dis_inst.funct6, dis_inst.rs1, dis_inst.rs2, supported_insns,
+      Seq(SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5, PipelinedExecution, PipelineStagesMinus1))
     valid := true.B
     inst := io.dis.bits
     assert(dis_inst.vstart === 0.U)
@@ -110,6 +116,13 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     head        := true.B
     acc_fold    := false.B
     acc_fold_id := 0.U
+    sets_wmask  := dis_ctrl.bool(SetsWMask)
+    uses_perm   := dis_ctrl.bool(UsesPermuteSeq) && usesPerm.B
+    elementwise := dis_ctrl.bool(Elementwise)
+    narrowing_ext := dis_ctrl.bool(UsesNarrowingSext)
+    zext_imm5   := dis_ctrl.bool(ZextImm5)
+    pipelined   := dis_ctrl.bool(PipelinedExecution)
+    pipe_stages := dis_ctrl.uint(PipelineStagesMinus1)
 
     val dis_slide = (dis_inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
       && dis_inst.funct3 =/= OPIVV)
@@ -181,9 +194,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.rvm.bits.oldest  := oldest
 
   val wvd_eg = getEgId(inst.rd, Mux(inst.reduction, 0.U, eidx), vd_eew, inst.writes_mask)
-  io.pipe_write_req.request := valid && pipe_write
+  io.pipe_write_req.request := valid && pipelined
   io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits-1,0)))
-  io.pipe_write_req.pipe_depth := ctrl.uint(PipelineStagesMinus1)
+  io.pipe_write_req.pipe_depth := pipe_stages
   io.pipe_write_req.oldest := oldest
   io.pipe_write_req.fire := io.iss.fire
 
@@ -191,7 +204,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     io.pipe_write_req.bank_sel := ~(0.U(vParams.vrfBanking.W))
   }
 
-  val read_perm_buffer = usesPerm.B && ctrl.bool(UsesPermuteSeq) && (!slide || Mux(slide_up,
+  val read_perm_buffer = uses_perm && (!slide || Mux(slide_up,
     next_eidx > slide_offset,
     eidx +& slide_offset < inst.vconfig.vtype.vlMax))
 
@@ -205,7 +218,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     !(renvd && !io.rvd.ready) &&
     !(renvm && !io.rvm.ready) &&
     !(read_perm_buffer && !io.perm.req.ready) &&
-    !(pipe_write && !io.pipe_write_req.available) &&
+    !(pipelined && !io.pipe_write_req.available) &&
     !(renacc && !io.acc_valid)
   )
   io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready && usesPerm.B
@@ -229,8 +242,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.vat       := inst.vat
   io.iss.bits.vm        := inst.vm
   io.iss.bits.rm        := inst.rm
-  io.iss.bits.iterative := !ctrl.bool(PipelinedExecution)
-  io.iss.bits.pipe_depth := ctrl.uint(PipelineStagesMinus1)
+  io.iss.bits.iterative := !pipelined
+  io.iss.bits.pipe_depth := pipe_stages
 
   val dlen_mask = ~(0.U(dLenB.W))
   val head_mask = dlen_mask << (eidx << vd_eew)(dLenOffBits-1,0)
@@ -260,13 +273,13 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.use_scalar_rvs1 := inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) || rgather_v || rgatherei16
   io.iss.bits.scalar := Mux(rgather_v || rgatherei16,
     rgather_eidx,
-    Mux(ctrl.bool(ZextImm5), uscalar, sscalar))
+    Mux(zext_imm5, uscalar, sscalar))
   io.iss.bits.use_zero_rvs2 := rgather_zero && (rgather || rgatherei16)
 
   io.iss.bits.acc       := inst.reduction && usesAcc.B
   io.iss.bits.acc_fold  := acc_fold
   io.iss.bits.acc_fold_id := acc_fold_id
-  io.iss.bits.acc_ew      := ctrl.bool(Elementwise)
+  io.iss.bits.acc_ew      := elementwise
 
 
   when (io.iss.fire && !tail) {
@@ -299,8 +312,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
 
 
     if (usesPerm) {
-      when (ctrl.bool(UsesPermuteSeq) && slide) {
-        val next_next_eidx = get_next_eidx(eff_vl, next_eidx, incr_eew, 0.U, increments_as_mask, ctrl.bool(Elementwise))
+      when (uses_perm && slide) {
+        val next_next_eidx = get_next_eidx(eff_vl, next_eidx, incr_eew, 0.U, increments_as_mask, elementwise)
         val next_tail = next_next_eidx === eff_vl
         perm_head := Mux(slide_up,
           Mux(next_eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U),
