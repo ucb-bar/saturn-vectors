@@ -193,8 +193,13 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.rvd.bits.oldest  := oldest
   io.rvm.bits.oldest  := oldest
 
+  val exu_scheduler = Module(new PipeScheduler(1, maxPipeDepth))
+  exu_scheduler.io.reqs(0).request := valid && pipelined
+  exu_scheduler.io.reqs(0).fire := io.iss.fire
+  exu_scheduler.io.reqs(0).depth := pipe_stages
+
   val wvd_eg = getEgId(inst.rd, Mux(inst.reduction, 0.U, eidx), vd_eew, inst.writes_mask)
-  io.pipe_write_req.request := valid && pipelined
+  io.pipe_write_req.request := valid && pipelined && exu_scheduler.io.reqs(0).available
   io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits-1,0)))
   io.pipe_write_req.pipe_depth := pipe_stages
   io.pipe_write_req.oldest := oldest
@@ -219,6 +224,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     !(renvm && !io.rvm.ready) &&
     !(read_perm_buffer && !io.perm.req.ready) &&
     !(pipelined && !io.pipe_write_req.available) &&
+    !(pipelined && !exu_scheduler.io.reqs(0).available) &&
     !(renacc && !io.acc_valid)
   )
   io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready && usesPerm.B
