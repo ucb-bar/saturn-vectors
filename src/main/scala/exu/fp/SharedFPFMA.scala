@@ -34,7 +34,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   val eidx = Mux(io.pipe(0).bits.acc, 0.U, io.pipe(0).bits.eidx)
 
   // Functional unit is ready if not currently running and the scalar FPU is available
-  io.iss.ready := io_fp_req.ready
+  io.stall := !io_fp_req.ready
 
   io_fp_active := io.pipe.tail.map(_.valid).orR // head is pipe0, issuing the request
 

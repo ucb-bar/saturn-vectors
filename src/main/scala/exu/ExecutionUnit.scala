@@ -68,9 +68,9 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     sharedFPUnits.foreach(_.io_fp_resp := io.shared_fp_resp)
   }
 
-  val readies = fus.map(_.io.iss.ready)
+  val stalls = fus.map(_.io.stall)
   when (io.iss.valid) { assert(PopCount(io.iss.bits.fu_sel) <= 1.U) }
-  io.iss.ready := Mux1H(io.iss.bits.fu_sel, readies)
+  io.iss.ready := !Mux1H(io.iss.bits.fu_sel, stalls)
   fus.zipWithIndex.foreach { case (fu,i) =>
     fu.io.iss.op := io.iss.bits
     fu.io.iss.valid := io.iss.valid && io.iss.bits.fu_sel(i)

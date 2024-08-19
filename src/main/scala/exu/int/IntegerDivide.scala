@@ -40,13 +40,13 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   val mul_insns = IntegerDivideFactory(supportsMul).mul_insns
 
   val div = Module(new MulDiv(MulDivParams(mulUnroll = if (supportsMul) 8 else 0), 64, 1)) // 128 to make smul work
-  io.iss.ready := div.io.req.ready && (!valid || last)
+  io.stall := !div.io.req.ready || (valid && !last)
 
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
-  div.io.req.valid := io.iss.valid && io.iss.ready
+  div.io.req.valid := io.iss.valid
 
   val ctrl_fn = WireInit(VecInit(Seq(FN_DIVU, FN_DIV, FN_REMU, FN_REM))(io.iss.op.funct6(1,0)))
   val ctrl_sign1 = WireInit(io.iss.op.funct6(0))

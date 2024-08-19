@@ -18,8 +18,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   val supported_insns = FPConvFactory.insns
 
   io.set_vxsat := false.B
-
-  io.iss.ready := true.B
+  io.stall := false.B
 
   val rs1 = io.pipe(0).bits.rs1
   val ctrl_widen = rs1(3)

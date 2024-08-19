@@ -12,7 +12,7 @@ import saturn.insns._
 class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
   val supported_insns = IntegerMultiplyFactory(depth, false).insns
 
-  io.iss.ready := true.B
+  io.stall := false.B
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare

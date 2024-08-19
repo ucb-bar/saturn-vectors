@@ -23,11 +23,11 @@ case object FPCmpFactory extends FunctionalUnitFactory {
 class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
   val supported_insns = FPCmpFactory.insns
 
+  io.stall := false.B
   io.set_vxsat := false.B
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
     supported_insns, Seq(WritesAsMask, FPComp, FPCompMin, FPMEQ, FPMNE, FPMLT, FPMGT, FPSgnj))
-  io.iss.ready := true.B
 
   val ctrl_sgnjn = io.pipe(0).bits.funct6(0)
   val ctrl_sgnjx = io.pipe(0).bits.funct6(1)

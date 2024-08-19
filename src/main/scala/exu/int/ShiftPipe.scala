@@ -200,7 +200,7 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
     supported_insns,
     Seq(UsesShift, ShiftsLeft, ScalingShift))
 
-  io.iss.ready := true.B
+  io.stall := false.B
 
   val shift_narrowing = vd_eew < rvs2_eew
   val shift_widening = vd_eew > rvs2_eew

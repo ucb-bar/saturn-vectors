@@ -217,7 +217,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
       CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask,
       UsesBitSwap, UsesCountZeros))
 
-  io.iss.ready := true.B
+  io.stall := false.B
 
   val carry_in = ctrl.bool(CarryIn) && (!io.pipe(0).bits.vm || ctrl.bool(AlwaysCarryIn))
 

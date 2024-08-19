@@ -10,10 +10,10 @@ import saturn.common._
 import saturn.insns.{VectorInstruction}
 
 abstract class FunctionalUnitIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val stall = Output(Bool())
   val iss = new Bundle {
     val valid = Input(Bool())
     val op = Input(new ExecuteMicroOpWithData(1))
-    val ready = Output(Bool())
   }
 
   val scalar_write = Decoupled(new ScalarWrite)
@@ -73,7 +73,8 @@ abstract class IterativeFunctionalUnit(implicit p: Parameters) extends Functiona
 
   io.busy := valid
 
-  when (io.iss.valid && io.iss.ready) {
+  when (io.iss.valid) {
+    assert(!valid || last)
     valid := true.B
     op := io.iss.op
   } .elsewhen (last) {

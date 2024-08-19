@@ -24,7 +24,7 @@ case object PermuteUnitFactory extends FunctionalUnitFactory {
 class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = PermuteUnitFactory.insns
 
-  io.iss.ready := true.B
+  io.stall := false.B
 
   val wvd_reg = Reg(UInt(5.W))
   val result_reg = Reg(UInt(64.W))

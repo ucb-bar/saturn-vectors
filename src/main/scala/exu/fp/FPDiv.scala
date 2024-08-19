@@ -268,7 +268,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   divSqrt16.io.roundingMode := op.frm
 
   val iss_fire_pipe = Reg(Bool())
-  iss_fire_pipe := io.iss.valid && io.iss.ready
+  iss_fire_pipe := io.iss.valid
 
   divSqrt.io.inValid := iss_fire_pipe && !(op.rvd_eew === 1.U) && (div_op || (op.opff6 === OPFFunct6.funary1 && op.rs1 === 0.U))
   divSqrt.io.sqrtOp := !div_op
@@ -356,7 +356,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Fill(dLenB >> 3, out)
-  io.iss.ready := ((divSqrt_ready && io.iss.op.vd_eew >= 2.U) || (divSqrt16_ready && io.iss.op.vd_eew === 1.U)) && (!valid || last)
+  io.stall := (!divSqrt_ready && io.iss.op.vd_eew >= 2.U) || (!divSqrt16_ready && io.iss.op.vd_eew === 1.U) || valid
   last := io.write.fire
 
   io.set_fflags.valid := divSqrt_out_valid || divSqrt16_out_valid || (vfrsqrt7_inst && io.write.fire) || (vfrec7_inst && io.write.fire)
