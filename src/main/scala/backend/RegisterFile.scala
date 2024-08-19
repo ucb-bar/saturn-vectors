@@ -151,39 +151,29 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
 
   io.ll_writes.foreach(_.ready := false.B)
 
-  val req_latency_ohs = io.pipe_write_reqs.map { w => UIntToOH(w.pipe_depth) }
   val req_stalls = WireInit(VecInit.fill(pipeWrites)(false.B))
   for (i <- 0 until pipeWrites) {
     io.pipe_write_reqs(i).available := !req_stalls(i)
   }
   vrf.zipWithIndex.foreach { case (rf, i) =>
     // Handle requests
-    val tracker = RegInit(0.U(maxDepth.W))
-    for (d <- 0 until maxDepth) {
-      var allocated = tracker(d)
-      for (j <- 0 until pipeWrites) {
-        val req = io.pipe_write_reqs(j)
-        val available = !allocated
-        val active = req.request && req.bank_sel(i) && req.oldest && req_latency_ohs(j)(d)
-        when (!available && active) { req_stalls(j) := true.B }
-        allocated = allocated || active
+    val scheduler = Module(new PipeScheduler(pipeWrites*2, maxDepth))
+    for (j <- 0 until pipeWrites) {
+      val req = io.pipe_write_reqs(j)
+      scheduler.io.reqs(j).request := req.request && req.bank_sel(i) && req.oldest
+      scheduler.io.reqs(j).depth := req.pipe_depth
+      scheduler.io.reqs(j).fire := req.fire
+      when (scheduler.io.reqs(j).request && !scheduler.io.reqs(j).available) {
+        req_stalls(j) := true.B
       }
-      for (j <- 0 until pipeWrites) {
-        val req = io.pipe_write_reqs(j)
-        val available = !allocated
-        val active = req.request && req.bank_sel(i) && !req.oldest && req_latency_ohs(j)(d)
-        when (!available && active) { req_stalls(j) := true.B }
-        allocated = allocated || active
+
+      scheduler.io.reqs(j+pipeWrites).request := req.request && req.bank_sel(i) && !req.oldest
+      scheduler.io.reqs(j+pipeWrites).depth := req.pipe_depth
+      scheduler.io.reqs(j+pipeWrites).fire := req.fire
+      when (scheduler.io.reqs(j+pipeWrites).request && !scheduler.io.reqs(j+pipeWrites).available) {
+        req_stalls(j) := true.B
       }
     }
-
-    val allocs = io.pipe_write_reqs.map { r =>
-      Mux(r.fire && r.bank_sel(i), UIntToOH(r.pipe_depth), 0.U)
-    }.reduce(_|_)
-    when (tracker =/= 0.U || allocs =/= 0.U) {
-      tracker := (tracker | allocs) >> 1
-    }
-
     // Handle the writes
     val bank_match = io.pipe_writes.map { w => (w.bits.bankId === i.U) && w.valid }
     val bank_write_data = Mux1H(bank_match, io.pipe_writes.map(_.bits.data))
