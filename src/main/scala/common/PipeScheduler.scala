@@ -27,7 +27,7 @@ class PipeScheduler(nReqs: Int, maxDepth: Int) extends Module {
       allocated = allocated || active
     }
   }
-  val allocs = io.reqs.zip(ohs).map { case (r,oh) => Mux(r.fire, oh, 0.U) }.reduce(_|_)
+  val allocs = io.reqs.zip(ohs).map { case (r,oh) => Mux(r.fire && r.request, oh, 0.U) }.reduce(_|_)
   when (tracker =/= 0.U || allocs =/= 0.U) {
     tracker := (tracker | allocs) >> 1
   }

@@ -25,7 +25,6 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     val scalar_write = Decoupled(new ScalarWrite)
 
     val pipe_hazards = Output(Vec(maxPipeDepth, Valid(new PipeHazard(maxPipeDepth))))
-    val issue_pipe_latency = Output(UInt((log2Ceil(maxPipeDepth) + 1).W))
 
     val shared_fp_req = Decoupled(new FPInput())
     val shared_fp_resp = Flipped(Valid(new FPResult()))
@@ -68,18 +67,14 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     sharedFPUnits.foreach(_.io_fp_resp := io.shared_fp_resp)
   }
 
-
-  val pipe_write_hazard = WireInit(false.B)
   val readies = fus.map(_.io.iss.ready)
-  io.iss.ready := readies.orR && !pipe_write_hazard
+  io.iss.ready := readies.orR
   fus.foreach { fu =>
     fu.io.iss.op := io.iss.bits
-    fu.io.iss.valid := io.iss.valid && !pipe_write_hazard
+    fu.io.iss.valid := io.iss.valid
   }
 
   when (io.iss.valid) { assert(PopCount(readies) <= 1.U) }
-
-  io.issue_pipe_latency  := Mux1H(pipe_fus.map(_.io.iss.ready), pipe_fus.map(_.depth.U))
 
   val pipe_write = WireInit(false.B)
 
@@ -105,13 +100,6 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     val pipe_valids    = Seq.fill(maxPipeDepth)(RegInit(false.B))
     val pipe_sels      = Seq.fill(maxPipeDepth)(Reg(UInt(pipe_fus.size.W)))
     val pipe_bits      = Seq.fill(maxPipeDepth)(Reg(new ExecuteMicroOpWithData))
-    val pipe_tracker   = RegInit(0.U(maxPipeDepth.W))
-
-    pipe_write_hazard := (pipe_tracker & UIntToOH(pipe_iss_depth)) =/= 0.U
-
-    when (pipe_tracker =/= 0.U || io.iss.fire) {
-      pipe_tracker := (pipe_tracker | UIntToOH(pipe_iss_depth)) >> 1
-    }
 
     val pipe_iss = io.iss.fire && pipe_fus.map(_.io.iss.ready).orR
     pipe_valids.head := pipe_iss
