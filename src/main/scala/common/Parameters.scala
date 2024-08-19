@@ -304,7 +304,7 @@ case class VectorParams(
   useScalarFPMisc: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
-  imaPipeDepth: Int = 3,
+  imaPipeDepth: Int = 4,
 
   // for comparisons only
   hazardingMultiplier: Int = 0,
