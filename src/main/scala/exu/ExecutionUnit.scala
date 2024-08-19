@@ -121,6 +121,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
 
     val write_sel = pipe_fus.map(_._1.io.pipe.last.valid)
     assert(PopCount(write_sel) <= 1.U)
+    pipe_write := write_sel.orR
     when (write_sel.orR) {
       val acc = Mux1H(write_sel, pipe_fus.map(_._1.io.pipe.last.bits.acc))
       val tail = Mux1H(write_sel, pipe_fus.map(_._1.io.pipe.last.bits.tail))
