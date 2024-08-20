@@ -62,7 +62,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val acc_fold_id = Reg(UInt(log2Ceil(dLenB).W))
 
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
-  val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
+  val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16 && usesPerm.B
   val compress = inst.opmf6 === OPMFunct6.compress && usesCompress.B
   val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew + Mux(inst.reduction && inst.wide_vd, 1.U, 0.U))
   val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(narrowing_ext, ~inst.rs1(2,1) + 1.U, 0.U)
@@ -77,7 +77,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val acc_last = acc_fold_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
   val sscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5_sext)
-  val rgather    = inst.opif6 === OPIFunct6.rgather
+  val rgather    = inst.opif6 === OPIFunct6.rgather && usesPerm.B
   val rgather_ix = rgather && inst.funct3.isOneOf(OPIVX, OPIVI)
   val rgather_v  = rgather && inst.funct3.isOneOf(OPIVV)
   val renv1    = inst.renv1 && !inst.reduction
@@ -128,7 +128,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     fu_sel      := dis_ctrl.uint(FUSel(nFUs))
 
     val dis_slide = (dis_inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
-      && dis_inst.funct3 =/= OPIVV)
+      && dis_inst.funct3 =/= OPIVV) && usesPerm.B
     val dis_slide_up     = !dis_inst.funct6(0)
     val dis_vl           = dis_inst.vconfig.vl
     val dis_sew          = dis_inst.vconfig.vtype.vsew
