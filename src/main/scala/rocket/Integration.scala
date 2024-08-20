@@ -16,7 +16,7 @@ import saturn.frontend.{VectorDispatcher}
 
 class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) with HasVectorParams with HasCoreParameters {
 
-  if (vParams.useScalarFPFMA || vParams.useScalarFPMisc) {
+  if (vParams.useScalarFPFMA) {
     require(coreParams.fpu.isDefined)
     if (vParams.useScalarFPFMA) {
       require(coreParams.fpu.get.sfmaLatency == vParams.fmaPipeDepth - 1)

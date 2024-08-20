@@ -41,12 +41,6 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
   val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
     Seq(Elementwise))
 
-
-  val acc_elementwise_opcodes = (Seq(OPFFunct6.fredosum, OPFFunct6.fwredosum) ++
-    (if (vParams.useScalarFPMisc) Seq(OPFFunct6.fredmax, OPFFunct6.fredmin) else Nil) ++
-    (if (vParams.useScalarFPFMA) Seq(OPFFunct6.fredusum, OPFFunct6.fwredusum) else Nil)
-  )
-
   val acc_elementwise = ctrl.bool(Elementwise)
 
   io.dis.ready := !valid

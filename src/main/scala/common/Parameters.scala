@@ -103,7 +103,6 @@ object VectorParams {
     vxissqEntries = 8,
     vpissqEntries = 8,
     useSegmentedIMul = true,
-    useScalarFPMisc = false,
     useScalarFPFMA = false,
     vrfBanking = 4,
     issStructure = VectorIssueStructure.Split
@@ -143,10 +142,6 @@ object VXFunctionalUnitGroups {
   def sharedFPFMA(pipeDepth: Int) = Seq(
     FPFMAFactory(pipeDepth, true)
   )
-  def sharedFPMisc = Seq(
-    SharedFPMiscFactory,
-    FPConvFactory
-  )
   def fpFMA(pipeDepth: Int) = Seq(
     FPFMAFactory(pipeDepth, false)
   )
@@ -156,9 +151,9 @@ object VXFunctionalUnitGroups {
     FPConvFactory
   )
 
-  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, useScalarFPMisc: Boolean) = (
+  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean) = (
     (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth)) ++
-    (if (useScalarFPMisc) sharedFPMisc else fpMisc)
+    fpMisc
   )
 }
 
@@ -178,7 +173,7 @@ object VectorIssueStructure {
           VXSequencerParams("fp_int", (
             integerFUs(params.useIterativeIMul) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul)) ++
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc)
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA)
           ))
         )
       )
@@ -194,7 +189,7 @@ object VectorIssueStructure {
         seqs = Seq(
           VXSequencerParams("int", integerFUs(params.useIterativeIMul)),
           VXSequencerParams("fp",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           )
         )
@@ -217,7 +212,7 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("fp",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           )
         )
@@ -241,7 +236,7 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("fp0",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           ),
           VXSequencerParams("fp1", fpFMA(params.fmaPipeDepth))
@@ -266,7 +261,7 @@ object VectorIssueStructure {
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc))
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA))
         )
       )
       Seq(int_path, fp_path)
@@ -305,7 +300,6 @@ case class VectorParams(
 
   useSegmentedIMul: Boolean = false,
   useScalarFPFMA: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
-  useScalarFPMisc: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
   imaPipeDepth: Int = 4,

@@ -17,7 +17,7 @@ import shuttle.common._
 
 
 class SaturnShuttleUnit(implicit p: Parameters) extends ShuttleVectorUnit()(p) with HasVectorParams with HasCoreParameters {
-  assert(!vParams.useScalarFPFMA && !vParams.useScalarFPMisc)
+  assert(!vParams.useScalarFPFMA)
   if (vParams.useScalarFPFMA) {
     require(coreParams.fpu.get.dfmaLatency == vParams.fmaPipeDepth - 1)
   }
