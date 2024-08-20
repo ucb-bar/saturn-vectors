@@ -144,7 +144,8 @@ object VXFunctionalUnitGroups {
     FPFMAFactory(pipeDepth, true)
   )
   def sharedFPMisc = Seq(
-    SharedFPMiscFactory
+    SharedFPMiscFactory,
+    FPConvFactory
   )
   def fpFMA(pipeDepth: Int) = Seq(
     FPFMAFactory(pipeDepth, false)

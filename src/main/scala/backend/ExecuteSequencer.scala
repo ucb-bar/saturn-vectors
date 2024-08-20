@@ -29,6 +29,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   def usesPerm = supported_insns.count(_.props.contains(UsesPermuteSeq.Y)) > 0
   def usesAcc = supported_insns.count(_.props.contains(Reduction.Y)) > 0
   def usesRvd = supported_insns.count(_.props.contains(ReadsVD.Y)) > 0
+  def usesCompress = supported_insns.count(_.props.contains(F6(OPMFunct6.compress))) > 0
 
   def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
 
@@ -62,7 +63,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
 
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
-  val compress = inst.opmf6 === OPMFunct6.compress
+  val compress = inst.opmf6 === OPMFunct6.compress && usesCompress.B
   val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew + Mux(inst.reduction && inst.wide_vd, 1.U, 0.U))
   val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(narrowing_ext, ~inst.rs1(2,1) + 1.U, 0.U)
   val vs3_eew  = inst.vconfig.vtype.vsew + inst.wide_vd
@@ -270,7 +271,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.eidx_mask := head_mask & tail_mask & slideup_mask
   io.iss.bits.full_tail_mask := full_tail_mask
 
-  val slide_down_byte_mask = Mux(slide && !slide_up && next_eidx + slide_offset > inst.vconfig.vtype.vlMax,
+  val slide_down_byte_mask = Mux(slide && !slide_up && next_eidx +& slide_offset > inst.vconfig.vtype.vlMax,
     Mux(eidx +& slide_offset >= inst.vconfig.vtype.vlMax,
       0.U,
       ~(0.U(dLenB.W)) >> (0.U(dLenOffBits.W) - ((inst.vconfig.vtype.vlMax - slide_offset) << vs2_eew))(dLenOffBits-1,0)),
@@ -286,6 +287,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.use_zero_rvs2 := rgather_zero && (rgather || rgatherei16)
 
   io.iss.bits.acc       := inst.reduction && usesAcc.B
+  io.iss.bits.acc_copy  := acc_copy
   io.iss.bits.acc_fold  := acc_fold
   io.iss.bits.acc_fold_id := acc_fold_id
   io.iss.bits.acc_ew      := elementwise

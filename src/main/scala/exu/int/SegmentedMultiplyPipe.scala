@@ -32,7 +32,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val supported_insns = IntegerMultiplyFactory(depth, true).insns
 
   io.stall := false.B
-  io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 

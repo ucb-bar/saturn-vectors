@@ -73,7 +73,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
   io.iss.ready := !Mux1H(io.iss.bits.fu_sel, stalls)
   fus.zipWithIndex.foreach { case (fu,i) =>
     fu.io.iss.op := io.iss.bits
-    fu.io.iss.valid := io.iss.valid && io.iss.bits.fu_sel(i)
+    fu.io.iss.valid := io.iss.valid && io.iss.bits.fu_sel(i) && !fu.io.stall
   }
 
   val pipe_write = WireInit(false.B)
@@ -88,7 +88,6 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
   io.set_vxsat := fus.map(_.io.set_vxsat).orR
   io.set_fflags.valid := fus.map(_.io.set_fflags.valid).orR
   io.set_fflags.bits := fus.map(f => Mux(f.io.set_fflags.valid, f.io.set_fflags.bits, 0.U)).reduce(_|_)
-
 
   val scalar_write_arb = Module(new Arbiter(new ScalarWrite, fus.size))
   scalar_write_arb.io.in.zip(fus.map(_.io.scalar_write)).foreach { case (l, r) => l <> r }
@@ -135,6 +134,13 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     for (i <- 0 until maxPipeDepth) {
       io.pipe_hazards(i).valid       := pipe_valids(i)
       io.pipe_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
+    }
+
+    // Compress instructions need special handling
+    val permFU = pipe_fus.map(_._1).collect { case f: PermuteUnit => f }.headOption.foreach { fu =>
+      when (fu.io.pipe(0).valid) {
+        io.pipe_hazards(0).bits.eg := fu.io.write.bits.eg
+      }
     }
   }
 

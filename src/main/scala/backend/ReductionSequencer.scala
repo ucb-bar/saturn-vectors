@@ -14,6 +14,7 @@ class ReductionSequencerIO(implicit p: Parameters) extends SequencerIO(Bool()) {
   val rvs = new VectorReadIO
 
   val acc_data = Decoupled(UInt(dLen.W))
+  val acc_init = Output(UInt(dLen.W))
   val acc_init_resp = Input(UInt(dLen.W))
   val acc_fu_resp = Input(Valid(new VectorWrite(dLen)))
 
@@ -33,6 +34,7 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
   val acc_e0 = Reg(Bool())
   val acc_busy = Reg(Bool())
   val acc = Reg(Vec(dLenB, UInt(8.W)))
+  val acc_init_sel = Reg(Vec(6, Bool()))
 
   val vd_eew = inst.vconfig.vtype.vsew + inst.wide_vd
 
@@ -68,6 +70,13 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
       (acc_init_fp_pos, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosFPUInt(sew))})(dis_vd_eew)),
       (acc_init_fp_neg, VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(dis_vd_eew))
     )).asTypeOf(Vec(dLenB, UInt(8.W)))
+
+    acc_init_sel(0) := dis_ctrl.bool(AccInitZeros)
+    acc_init_sel(1) := dis_ctrl.bool(AccInitOnes)
+    acc_init_sel(2) := dis_ctrl.bool(AccInitPos)
+    acc_init_sel(3) := dis_ctrl.bool(AccInitNeg)
+    acc_init_sel(4) := acc_init_fp_pos
+    acc_init_sel(5) := acc_init_fp_neg
   }
 
   val raw_hazard = (UIntToOH(io.rvs.req.bits.eg) & io.older_writes) =/= 0.U
@@ -86,6 +95,14 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
   io.iss.valid := false.B
   io.iss.bits := DontCare
 
+  io.acc_init := Mux1H(acc_init_sel, Seq(
+    0.U(dLen.W),
+    ~(0.U(dLen.W)),
+    VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosUInt(sew))})(vd_eew),
+    VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegUInt(sew))})(vd_eew),
+    VecInit.tabulate(4)({sew => Fill(dLenB >> sew, maxPosFPUInt(sew))})(vd_eew),
+    VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)
+  ))
 
   when (io.rvs.req.fire) {
     val v0_mask = eewByteMask(vd_eew)
