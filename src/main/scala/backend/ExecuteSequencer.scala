@@ -294,24 +294,26 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
 
 
   when (io.iss.fire && !tail) {
-    when (next_is_new_eg(eidx, next_eidx, vd_eew, inst.writes_mask) && !inst.reduction && !compress && vParams.enableChaining.B) {
-      val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
-      wvd_mask  := wvd_mask  & ~wvd_clr_mask
-    }
-    when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_vs2_mask) && !(inst.reduction && head) && !rgather_v && !rgatherei16 && vParams.enableChaining.B) {
-      rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.bits.eg)
-    }
-    when (rgather_ix && vParams.enableChaining.B) {
-      rvs2_mask := 0.U
-    }
-    when (next_is_new_eg(eidx, next_eidx, vs1_eew, inst.reads_vs1_mask) && vParams.enableChaining.B) {
-      rvs1_mask := rvs1_mask & ~UIntToOH(io.rvs1.bits.eg)
-    }
-    when (next_is_new_eg(eidx, next_eidx, vs3_eew, false.B) && vParams.enableChaining.B) {
-      rvd_mask  := rvd_mask  & ~UIntToOH(io.rvd.bits.eg)
-    }
-    when (next_is_new_eg(eidx, next_eidx, 0.U    , true.B) && vParams.enableChaining.B) {
-      rvm_mask  := rvm_mask  & ~UIntToOH(io.rvm.bits.eg)
+    if (vParams.enableChaining) {
+      when (next_is_new_eg(eidx, next_eidx, vd_eew, inst.writes_mask) && !inst.reduction && !compress) {
+        val wvd_clr_mask = UIntToOH(io.iss.bits.wvd_eg)
+        wvd_mask  := wvd_mask  & ~wvd_clr_mask
+      }
+      when (next_is_new_eg(eidx, next_eidx, vs2_eew, inst.reads_vs2_mask) && !(inst.reduction && head) && !rgather_v && !rgatherei16) {
+        rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.bits.eg)
+      }
+      when (rgather_ix) {
+        rvs2_mask := 0.U
+      }
+      when (next_is_new_eg(eidx, next_eidx, vs1_eew, inst.reads_vs1_mask)) {
+        rvs1_mask := rvs1_mask & ~UIntToOH(io.rvs1.bits.eg)
+      }
+      when (next_is_new_eg(eidx, next_eidx, vs3_eew, false.B)) {
+        rvd_mask  := rvd_mask  & ~UIntToOH(io.rvd.bits.eg)
+      }
+      when (next_is_new_eg(eidx, next_eidx, 0.U    , true.B)) {
+        rvm_mask  := rvm_mask  & ~UIntToOH(io.rvm.bits.eg)
+      }
     }
 
     eidx := next_eidx

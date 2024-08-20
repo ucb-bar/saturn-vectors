@@ -84,11 +84,13 @@ class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]
   io.iss.bits.vat := inst.vat
 
   when (io.iss.fire && !tail) {
-    when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B) && vParams.enableChaining.B) {
-      rvd_mask := rvd_mask & ~UIntToOH(io.rvd.bits.eg)
-    }
-    when (next_is_new_eg(eidx, next_eidx, 0.U, true.B) && vParams.enableChaining.B) {
-      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.bits.eg)
+    if (vParams.enableChaining) {
+      when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B)) {
+        rvd_mask := rvd_mask & ~UIntToOH(io.rvd.bits.eg)
+      }
+      when (next_is_new_eg(eidx, next_eidx, 0.U, true.B)) {
+        rvm_mask := rvm_mask & ~UIntToOH(io.rvm.bits.eg)
+      }
     }
     when (sidx === inst.seg_nf) {
       sidx := 0.U
