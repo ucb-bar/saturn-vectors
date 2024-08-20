@@ -122,7 +122,7 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
     }))
 
     val out = Decoupled(new Bundle {
-      val data = new StoreDataMicroOp
+      val data = new VectorStoreData
       val head = UInt(log2Ceil(dLenB).W)
       val tail = UInt(log2Ceil(dLenB).W)
     })
@@ -167,8 +167,6 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
   io.in.ready := !modes(in_sel)
   io.out.valid := modes(out_sel)
   val row_sel = out_row + sidxOff(out_sidx(out_sel), out_eew(out_sel))
-  io.out.bits.data.tail := DontCare
-  io.out.bits.data.vat := DontCare
   io.out.bits.data.stdata := Mux1H(UIntToOH(row_sel), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
   io.out.bits.data.stmask := Fill(dLenB, (Mux1H(UIntToOH(out_sel), mask) >> (out_row << out_eew(out_sel)))(0))
   io.out.bits.data.debug_id := out_id(out_sel)

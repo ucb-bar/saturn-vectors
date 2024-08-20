@@ -23,7 +23,6 @@ class WithShuttleVectorUnit(
       val vParams = params.copy(
         dLen=dLen,
         useScalarFPFMA = false,
-        useScalarFPMisc = false
       )
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
         core = tp.tileParams.core.copy(

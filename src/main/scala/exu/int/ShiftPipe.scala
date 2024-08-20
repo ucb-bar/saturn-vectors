@@ -184,7 +184,7 @@ case object ShiftPipeFactory extends FunctionalUnitFactory {
     SSRL.VV, SSRL.VX, SSRL.VI, SSRA.VV, SSRA.VX, SSRA.VI,
     // Zvbb
     ROL.VV, ROL.VX, ROR.VV, ROR.VX, ROR.VI, RORI.VI, WSLL.VV, WSLL.VX, WSLL.VI
-  )
+  ).map(_.pipelined(2))
   def generate(implicit p: Parameters) = new ShiftPipe()(p)
 }
 
@@ -200,7 +200,7 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
     supported_insns,
     Seq(UsesShift, ShiftsLeft, ScalingShift))
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
+  io.stall := false.B
 
   val shift_narrowing = vd_eew < rvs2_eew
   val shift_widening = vd_eew > rvs2_eew
@@ -224,7 +224,6 @@ class ShiftPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
   shift_arr.io.scaling   := ctrl.bool(ScalingShift)
   shift_arr.io.narrowing := shift_narrowing
 
-  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)

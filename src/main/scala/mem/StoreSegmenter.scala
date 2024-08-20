@@ -16,7 +16,7 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
 
     val compactor = Decoupled(new CompactorReq(dLenB))
     val compactor_data = Output(Vec(dLenB, new MaskedByte))
-    val stdata = Flipped(Decoupled(new StoreDataMicroOp))
+    val stdata = Flipped(Decoupled(new VectorStoreData))
   })
 
   val segbuf = Module(new StoreSegmentBuffer(vParams.doubleBufferSegments))

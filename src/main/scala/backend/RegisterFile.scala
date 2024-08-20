@@ -13,7 +13,6 @@ class OldestRRArbiter(val n: Int)(implicit p: Parameters) extends Module {
   val arb = Module(new RRArbiter(new VectorReadReq, n))
   io <> arb.io
   val oldest_oh = io.in.map(i => i.valid && i.bits.oldest)
-  //assert(PopCount(oldest_oh) <= 1.U)
   when (oldest_oh.orR) {
     io.chosen := VecInit(oldest_oh).asUInt
     io.out.valid := true.B
@@ -117,7 +116,7 @@ class RegisterFileBank(reads: Int, maskReads: Int, rows: Int, maskRows: Int)(imp
   }
 }
 
-class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrites: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrites: Int, maxDepth: Int)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val nBanks = vParams.vrfBanking
   // Support 1, 2, and 4 banks for the VRF
@@ -126,6 +125,7 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
   val io = IO(new Bundle {
     val read = MixedVec(reads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
     val mask_read = MixedVec(maskReads.map(rc => Vec(rc, Flipped(new VectorReadIO))))
+    val pipe_write_reqs = Vec(pipeWrites, Flipped(new VectorPipeWriteReqIO(maxDepth)))
 
     val pipe_writes = Vec(pipeWrites, Input(Valid(new VectorWrite(dLen))))
     val ll_writes = Vec(llWrites, Flipped(Decoupled(new VectorWrite(dLen))))
@@ -151,7 +151,30 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
 
   io.ll_writes.foreach(_.ready := false.B)
 
+  val req_stalls = WireInit(VecInit.fill(pipeWrites)(false.B))
+  for (i <- 0 until pipeWrites) {
+    io.pipe_write_reqs(i).available := !req_stalls(i)
+  }
   vrf.zipWithIndex.foreach { case (rf, i) =>
+    // Handle requests
+    val scheduler = Module(new PipeScheduler(pipeWrites*2, maxDepth))
+    for (j <- 0 until pipeWrites) {
+      val req = io.pipe_write_reqs(j)
+      scheduler.io.reqs(j).request := req.request && req.bank_sel(i) && req.oldest
+      scheduler.io.reqs(j).depth := req.pipe_depth
+      scheduler.io.reqs(j).fire := req.fire
+      when (scheduler.io.reqs(j).request && !scheduler.io.reqs(j).available) {
+        req_stalls(j) := true.B
+      }
+
+      scheduler.io.reqs(j+pipeWrites).request := req.request && req.bank_sel(i) && !req.oldest
+      scheduler.io.reqs(j+pipeWrites).depth := req.pipe_depth
+      scheduler.io.reqs(j+pipeWrites).fire := req.fire
+      when (scheduler.io.reqs(j+pipeWrites).request && !scheduler.io.reqs(j+pipeWrites).available) {
+        req_stalls(j) := true.B
+      }
+    }
+    // Handle the writes
     val bank_match = io.pipe_writes.map { w => (w.bits.bankId === i.U) && w.valid }
     val bank_write_data = Mux1H(bank_match, io.pipe_writes.map(_.bits.data))
     val bank_write_mask = Mux1H(bank_match, io.pipe_writes.map(_.bits.mask))

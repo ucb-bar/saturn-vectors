@@ -10,7 +10,7 @@ import saturn.common._
 import saturn.insns._
 
 case object MaskUnitFactory extends FunctionalUnitFactory {
-  def insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID)
+  def insns = Seq(MV_S_X, MV_X_S, POPC, FIRST, FMV_S_F, FMV_F_S, MSBF, MSOF, MSIF, IOTA, ID).map(_.pipelined(1))
   def generate(implicit p: Parameters) = new MaskUnit()(p)
 }
 
@@ -26,7 +26,7 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
 
   def accepts(op: ExecuteMicroOp): Bool = (op.opff6.isOneOf(OPFFunct6.wrfunary0) || op.opmf6.isOneOf(OPMFunct6.wrxunary0, OPMFunct6.munary0)) && !scalar_wb_busy
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2, supported_insns, Nil).matched && !scalar_wb_busy && !io.pipe(0).bits.tail
+  io.stall := scalar_wb_busy || io.pipe(0).bits.tail
 
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
@@ -116,7 +116,6 @@ class MaskUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   io.scalar_write.bits.fp := scalar_wb_fp
   io.scalar_write.bits.size := scalar_wb_size
 
-  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(0).valid && (rxunary0 || rfunary0 || munary0)
   io.write.bits.eg   := op.wvd_eg
   io.write.bits.mask := Mux1H(Seq(

@@ -5,8 +5,14 @@ import chisel3.util._
 import org.chipsalliance.cde.config._
 import saturn.common._
 
-class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMicroOp)(p) {
+class LoadSequencerIO(implicit p: Parameters) extends SequencerIO(new LoadRespMicroOp) {
+  val rvm  = Decoupled(new VectorReadReq)
+}
+
+class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()(p) {
   def accepts(inst: VectorIssueInst) = inst.vmu && !inst.opcode(5)
+
+  val io = IO(new LoadSequencerIO)
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
@@ -49,7 +55,7 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
   io.seq_hazard.bits.vat     := inst.vat
 
-  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits.eg), 0.U)
+  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.bits.eg), 0.U)
   val vd_write_oh = UIntToOH(io.iss.bits.wvd_eg)
 
   val raw_hazard = (vm_read_oh & io.older_writes) =/= 0.U
@@ -57,27 +63,30 @@ class LoadSequencer(implicit p: Parameters) extends PipeSequencer(new LoadRespMi
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-  io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
-  io.rvm.req.bits.oldest := inst.vat === io.vat_head
+  io.rvm.valid := valid && renvm
+  io.rvm.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
+  io.rvm.bits.oldest := inst.vat === io.vat_head
 
-  io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready)
+  io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.ready)
   io.iss.bits.wvd_eg    := getEgId(inst.rd + (sidx << inst.emul), eidx, inst.mem_elem_size, false.B)
   io.iss.bits.tail       := tail
   io.iss.bits.vat        := inst.vat
   io.iss.bits.debug_id   := inst.debug_id
+  io.iss.bits.eidx       := eidx
 
   val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
   val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
-  val vm_mask   = Mux(!renvm, ~(0.U(dLenB.W)), get_vm_mask(io.rvm.resp, eidx, inst.mem_elem_size))
-  io.iss.bits.wmask := Mux(sidx > inst.segend && inst.seg_nf =/= 0.U, 0.U, head_mask & tail_mask & vm_mask)
+
+  io.iss.bits.eidx_wmask := Mux(sidx > inst.segend && inst.seg_nf =/= 0.U, 0.U, head_mask & tail_mask)
+  io.iss.bits.use_rmask := renvm
+  io.iss.bits.elem_size := inst.mem_elem_size
 
   when (io.iss.fire && !tail) {
     when (next_is_new_eg(eidx, next_eidx, inst.mem_elem_size, false.B) && vParams.enableChaining.B) {
       wvd_mask := wvd_mask & ~vd_write_oh
     }
     when (next_is_new_eg(eidx, next_eidx, 0.U, true.B) && vParams.enableChaining.B) {
-      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits.eg)
+      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.bits.eg)
     }
     when (sidx === inst.seg_nf) {
       sidx := 0.U

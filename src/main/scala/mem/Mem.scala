@@ -70,12 +70,28 @@ class VectorSGMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVect
   val resp = Vec(vParams.vsgPorts, Input(Valid(new MemResponse(1, sgmemTagBits))))
 }
 
+class VectorStoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val stdata = UInt(dLen.W)
+  val stmask = UInt(dLenB.W)
+  val debug_id = UInt(debugIdSz.W)
+  def asMaskedBytes = {
+    val bytes = Wire(Vec(dLenB, new MaskedByte))
+    for (i <- 0 until dLenB) {
+      bytes(i).data := stdata(((i+1)*8)-1,i*8)
+      bytes(i).mask := stmask(i)
+      bytes(i).debug_id := debug_id
+    }
+    bytes
+  }
+}
+
+
 class VectorMemDatapathIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val lresp = Decoupled(new Bundle {
     val data = UInt(dLen.W)
     val debug_id = UInt(debugIdSz.W)
   })
-  val sdata = Flipped(Decoupled(new StoreDataMicroOp))
+  val sdata = Flipped(Decoupled(new VectorStoreData))
 
   val mask_pop = Decoupled(new CompactorReq(dLenB))
   val mask_data = Input(Vec(dLenB, Bool()))

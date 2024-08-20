@@ -16,18 +16,18 @@ case object FPCmpFactory extends FunctionalUnitFactory {
     MFEQ.VV, MFEQ.VF, MFNE.VV, MFNE.VF,
     MFLT.VV, MFLT.VF, MFLE.VV, MFLE.VF,
     MFGT.VF, MFGE.VF,
-    FREDMIN.VV, FREDMAX.VV)
+    FREDMIN.VV, FREDMAX.VV).map(_.pipelined(1))
   def generate(implicit p: Parameters) = new FPCompPipe()(p)
 }
 
 class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
   val supported_insns = FPCmpFactory.insns
 
+  io.stall := false.B
   io.set_vxsat := false.B
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U,
     supported_insns, Seq(WritesAsMask, FPComp, FPCompMin, FPMEQ, FPMNE, FPMLT, FPMGT, FPSgnj))
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
 
   val ctrl_sgnjn = io.pipe(0).bits.funct6(0)
   val ctrl_sgnjx = io.pipe(0).bits.funct6(1)
@@ -151,5 +151,4 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
   io.set_fflags.bits := Mux(rvd_eew === 3.U, exceptions(1), exceptions(0))
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
-  io.pipe0_stall := false.B
 }

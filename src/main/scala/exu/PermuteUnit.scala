@@ -16,7 +16,7 @@ case object PermuteUnitFactory extends FunctionalUnitFactory {
     RGATHER_VV, RGATHER_VI, RGATHER_VX,
     RGATHEREI16, COMPRESS.VV,
     MVNRR
-  )
+  ).map(_.pipelined(1))
 
   def generate(implicit p: Parameters) = new PermuteUnit()(p)
 }
@@ -24,8 +24,7 @@ case object PermuteUnitFactory extends FunctionalUnitFactory {
 class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = PermuteUnitFactory.insns
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
-    supported_insns, Nil).matched
+  io.stall := false.B
 
   val wvd_reg = Reg(UInt(5.W))
   val result_reg = Reg(UInt(64.W))
@@ -83,7 +82,6 @@ class PermuteUnit(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
-  io.pipe0_stall     := false.B
   io.write.valid := io.pipe(0).valid && (!compress || compress_bit)
   io.write.bits.eg := Mux(compress,
     getEgId(compress_wvd, compress_eidx, io.pipe(0).bits.rvs2_eew, false.B),

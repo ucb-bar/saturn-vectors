@@ -10,7 +10,7 @@ import saturn.common._
 import saturn.insns._
 
 case object FPConvFactory extends FunctionalUnitFactory {
-  def insns = Seq(FCVT_SGL, FCVT_NRW, FCVT_WID)
+  def insns = Seq(FCVT_SGL, FCVT_NRW, FCVT_WID).map(_.pipelined(2))
   def generate(implicit p: Parameters) = new FPConvPipe()(p)
 }
 
@@ -18,9 +18,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   val supported_insns = FPConvFactory.insns
 
   io.set_vxsat := false.B
-
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U,
-    supported_insns, Nil).matched
+  io.stall := false.B
 
   val rs1 = io.pipe(0).bits.rs1
   val ctrl_widen = rs1(3)
@@ -172,5 +170,4 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   io.set_fflags := DontCare
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
-  io.pipe0_stall := false.B
 }

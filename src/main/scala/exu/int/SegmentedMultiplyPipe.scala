@@ -19,7 +19,7 @@ case class IntegerMultiplyFactory(depth: Int, segmented: Boolean) extends Functi
     MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
     WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
-    SMUL.VV, SMUL.VX)
+    SMUL.VV, SMUL.VX).map(_.pipelined(depth))
   def insns = if (segmented) base_insns else base_insns.map(_.elementWise)
   def generate(implicit p: Parameters) = if (segmented) {
     new SegmentedMultiplyPipe(depth)(p)
@@ -31,8 +31,7 @@ case class IntegerMultiplyFactory(depth: Int, segmented: Boolean) extends Functi
 class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) {
   val supported_insns = IntegerMultiplyFactory(depth, true).insns
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
-  io.set_vxsat := false.B
+  io.stall := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
@@ -113,7 +112,6 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   val vxsat = Mux(ctrl_smul, smul_sat, 0.U) & io.pipe(depth-2).bits.wmask
   val pipe_vxsat = Pipe(io.pipe(depth-2).valid, vxsat, 1).bits
 
-  io.pipe0_stall     := false.B
   io.write.valid     := io.pipe(depth-1).valid
   io.write.bits.eg   := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.data := pipe_out

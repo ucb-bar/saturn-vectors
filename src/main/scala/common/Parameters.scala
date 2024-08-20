@@ -8,6 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy.{BufferParams}
 import saturn.exu._
+import saturn.insns.{FUSel}
 
 object VectorParams {
 
@@ -42,8 +43,11 @@ object VectorParams {
   // code sequences
   def genParams = dspParams.copy(
     issStructure = VectorIssueStructure.Split,
+    vrissqEntries = 1,
     vlifqEntries = 16,
-    vlrobEntries = 16
+    vlrobEntries = 16,
+    vliqEntries = 4,
+    vsiqEntries = 6
   )
 
   // multiFMAParams:
@@ -99,7 +103,6 @@ object VectorParams {
     vxissqEntries = 8,
     vpissqEntries = 8,
     useSegmentedIMul = true,
-    useScalarFPMisc = false,
     useScalarFPFMA = false,
     vrfBanking = 4,
     issStructure = VectorIssueStructure.Split
@@ -110,7 +113,9 @@ case class VXSequencerParams(
   name: String,
   fus: Seq[FunctionalUnitFactory]
 ) {
-  def insns = fus.map(_.insns).flatten
+  def insns = fus.zipWithIndex.map { case (fu, i) =>
+    fu.insns.map(_.append(FUSel(fus.size)((1 << i).U)))
+  }.flatten
 }
 
 case class VXIssuePathParams(
@@ -134,15 +139,8 @@ object VXFunctionalUnitGroups {
     IntegerMultiplyFactory(pipeDepth, useSegmented)
   )
 
-  def allIntegerFUs(idivDoesImul: Boolean, imaDepth: Int, useSegmentedImul: Boolean) = (
-    integerFUs(idivDoesImul) ++ integerMAC(imaDepth, useSegmentedImul)
-  )
-
   def sharedFPFMA(pipeDepth: Int) = Seq(
     FPFMAFactory(pipeDepth, true)
-  )
-  def sharedFPMisc = Seq(
-    SharedFPMiscFactory
   )
   def fpFMA(pipeDepth: Int) = Seq(
     FPFMAFactory(pipeDepth, false)
@@ -153,9 +151,9 @@ object VXFunctionalUnitGroups {
     FPConvFactory
   )
 
-  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, useScalarFPMisc: Boolean) = (
+  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean) = (
     (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth)) ++
-    (if (useScalarFPMisc) sharedFPMisc else fpMisc)
+    fpMisc
   )
 }
 
@@ -173,8 +171,9 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("fp_int", (
-            allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul) ++
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc)
+            integerFUs(params.useIterativeIMul) ++
+            (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul)) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA)
           ))
         )
       )
@@ -188,8 +187,11 @@ object VectorIssueStructure {
         name = "fp_int",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("int", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc))
+          VXSequencerParams("int", integerFUs(params.useIterativeIMul)),
+          VXSequencerParams("fp",
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA) ++
+            (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
+          )
         )
       )
       Seq(fp_int_path)
@@ -202,14 +204,17 @@ object VectorIssueStructure {
         name = "int",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("int", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
+          VXSequencerParams("int", integerFUs(params.useIterativeIMul))
         )
       )
       val fp_path = VXIssuePathParams(
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc))
+          VXSequencerParams("fp",
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA) ++
+            (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
+          )
         )
       )
       Seq(int_path, fp_path)
@@ -223,14 +228,17 @@ object VectorIssueStructure {
         name = "int",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("int", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
+          VXSequencerParams("int", integerFUs(params.useIterativeIMul))
         )
       )
       val fp_path = VXIssuePathParams(
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp0", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc)),
+          VXSequencerParams("fp0",
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA) ++
+            (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
+          ),
           VXSequencerParams("fp1", fpFMA(params.fmaPipeDepth))
         )
       )
@@ -245,15 +253,15 @@ object VectorIssueStructure {
         name = "int",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("int0", allIntegerFUs(params.useIterativeIMul, params.imaPipeDepth, params.useSegmentedIMul)),
-          VXSequencerParams("int1", integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
+          VXSequencerParams("int0", integerFUs(false) ++ integerMAC(params.imaPipeDepth, true)),
+          VXSequencerParams("int1", integerMAC(params.imaPipeDepth, true))
         )
       )
       val fp_path = VXIssuePathParams(
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useScalarFPMisc))
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA))
         )
       )
       Seq(int_path, fp_path)
@@ -284,6 +292,7 @@ case class VectorParams(
   vsissqEntries: Int = 0,
   vxissqEntries: Int = 0,
   vpissqEntries: Int = 0,
+  vrissqEntries: Int = 0,
 
   dLen: Int = 64,
   vatSz: Int = 3,
@@ -291,10 +300,9 @@ case class VectorParams(
 
   useSegmentedIMul: Boolean = false,
   useScalarFPFMA: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
-  useScalarFPMisc: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
   useIterativeIMul: Boolean = false,
   fmaPipeDepth: Int = 4,
-  imaPipeDepth: Int = 3,
+  imaPipeDepth: Int = 4,
 
   // for comparisons only
   hazardingMultiplier: Int = 0,
@@ -400,5 +408,12 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     VecInit(mask.asBools.grouped(1 << vParams.hazardingMultiplier).map { g =>
       Fill(1 << vParams.hazardingMultiplier, g.orR)
     }.toSeq).asUInt
+  }
+
+  def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {
+    val vm_off  = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
+    val vm_eidx = (eidx & ~(vm_off >> eew))(log2Ceil(dLen)-1,0)
+    val vm_resp = (mask_resp >> vm_eidx)(dLenB-1,0)
+    Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
   }
 }

@@ -94,7 +94,7 @@ case class FPFMAFactory(depth: Int, sharedScalar: Boolean) extends FunctionalUni
     FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV
-  )
+  ).map(_.pipelined(depth))
   def insns = if (sharedScalar) base_insns.map(_.elementWise) else base_insns
   def generate(implicit p: Parameters) = if (sharedScalar) {
     new SharedScalarElementwiseFPFMA(depth)(p)
@@ -106,8 +106,7 @@ case class FPFMAFactory(depth: Int, sharedScalar: Boolean) extends FunctionalUni
 class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
   val supported_insns = FPFMAFactory(depth, false).insns
 
-  io.iss.ready := new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, supported_insns, Nil).matched
-
+  io.stall := false.B
   io.set_vxsat := false.B
 
   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
@@ -201,5 +200,4 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   io.set_fflags.bits := fma_pipes.map(pipe => pipe.exc).reduce(_ | _)
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
-  io.pipe0_stall := false.B
 }

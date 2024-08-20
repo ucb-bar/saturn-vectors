@@ -6,13 +6,20 @@ import org.chipsalliance.cde.config._
 import saturn.common._
 import saturn.insns._
 
-class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends PipeSequencer(new PermuteMicroOp)(p) {
+class PermuteSequencerIO(implicit p: Parameters) extends SequencerIO(new PermuteMicroOp) {
+  val rvs2 = Decoupled(new VectorReadReq)
+  val rvm  = Decoupled(new VectorReadReq)
+}
+
+class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends Sequencer[PermuteMicroOp]()(p) {
   def accepts(inst: VectorIssueInst) = {
     val needs_mask = inst.vmu && (!inst.vm && inst.mop =/= mopUnit)
     val needs_index = inst.vmu && inst.mop(0)
-    val arith = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns.filter(_.props.contains(UsesPermuteSeq.Y)), Nil).matched
+    val arith = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns, Seq(UsesPermuteSeq)).bool(UsesPermuteSeq)
     needs_mask || needs_index || arith
   }
+
+  val io = IO(new PermuteSequencerIO)
 
   val valid = RegInit(false.B)
   val inst  = Reg(new BackendIssueInst)
@@ -70,29 +77,27 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   io.seq_hazard.bits.wintent := false.B
   io.seq_hazard.bits.vat := inst.vat
 
-  val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.req.bits.eg), 0.U)
-  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.req.bits.eg), 0.U)
+  val vs2_read_oh = Mux(renv2, UIntToOH(io.rvs2.bits.eg), 0.U)
+  val vm_read_oh  = Mux(renvm, UIntToOH(io.rvm.bits.eg), 0.U)
 
   val raw_hazard = ((vm_read_oh | vs2_read_oh) & io.older_writes) =/= 0.U
   val data_hazard = raw_hazard
 
   val oldest = inst.vat === io.vat_head
 
-  io.rvs2.req.valid := valid && renv2
-  io.rvs2.req.bits.eg := getEgId(rs2, eidx, incr_eew, false.B)
-  io.rvs2.req.bits.oldest := oldest
-  io.rvm.req.valid := valid && renvm
-  io.rvm.req.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
-  io.rvm.req.bits.oldest := oldest
+  io.rvs2.valid := valid && renv2
+  io.rvs2.bits.eg := getEgId(rs2, eidx, incr_eew, false.B)
+  io.rvs2.bits.oldest := oldest
+  io.rvm.valid := valid && renvm
+  io.rvm.bits.eg := getEgId(0.U, eidx, 0.U, true.B)
+  io.rvm.bits.oldest := oldest
 
-  io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.req.ready) && (!renv2 || io.rvs2.req.ready)
+  io.iss.valid := valid && !data_hazard && (!renvm || io.rvm.ready) && (!renv2 || io.rvs2.ready)
   io.iss.bits.renv2     := renv2
   io.iss.bits.renvm     := renvm
-  io.iss.bits.rvs2_data := io.rvs2.resp
   io.iss.bits.rvs2_eew  := incr_eew
   io.iss.bits.eidx      := eidx
   io.iss.bits.vl        := eff_vl
-  io.iss.bits.rvm_data  := Mux(renvm, io.rvm.resp, ~(0.U(dLen.W)))
   io.iss.bits.vmu       := inst.vmu
   io.iss.bits.tail      := tail
 
@@ -101,7 +106,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
       rvs2_mask := rvs2_mask & ~vs2_read_oh
     }
     when (next_is_new_eg(eidx, next_eidx, 0.U, true.B) && vParams.enableChaining.B) {
-      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.req.bits.eg)
+      rvm_mask := rvm_mask & ~UIntToOH(io.rvm.bits.eg)
     }
     eidx := next_eidx
   }
