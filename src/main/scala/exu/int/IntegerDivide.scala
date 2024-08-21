@@ -82,7 +82,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
 
   io.hazard.valid       := valid
   io.hazard.bits.eg     := op.wvd_eg
-
+  io.hazard.bits.vat := op.vat
 
   val write_elem = WireInit(div.io.resp.bits.data)
   val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, write_elem((8<<eew)-1,0)) })(op.rvd_eew)

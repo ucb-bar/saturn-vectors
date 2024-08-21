@@ -275,6 +275,7 @@ class PermuteMicroOpWithData(implicit p: Parameters) extends PermuteMicroOp {
 
 class PipeHazard(pipe_depth: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val eg = UInt(log2Ceil(egsTotal).W)
+  val vat = UInt(vParams.vatSz.W)
   def eg_oh = UIntToOH(eg)
 }
 

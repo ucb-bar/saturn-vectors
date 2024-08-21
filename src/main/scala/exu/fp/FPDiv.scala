@@ -281,6 +281,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   io.hazard.valid := valid
   io.hazard.bits.eg := op.wvd_eg
+  io.hazard.bits.vat := op.vat
 
   when (op.rvs1_eew === 3.U) {
     divSqrt.io.a := Mux(ctrl.bool(FPSwapVdV2) && div_op, FType.D.recode(rvs1_bits), FType.D.recode(rvs2_bits))

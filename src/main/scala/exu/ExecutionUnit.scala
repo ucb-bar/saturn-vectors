@@ -133,6 +133,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
     when (pipe_valids.orR) { io.busy := true.B }
     for (i <- 0 until maxPipeDepth) {
       io.pipe_hazards(i).valid       := pipe_valids(i)
+      io.pipe_hazards(i).bits.vat    := pipe_bits(i).vat
       io.pipe_hazards(i).bits.eg     := pipe_bits(i).wvd_eg
     }
 

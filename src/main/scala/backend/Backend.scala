@@ -177,6 +177,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR
 
+  var flat_vxu_id: Int = 0
+
   for ((group, i) <- issGroups.zipWithIndex) {
     val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
     val otherIssqs = otherIssGroups.map(_.issq)
@@ -206,11 +208,28 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       }.reduce(_|_)
       val older_rintents = older_issq_rintents | older_seq_rintents
 
-      val older_pipe_writes = vxus.flatten.map(_.io.pipe_hazards.toSeq).flatten.map { h =>
+      val (other_vxus, same_vxu): (Seq[ExecutionUnit], Option[ExecutionUnit]) = seq match {
+        case s: ExecuteSequencer => {
+          val other_vxus = flat_vxus.zipWithIndex.filter(_._2 != flat_vxu_id).map(_._1)
+          val same_vxu = flat_vxus(flat_vxu_id)
+          flat_vxu_id += 1
+          (other_vxus, Some(same_vxu))
+        }
+        case _ => (flat_vxus, None)
+      }
+
+      // Older writes from adjacent VXUs will always induce WAW/RAW, but older
+      // writes from the same VXU may be from the same instruction, and no WAR
+      // or RAW is possible
+      val older_other_pipe_writes = other_vxus.map(_.io.pipe_hazards.toSeq).flatten.map { h =>
         Mux(h.valid, h.bits.eg_oh, 0.U)
       }.reduce(_|_)
+      val older_same_pipe_writes = same_vxu.map(_.io.pipe_hazards.toSeq.map { h =>
+        Mux(h.valid && h.bits.vat =/= vat, h.bits.eg_oh, 0.U)
+      }.reduce(_|_)).getOrElse(0.U)
+      val older_pipe_writes = older_other_pipe_writes | older_same_pipe_writes
 
-      val older_iter_writes = vxus.flatten.map(_.io.iter_hazards.toSeq).flatten.map { h =>
+      val older_iter_writes = flat_vxus.map(_.io.iter_hazards.toSeq).flatten.map { h =>
         Mux(h.valid, h.bits.eg_oh, 0.U)
       }.reduce(_|_)
 
