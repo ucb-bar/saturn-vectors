@@ -56,8 +56,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries, 1))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries, 1))
-  val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 1))
-  val vrissq = Module(new IssueQueue(vParams.vrissqEntries, 1))
+  val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 2)) // permute/reduction
   val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size)).suggestName(s"vxissq_${q.name}"))
 
   val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus)).suggestName(s"vxu${s.name}")))
@@ -73,7 +72,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   ))
 
   val allSeqs = Seq(vls, vss, vps, vrs) ++ vxs.flatten
-  val allIssQs = Seq(vlissq, vsissq, vpissq, vrissq) ++ vxissqs
+  val allIssQs = Seq(vlissq, vsissq, vpissq) ++ vxissqs
 
   val flat_vxs = vxs.flatten
   require(flat_vxs.size == flat_vxus.size)
@@ -98,8 +97,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val issGroups = Seq(
     IssueGroup(vlissq, Seq(vls)),
     IssueGroup(vsissq, Seq(vss)),
-    IssueGroup(vpissq, Seq(vps)),
-    IssueGroup(vrissq, Seq(vrs))
+    IssueGroup(vpissq, Seq(vps, vrs)),
   ) ++ (vxissqs.zip(vxs).map { case (q, seqs) =>
     IssueGroup(q, seqs)
   })
@@ -145,14 +143,12 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vsissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop === mopUnit
 
   // Permute source sequencer
-  vpissq.io.enq.bits.renv2 := vdq.io.deq.bits.mop(0) || !vdq.io.deq.bits.vmu
-  vpissq.io.enq.bits.renvd := true.B
+  vpissq.io.enq.bits.renv1 := !vdq.io.deq.bits.vmu && dis_ctrl.bool(Reduction)
+  vpissq.io.enq.bits.renv2 := (vdq.io.deq.bits.mop(0) || (!vdq.io.deq.bits.vmu && !dis_ctrl.bool(Reduction)))
+  vpissq.io.enq.bits.renvd := !dis_ctrl.bool(Reduction)
   vpissq.io.enq.bits.renvm := !vdq.io.deq.bits.vm && vdq.io.deq.bits.mop =/= mopUnit && vdq.io.deq.bits.vmu
+  vpissq.io.enq.bits.wide_vd := dis_ctrl.bool(Wide2VD) && !vdq.io.deq.bits.vmu
   vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && (vdq.io.deq.bits.opif6 === OPIFunct6.rgather || (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.opif6 === OPIFunct6.rgatherei16))
-
-  // Reduction sequencer
-  vrissq.io.enq.bits.renv1 := true.B
-  vrissq.io.enq.bits.wide_vd := dis_ctrl.bool(Wide2VD)
 
   // Execute sequencers
   vxissqs.foreach { vxissq =>
