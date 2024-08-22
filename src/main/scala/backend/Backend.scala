@@ -49,8 +49,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
   vdq.io.enq <> io.dis
 
-  val perm_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
-
   val xissParams = vParams.issStructure.generate(vParams)
   val all_supported_insns = xissParams.map(_.insns).flatten
 
@@ -417,7 +415,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vmu_index_q = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
   val vmu_mask_q = Module(new Compactor(dLenB, dLenB, Bool(), false))
-  val perm_q = Module(new DCEQueue(new PermuteMicroOpWithData, 2))
+  val vgu = Module(new GatherUnit)
 
   vmu_index_q.io.push_data      := vrf.io.vps.rvs2.resp.asTypeOf(Vec(dLenB, UInt(8.W)))
   vmu_index_q.io.push.bits.head := vps.io.iss.bits.eidx << vps.io.iss.bits.rvs2_eew
@@ -435,7 +433,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   vps.io.iss.ready := Mux(vps.io.iss.bits.vmu,
     vmu_index_q.io.push.ready && vmu_mask_q.io.push.ready,
-    perm_q.io.enq.ready)
+    vgu.io.vps.ready)
 
   vmu_index_q.io.push.valid := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renv2 && vps.io.iss.ready
   vmu_mask_q.io.push.valid  := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renvm && vps.io.iss.ready
@@ -458,26 +456,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // ==================================
   // Connect Permute-to-Execute path
 
-  perm_q.io.enq.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
-  perm_q.io.enq.bits.viewAsSupertype(new PermuteMicroOp) := vps.io.iss.bits
-  perm_q.io.enq.bits.rvs2_data := vrf.io.vps.rvs2.resp
-
-  perm_q.io.deq.ready := perm_buffer.io.push.ready
-  perm_buffer.io.push.valid := perm_q.io.deq.valid
-  perm_buffer.io.push.bits.head := perm_q.io.deq.bits.eidx << perm_q.io.deq.bits.rvs2_eew
-  perm_buffer.io.push.bits.tail := Mux(perm_q.io.deq.bits.tail,
-    perm_q.io.deq.bits.vl << perm_q.io.deq.bits.rvs2_eew,
-    0.U)
-  perm_buffer.io.push_data := perm_q.io.deq.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  vgu.io.vps.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
+  vgu.io.vps.bits.viewAsSupertype(new PermuteMicroOp) := vps.io.iss.bits
+  vgu.io.vps.bits.rvs2_data := vrf.io.vps.rvs2.resp
 
   // Only the first VSU can handle permutations TODO clean this up
-  flat_vxs.foreach(_.io.perm.req.ready := false.B)
-  flat_vxs.foreach(_.io.perm.data := DontCare)
+  flat_vxs.foreach(_.io.vgu.req.ready := false.B)
+  flat_vxs.foreach(_.io.vgu.data := DontCare)
 
   val perm_vxs = flat_vxs.filter(_.usesPerm)
   require(perm_vxs.size == 1)
-  perm_buffer.io.pop <> perm_vxs.head.io.perm.req
-  perm_vxs.head.io.perm.data := perm_buffer.io.pop_data.asUInt
+  vgu.io.vxs <> perm_vxs.head.io.vgu
 
   // =================================
   // Connect ReductionSeq to sequencer

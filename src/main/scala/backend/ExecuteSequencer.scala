@@ -16,10 +16,7 @@ class ExecuteSequencerIO(maxDepth: Int, nFUs: Int)(implicit p: Parameters) exten
   val rvd  = Decoupled(new VectorReadReq)
   val rvm  = Decoupled(new VectorReadReq)
   val pipe_write_req  = new VectorPipeWriteReqIO(maxDepth)
-  val perm = new Bundle {
-    val req = Decoupled(new CompactorReq(dLenB))
-    val data = Input(UInt(dLen.W))
-  }
+  val vgu = Flipped(new GatherToExecuteIO)
 
   val acc_valid = Input(Bool())
   val acc_ready = Output(Bool())
@@ -176,7 +173,22 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-  val rgather_eidx = get_max_offset(Mux(rgather_ix && rgather, uscalar, io.perm.data & eewBitMask(vs1_eew)))
+
+  // val rgatherv_e0_eg = getEgId(0.U, rgatherv_e0_eidx, vs1_eew, false.B)
+  // val rgatherv_same_eidxs = VecInit((0 until 4).map { eew =>
+  //   val eidxs = io.vgu.data.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W)))
+  //   val egs = eidxs.map { x => getEgId(0.U, x, eew, false.B) }
+  //   if (egs.size == 1) { 0.U } else {
+  //     val tail_matches = VecInit(egs.tail.map(_ === egs.head)).asUInt
+  //     PriorityEncoderOH(0.U(1.W) ## tail_matches) - 1.U
+  //   }
+  // })(vs1_eew)
+
+  // val rgatherv_same_eidxs_debug = WireInit(rgatherv_same_eidxs)
+  // dontTouch(rgatherv_same_eidxs_debug)
+
+  val rgatherv_e0_eidx = io.vgu.data & eewBitMask(vs1_eew)
+  val rgather_eidx = get_max_offset(Mux(rgather_ix, uscalar, rgatherv_e0_eidx))
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
   val rvs2_eidx = Mux(rgather || rgatherei16, rgather_eidx, eidx)
   io.rvs1.bits.eg := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_vs1_mask)
@@ -216,8 +228,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     next_eidx > slide_offset,
     eidx +& slide_offset < inst.vconfig.vtype.vlMax))
 
-  io.perm.req.bits.head := (if (usesPerm) perm_head else 0.U)
-  io.perm.req.bits.tail := (if (usesPerm) perm_tail else 0.U)
+  io.vgu.req.bits.head := (if (usesPerm) perm_head else 0.U)
+  io.vgu.req.bits.tail := (if (usesPerm) perm_tail else 0.U)
 
   val iss_valid = (valid &&
     !data_hazard &&
@@ -225,12 +237,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     !(renv2 && !io.rvs2.ready) &&
     !(renvd && !io.rvd.ready) &&
     !(renvm && !io.rvm.ready) &&
-    !(read_perm_buffer && !io.perm.req.ready) &&
+    !(read_perm_buffer && !io.vgu.req.ready) &&
     !(pipelined && !io.pipe_write_req.available) &&
     !(pipelined && !exu_scheduler.io.reqs(0).available) &&
     !(renacc && !io.acc_valid)
   )
-  io.perm.req.valid := iss_valid && read_perm_buffer && io.iss.ready && usesPerm.B
+  io.vgu.req.valid := iss_valid && read_perm_buffer && io.iss.ready && usesPerm.B
   io.iss.valid := iss_valid
   io.acc_ready := iss_valid && renacc && usesAcc.B
 
@@ -278,7 +290,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     ~(0.U(dLenB.W)))
   val slide_down_bit_mask = FillInterleaved(8, slide_down_byte_mask)
   io.iss.bits.use_slide_rvs2 := slide
-  io.iss.bits.slide_data := io.perm.data & slide_down_bit_mask
+  io.iss.bits.slide_data := io.vgu.data & slide_down_bit_mask
 
   io.iss.bits.use_scalar_rvs1 := inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) || rgather_v || rgatherei16
   io.iss.bits.scalar := Mux(rgather_v || rgatherei16,
