@@ -199,7 +199,6 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   when (siq_sas_fire) {
     ptrIncr(siq_sas_ptr, vParams.vsiqEntries)
     siq_sas(siq_sas_ptr) := true.B
-    assert(siq_sss(siq_sas_ptr) || (siq_sss_fire && siq_sss_ptr === siq_sas_ptr))
   }
   when (siq_deq_fire) {
     ptrIncr(siq_deq_ptr, vParams.vsiqEntries)
@@ -345,35 +344,48 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   sas.io.op := siq(siq_sas_ptr).op
   siq_sas_fire := Mux(siq(siq_sas_ptr).op.fast_sg, sgas.map(_.io.done && maskindex_scatter).getOrElse(false.B), sas.io.done)
 
-  val store_req_q = Module(new DCEQueue(new MemRequest(dLenB, dmemTagBits), 2))
-  store_req_q.io.enq <> sas.io.req
-  store_req_q.io.enq.bits.store := true.B
-  store_req_q.io.enq.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
-  store_req_q.io.enq.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & sas.io.req.bits.mask
+  val store_req_q = Module(new DCEQueue(new Bundle {
+    val sifq = new IFQEntry
+    val request = new MemRequest(dLenB, dmemTagBits)
+  }, 2))
+
+  store_req_q.io.enq.valid := sas.io.out.valid
+  store_req_q.io.enq.bits.sifq := sas.io.out.bits
+  store_req_q.io.enq.bits.request := sas.io.req.bits
+  sas.io.out.ready := store_req_q.io.enq.ready
+  sas.io.req.ready := store_req_q.io.enq.ready
+
+  val store_req = Wire(Decoupled(new MemRequest(dLenB, dmemTagBits)))
+  store_req.bits := store_req_q.io.deq.bits.request
+  store_req.bits.store := true.B
+  store_req.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
+  store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & store_req_q.io.deq.bits.request.mask
+  store_req.valid := store_req_q.io.deq.valid && !store_req_q.io.deq.bits.sifq.masked && scu.io.pop.ready && sifq.io.enq.ready
+  store_req_q.io.deq.ready := sifq.io.enq.ready && scu.io.pop.ready && (store_req_q.io.deq.bits.sifq.masked || store_req.ready)
 
   val store_rob = Module(new ReorderBuffer(Bool(), vParams.vsifqEntries))
   sas.io.tag <> store_rob.io.reserve
-  store_rob.io.reserve.ready := sas.io.tag.ready && sas.io.req.valid
+  store_rob.io.reserve.ready := sas.io.tag.ready && sas.io.out.fire
 
-  sas.io.out.ready := sifq.io.enq.ready && scu.io.pop.ready
-  sifq.io.enq.valid := sas.io.out.valid && scu.io.pop.ready
-  sifq.io.enq.bits := sas.io.out.bits
-  scu.io.pop.valid := sas.io.out.valid && sifq.io.enq.ready
+  sifq.io.enq.valid := store_req_q.io.deq.valid && scu.io.pop.ready && (store_req.ready || store_req_q.io.deq.bits.sifq.masked)
+  sifq.io.enq.bits := store_req_q.io.deq.bits.sifq
+
+  scu.io.pop.valid := store_req_q.io.deq.valid && sifq.io.enq.ready && (store_req.ready || store_req_q.io.deq.bits.sifq.masked)
+  scu.io.pop.bits.head := store_req_q.io.deq.bits.sifq.head
+  scu.io.pop.bits.tail := store_req_q.io.deq.bits.sifq.tail
+
   when (scu.io.pop.fire) {
     for (i <- 0 until dLenB) {
-      assert(scu.io.pop_data(i).debug_id === sas.io.op.debug_id ||
+      assert(scu.io.pop_data(i).debug_id === siq(store_req_q.io.deq.bits.sifq.lsiq_id).op.debug_id ||
         i.U < scu.io.pop.bits.head ||
         (i.U >= scu.io.pop.bits.tail && scu.io.pop.bits.tail =/= 0.U))
     }
   }
 
-  scu.io.pop.bits.head := sas.io.out.bits.head
-  scu.io.pop.bits.tail := sas.io.out.bits.tail
-
   sgas.foreach { sgas =>
     sgas.io.store_pop.ready := false.B
     sgas.io.store_data := scu.io.pop_data.map(_.data)
-    when (maskindex_scatter && !store_rob.io.busy) {
+    when (maskindex_scatter && !store_rob.io.busy && !store_req_q.io.deq.valid) {
       sgas.io.store_pop.ready := scu.io.pop.ready
       scu.io.pop.valid := sgas.io.store_pop.valid
       scu.io.pop.bits := sgas.io.store_pop.bits
@@ -405,12 +417,12 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     load_delay.io.delay := latency
     store_delay.io.delay := latency
     load_delay.io.enq <> load_arb.io.out
-    store_delay.io.enq <> store_req_q.io.deq
+    store_delay.io.enq <> store_req
     io.dmem.load_req <> load_delay.io.deq
     io.dmem.store_req <> store_delay.io.deq
   } else {
     io.dmem.load_req <> load_arb.io.out
-    io.dmem.store_req <> store_req_q.io.deq
+    io.dmem.store_req <> store_req
   }
   io.dmem.load_req.bits.mask := ~(0.U(dLenB.W))
 
