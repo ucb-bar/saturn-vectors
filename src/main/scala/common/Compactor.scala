@@ -13,7 +13,7 @@ class CompactorReq(n: Int) extends Bundle {
   def count = Mux(tail === 0.U, n.U, tail) - head
 }
 
-class Compactor[T <: Data](pushN: Int, popN: Int, gen: => T, forward: Boolean) extends Module {
+class Compactor[T <: Data](pushN: Int, popN: Int, gen: => T, forward: Boolean)(implicit p: Parameters) extends Module {
   require (pushN >= popN)
   val io = IO(new Bundle {
     val push = Flipped(Decoupled(new CompactorReq(pushN)))
@@ -26,7 +26,7 @@ class Compactor[T <: Data](pushN: Int, popN: Int, gen: => T, forward: Boolean) e
   val (push, push_data) = if (forward) {
     (io.push, io.push_data)
   } else {
-    val push_q = Module(new Queue(new CompactorReq(pushN) {
+    val push_q = Module(new DCEQueue(new CompactorReq(pushN) {
       val data = Vec(pushN, gen)
     }, 2))
     push_q.io.enq.valid := io.push.valid
