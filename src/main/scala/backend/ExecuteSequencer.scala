@@ -40,6 +40,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val rvs2_mask = Reg(UInt(egsTotal.W))
   val rvd_mask  = Reg(UInt(egsTotal.W))
   val rvm_mask  = Reg(UInt(egsPerVReg.W))
+  val vs1_eew   = Reg(UInt(2.W))
+  val vs2_eew   = Reg(UInt(2.W))
+  val vs3_eew   = Reg(UInt(2.W))
+  val vd_eew    = Reg(UInt(2.W))
   val slide     = Reg(Bool())
   val slide_up  = Reg(Bool())
   val slide1    = Reg(Bool())
@@ -49,7 +53,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val sets_wmask = Reg(Bool())
   val uses_perm = Reg(Bool())
   val elementwise = Reg(Bool())
-  val narrowing_ext = Reg(Bool())
   val zext_imm5 = Reg(Bool())
   val pipelined = Reg(Bool())
   val pipe_stages = Reg(UInt(log2Ceil(maxPipeDepth).W))
@@ -61,10 +64,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
   val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16 && usesPerm.B
   val compress = inst.opmf6 === OPMFunct6.compress && usesCompress.B
-  val vs1_eew  = Mux(rgatherei16, 1.U, inst.vconfig.vtype.vsew + Mux(inst.reduction && inst.wide_vd, 1.U, 0.U))
-  val vs2_eew  = inst.vconfig.vtype.vsew + inst.wide_vs2 - Mux(narrowing_ext, ~inst.rs1(2,1) + 1.U, 0.U)
-  val vs3_eew  = inst.vconfig.vtype.vsew + inst.wide_vd
-  val vd_eew   = inst.vconfig.vtype.vsew + inst.wide_vd
   val incr_eew = Seq(
     Mux(inst.renv1, vs1_eew, 0.U),
     Mux(inst.renv2, vs2_eew, 0.U),
@@ -97,32 +96,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_inst = io.dis.bits
 
     val dis_ctrl = new VectorDecoder(dis_inst.funct3, dis_inst.funct6, dis_inst.rs1, dis_inst.rs2, supported_insns,
-      Seq(SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5, PipelinedExecution, PipelineStagesMinus1, FUSel(nFUs)))
-    valid := true.B
-    inst := io.dis.bits
-    assert(dis_inst.vstart === 0.U)
-    eidx := 0.U
-
-    val vd_arch_mask  = get_arch_mask(dis_inst.rd , dis_inst.emul +& dis_inst.wide_vd)
-    val vs1_arch_mask = get_arch_mask(dis_inst.rs1, Mux(dis_inst.reads_vs1_mask, 0.U, dis_inst.emul))
-    val vs2_arch_mask = get_arch_mask(dis_inst.rs2, Mux(dis_inst.reads_vs2_mask, 0.U, dis_inst.emul +& dis_inst.wide_vs2))
-
-    wvd_mask    := Mux(dis_inst.wvd               , FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
-    rvs1_mask   := Mux(dis_inst.renv1             , FillInterleaved(egsPerVReg, vs1_arch_mask), 0.U)
-    rvs2_mask   := Mux(dis_inst.renv2             , FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)
-    rvd_mask    := Mux(dis_inst.renvd && usesRvd.B, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
-    rvm_mask    := Mux(dis_inst.renvm             , ~(0.U(egsPerVReg.W)), 0.U)
-    head        := true.B
-    acc_fold    := false.B
-    acc_fold_id := 0.U
-    sets_wmask  := dis_ctrl.bool(SetsWMask)
-    uses_perm   := dis_ctrl.bool(UsesPermuteSeq) && usesPerm.B
-    elementwise := dis_ctrl.bool(Elementwise)
-    narrowing_ext := dis_ctrl.bool(UsesNarrowingSext)
-    zext_imm5   := dis_ctrl.bool(ZextImm5)
-    pipelined   := dis_ctrl.bool(PipelinedExecution)
-    pipe_stages := dis_ctrl.uint(PipelineStagesMinus1)
-    fu_sel      := dis_ctrl.uint(FUSel(nFUs))
+      Seq(SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5,
+        PipelinedExecution, PipelineStagesMinus1, FUSel(nFUs)))
 
     val dis_slide = (dis_inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
       && dis_inst.funct3 =/= OPIVV) && usesPerm.B
@@ -135,19 +110,58 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_uscalar      = Mux(dis_inst.funct3(2), dis_inst.rs1_data, dis_inst.imm5)
     val dis_slide_offset = Mux(!dis_slide1, get_max_offset(dis_uscalar), 1.U)
     val dis_tail         = dis_next_eidx === dis_vl
+    val dis_rgatherei16  = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16 && usesPerm.B
     val dis_rgather_eew  = Mux(dis_inst.opif6 === OPIFunct6.rgatherei16, 1.U, dis_sew)
-    slide        := dis_slide
+    val dis_vd_arch_mask  = get_arch_mask(dis_inst.rd , dis_inst.emul +& dis_inst.wide_vd)
+    val dis_vs1_arch_mask = get_arch_mask(dis_inst.rs1, Mux(dis_inst.reads_vs1_mask, 0.U, dis_inst.emul))
+    val dis_vs2_arch_mask = get_arch_mask(dis_inst.rs2, Mux(dis_inst.reads_vs2_mask, 0.U, dis_inst.emul +& dis_inst.wide_vs2))
+
+
+    assert(dis_inst.vstart === 0.U)
+    valid         := true.B
+    inst          := io.dis.bits
+    eidx          := 0.U
+    wvd_mask      := Mux(dis_inst.wvd               , FillInterleaved(egsPerVReg, dis_vd_arch_mask), 0.U)
+    rvs1_mask     := Mux(dis_inst.renv1             , FillInterleaved(egsPerVReg, dis_vs1_arch_mask), 0.U)
+    rvs2_mask     := Mux(dis_inst.renv2             , FillInterleaved(egsPerVReg, dis_vs2_arch_mask), 0.U)
+    rvd_mask      := Mux(dis_inst.renvd && usesRvd.B, FillInterleaved(egsPerVReg, dis_vd_arch_mask), 0.U)
+    rvm_mask      := Mux(dis_inst.renvm             , ~(0.U(egsPerVReg.W)), 0.U)
+    head          := true.B
+    acc_fold      := false.B
+    acc_fold_id   := 0.U
+    sets_wmask    := dis_ctrl.bool(SetsWMask)
+    uses_perm     := dis_ctrl.bool(UsesPermuteSeq) && usesPerm.B
+    elementwise   := dis_ctrl.bool(Elementwise)
+    zext_imm5     := dis_ctrl.bool(ZextImm5)
+    pipelined     := dis_ctrl.bool(PipelinedExecution)
+    pipe_stages   := dis_ctrl.uint(PipelineStagesMinus1)
+    fu_sel        := dis_ctrl.uint(FUSel(nFUs))
+    slide         := dis_slide
+    vs1_eew       := dis_inst.vconfig.vtype.vsew + (dis_inst.reduction && dis_inst.wide_vd)
+    vs2_eew       := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vs2
+    vs3_eew       := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd
+    vd_eew        := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd
+
+    when (dis_rgatherei16) {
+      vs1_eew      := 1.U
+    }
+    when (dis_ctrl.bool(UsesNarrowingSext)) {
+      vs2_eew := dis_inst.vconfig.vtype.vsew - (~dis_inst.rs1(2,1) + 1.U)
+    }
     when (dis_slide) {
       slide_up     := dis_slide_up
       slide1       := dis_slide1
       slide_offset := dis_slide_offset
     }
+
     slide_head    := Mux(dis_slide_up,
       (dis_slide_offset << dis_sew)(dLenOffBits-1,0),
       0.U)
     slide_tail   := Mux(dis_slide_up,
       Mux(dis_tail, dis_vl << dis_sew, 0.U),
-      (Mux(dis_next_eidx + dis_slide_offset <= dis_vlmax, dis_next_eidx, dis_vlmax - dis_slide_offset) << dis_sew)(dLenOffBits-1,0)
+      (Mux(dis_next_eidx + dis_slide_offset <= dis_vlmax,
+        dis_next_eidx, dis_vlmax - dis_slide_offset) << dis_sew
+      )(dLenOffBits-1,0)
     )
   } .elsewhen (io.iss.fire) {
     valid := !tail
