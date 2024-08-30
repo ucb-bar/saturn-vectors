@@ -217,7 +217,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       // or RAW is possible
       val older_other_pipe_writes = other_vxus.map(_.io.pipe_hazards.toSeq).flatten.map { h =>
         Mux(h.valid, h.bits.eg_oh, 0.U)
-      }.reduce(_|_)
+      }.foldLeft(0.U)(_|_)
       val older_same_pipe_writes = same_vxu.map(_.io.pipe_hazards.toSeq.map { h =>
         Mux(h.valid && h.bits.vat =/= vat, h.bits.eg_oh, 0.U)
       }.reduce(_|_)).getOrElse(0.U)

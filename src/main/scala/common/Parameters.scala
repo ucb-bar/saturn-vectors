@@ -31,12 +31,13 @@ object VectorParams {
     doubleBufferSegments = true,
     useScalarFPFMA = false,
     vrfBanking = 4,
+    issStructure = VectorIssueStructure.Shared
   )
 
   // dspParams
   // For a wide high-performance vector unit with multi-issue
   def dspParams = refParams.copy(
-    issStructure = VectorIssueStructure.Shared
+    issStructure = VectorIssueStructure.Split
   )
 
   // genParams:
@@ -339,11 +340,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def vrfBankBits = log2Ceil(vParams.vrfBanking)
   def lsiqIdBits = log2Ceil(vParams.vliqEntries.max(vParams.vsiqEntries))
   val debugIdSz = 16
-  val nRelease = vParams.issStructure match {
-    case VectorIssueStructure.Unified => 3
-    case VectorIssueStructure.Shared | VectorIssueStructure.Split => 4
-    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => 5
-  }
+  def nRelease = vParams.issStructure.generate(vParams).map(_.seqs.size).reduce(_+_) + 2 // load/stores
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)
