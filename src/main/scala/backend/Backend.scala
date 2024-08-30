@@ -461,8 +461,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vgu.io.vps.bits.rvs2_data := vrf.io.vps.rvs2.resp
 
   // Only the first VSU can handle permutations TODO clean this up
-  flat_vxs.foreach(_.io.vgu.req.ready := false.B)
-  flat_vxs.foreach(_.io.vgu.data := DontCare)
+  flat_vxs.foreach(_.io.vgu.slide_req.ready := false.B)
+  flat_vxs.foreach(_.io.vgu.slide_data := DontCare)
+  flat_vxs.foreach(_.io.vgu.gather_eidx.valid := false.B)
+  flat_vxs.foreach(_.io.vgu.gather_eidx.bits := DontCare)
 
   val perm_vxs = flat_vxs.filter(_.usesPerm)
   require(perm_vxs.size == 1)

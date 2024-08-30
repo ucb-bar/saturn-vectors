@@ -260,6 +260,7 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 }
 
 class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+  val slide = Bool()
   val renv2 = Bool()
   val renvm = Bool()
   val eidx = UInt(log2Ceil(maxVLMax).W)

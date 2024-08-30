@@ -32,6 +32,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   val slide_up = !inst.funct6(0)
   val rs2 = Mux(inst.rs1_is_rs2, inst.rs1, inst.rs2)
   val gatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16
+  val elementwise = !inst.vmu && !slide
 
   val renvm = inst.renvm
   val renv2 = inst.renv2
@@ -41,7 +42,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
     Mux(slide_up, inst.vconfig.vl - slide_offset, min(inst.vconfig.vtype.vlMax, inst.vconfig.vl + slide_offset)),
     inst.vconfig.vl
   )(log2Ceil(maxVLMax),0)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, false.B, false.B)
+  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, false.B, elementwise)
   val tail = next_eidx === eff_vl
 
   io.dis.ready := !valid || (tail && io.iss.fire) && !io.dis_stall
@@ -100,6 +101,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   io.iss.bits.vl        := eff_vl
   io.iss.bits.vmu       := inst.vmu
   io.iss.bits.tail      := tail
+  io.iss.bits.slide     := slide
 
   when (io.iss.fire && !tail) {
     when (next_is_new_eg(eidx, next_eidx, incr_eew, false.B) && vParams.enableChaining.B) {
