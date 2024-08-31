@@ -248,7 +248,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val read_slide_buffer = slide && Mux(slide_up,
     next_eidx > slide_offset,
     eidx +& slide_offset < inst.vconfig.vtype.vlMax)
-  val read_eidx_buffer = rgather_v
+  val read_eidx_buffer = rgather_v || rgatherei16
 
   io.vgu.slide_req.bits.head := (if (usesPerm) slide_head else 0.U)
   io.vgu.slide_req.bits.tail := (if (usesPerm) slide_tail else 0.U)
