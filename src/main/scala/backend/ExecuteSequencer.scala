@@ -48,21 +48,22 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val slide_up  = Reg(Bool())
   val slide1    = Reg(Bool())
   val slide_offset = Reg(UInt((1+log2Ceil(maxVLMax)).W))
-  val slide_head = Reg(UInt(dLenOffBits.W))
-  val slide_tail = Reg(UInt(dLenOffBits.W))
-  val sets_wmask = Reg(Bool())
-  val uses_perm = Reg(Bool())
-  val elementwise = Reg(Bool())
-  val zext_imm5 = Reg(Bool())
-  val pipelined = Reg(Bool())
-  val pipe_stages = Reg(UInt(log2Ceil(maxPipeDepth).W))
-  val fu_sel = Reg(UInt(nFUs.W))
+  val slide_head   = Reg(UInt(dLenOffBits.W))
+  val slide_tail   = Reg(UInt(dLenOffBits.W))
+  val sets_wmask   = Reg(Bool())
+  val uses_perm    = Reg(Bool())
+  val elementwise  = Reg(Bool())
+  val zext_imm5    = Reg(Bool())
+  val pipelined    = Reg(Bool())
+  val pipe_stages  = Reg(UInt(log2Ceil(maxPipeDepth).W))
+  val fu_sel       = Reg(UInt(nFUs.W))
+  val eff_vl       = Reg(UInt(log2Ceil(maxVLMax).W))
+  val rgatherei16  = Reg(Bool())
+  val mvnrr        = Reg(Bool())
 
   val acc_fold  = Reg(Bool())
   val acc_fold_id = Reg(UInt(log2Ceil(dLenB).W))
 
-  val mvnrr    = inst.funct3 === OPIVI && inst.opif6 === OPIFunct6.mvnrr
-  val rgatherei16 = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16 && usesPerm.B
   val compress = inst.opmf6 === OPMFunct6.compress && usesCompress.B
   val incr_eew = Seq(
     Mux(inst.renv1, vs1_eew, 0.U),
@@ -84,7 +85,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
 
   val use_wmask = !inst.vm && sets_wmask
   val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
-  val eff_vl    = Mux(mvnrr, ((vLen/8).U >> vd_eew) << inst.emul, Mux(inst.scalar_to_vd0, 1.U, inst.vconfig.vl))
   val increments_as_mask = (!inst.renv1 || inst.reads_vs1_mask) && (!inst.renv2 || inst.reads_vs2_mask) && (!inst.wvd || inst.writes_mask)
   val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, increments_as_mask, elementwise)
   val eidx_tail = next_eidx === eff_vl
@@ -110,12 +110,12 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_uscalar      = Mux(dis_inst.funct3(2), dis_inst.rs1_data, dis_inst.imm5)
     val dis_slide_offset = Mux(!dis_slide1, get_max_offset(dis_uscalar), 1.U)
     val dis_tail         = dis_next_eidx === dis_vl
-    val dis_rgatherei16  = inst.funct3 === OPIVV && inst.opif6 === OPIFunct6.rgatherei16 && usesPerm.B
+    val dis_rgatherei16  = dis_inst.funct3 === OPIVV && dis_inst.opif6 === OPIFunct6.rgatherei16 && usesPerm.B
     val dis_rgather_eew  = Mux(dis_inst.opif6 === OPIFunct6.rgatherei16, 1.U, dis_sew)
+    val dis_mvnrr         = dis_inst.funct3 === OPIVI && dis_inst.opif6 === OPIFunct6.mvnrr
     val dis_vd_arch_mask  = get_arch_mask(dis_inst.rd , dis_inst.emul +& dis_inst.wide_vd)
     val dis_vs1_arch_mask = get_arch_mask(dis_inst.rs1, Mux(dis_inst.reads_vs1_mask, 0.U, dis_inst.emul))
     val dis_vs2_arch_mask = get_arch_mask(dis_inst.rs2, Mux(dis_inst.reads_vs2_mask, 0.U, dis_inst.emul +& dis_inst.wide_vs2))
-
 
     assert(dis_inst.vstart === 0.U)
     valid         := true.B
@@ -141,9 +141,18 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     vs2_eew       := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vs2
     vs3_eew       := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd
     vd_eew        := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd
+    eff_vl        := dis_inst.vconfig.vl
+    rgatherei16   := dis_rgatherei16
+    mvnrr         := dis_mvnrr
 
+    when (dis_mvnrr) {
+      eff_vl := ((vLen/8).U >> dis_inst.vconfig.vtype.vsew) << dis_inst.emul
+    }
+    when (dis_inst.scalar_to_vd0) {
+      eff_vl := 1.U
+    }
     when (dis_rgatherei16) {
-      vs1_eew      := 1.U
+      vs1_eew := 1.U
     }
     when (dis_ctrl.bool(UsesNarrowingSext)) {
       vs2_eew := dis_inst.vconfig.vtype.vsew - (~dis_inst.rs1(2,1) + 1.U)
