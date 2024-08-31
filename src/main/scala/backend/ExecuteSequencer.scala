@@ -58,18 +58,16 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val pipe_stages  = Reg(UInt(log2Ceil(maxPipeDepth).W))
   val fu_sel       = Reg(UInt(nFUs.W))
   val eff_vl       = Reg(UInt(log2Ceil(maxVLMax).W))
+  val next_eidx    = Reg(UInt(log2Ceil(maxVLMax).W))
   val rgatherei16  = Reg(Bool())
   val mvnrr        = Reg(Bool())
-
+  val incr_eew     = Reg(UInt(2.W))
+  val increments_as_mask = Reg(Bool())
+  val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
   val acc_fold  = Reg(Bool())
   val acc_fold_id = Reg(UInt(log2Ceil(dLenB).W))
 
   val compress = inst.opmf6 === OPMFunct6.compress && usesCompress.B
-  val incr_eew = Seq(
-    Mux(inst.renv1, vs1_eew, 0.U),
-    Mux(inst.renv2, vs2_eew, 0.U),
-    Mux(inst.renvd, vs3_eew, 0.U),
-    vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
   val acc_copy = (vd_eew === 3.U && (dLenB == 8).B) || elementwise
   val acc_last = acc_fold_id + 1.U === log2Ceil(dLenB).U - vd_eew || acc_copy
   val uscalar  = Mux(inst.funct3(2), inst.rs1_data, inst.imm5)
@@ -84,9 +82,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val renacc   = inst.reduction && usesAcc.B
 
   val use_wmask = !inst.vm && sets_wmask
-  val eidx      = Reg(UInt(log2Ceil(maxVLMax).W))
-  val increments_as_mask = (!inst.renv1 || inst.reads_vs1_mask) && (!inst.renv2 || inst.reads_vs2_mask) && (!inst.wvd || inst.writes_mask)
-  val next_eidx = get_next_eidx(eff_vl, eidx, incr_eew, 0.U, increments_as_mask, elementwise)
   val eidx_tail = next_eidx === eff_vl
   val tail      = Mux(inst.reduction && usesAcc.B, acc_fold && acc_last, eidx_tail)
 
@@ -116,6 +111,22 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_vd_arch_mask  = get_arch_mask(dis_inst.rd , dis_inst.emul +& dis_inst.wide_vd)
     val dis_vs1_arch_mask = get_arch_mask(dis_inst.rs1, Mux(dis_inst.reads_vs1_mask, 0.U, dis_inst.emul))
     val dis_vs2_arch_mask = get_arch_mask(dis_inst.rs2, Mux(dis_inst.reads_vs2_mask, 0.U, dis_inst.emul +& dis_inst.wide_vs2))
+    val dis_eff_vl        = WireInit(dis_inst.vconfig.vl)
+    val dis_increments_as_mask = (
+      (!dis_inst.renv1 || dis_inst.reads_vs1_mask) &&
+      (!dis_inst.renv2 || dis_inst.reads_vs2_mask) &&
+      (!dis_inst.wvd || dis_inst.writes_mask)
+    )
+    val dis_vs1_eew = WireInit((dis_inst.vconfig.vtype.vsew + (dis_inst.reduction && dis_inst.wide_vd))(1,0))
+    val dis_vs2_eew = WireInit((dis_inst.vconfig.vtype.vsew + dis_inst.wide_vs2)(1,0))
+    val dis_vs3_eew = WireInit((dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd)(1,0))
+    val dis_vd_eew  = WireInit((dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd)(1,0))
+    val dis_incr_eew = Seq(
+      Mux(dis_inst.renv1, dis_vs1_eew, 0.U),
+      Mux(dis_inst.renv2, dis_vs2_eew, 0.U),
+      Mux(dis_inst.renvd, dis_vs3_eew, 0.U),
+      dis_vd_eew).foldLeft(0.U(2.W)) { case (b, a) => Mux(a > b, a, b) }
+
 
     assert(dis_inst.vstart === 0.U)
     valid         := true.B
@@ -137,25 +148,28 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     pipe_stages   := dis_ctrl.uint(PipelineStagesMinus1)
     fu_sel        := dis_ctrl.uint(FUSel(nFUs))
     slide         := dis_slide
-    vs1_eew       := dis_inst.vconfig.vtype.vsew + (dis_inst.reduction && dis_inst.wide_vd)
-    vs2_eew       := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vs2
-    vs3_eew       := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd
-    vd_eew        := dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd
-    eff_vl        := dis_inst.vconfig.vl
     rgatherei16   := dis_rgatherei16
     mvnrr         := dis_mvnrr
+    vs1_eew       := dis_vs1_eew
+    vs2_eew       := dis_vs2_eew
+    vs3_eew       := dis_vs3_eew
+    vd_eew        := dis_vd_eew
+    eff_vl        := dis_eff_vl
+    incr_eew      := dis_incr_eew
+    next_eidx     := get_next_eidx(dis_eff_vl, 0.U, dis_incr_eew, 0.U, dis_increments_as_mask, dis_ctrl.bool(Elementwise))
+    increments_as_mask := dis_increments_as_mask
 
     when (dis_mvnrr) {
-      eff_vl := ((vLen/8).U >> dis_inst.vconfig.vtype.vsew) << dis_inst.emul
+      dis_eff_vl := ((vLen/8).U >> dis_inst.vconfig.vtype.vsew) << dis_inst.emul
     }
     when (dis_inst.scalar_to_vd0) {
-      eff_vl := 1.U
+      dis_eff_vl := 1.U
     }
     when (dis_rgatherei16) {
-      vs1_eew := 1.U
+      dis_vs1_eew := 1.U
     }
     when (dis_ctrl.bool(UsesNarrowingSext)) {
-      vs2_eew := dis_inst.vconfig.vtype.vsew - (~dis_inst.rs1(2,1) + 1.U)
+      dis_vs2_eew := dis_inst.vconfig.vtype.vsew - (~dis_inst.rs1(2,1) + 1.U)
     }
     when (dis_slide) {
       slide_up     := dis_slide_up
@@ -339,6 +353,8 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     }
 
     eidx := next_eidx
+    val next_next_eidx = get_next_eidx(eff_vl, next_eidx, incr_eew, 0.U, increments_as_mask, elementwise)
+    next_eidx := next_next_eidx
 
     if (usesAcc) {
       when (eidx_tail) { acc_fold := true.B }
@@ -348,7 +364,6 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
 
     if (usesPerm) {
       when (uses_perm && slide) {
-        val next_next_eidx = get_next_eidx(eff_vl, next_eidx, incr_eew, 0.U, increments_as_mask, elementwise)
         val next_tail = next_next_eidx === eff_vl
         slide_head := Mux(slide_up,
           Mux(next_eidx < slide_offset, (slide_offset << vs2_eew)(dLenOffBits-1,0), 0.U),
