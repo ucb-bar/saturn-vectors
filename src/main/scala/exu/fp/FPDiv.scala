@@ -313,15 +313,25 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   narrow.io.in := divSqrt.io.out
 
   val divSqrt_out = Mux(op.vd_eew === 3.U, FType.D.ieee(divSqrt.io.out), Fill(2, FType.S.ieee(narrow.io.out)))
-
-  val out_buffer = RegEnable(divSqrt_out, divSqrt_out_valid)
-  val out_toWrite = RegInit(false.B)
-  val divSqrt_write = Mux(out_toWrite, out_buffer, divSqrt_out)
-
   val divSqrt16_out = FType.H.ieee(divSqrt16.io.out)
-  val out16_buffer = RegEnable(divSqrt16_out, divSqrt16_out_valid)
-  val out16_toWrite = RegInit(false.B)
-  val divSqrt16_write = Mux(out16_toWrite, out16_buffer, divSqrt16_out)
+
+  val divsqrt_exc = Reg(UInt(5.W))
+  val divsqrt_reg = Reg(UInt(64.W))
+  val divsqrt_valid = RegInit(false.B)
+
+  when (divSqrt_out_valid) {
+    divsqrt_exc := divSqrt.io.exceptionFlags
+    divsqrt_reg := divSqrt_out
+    divsqrt_valid := true.B
+  }
+  when (divSqrt16_out_valid) {
+    divsqrt_exc := divSqrt16.io.exceptionFlags
+    divsqrt_reg := divSqrt16_out
+    divsqrt_valid := true.B
+  }
+  when (io.write.fire) {
+    divsqrt_valid := false.B
+  }
 
   // vfclass instruction
   val gen_vfclass = Seq(FType.H, FType.S, FType.D).zipWithIndex.map { case(fType, i) =>
@@ -343,29 +353,21 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   rec7.io.eew := op.rvs2_eew
   rec7.io.frm := op.frm
 
-  // Capture result in case of write port backpressure
-  when (io.write.fire) {
-    out_toWrite := false.B
-    out16_toWrite := false.B
-  } .elsewhen (divSqrt_out_valid) {
-    out_toWrite := true.B
-    out16_toWrite := true.B
-  }
-
   val out = Mux1H(
-    Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, out_toWrite || divSqrt_out_valid || divSqrt16_out_valid),
-    Seq(Mux1H(Seq(op.rvs2_eew === 3.U, op.rvs2_eew === 2.U, op.rvs2_eew === 1.U), Seq(gen_vfclass(2), gen_vfclass(1), gen_vfclass(0))), recSqrt7.io.out, rec7.io.out, divSqrt_write)
+    Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, divsqrt_valid),
+    Seq(Mux1H(Seq(op.rvs2_eew === 3.U, op.rvs2_eew === 2.U, op.rvs2_eew === 1.U), Seq(gen_vfclass(2), gen_vfclass(1), gen_vfclass(0))), recSqrt7.io.out, rec7.io.out, divsqrt_reg)
   )(63,0)
 
-  io.write.valid := ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) && valid) || out_toWrite || divSqrt_out_valid
+  io.write.valid := valid && ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) || divsqrt_valid)
   io.write.bits.eg := op.wvd_eg
   io.write.bits.mask := FillInterleaved(8, op.wmask)
   io.write.bits.data := Fill(dLenB >> 3, out)
-  io.stall := (!divSqrt_ready && io.iss.op.vd_eew >= 2.U) || (!divSqrt16_ready && io.iss.op.vd_eew === 1.U) || valid
+  io.stall := valid
   last := io.write.fire
 
-  io.set_fflags.valid := divSqrt_out_valid || divSqrt16_out_valid || (vfrsqrt7_inst && io.write.fire) || (vfrec7_inst && io.write.fire)
-  io.set_fflags.bits := (divSqrt.io.exceptionFlags & Fill(5, divSqrt_out_valid)) | divSqrt16.io.exceptionFlags & Fill(5, divSqrt_out_valid) | (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst)) | (rec7.io.exc & Fill(5, vfrec7_inst))
+  io.set_fflags.valid := divsqrt_valid || (vfrsqrt7_inst && io.write.fire) || (vfrec7_inst && io.write.fire)
+  io.set_fflags.bits := Mux(divsqrt_valid, divsqrt_exc,
+    (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst)) | (rec7.io.exc & Fill(5, vfrec7_inst)))
 
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
