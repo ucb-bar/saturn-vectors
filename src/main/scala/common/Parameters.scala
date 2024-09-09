@@ -351,10 +351,10 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     Cat(getEgId(vreg, eidx, eew, false.B), (eidx << eew)(log2Ceil(dLenB)-1,0))
   }
 
-  def eewByteMask(eew: UInt) = (0 until (1+log2Ceil(eLen/8))).map { e =>
+  def eewByteMask(eew: UInt, validEews: Seq[Int] = Seq(0, 1, 2, 3)) = validEews.map { e =>
     Mux(e.U === eew, ((1 << (1 << e)) - 1).U, 0.U)
   }.reduce(_|_)((eLen/8)-1,0)
-  def eewBitMask(eew: UInt) = FillInterleaved(8, eewByteMask(eew))
+  def eewBitMask(eew: UInt, validEews: Seq[Int] = Seq(0, 1, 2, 3)) = FillInterleaved(8, eewByteMask(eew, validEews))
 
 
   def cqOlder(i0: UInt, i1: UInt, tail: UInt) = (i0 < i1) ^ (i0 < tail) ^ (i1 < tail)
