@@ -57,7 +57,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 2)) // permute/reduction
   val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size)).suggestName(s"vxissq_${q.name}"))
 
-  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus)).suggestName(s"vxu${s.name}")))
+  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus, s.name)).suggestName(s"vxu${s.name}")))
   val flat_vxus = vxus.flatten
   val maxPipeDepth = flat_vxus.map(_.maxPipeDepth).max
 

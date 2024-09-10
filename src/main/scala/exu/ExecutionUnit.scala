@@ -8,7 +8,9 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
 
-class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  override def desiredName = s"ExecutionUnit$desc"
+
   val fus = genFUs.map(gen => Module(gen.generate(p)))
   val nFUs = fus.size
 
