@@ -10,7 +10,7 @@ import saturn.common._
 import saturn.insns._
 
 
-class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
+class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) with InlineInstance {
   val io = IO(new Bundle {
     val valid = Input(Bool())
     val frm = Input(UInt(3.W))
