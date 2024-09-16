@@ -136,6 +136,9 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
     f2f.io.roundingMode := io.frm
     f2f.io.detectTininess := hardfloat.consts.tininess_afterRounding
   }
+  (s2h ++ d2s).foreach { f2f =>
+    f2f.io.roundingMode := Mux(io.rto, "b110".U, io.frm)
+  }
 
   io.out := DontCare
   io.exc := DontCare
