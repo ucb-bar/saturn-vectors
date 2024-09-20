@@ -10,7 +10,8 @@ import saturn.common._
 import saturn.insns._
 
 
-class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) with InlineInstance {
+class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
+  require (depth >= 4)
   val io = IO(new Bundle {
     val valid = Input(Bool())
     val frm = Input(UInt(3.W))
@@ -25,6 +26,7 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) w
     val b = Input(UInt(64.W))
     val c = Input(UInt(64.W))
     val mask = Input(UInt(4.W))
+
     val out = Output(UInt(64.W))
     val exc = Output(UInt(5.W))
   })
@@ -40,7 +42,6 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) w
     val fma_eew = log2Ceil(fType.ieeeWidth >> 3)
 
     val results = (0 until n).map { i =>
-      val fma = Module(new MulAddRecFNPipe((depth-1) min 2, fType.exp, fType.sig))
       val validin = io.valid && (io.out_eew === fma_eew.U)
       val msb_idx = ((i + 1) * fType.ieeeWidth) - 1
       val lsb_idx = i * fType.ieeeWidth
@@ -58,16 +59,18 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) w
         }
       }
 
-      fma.io.validin := validin 
-      fma.io.op := Mux(validin, io.op, 0.U)
-      fma.io.roundingMode := Mux(validin, io.frm, 0.U)
+      val s1_validin = RegEnable(validin, io.valid)
+      val fma = Module(new MulAddRecFNPipe(depth-2, fType.exp, fType.sig))
+      fma.io.validin := s1_validin
+      fma.io.op := Mux(s1_validin, RegEnable(io.op, io.valid), 0.U)
+      fma.io.roundingMode := Mux(s1_validin, RegEnable(io.frm, io.valid), 0.U)
       fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
-      fma.io.a := inputs(0) 
-      fma.io.b := Mux(io.addsub, 1.U << (fType.ieeeWidth - 1), inputs(1))
-      fma.io.c := Mux(io.mul, (inputs(0) ^ inputs(1)) & (1.U << fType.ieeeWidth), inputs(2))
+      fma.io.a := RegEnable(inputs(0), io.valid)
+      fma.io.b := RegEnable(Mux(io.addsub, 1.U << (fType.ieeeWidth - 1), inputs(1)), io.valid)
+      fma.io.c := RegEnable(Mux(io.mul, (inputs(0) ^ inputs(1)) & (1.U << fType.ieeeWidth), inputs(2)), io.valid)
 
-      val out = Pipe(fma.io.validout, fType.ieee(fma.io.out), (depth-3) max 0).bits
-      val exc = Pipe(fma.io.validout, fma.io.exceptionFlags, (depth-3) max 0).bits
+      val out = Pipe(fma.io.validout, fType.ieee(fma.io.out), depth-4).bits
+      val exc = Pipe(fma.io.validout, fma.io.exceptionFlags, depth-4).bits
       (out, exc)
     }
     val out = results.map(_._1).asUInt
