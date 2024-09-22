@@ -40,6 +40,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val pc = UInt(vaddrBitsExtended.W)
   val bits = UInt(32.W)
   val vconfig = new VConfig
+  val fission_vl = Valid(UInt((1+log2Ceil(maxVLMax)).W))
 
   val vstart = UInt(log2Ceil(maxVLMax).W)
   val segstart = UInt(3.W)

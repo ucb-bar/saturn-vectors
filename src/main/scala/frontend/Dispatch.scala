@@ -74,6 +74,11 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
     issue_inst.vstart := 0.U
   }
 
+  // This resolves a false critical path from PTC fissioning of VL to the scalar-resp VL check
+  when (io.issue.bits.fission_vl.valid) {
+    issue_inst.vconfig.vl := io.issue.bits.fission_vl.bits
+  }
+
   // Strided with stride = 1 << eew is just unit-strided
   when (io.issue.bits.mop === mopStrided && io.issue.bits.rs2_data === ((io.issue.bits.nf +& 1.U) << io.issue.bits.mem_elem_size)) {
     issue_inst.mop := mopUnit
@@ -88,7 +93,7 @@ class VectorDispatcher(implicit p: Parameters) extends CoreModule()(p) with HasV
     0.U // vpopc
   )
 
-  when (issue_inst.vconfig.vl <= issue_inst.vstart && !(issue_inst.funct3 === OPIVI && issue_inst.opif6 === OPIFunct6.mvnrr)) {
+  when (io.issue.bits.vconfig.vl <= issue_inst.vstart && !(issue_inst.funct3 === OPIVI && issue_inst.opif6 === OPIFunct6.mvnrr)) {
     io.issue.ready := true.B
     io.mem.valid := false.B
     io.dis.valid := false.B

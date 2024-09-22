@@ -82,6 +82,8 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   s0_inst.rm       := DontCare
   s0_inst.fast_sg  := false.B
   s0_inst.mop      := s0_inst.orig_mop
+  s0_inst.fission_vl.valid := false.B // set in s2
+  s0_inst.fission_vl.bits := DontCare
   when (s0_inst.vmu && s0_inst.mop === mopUnit) {
     val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
     val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) * (s0_inst.nf +& 1.U)
@@ -194,9 +196,8 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   io.s2.issue.bits.page     := s2_tlb_resp.paddr >> pgIdxBits
 
   val consumed = ((1 << pgIdxBits).U - s2_tlb_resp.paddr(pgIdxBits-1,0)) >> s2_inst.mem_elem_size
-  when (s2_inst.vmu && s2_replay_next_page) {
-    io.s2.issue.bits.vconfig.vl := s2_inst.vstart +& consumed
-  }
+  io.s2.issue.bits.fission_vl.valid := s2_inst.vmu && s2_replay_next_page
+  io.s2.issue.bits.fission_vl.bits := s2_inst.vstart +& consumed
 
   when (s2_valid) {
     when (!io.s2.issue.ready || (io.s2.scalar_store_pending && s2_inst.vmu)) {
