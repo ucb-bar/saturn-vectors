@@ -99,9 +99,11 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
     Module(new hardfloat.INToRecFN(64, FType.S.exp, FType.S.sig)),
     Module(new hardfloat.INToRecFN(32, FType.S.exp, FType.S.sig))
   )
-  val i2h = (
-    Seq.fill(2) { Module(new hardfloat.INToRecFN(32, FType.H.exp, FType.H.sig)) } ++
-    Seq.fill(2) { Module(new hardfloat.INToRecFN(16, FType.H.exp, FType.H.sig)) }
+  val i2h = Seq(
+    Module(new hardfloat.INToRecFN(32, FType.H.exp, FType.H.sig)),
+    Module(new hardfloat.INToRecFN(16, FType.H.exp, FType.H.sig)),
+    Module(new hardfloat.INToRecFN(32, FType.H.exp, FType.H.sig)),
+    Module(new hardfloat.INToRecFN(16, FType.H.exp, FType.H.sig))
   )
 
   def sext(w: Int, in: UInt) = Fill(w - in.getWidth, io.signed && in(in.getWidth-1)) ## in
@@ -109,9 +111,10 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
   i2d(0).io.in := Mux(io.widen, sext(64, in32(0)), in64(0))
   i2s(0).io.in := Mux(io.widen, sext(64, in16(0)), Mux(io.narrow, in64(0), sext(64, in32(0))))
   i2s(1).io.in := Mux(io.widen, sext(32, in16(1)), in32(1))
+
   i2h(0).io.in := Mux(io.narrow, in32(0), sext(32, in16(0)))
-  i2h(1).io.in := Mux(io.narrow, in32(1), sext(32, in16(1)))
-  i2h(2).io.in := in16(2)
+  i2h(1).io.in := in16(1)
+  i2h(2).io.in := Mux(io.narrow, in32(1), sext(32, in16(2)))
   i2h(3).io.in := in16(3)
 
   (i2h ++ i2s ++ i2d).foreach { i2f =>
