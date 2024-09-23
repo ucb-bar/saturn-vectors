@@ -313,7 +313,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   narrow.io.in := divSqrt.io.out
 
   val divSqrt_out = Mux(op.vd_eew === 3.U, FType.D.ieee(divSqrt.io.out), Fill(2, FType.S.ieee(narrow.io.out)))
-  val divSqrt16_out = FType.H.ieee(divSqrt16.io.out)
+  val divSqrt16_out = Fill(4, FType.H.ieee(divSqrt16.io.out))
 
   val divsqrt_exc = Reg(UInt(5.W))
   val divsqrt_reg = Reg(UInt(64.W))
@@ -334,9 +334,11 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   }
 
   // vfclass instruction
-  val gen_vfclass = Seq(FType.H, FType.S, FType.D).zipWithIndex.map { case(fType, i) =>
-    Fill(2, Cat(0.U((fType.ieeeWidth-10).W), fType.classify(fType.recode(rvs2_bits(fType.ieeeWidth-1,0)))))
-  }
+  val gen_vfclass = Mux1H(Seq(FType.H, FType.S, FType.D).zipWithIndex.map { case (fType, i) =>
+    (op.rvs2_eew === (i+1).U) -> Fill(64 / fType.ieeeWidth,
+      0.U((fType.ieeeWidth-10).W) ## fType.classify(fType.recode(rvs2_bits(fType.ieeeWidth-1,0)))
+    )
+  })
 
   val vfclass_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 16.U
   val vfrsqrt7_inst = op.opff6.isOneOf(OPFFunct6.funary1) && op.rs1 === 4.U
@@ -355,7 +357,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
 
   val out = Mux1H(
     Seq(vfclass_inst, vfrsqrt7_inst, vfrec7_inst, divsqrt_valid),
-    Seq(Mux1H(Seq(op.rvs2_eew === 3.U, op.rvs2_eew === 2.U, op.rvs2_eew === 1.U), Seq(gen_vfclass(2), gen_vfclass(1), gen_vfclass(0))), recSqrt7.io.out, rec7.io.out, divsqrt_reg)
+    Seq(gen_vfclass, recSqrt7.io.out, rec7.io.out, divsqrt_reg)
   )(63,0)
 
   io.write.valid := valid && ((vfclass_inst || vfrsqrt7_inst || vfrec7_inst) || divsqrt_valid)
