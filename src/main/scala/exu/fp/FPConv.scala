@@ -15,7 +15,7 @@ case object FPConvFactory extends FunctionalUnitFactory {
   def generate(implicit p: Parameters) = new FPConvPipe()(p)
 }
 
-class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUParameters with InlineInstance {
+class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUParameters {
   val io = IO(new Bundle {
     val in = Input(UInt(64.W))
     val in_eew = Input(UInt(2.W))
@@ -73,7 +73,7 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
 
   val d2i = Seq(Module(new RecFNToINDynamic(FType.D.exp, FType.D.sig, Seq(16, 32, 64))))
   val s2i = Seq(Module(new RecFNToINDynamic(FType.S.exp, FType.S.sig, Seq(16, 32))))
-  val h2i = Seq.fill(2)(Module(new RecFNToINDynamic(FType.H.exp, FType.H.sig, Seq(32))))
+  val h2i = Seq.fill(2)(Module(new RecFNToINDynamic(FType.H.exp, FType.H.sig, Seq(16))))
 
   d2i(0).io.in := raw2rec(FType.D,
     Mux(io.in_eew === 3.U, raw64(0), Mux(io.in_eew === 2.U, raw32as64(0), raw16as64(0)))
@@ -167,7 +167,7 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
       io.exc := VecInit.fill(8)(exc(d2i(0).io.intExceptionFlags))
     }
     when (out_eew === 2.U) {
-      io.out := s2i(0).io.out ## d2i(0).io.out(31,0)
+      io.out := s2i(0).io.out(31,0) ## d2i(0).io.out(31,0)
       io.exc(0) := exc(d2i(0).io.intExceptionFlags)
       io.exc(1) := exc(d2i(0).io.intExceptionFlags)
       io.exc(2) := exc(d2i(0).io.intExceptionFlags)
@@ -178,7 +178,7 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
       io.exc(7) := exc(s2i(0).io.intExceptionFlags)
     }
     when (out_eew === 1.U) {
-      io.out := h2i(1).io.out ## s2i(0).io.out(15,0) ## h2i(0).io.out ## d2i(0).io.out(15,0)
+      io.out := h2i(1).io.out(15,0) ## s2i(0).io.out(15,0) ## h2i(0).io.out(15,0) ## d2i(0).io.out(15,0)
       io.exc(0) := exc(d2i(0).io.intExceptionFlags)
       io.exc(1) := exc(d2i(0).io.intExceptionFlags)
       io.exc(2) := exc(h2i(0).io.intExceptionFlags)
@@ -202,7 +202,8 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
       io.exc := VecInit.fill(8)(d2s(0).io.exceptionFlags)
     }
     when (out_eew === 1.U) {
-
+      io.out := VecInit(s2h.map(h => 0.U(16.W) ## FType.H.ieee(h.io.out))).asUInt
+      for (i <- 0 until 8) { io.exc(i) := s2h(i/4).io.exceptionFlags }
     }
   }
 
