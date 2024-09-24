@@ -109,8 +109,9 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
   def sext(w: Int, in: UInt) = Fill(w - in.getWidth, io.signed && in(in.getWidth-1)) ## in
 
   i2d(0).io.in := Mux(io.widen, sext(64, in32(0)), in64(0))
+
   i2s(0).io.in := Mux(io.widen, sext(64, in16(0)), Mux(io.narrow, in64(0), sext(64, in32(0))))
-  i2s(1).io.in := Mux(io.widen, sext(32, in16(1)), in32(1))
+  i2s(1).io.in := Mux(io.widen, sext(32, in16(2)), in32(1))
 
   i2h(0).io.in := Mux(io.narrow, in32(0), sext(32, in16(0)))
   i2h(1).io.in := in16(1)
@@ -129,7 +130,7 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
   val d2s = Seq.fill(1)(Module(new hardfloat.RecFNToRecFN(FType.D.exp, FType.D.sig, FType.S.exp, FType.S.sig)))
 
   h2s(0).io.in := raw2rec(FType.H, raw16(0))
-  h2s(1).io.in := raw2rec(FType.H, raw16(1))
+  h2s(1).io.in := raw2rec(FType.H, raw16(2))
   s2d(0).io.in := raw2rec(FType.S, raw32(0))
   s2h(0).io.in := raw2rec(FType.S, raw32(0))
   s2h(1).io.in := raw2rec(FType.S, raw32(1))
