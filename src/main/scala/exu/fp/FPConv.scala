@@ -214,7 +214,7 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
   dontTouch(io)
 }
 
-class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) with HasFPUParameters {
+class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with HasFPUParameters {
   val supported_insns = FPConvFactory.insns
 
   io.set_vxsat := false.B
@@ -281,8 +281,8 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   }
 
 
-  val pipe_out = Pipe(io.pipe(0).valid, out).bits
-  val pipe_exc = Pipe(io.pipe(0).valid, exc).bits
+  val pipe_out = Pipe(io.pipe(0).valid, out, depth-1).bits
+  val pipe_exc = Pipe(io.pipe(0).valid, exc, depth-1).bits
 
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
