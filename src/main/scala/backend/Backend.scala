@@ -397,14 +397,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   )
   // TODO: this conservatively assumes a index data hazard against anything in the vdq
 
-  frontend_rindex.req.valid := io.index_access.valid && !index_access_hazard
+  frontend_rindex.req.valid := io.index_access.valid
   io.index_access.ready := frontend_rindex.req.ready && !index_access_hazard
   frontend_rindex.req.bits.eg  := index_access_eg
   frontend_rindex.req.bits.oldest  := false.B
   io.index_access.idx   := frontend_rindex.resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
   val vm_busy = Wire(Bool())
-  frontend_rmask.req.valid    := io.mask_access.valid && !vm_busy
+  frontend_rmask.req.valid    := io.mask_access.valid
   frontend_rmask.req.bits.eg  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
   frontend_rmask.req.bits.oldest := false.B
   io.mask_access.ready  := frontend_rmask.req.ready && !vm_busy
