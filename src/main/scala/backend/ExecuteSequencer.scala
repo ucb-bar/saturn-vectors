@@ -208,7 +208,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-  val rgatherv_e0_eidx = io.vgu.gather_eidx.bits & eewBitMask(vs1_eew)
+  val rgatherv_e0_eidx = io.vgu.gather_eidx.bits
   val rgather_eidx = get_max_offset(Mux(rgather_ix, uscalar, rgatherv_e0_eidx))
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
   val rvs2_eidx = Mux(rgather || rgatherei16, rgather_eidx, eidx)
