@@ -107,7 +107,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
 
     for (i <- 1 until maxPipeDepth) {
       val fire = pipe_valids(i-1)
-      pipe_valids(i) := fire && pipe_fus.map(t => pipe_bits(i-1).fu_sel(t._2) && (t._1.depth > i).B).orR
+      pipe_valids(i) := fire && pipe_bits(i-1).pipe_depth =/= (i-1).U
       when (fire) {
         pipe_bits(i)      := pipe_bits(i-1)
       }
