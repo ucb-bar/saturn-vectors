@@ -120,18 +120,22 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       }
     }
 
-    val write_sel = pipe_valids.zip(pipe_bits).zipWithIndex.map { case ((v,b),i) =>
-      Mux(v && b.pipe_depth === i.U, b.fu_sel, 0.U)
-    }.reduce(_|_)
-    assert(PopCount(write_sel) <= 1.U)
-    pipe_write := write_sel.orR
-    when (write_sel.orR) {
-      val acc = Mux1H(write_sel, pipe_fus.map(_._1.io.pipe.last.bits.acc))
-      val tail = Mux1H(write_sel, pipe_fus.map(_._1.io.pipe.last.bits.tail))
-      io.pipe_write.valid := Mux1H(write_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
-      io.pipe_write.bits := Mux1H(write_sel, pipe_fus.map(_._1.io.write.bits))
+    // Selects which pipe register has the write
+    val write_pipe_sel = pipe_valids.zip(pipe_bits).zipWithIndex.map { case ((v,b),i) =>
+      v && b.pipe_depth === i.U
+    }
+    // Selects which of all FUs has the write
+    val write_fu_sel = pipe_fus.map { case (_, j) => Mux1H(write_pipe_sel, pipe_bits.map(_.fu_sel))(j) }
+    assert(PopCount(write_pipe_sel) <= 1.U)
+    pipe_write := write_pipe_sel.orR
+    when (write_pipe_sel.orR) {
+      assert(PopCount(write_fu_sel) <= 1.U)
+      val acc = Mux1H(write_pipe_sel, pipe_bits.map(_.acc))
+      val tail = Mux1H(write_pipe_sel, pipe_bits.map(_.tail))
+      io.pipe_write.valid := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
+      io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
       io.acc_write.valid := acc && !tail
-      io.acc_write.bits := Mux1H(write_sel, pipe_fus.map(_._1.io.write.bits))
+      io.acc_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
     }
 
     when (pipe_valids.orR) { io.busy := true.B }
