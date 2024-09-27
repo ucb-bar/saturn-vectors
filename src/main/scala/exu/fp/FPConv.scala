@@ -17,6 +17,7 @@ case object FPConvFactory extends FunctionalUnitFactory {
 
 class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUParameters {
   val io = IO(new Bundle {
+    val valid = Input(Bool())
     val in = Input(UInt(64.W))
     val in_eew = Input(UInt(2.W))
     val widen = Input(Bool())
@@ -144,74 +145,74 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
     f2f.io.roundingMode := Mux(io.rto, "b110".U, io.frm)
   }
 
-  io.out := DontCare
-  io.exc := DontCare
+  val out = WireInit(0.U(64.W))
+  val exc = WireInit(0.U.asTypeOf(Vec(8, UInt(FPConstants.FLAGS_SZ.W))))
+  io.out := RegEnable(out, io.valid)
+  io.exc := RegEnable(exc, io.valid)
 
-  def exc(iFlags: UInt) = Cat(iFlags(2,1).orR, 0.U(3.W), iFlags(0))
+  def toExc(iFlags: UInt) = Cat(iFlags(2,1).orR, 0.U(3.W), iFlags(0))
 
   when (io.i2f) {
     val i2d_out = i2d.map(f => FType.D.ieee(f.io.out))
     val i2s_out = i2s.map(f => FType.S.ieee(f.io.out))
     val i2h_out = i2h.map(f => FType.H.ieee(f.io.out))
     when (out_eew === 3.U) {
-      io.out := VecInit(i2d_out).asUInt
-      io.exc := VecInit.fill(8)(i2d(0).io.exceptionFlags)
+      out := VecInit(i2d_out).asUInt
+      exc := VecInit.fill(8)(i2d(0).io.exceptionFlags)
     }
     when (out_eew === 2.U) {
-      io.out := VecInit(i2s_out).asUInt
-      for (i <- 0 until 8) { io.exc(i) := i2s(i/4).io.exceptionFlags }
+      out := VecInit(i2s_out).asUInt
+      for (i <- 0 until 8) { exc(i) := i2s(i/4).io.exceptionFlags }
     }
     when (out_eew === 1.U) {
-      io.out := VecInit(i2h_out).asUInt
-      for (i <- 0 until 8) { io.exc(i) := i2h(i/2).io.exceptionFlags }
+      out := VecInit(i2h_out).asUInt
+      for (i <- 0 until 8) { exc(i) := i2h(i/2).io.exceptionFlags }
     }
   } .elsewhen (io.f2i) {
     when (out_eew === 3.U) {
-      io.out := d2i(0).io.out
-      io.exc := VecInit.fill(8)(exc(d2i(0).io.intExceptionFlags))
+      out := d2i(0).io.out
+      exc := VecInit.fill(8)(toExc(d2i(0).io.intExceptionFlags))
     }
     when (out_eew === 2.U) {
-      io.out := s2i(0).io.out(31,0) ## d2i(0).io.out(31,0)
-      io.exc(0) := exc(d2i(0).io.intExceptionFlags)
-      io.exc(1) := exc(d2i(0).io.intExceptionFlags)
-      io.exc(2) := exc(d2i(0).io.intExceptionFlags)
-      io.exc(3) := exc(d2i(0).io.intExceptionFlags)
-      io.exc(4) := exc(s2i(0).io.intExceptionFlags)
-      io.exc(5) := exc(s2i(0).io.intExceptionFlags)
-      io.exc(6) := exc(s2i(0).io.intExceptionFlags)
-      io.exc(7) := exc(s2i(0).io.intExceptionFlags)
+      out := s2i(0).io.out(31,0) ## d2i(0).io.out(31,0)
+      exc(0) := toExc(d2i(0).io.intExceptionFlags)
+      exc(1) := toExc(d2i(0).io.intExceptionFlags)
+      exc(2) := toExc(d2i(0).io.intExceptionFlags)
+      exc(3) := toExc(d2i(0).io.intExceptionFlags)
+      exc(4) := toExc(s2i(0).io.intExceptionFlags)
+      exc(5) := toExc(s2i(0).io.intExceptionFlags)
+      exc(6) := toExc(s2i(0).io.intExceptionFlags)
+      exc(7) := toExc(s2i(0).io.intExceptionFlags)
     }
     when (out_eew === 1.U) {
-      io.out := h2i(1).io.out(15,0) ## s2i(0).io.out(15,0) ## h2i(0).io.out(15,0) ## d2i(0).io.out(15,0)
-      io.exc(0) := exc(d2i(0).io.intExceptionFlags)
-      io.exc(1) := exc(d2i(0).io.intExceptionFlags)
-      io.exc(2) := exc(h2i(0).io.intExceptionFlags)
-      io.exc(3) := exc(h2i(0).io.intExceptionFlags)
-      io.exc(4) := exc(s2i(0).io.intExceptionFlags)
-      io.exc(5) := exc(s2i(0).io.intExceptionFlags)
-      io.exc(6) := exc(h2i(1).io.intExceptionFlags)
-      io.exc(7) := exc(h2i(1).io.intExceptionFlags)
+      out := h2i(1).io.out(15,0) ## s2i(0).io.out(15,0) ## h2i(0).io.out(15,0) ## d2i(0).io.out(15,0)
+      exc(0) := toExc(d2i(0).io.intExceptionFlags)
+      exc(1) := toExc(d2i(0).io.intExceptionFlags)
+      exc(2) := toExc(h2i(0).io.intExceptionFlags)
+      exc(3) := toExc(h2i(0).io.intExceptionFlags)
+      exc(4) := toExc(s2i(0).io.intExceptionFlags)
+      exc(5) := toExc(s2i(0).io.intExceptionFlags)
+      exc(6) := toExc(h2i(1).io.intExceptionFlags)
+      exc(7) := toExc(h2i(1).io.intExceptionFlags)
     }
   } .otherwise {
     when (out_eew === 3.U) {
-      io.out := FType.D.ieee(s2d(0).io.out)
-      io.exc := VecInit.fill(8)(s2d(0).io.exceptionFlags)
+      out := FType.D.ieee(s2d(0).io.out)
+      exc := VecInit.fill(8)(s2d(0).io.exceptionFlags)
     }
     when (io.widen && out_eew === 2.U) {
-      io.out := VecInit(h2s.map(h => FType.S.ieee(h.io.out))).asUInt
-      for (i <- 0 until 8) { io.exc(i) := h2s(i/4).io.exceptionFlags }
+      out := VecInit(h2s.map(h => FType.S.ieee(h.io.out))).asUInt
+      for (i <- 0 until 8) { exc(i) := h2s(i/4).io.exceptionFlags }
     }
     when (io.narrow && out_eew === 2.U) {
-      io.out := FType.S.ieee(d2s(0).io.out)
-      io.exc := VecInit.fill(8)(d2s(0).io.exceptionFlags)
+      out := FType.S.ieee(d2s(0).io.out)
+      exc := VecInit.fill(8)(d2s(0).io.exceptionFlags)
     }
     when (out_eew === 1.U) {
-      io.out := VecInit(s2h.map(h => 0.U(16.W) ## FType.H.ieee(h.io.out))).asUInt
-      for (i <- 0 until 8) { io.exc(i) := s2h(i/4).io.exceptionFlags }
+      out := VecInit(s2h.map(h => 0.U(16.W) ## FType.H.ieee(h.io.out))).asUInt
+      for (i <- 0 until 8) { exc(i) := s2h(i/4).io.exceptionFlags }
     }
   }
-
-  dontTouch(io)
 }
 
 class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) with HasFPUParameters {
@@ -239,6 +240,7 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) w
 
   val conv_blocks = Seq.fill(dLen/64) { Module(new FPConvBlock) }
   conv_blocks.zipWithIndex.foreach { case (c,i) =>
+    c.io.valid := io.pipe(0).valid
     c.io.in := Mux(ctrl_widen,
       expanded_rvs2_data,
       rvs2_data)((i*64)+63,i*64)
@@ -257,21 +259,23 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) w
   val out = Wire(UInt(dLen.W))
   val exc = Wire(Vec(dLenB, UInt(FPConstants.FLAGS_SZ.W)))
 
-  when (ctrl_narrow) {
+  val s1_ctrl_narrow = io.pipe(1).bits.rs1(4)
+  val s1_vd_eew = io.pipe(1).bits.vd_eew
+  when (s1_ctrl_narrow) {
     val bits = VecInit(conv_blocks.map(_.io.out)).asUInt
     val out8  = VecInit(bits.asTypeOf(Vec(dLenB     , UInt( 8.W))).grouped(2).map(_.head).toSeq).asUInt
     val out16 = VecInit(bits.asTypeOf(Vec(dLenB >> 1, UInt(16.W))).grouped(2).map(_.head).toSeq).asUInt
     val out32 = VecInit(bits.asTypeOf(Vec(dLenB >> 2, UInt(32.W))).grouped(2).map(_.head).toSeq).asUInt
     out := Fill(2, Mux1H(Seq(
-      (vd_eew === 0.U) -> out8,
-      (vd_eew === 1.U) -> out16,
-      (vd_eew === 2.U) -> out32
+      (s1_vd_eew === 0.U) -> out8,
+      (s1_vd_eew === 1.U) -> out16,
+      (s1_vd_eew === 2.U) -> out32
     )))
     val excs = VecInit(conv_blocks.map(_.io.exc).flatten)
     val exc_out = Mux1H(Seq(
-      (vd_eew === 0.U) -> VecInit(excs.grouped(2).map(_.take(1)).flatten.toSeq),
-      (vd_eew === 1.U) -> VecInit(excs.grouped(4).map(_.take(2)).flatten.toSeq),
-      (vd_eew === 2.U) -> VecInit(excs.grouped(8).map(_.take(4)).flatten.toSeq),
+      (s1_vd_eew === 0.U) -> VecInit(excs.grouped(2).map(_.take(1)).flatten.toSeq),
+      (s1_vd_eew === 1.U) -> VecInit(excs.grouped(4).map(_.take(2)).flatten.toSeq),
+      (s1_vd_eew === 2.U) -> VecInit(excs.grouped(8).map(_.take(4)).flatten.toSeq),
     ))
 
     exc := VecInit(Seq(exc_out, exc_out).flatten)
@@ -281,8 +285,8 @@ class FPConvPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(3)(p) w
   }
 
 
-  val pipe_out = Pipe(io.pipe(0).valid, out, depth-1).bits
-  val pipe_exc = Pipe(io.pipe(0).valid, exc, depth-1).bits
+  val pipe_out = Pipe(io.pipe(1).valid, out, depth-2).bits
+  val pipe_exc = Pipe(io.pipe(1).valid, exc, depth-2).bits
 
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
