@@ -75,7 +75,7 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
 
   val raw_hazard = (UIntToOH(io.rvs.req.bits.eg) & io.older_writes) =/= 0.U
 
-  io.rvs.req.valid := valid && acc_e0 && !raw_hazard
+  io.rvs.req.valid := valid && acc_e0
   io.rvs.req.bits.eg := getEgId(inst.rs1, 0.U, vd_eew, false.B)
   io.rvs.req.bits.oldest := inst.vat === io.vat_head
 
@@ -98,7 +98,7 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
     VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)
   ))
 
-  when (io.rvs.req.fire) {
+  when (io.rvs.req.fire && !raw_hazard) {
     val v0_mask = eewByteMask(vd_eew)
     val init_resp = io.acc_init_resp.asTypeOf(Vec(dLenB, UInt(8.W)))
     for (i <- 0 until 8) {
