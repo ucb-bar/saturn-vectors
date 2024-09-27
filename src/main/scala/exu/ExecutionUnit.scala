@@ -120,7 +120,9 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       }
     }
 
-    val write_sel = pipe_fus.map(_._1.io.pipe.last.valid)
+    val write_sel = pipe_valids.zip(pipe_bits).zipWithIndex.map { case ((v,b),i) =>
+      Mux(v && b.pipe_depth === i.U, b.fu_sel, 0.U)
+    }.reduce(_|_)
     assert(PopCount(write_sel) <= 1.U)
     pipe_write := write_sel.orR
     when (write_sel.orR) {
