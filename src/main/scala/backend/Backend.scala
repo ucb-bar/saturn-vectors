@@ -428,8 +428,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     ~(0.U(dLenB.W))
   ).asBools
   vmu_mask_q.io.push.bits.head  := 0.U
-  vmu_mask_q.io.push.bits.tail  := Mux(vps.io.iss.bits.tail, vps.io.iss.bits.vl, 0.U) - vps.io.iss.bits.eidx
-
+  vmu_mask_q.io.push.bits.tail  := (Mux(vmu_index_q.io.push.bits.tail === 0.U, dLenB.U, vmu_index_q.io.push.bits.tail) - vmu_index_q.io.push.bits.head) >> vps.io.iss.bits.rvs2_eew
 
   vps.io.iss.ready := Mux(vps.io.iss.bits.vmu,
     vmu_index_q.io.push.ready && vmu_mask_q.io.push.ready,
