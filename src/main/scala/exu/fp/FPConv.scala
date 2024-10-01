@@ -147,70 +147,83 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
 
   val out = WireInit(0.U(64.W))
   val exc = WireInit(0.U.asTypeOf(Vec(8, UInt(FPConstants.FLAGS_SZ.W))))
-  io.out := RegEnable(out, io.valid)
-  io.exc := RegEnable(exc, io.valid)
+
+  io.out := out
+  io.exc := exc
 
   def toExc(iFlags: UInt) = Cat(iFlags(2,1).orR, 0.U(3.W), iFlags(0))
 
-  when (io.i2f) {
-    val i2d_out = i2d.map(f => FType.D.ieee(f.io.out))
-    val i2s_out = i2s.map(f => FType.S.ieee(f.io.out))
-    val i2h_out = i2h.map(f => FType.H.ieee(f.io.out))
-    when (out_eew === 3.U) {
+  val i2d_out = i2d.map(f => RegEnable(FType.D.ieee(f.io.out), io.valid))
+  val i2s_out = i2s.map(f => RegEnable(FType.S.ieee(f.io.out), io.valid))
+  val i2h_out = i2h.map(f => RegEnable(FType.H.ieee(f.io.out), io.valid))
+  val i2d_exc = i2d.map(f => RegEnable(f.io.exceptionFlags, io.valid))
+  val i2s_exc = i2s.map(f => RegEnable(f.io.exceptionFlags, io.valid))
+  val i2h_exc = i2h.map(f => RegEnable(f.io.exceptionFlags, io.valid))
+
+  val d2i_out = d2i.map(f => RegEnable(f.io.out, io.valid))
+  val s2i_out = s2i.map(f => RegEnable(f.io.out, io.valid))
+  val h2i_out = h2i.map(f => RegEnable(f.io.out, io.valid))
+  val d2i_exc = d2i.map(f => RegEnable(toExc(f.io.intExceptionFlags), io.valid))
+  val s2i_exc = s2i.map(f => RegEnable(toExc(f.io.intExceptionFlags), io.valid))
+  val h2i_exc = h2i.map(f => RegEnable(toExc(f.io.intExceptionFlags), io.valid))
+
+  val s2d_out = s2d.map(f => RegEnable(FType.D.ieee(f.io.out), io.valid))
+  val h2s_out = h2s.map(f => RegEnable(FType.S.ieee(f.io.out), io.valid))
+  val d2s_out = d2s.map(f => RegEnable(FType.S.ieee(f.io.out), io.valid))
+  val s2h_out = s2h.map(f => RegEnable(FType.H.ieee(f.io.out), io.valid))
+  val s2d_exc = s2d.map(f => RegEnable(f.io.exceptionFlags, io.valid))
+  val h2s_exc = h2s.map(f => RegEnable(f.io.exceptionFlags, io.valid))
+  val d2s_exc = d2s.map(f => RegEnable(f.io.exceptionFlags, io.valid))
+  val s2h_exc = s2h.map(f => RegEnable(f.io.exceptionFlags, io.valid))
+
+  val s1_i2f = RegEnable(io.i2f, io.valid)
+  val s1_f2i = RegEnable(io.f2i, io.valid)
+  val s1_widen = RegEnable(io.widen, io.valid)
+  val s1_narrow = RegEnable(io.narrow, io.valid)
+  val s1_out_eew = RegEnable(out_eew, io.valid)
+
+  when (s1_i2f) {
+    when (s1_out_eew === 3.U) {
       out := VecInit(i2d_out).asUInt
-      exc := VecInit.fill(8)(i2d(0).io.exceptionFlags)
+      exc := VecInit.fill(8)(i2d_exc(0))
     }
-    when (out_eew === 2.U) {
+    when (s1_out_eew === 2.U) {
       out := VecInit(i2s_out).asUInt
-      for (i <- 0 until 8) { exc(i) := i2s(i/4).io.exceptionFlags }
+      for (i <- 0 until 8) { exc(i) := i2s_exc(i/4) }
     }
-    when (out_eew === 1.U) {
+    when (s1_out_eew === 1.U) {
       out := VecInit(i2h_out).asUInt
-      for (i <- 0 until 8) { exc(i) := i2h(i/2).io.exceptionFlags }
+      for (i <- 0 until 8) { exc(i) := i2h_exc(i/2) }
     }
-  } .elsewhen (io.f2i) {
-    when (out_eew === 3.U) {
-      out := d2i(0).io.out
-      exc := VecInit.fill(8)(toExc(d2i(0).io.intExceptionFlags))
+  } .elsewhen (s1_f2i) {
+    when (s1_out_eew === 3.U) {
+      out := d2i_out(0)
+      exc := VecInit.fill(8)(d2i_exc(0))
     }
-    when (out_eew === 2.U) {
-      out := s2i(0).io.out(31,0) ## d2i(0).io.out(31,0)
-      exc(0) := toExc(d2i(0).io.intExceptionFlags)
-      exc(1) := toExc(d2i(0).io.intExceptionFlags)
-      exc(2) := toExc(d2i(0).io.intExceptionFlags)
-      exc(3) := toExc(d2i(0).io.intExceptionFlags)
-      exc(4) := toExc(s2i(0).io.intExceptionFlags)
-      exc(5) := toExc(s2i(0).io.intExceptionFlags)
-      exc(6) := toExc(s2i(0).io.intExceptionFlags)
-      exc(7) := toExc(s2i(0).io.intExceptionFlags)
+    when (s1_out_eew === 2.U) {
+      out := s2i_out(0)(31,0) ## d2i_out(0)(31,0)
+      exc := VecInit(Seq.fill(4)(d2i_exc(0)) ++ Seq.fill(4)(s2i_exc(0)))
     }
-    when (out_eew === 1.U) {
-      out := h2i(1).io.out(15,0) ## s2i(0).io.out(15,0) ## h2i(0).io.out(15,0) ## d2i(0).io.out(15,0)
-      exc(0) := toExc(d2i(0).io.intExceptionFlags)
-      exc(1) := toExc(d2i(0).io.intExceptionFlags)
-      exc(2) := toExc(h2i(0).io.intExceptionFlags)
-      exc(3) := toExc(h2i(0).io.intExceptionFlags)
-      exc(4) := toExc(s2i(0).io.intExceptionFlags)
-      exc(5) := toExc(s2i(0).io.intExceptionFlags)
-      exc(6) := toExc(h2i(1).io.intExceptionFlags)
-      exc(7) := toExc(h2i(1).io.intExceptionFlags)
+    when (s1_out_eew === 1.U) {
+      out := h2i_out(1)(15,0) ## s2i_out(0)(15,0) ## h2i_out(0)(15,0) ## d2i_out(0)(15,0)
+      exc := VecInit(Seq.fill(2)(d2i_exc(0)) ++ Seq.fill(2)(h2i_exc(0)) ++ Seq.fill(2)(s2i_exc(0)) ++ Seq.fill(2)(h2i_exc(1)))
     }
   } .otherwise {
-    when (out_eew === 3.U) {
-      out := FType.D.ieee(s2d(0).io.out)
-      exc := VecInit.fill(8)(s2d(0).io.exceptionFlags)
+    when (s1_out_eew === 3.U) {
+      out := s2d_out(0)
+      exc := VecInit.fill(8)(s2d_exc(0))
     }
-    when (io.widen && out_eew === 2.U) {
-      out := VecInit(h2s.map(h => FType.S.ieee(h.io.out))).asUInt
-      for (i <- 0 until 8) { exc(i) := h2s(i/4).io.exceptionFlags }
+    when (s1_widen && s1_out_eew === 2.U) {
+      out := VecInit(h2s_out).asUInt
+      for (i <- 0 until 8) { exc(i) := h2s_exc(i/4) }
     }
-    when (io.narrow && out_eew === 2.U) {
-      out := FType.S.ieee(d2s(0).io.out)
-      exc := VecInit.fill(8)(d2s(0).io.exceptionFlags)
+    when (s1_narrow && s1_out_eew === 2.U) {
+      out := d2s_out(0)
+      exc := VecInit.fill(8)(d2s_exc(0))
     }
-    when (out_eew === 1.U) {
-      out := VecInit(s2h.map(h => 0.U(16.W) ## FType.H.ieee(h.io.out))).asUInt
-      for (i <- 0 until 8) { exc(i) := s2h(i/4).io.exceptionFlags }
+    when (s1_out_eew === 1.U) {
+      out := VecInit(s2h_out.map(o => 0.U(16.W) ## o)).asUInt
+      for (i <- 0 until 8) { exc(i) := s2h_exc(i/4) }
     }
   }
 }
