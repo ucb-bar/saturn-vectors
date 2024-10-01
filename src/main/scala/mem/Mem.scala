@@ -323,7 +323,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   lss.io.op := liq(liq_lss_ptr).op
   lcu.io.pop <> lss.io.compactor
   lss.io.compactor_data := lcu.io.pop_data.asUInt
-  io.vu.lresp <> lss.io.resp
+  io.vu.lresp <> Queue(lss.io.resp)
   liq_lss_fire := lss.io.done
 
   // Store segment sequencing
