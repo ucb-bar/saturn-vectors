@@ -103,7 +103,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_next_eidx    = get_next_eidx(dis_vl, 0.U, dis_sew, 0.U, false.B, false.B)
     val dis_slide1       = !dis_inst.isOpi
     val dis_uscalar      = Mux(dis_inst.funct3(2), dis_inst.rs1_data, dis_inst.imm5)
-    val dis_slide_offset = Mux(!dis_slide1, get_max_offset(dis_uscalar), 1.U)
+    val dis_slide_offset = Mux(!dis_slide1, get_max_offset(dis_uscalar, dis_sew), 1.U)
     val dis_tail         = dis_next_eidx === dis_vl
     val dis_rgatherei16  = dis_inst.funct3 === OPIVV && dis_inst.opif6 === OPIFunct6.rgatherei16 && usesPerm.B
     val dis_rgather_eew  = Mux(dis_inst.opif6 === OPIFunct6.rgatherei16, 1.U, dis_sew)
@@ -209,11 +209,13 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
   val rgatherv_e0_eidx = io.vgu.gather_eidx.bits
-  val rgather_eidx = get_max_offset(Mux(rgather_ix, uscalar, rgatherv_e0_eidx))
+  val rgather_eidx = Mux(rgather_ix, uscalar, rgatherv_e0_eidx)
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
-  val rvs2_eidx = Mux(rgather || rgatherei16, rgather_eidx, eidx)
   io.rvs1.bits.eg := getEgId(inst.rs1, eidx     , vs1_eew, inst.reads_vs1_mask)
-  io.rvs2.bits.eg := getEgId(inst.rs2, rvs2_eidx, vs2_eew, inst.reads_vs2_mask)
+  io.rvs2.bits.eg := Mux(rgather || rgatherei16,
+    getEgId(inst.rs2, rgather_eidx, vs2_eew, false.B),
+    getEgId(inst.rs2, eidx        , vs2_eew, inst.reads_vs2_mask)
+  )
   io.rvd.bits.eg  := getEgId(inst.rd , eidx     , vs3_eew, false.B)
   io.rvm.bits.eg  := getEgId(0.U     , eidx     , 0.U    , true.B)
 

@@ -412,4 +412,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     val vm_resp = (mask_resp >> vm_eidx)(dLenB-1,0)
     Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
   }
+
+  def min(a: UInt, b: UInt) = Mux(a > b, b, a)
+  def get_max_offset(offset: UInt, eew: UInt): UInt = min(offset, maxVLMax.U >> eew)(log2Ceil(maxVLMax),0)
 }

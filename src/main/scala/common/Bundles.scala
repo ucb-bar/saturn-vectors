@@ -267,6 +267,7 @@ class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val renvm = Bool()
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val rvs2_eew = UInt(2.W)
+  val sew = UInt(2.W)
   val vmu = Bool()
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
   val tail = Bool()

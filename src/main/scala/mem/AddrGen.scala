@@ -29,8 +29,6 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
     val out = Decoupled(new IFQEntry)
   })
 
-  def min(a: UInt, b: UInt) = Mux(a > b, b, a)
-
   def getElems(off: UInt, eew: UInt): UInt = {
     (dLenB.U - off(dLenOffBits-1,0)) >> eew
   }
