@@ -194,8 +194,6 @@ case object IntegerPipeFactory extends FunctionalUnitFactory {
     REDSUM.VV, WREDSUM.VV, WREDSUMU.VV,
     REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
     FMERGE.VF,
-    // zvbb
-    BREV8.VV, BREV.VV, REV8.VV, CLZ.VV, CTZ.VV, CPOP.VV
   ).map(_.pipelined(1)) ++ Seq(
     SADDU.VV, SADDU.VX, SADDU.VI, SADD.VV, SADD.VX, SADD.VI,
     SSUBU.VV, SSUBU.VX, SSUB.VV, SSUB.VX,
@@ -215,8 +213,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) 
     supported_insns,
     Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
       DoSub, WideningSext, Averaging,
-      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask,
-      UsesBitSwap, UsesCountZeros))
+      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask))
 
   io.stall := false.B
 
@@ -306,56 +303,11 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) 
     }
   }}.flatten)
 
-  val brev_bytes = VecInit(in2_bytes.map(b => Reverse(b))).asUInt
-  val brev_elements = VecInit((0 until 4).map { eew =>
-    VecInit(in2_bytes.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(b => Reverse(b))).asUInt
-  })(vd_eew)
-  val rev8_elements = VecInit((0 until 4).map { eew =>
-    VecInit(in2_bytes.asTypeOf(Vec(dLenB >> eew, Vec(1 << eew, UInt(8.W)))).map(b => VecInit(b.reverse))).asUInt
-  })(vd_eew)
-  val swap_out = Mux1H(Seq(
-    (io.pipe(0).bits.rs1(1,0) === 0.U) -> brev_bytes,
-    (io.pipe(0).bits.rs1(1,0) === 1.U) -> rev8_elements,
-    (io.pipe(0).bits.rs1(1,0) === 2.U) -> brev_elements
-  ))
-
-  val tz_in = Mux(io.pipe(0).bits.rs1(0), in2_bytes, brev_elements.asTypeOf(Vec(dLenB, UInt(8.W))))
-  val tz_8b = tz_in.map(b => (b === 0.U, (PriorityEncoderOH(1.U ## b) - 1.U)(7,0)))
-  val tz_16b = tz_8b.grouped(2).toSeq.map(t =>
-    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(8.W)), t(0)._2))
-  )
-  val tz_32b = tz_16b.grouped(2).toSeq.map(t =>
-    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(16.W)), t(0)._2))
-  )
-  val tz_64b = tz_32b.grouped(2).toSeq.map(t =>
-    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(32.W)), t(0)._2))
-  )
-  val tz_out = WireInit(VecInit(
-    VecInit(tz_8b.map(_._2)).asUInt,
-    VecInit(tz_16b.map(_._2)).asUInt,
-    VecInit(tz_32b.map(_._2)).asUInt,
-    VecInit(tz_64b.map(_._2)).asUInt
-  )(vd_eew).asTypeOf(Vec(dLenB, UInt(8.W))))
-
-  val cpop_in = Mux(io.pipe(0).bits.rs1(1), in2_bytes, tz_out)
-  val cpop_8b = cpop_in.map(b => PopCount(b))
-  val cpop_16b = cpop_8b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpop_32b = cpop_16b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpop_64b = cpop_32b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpops = Seq(cpop_8b, cpop_16b, cpop_32b, cpop_64b)
-  val count_out = WireInit(VecInit((0 until 4).map { eew =>
-    val out = Wire(Vec(dLenB >> eew, UInt((8 << eew).W)))
-    out := VecInit(cpops(eew))
-    out.asUInt
-  })(vd_eew))
-
   val outs = Seq(
     (ctrl.bool(UsesNarrowingSext)        , narrowing_ext_out),
     (ctrl.bool(WritesAsMask)             , mask_out),
     (ctrl.bool(UsesMinMax)               , minmax_out),
     (ctrl.bool(UsesMerge)                , merge_out),
-    (ctrl.bool(UsesBitSwap)              , swap_out),
-    (ctrl.bool(UsesCountZeros)           , count_out),
   )
 
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)

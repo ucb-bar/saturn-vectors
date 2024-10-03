@@ -134,7 +134,8 @@ object VXFunctionalUnitGroups {
     BitwisePipeFactory,
     IntegerDivideFactory(idivDoesImul),
     MaskUnitFactory,
-    PermuteUnitFactory
+    PermuteUnitFactory,
+    BitmanipPipeFactory
   )
   def integerMAC(pipeDepth: Int, useSegmented: Boolean) = Seq(
     IntegerMultiplyFactory(pipeDepth, useSegmented)
