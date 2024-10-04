@@ -177,14 +177,19 @@ class ShiftArray(dLenB: Int) extends Module {
 }
 
 case object ShiftPipeFactory extends FunctionalUnitFactory {
-  def insns = Seq(
-    SLL.VV, SLL.VX, SLL.VI, SRL.VV, SRL.VX, SRL.VI, SRA.VV, SRA.VX, SRA.VI,
+  def wideNarrowInsns = Seq(
     NSRA.VV, NSRA.VX, NSRA.VI, NSRL.VV, NSRL.VX, NSRL.VI,
     NCLIPU.VV, NCLIPU.VX, NCLIPU.VI, NCLIP.VV, NCLIP.VX, NCLIP.VI,
+    // Zvbb
+    WSLL.VV, WSLL.VX, WSLL.VI
+  ).map(_.restrictSEW(0,1,2)).flatten
+
+  def insns = (wideNarrowInsns ++ Seq(
+    SLL.VV, SLL.VX, SLL.VI, SRL.VV, SRL.VX, SRL.VI, SRA.VV, SRA.VX, SRA.VI,
     SSRL.VV, SSRL.VX, SSRL.VI, SSRA.VV, SSRA.VX, SSRA.VI,
     // Zvbb
-    ROL.VV, ROL.VX, ROR.VV, ROR.VX, ROR.VI, RORI.VI, WSLL.VV, WSLL.VX, WSLL.VI
-  ).map(_.pipelined(2))
+    ROL.VV, ROL.VX, ROR.VV, ROR.VX, ROR.VI, RORI.VI,
+  )).map(_.pipelined(2))
   def generate(implicit p: Parameters) = new ShiftPipe()(p)
 }
 

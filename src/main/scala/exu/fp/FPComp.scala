@@ -16,7 +16,8 @@ case object FPCmpFactory extends FunctionalUnitFactory {
     MFEQ.VV, MFEQ.VF, MFNE.VV, MFNE.VF,
     MFLT.VV, MFLT.VF, MFLE.VV, MFLE.VF,
     MFGT.VF, MFGE.VF,
-    FREDMIN.VV, FREDMAX.VV).map(_.pipelined(1))
+    FREDMIN.VV, FREDMAX.VV
+  ).map(_.restrictSEW(1,2,3)).flatten.map(_.pipelined(1))
   def generate(implicit p: Parameters) = new FPCompPipe()(p)
 }
 

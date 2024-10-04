@@ -11,7 +11,11 @@ import saturn.insns._
 import hardfloat._
 
 case object FPConvFactory extends FunctionalUnitFactory {
-  def insns = Seq(FCVT_SGL, FCVT_NRW, FCVT_WID).map(_.pipelined(3))
+  def insns = Seq(
+    FCVT_SGL.restrictSEW(1,2,3),
+    FCVT_NRW.restrictSEW(1,2),
+    FCVT_WID.restrictSEW(0,1,2)
+  ).flatten.map(_.pipelined(3))
   def generate(implicit p: Parameters) = new FPConvPipe()(p)
 }
 

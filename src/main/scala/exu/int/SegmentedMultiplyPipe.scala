@@ -10,17 +10,22 @@ import saturn.common._
 import saturn.insns._
 
 case class IntegerMultiplyFactory(depth: Int, segmented: Boolean) extends FunctionalUnitFactory {
-  def base_insns = Seq(
-    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
-    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
+  def wideningInsns = Seq(
     WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
     WMULSU.VV, WMULSU.VX,
-    MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
-    MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
     WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
-    SMUL.VV, SMUL.VX).map(_.pipelined(depth))
-  def insns = if (segmented) base_insns else base_insns.map(_.elementWise)
+  ).map(_.restrictSEW(0, 1, 2)).flatten
+
+  def baseInsns = (wideningInsns ++ Seq(
+    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
+    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
+    MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
+    MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
+    SMUL.VV, SMUL.VX)
+  ).map(_.pipelined(depth))
+
+  def insns = if (segmented) baseInsns else baseInsns.map(_.elementWise)
   def generate(implicit p: Parameters) = if (segmented) {
     new SegmentedMultiplyPipe(depth)(p)
   } else {

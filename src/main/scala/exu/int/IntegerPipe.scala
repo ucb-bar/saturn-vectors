@@ -175,13 +175,12 @@ class SaturatedSumArray(dLenB: Int) extends Module {
 }
 
 case object IntegerPipeFactory extends FunctionalUnitFactory {
-  def insns = Seq(
+
+  def baseInsns = Seq(
     ADD.VV, ADD.VX, ADD.VI, SUB.VV, SUB.VX, RSUB.VX, RSUB.VI,
-    WADDU.VV, WADDU.VX, WADD.VV, WADD.VX, WSUBU.VV, WSUBU.VX, WSUB.VV, WSUB.VX,
-    WADDUW.VV, WADDUW.VX, WADDW.VV, WADDW.VX, WSUBUW.VV, WSUBUW.VX, WSUBW.VV, WSUBW.VX,
     ADC.VV, ADC.VX, ADC.VI, MADC.VV, MADC.VX, MADC.VI,
     SBC.VV, SBC.VX, MSBC.VV, MSBC.VX,
-    NEXT.VV,
+    NEXT.VV, // TODO these don't support all SEWs
     MSEQ.VV, MSEQ.VX, MSEQ.VI, MSNE.VV, MSNE.VX, MSNE.VI,
     MSLTU.VV, MSLTU.VX, MSLT.VV, MSLT.VX,
     MSLEU.VV, MSLEU.VX, MSLEU.VI, MSLE.VV, MSLE.VX, MSLE.VI,
@@ -191,13 +190,25 @@ case object IntegerPipeFactory extends FunctionalUnitFactory {
     MERGE.VV, MERGE.VX, MERGE.VI,
     AADDU.VV, AADDU.VX, AADD.VV, AADD.VX,
     ASUBU.VV, ASUBU.VX, ASUB.VV, ASUB.VX,
-    REDSUM.VV, WREDSUM.VV, WREDSUMU.VV,
+    REDSUM.VV,
     REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
     FMERGE.VF,
-  ).map(_.pipelined(1)) ++ Seq(
+  )
+
+  // These support only SEW=0/1/2
+  def wideningInsns = Seq(
+    WADDU.VV, WADDU.VX, WADD.VV, WADD.VX, WSUBU.VV, WSUBU.VX, WSUB.VV, WSUB.VX,
+    WADDUW.VV, WADDUW.VX, WADDW.VV, WADDW.VX, WSUBUW.VV, WSUBUW.VX, WSUBW.VV, WSUBW.VX,
+    WREDSUM.VV, WREDSUMU.VV,
+  ).map(_.restrictSEW(0, 1, 2)).flatten
+
+  def satInsns = Seq(
     SADDU.VV, SADDU.VX, SADDU.VI, SADD.VV, SADD.VX, SADD.VI,
     SSUBU.VV, SSUBU.VX, SSUB.VV, SSUB.VX,
-  ).map(_.pipelined(2))
+  )
+
+  def insns = (baseInsns ++ wideningInsns).map(_.pipelined(1)) ++ satInsns.map(_.pipelined(2))
+
   def generate(implicit p: Parameters) = new IntegerPipe()(p)
 }
 
