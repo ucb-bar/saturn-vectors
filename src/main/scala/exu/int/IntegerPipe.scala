@@ -209,7 +209,7 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) 
   val vd_eew   = io.pipe(0).bits.vd_eew
 
   val ctrl = new VectorDecoder(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, io.pipe(0).bits.rs1, io.pipe(0).bits.rs2,
+    io.pipe(0).bits,
     supported_insns,
     Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
       DoSub, WideningSext, Averaging,

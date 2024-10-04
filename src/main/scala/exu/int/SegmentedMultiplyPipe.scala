@@ -35,7 +35,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
-   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+   val ctrl = new VectorDecoder(io.pipe(0).bits, supported_insns, Seq(
      MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
 
   val in_eew = io.pipe(0).bits.rvs1_eew

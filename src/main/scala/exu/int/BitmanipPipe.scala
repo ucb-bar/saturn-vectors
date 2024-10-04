@@ -21,7 +21,7 @@ class BitmanipPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunction
   val supported_insns = BitmanipPipeFactory.insns
 
   val ctrl = new VectorDecoder(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, io.pipe(0).bits.rs1, io.pipe(0).bits.rs2,
+    io.pipe(0).bits,
     supported_insns,
     Seq(UsesCountZeros))
 

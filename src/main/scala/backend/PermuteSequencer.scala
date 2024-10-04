@@ -15,7 +15,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   def accepts(inst: VectorIssueInst) = {
     val needs_mask = inst.vmu && (!inst.vm && inst.mop =/= mopUnit)
     val needs_index = inst.vmu && inst.mop(0)
-    val arith = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns, Seq(UsesPermuteSeq)).bool(UsesPermuteSeq)
+    val arith = !inst.vmu && new VectorDecoder(inst, exu_insns, Seq(UsesPermuteSeq)).bool(UsesPermuteSeq)
     needs_mask || needs_index || arith
   }
 

@@ -143,7 +143,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   io.stall := false.B
   io.set_vxsat := false.B
 
-  val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+  val ctrl = new VectorDecoder(io.pipe(0).bits, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd))
 
   val vs1_eew = io.pipe(0).bits.rvs1_eew

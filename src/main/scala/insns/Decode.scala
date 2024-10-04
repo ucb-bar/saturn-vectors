@@ -10,14 +10,26 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.rocket.constants._
 import freechips.rocketchip.util._
 
+trait HasVectorDecoderSignals {
+  def funct6: UInt
+  def funct3: UInt
+  def rs1: UInt
+  def rs2: UInt
+  def sew: UInt
+}
 
 class VectorDecoder(
-  funct3: UInt, funct6: UInt, rs1: UInt, rs2: UInt,
+  rs1: UInt, rs2: UInt, funct3: UInt, funct6: UInt, sew: UInt,
   insns: Seq[VectorInstruction],
   fields: Seq[InstructionField]) {
 
-  val index = Cat(rs1(4,0), rs2(4,0), funct3(2,0), funct6(5,0))
-  val lookups = insns.map { i => i.lookup(RS1) ## i.lookup(RS2) ## i.lookup(F3) ## i.lookup(F6) }
+  def this(bundle: HasVectorDecoderSignals, insns: Seq[VectorInstruction], fields: Seq[InstructionField]) = {
+    this(bundle.rs1, bundle.rs2, bundle.funct3, bundle.funct6, bundle.sew,
+      insns, fields)
+  }
+
+  val index = Cat(rs1(4,0), rs2(4,0), funct3(2,0), funct6(5,0), sew(1,0))
+  val lookups = insns.map { i => i.lookup(RS1) ## i.lookup(RS2) ## i.lookup(F3) ## i.lookup(F6) ## i.lookup(SEW) }
   val duplicates = lookups.diff(lookups.distinct).distinct
   val table = insns.map { i => fields.map(f => i.lookup(f)) :+ BitPat(true.B) }
 

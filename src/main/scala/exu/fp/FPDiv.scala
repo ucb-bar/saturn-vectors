@@ -251,12 +251,12 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   }
 
   val accept_inst = new VectorDecoder(
-    io.iss.op.funct3, io.iss.op.funct6, io.iss.op.rs1, io.iss.op.rs2,
+    io.iss.op,
     supported_insns,
     Seq(FPSwapVdV2))
 
   val ctrl = new VectorDecoder(
-    op.funct3, op.funct6, op.rs1, op.rs2,
+    op,
     supported_insns,
     Seq(FPSwapVdV2))
 

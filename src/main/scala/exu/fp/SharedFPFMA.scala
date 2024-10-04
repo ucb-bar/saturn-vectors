@@ -22,7 +22,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
 
   val supported_insns = FPFMAFactory(depth, true).insns
 
-  val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+  val ctrl = new VectorDecoder(io.pipe(0).bits, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, FPSpecRM, Wide2VD, Wide2VS2, Reduction))
 
   val vs1_eew = io.pipe(0).bits.rvs1_eew

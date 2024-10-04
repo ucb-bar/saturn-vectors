@@ -28,7 +28,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   def usesRvd = supported_insns.count(_.props.contains(ReadsVD.Y)) > 0
   def usesCompress = supported_insns.count(_.props.contains(F6(OPMFunct6.compress))) > 0
 
-  def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Nil).matched
+  def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst, supported_insns, Nil).matched
 
   val io = IO(new ExecuteSequencerIO(maxPipeDepth, nFUs))
 
@@ -90,7 +90,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   when (io.dis.fire) {
     val dis_inst = io.dis.bits
 
-    val dis_ctrl = new VectorDecoder(dis_inst.funct3, dis_inst.funct6, dis_inst.rs1, dis_inst.rs2, supported_insns,
+    val dis_ctrl = new VectorDecoder(dis_inst, supported_insns,
       Seq(SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5,
         PipelinedExecution, PipelineStagesMinus1, FUSel(nFUs)))
 
@@ -276,6 +276,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.rvs2_eew  := vs2_eew
   io.iss.bits.rvd_eew   := vs3_eew
   io.iss.bits.vd_eew    := vd_eew
+  io.iss.bits.sew       := inst.vconfig.vtype.vsew
   io.iss.bits.eidx      := eidx
   io.iss.bits.vl        := inst.vconfig.vl
   io.iss.bits.wvd_eg    := wvd_eg

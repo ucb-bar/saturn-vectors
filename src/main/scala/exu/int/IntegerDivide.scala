@@ -54,7 +54,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   val ctrl_swapvdv2 = WireInit(false.B)
 
   if (supportsMul) {
-    val mul_ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, mul_insns, Seq(
+    val mul_ctrl = new VectorDecoder(io.iss.op, mul_insns, Seq(
       MULHi, MULSign1, MULSign2, MULSwapVdV2))
     when (mul_ctrl.matched) {
       ctrl_fn       := Mux(mul_ctrl.bool(MULHi),
@@ -88,7 +88,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, write_elem((8<<eew)-1,0)) })(op.rvd_eew)
 
   if (supportsMul) {
-    val mul_ctrl = new VectorDecoder(op.funct3, op.funct6, 0.U, 0.U, mul_insns, Seq(
+    val mul_ctrl = new VectorDecoder(op, mul_insns, Seq(
       MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
     val is_smul = op.isOpi
     val prod = div.io.resp.bits.full_data.asSInt
