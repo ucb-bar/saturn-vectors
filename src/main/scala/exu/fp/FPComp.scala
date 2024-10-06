@@ -17,11 +17,11 @@ case object FPCmpFactory extends FunctionalUnitFactory {
     MFLT.VV, MFLT.VF, MFLE.VV, MFLE.VF,
     MFGT.VF, MFGE.VF,
     FREDMIN.VV, FREDMAX.VV
-  ).map(_.restrictSEW(1,2,3)).flatten.map(_.pipelined(1))
+  ).map(_.restrictSEW(1,2,3)).flatten.map(_.pipelined(2))
   def generate(implicit p: Parameters) = new FPCompPipe()(p)
 }
 
-class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) with HasFPUParameters {
+class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) with HasFPUParameters {
   val supported_insns = FPCmpFactory.insns
 
   io.stall := false.B
@@ -137,19 +137,23 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) w
 
   // Mask writing
   val mask_write_offset = VecInit.tabulate(4)({ eew =>
-    Cat(io.pipe(0).bits.eidx(log2Ceil(dLen)-1, dLenOffBits-eew), 0.U((dLenOffBits-eew).W))
-  })(rvs1_eew)
+    Cat(io.pipe(1).bits.eidx(log2Ceil(dLen)-1, dLenOffBits-eew), 0.U((dLenOffBits-eew).W))
+  })(io.pipe(1).bits.rvs1_eew)
   val mask_write_mask = (VecInit.tabulate(4)({ eew =>
-    VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
-  })(rvs1_eew) << mask_write_offset)(dLen-1,0)
+    VecInit(io.pipe(1).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
+  })(io.pipe(1).bits.rvs1_eew) << mask_write_offset)(dLen-1,0)
 
-  io.write.valid := io.pipe(0).valid
-  io.write.bits.eg := io.pipe(0).bits.wvd_eg
-  io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
-  io.write.bits.data := out
+  val s1_writes_as_mask = RegEnable(ctrl.bool(WritesAsMask), io.pipe(0).valid)
+  val s1_exceptions = RegEnable(exceptions, io.pipe(0).valid)
+
+
+  io.write.valid := io.pipe(1).valid
+  io.write.bits.eg := io.pipe(1).bits.wvd_eg
+  io.write.bits.mask := Mux(s1_writes_as_mask, mask_write_mask, FillInterleaved(8, io.pipe(1).bits.wmask))
+  io.write.bits.data := RegEnable(out, io.pipe(0).valid)
 
   io.set_fflags.valid := io.write.valid
-  io.set_fflags.bits := Mux(rvd_eew === 3.U, exceptions(1), exceptions(0))
+  io.set_fflags.bits := Mux(io.pipe(1).bits.rvd_eew === 3.U, s1_exceptions(1), s1_exceptions(0))
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
 }
