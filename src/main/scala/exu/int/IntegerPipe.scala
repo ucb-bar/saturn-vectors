@@ -219,16 +219,24 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) 
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
 
+  val iss_ctrl = new VectorDecoder(
+    io.iss.op,
+    supported_insns,
+    Seq(WideningSext))
+
   val ctrl = new VectorDecoder(
     io.pipe(0).bits,
     supported_insns,
     Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
-      DoSub, WideningSext, Averaging,
+      DoSub, Averaging,
       CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask))
 
   io.stall := false.B
 
   val carry_in = ctrl.bool(CarryIn) && (!io.pipe(0).bits.vm || ctrl.bool(AlwaysCarryIn))
+
+  val iss_rvs1_bytes = io.iss.op.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  val iss_rvs2_bytes = io.iss.op.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
 
   val rvs1_bytes = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val rvs2_bytes = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -236,12 +244,12 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) 
   val in1_bytes = Mux(ctrl.bool(Swap12), rvs2_bytes, rvs1_bytes)
   val in2_bytes = Mux(ctrl.bool(Swap12), rvs1_bytes, rvs2_bytes)
 
-  val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew,
-    (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0),
-    ctrl.bool(WideningSext))
-  val narrow_vs2 = narrow2_expand(rvs2_bytes, rvs2_eew,
-    (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0),
-    ctrl.bool(WideningSext))
+  val narrow_vs1 = RegEnable(narrow2_expand(iss_rvs1_bytes, io.iss.op.rvs1_eew,
+    (io.iss.op.eidx >> (dLenOffBits.U - io.iss.op.vd_eew))(0),
+    iss_ctrl.bool(WideningSext)), io.iss.valid)
+  val narrow_vs2 = RegEnable(narrow2_expand(iss_rvs2_bytes, io.iss.op.rvs2_eew,
+    (io.iss.op.eidx >> (dLenOffBits.U - io.iss.op.vd_eew))(0),
+    iss_ctrl.bool(WideningSext)), io.iss.valid)
 
   val add_mask_carry = VecInit.tabulate(4)({ eew =>
     VecInit((0 until dLenB >> eew).map { i => io.pipe(0).bits.rmask(i) | 0.U((1 << eew).W) }).asUInt
