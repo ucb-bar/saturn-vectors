@@ -86,7 +86,12 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   s0_inst.fission_vl.bits := DontCare
   when (s0_inst.vmu && s0_inst.mop === mopUnit) {
     val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
-    val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) * (s0_inst.nf +& 1.U)
+    val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) << MuxLookup(s0_inst.nf, 0.U)(Seq(
+      0.U -> 0.U,
+      1.U -> 1.U,
+      3.U -> 2.U,
+      7.U -> 3.U
+    ))
     s0_inst.vconfig.vl := MuxLookup(s0_inst.umop, io.s0.in.bits.vconfig.vl)(Seq(
       (lumopWhole -> whole_vl), (lumopMask -> mask_vl)
     ))
