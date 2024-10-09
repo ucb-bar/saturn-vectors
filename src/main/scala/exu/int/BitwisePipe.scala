@@ -23,7 +23,7 @@ case object BitwisePipeFactory extends FunctionalUnitFactory {
 class BitwisePipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
   val supported_insns = BitwisePipeFactory.insns
 
-  val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns,
+  val ctrl = new VectorDecoder(io.pipe(0).bits, supported_insns,
     Seq(BWAnd, BWOr, BWXor, BWInvOut, BWInv1))
   io.stall := false.B
 

@@ -93,7 +93,7 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
     val vstart     = Valid(UInt(log2Ceil(maxVLMax).W))
     val vconfig    = Valid(new VConfig)
     val xcpt       = Valid(new Bundle {
-       val cause = UInt(xLen.W)
+      val cause = UInt(xLen.W)
       val tval = UInt(coreMaxAddrBits.W)
     })
     val inst       = Output(new VectorIssueInst)
@@ -176,6 +176,7 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
     }
   }
 
+  val s1_kill        = WireInit(false.B)
   val s1_valid       = RegNext(replay_fire && !replay_kill, false.B)
   val s1_eidx        = RegEnable(eidx, valid)
   val s1_masked      = RegEnable(masked, valid)
@@ -206,65 +207,80 @@ class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with Ha
   val xcpt = xcpts.map(_._1).orR && s1_eidx >= inst.vstart && !s1_masked
   val cause = PriorityMux(xcpts)
 
+  val s2_valid = RegNext(s1_valid && !s1_kill, false.B)
+  val s2_eidx = RegEnable(s1_eidx, s1_valid)
+  val s2_base = RegEnable(s1_base, s1_valid)
+  val s2_tlb_resp = RegEnable(tlb_resp, s1_valid)
+  val s2_tlb_addr = RegEnable(s1_tlb_addr, s1_valid)
+  val s2_xcpt = RegEnable(xcpt, s1_valid)
+  val s2_masked = RegEnable(s1_masked, s1_valid)
+  val s2_seg_single_page = RegEnable(s1_seg_single_page, s1_valid)
+  val s2_seg_hi = RegEnable(s1_seg_hi, s1_valid)
+  val s2_seg_nf_consumed = RegEnable(s1_seg_nf_consumed, s1_valid)
+  val s2_cause = RegEnable(cause, s1_valid)
+
 
   io.issue.valid := false.B
   io.issue.bits := inst
-  io.issue.bits.vstart := s1_eidx
-  io.issue.bits.vconfig.vl := s1_eidx +& 1.U
+  io.issue.bits.vstart := s2_eidx
+  io.issue.bits.vconfig.vl := s2_eidx +& 1.U
   io.issue.bits.segend := inst.seg_nf
   io.issue.bits.segstart := 0.U
-  io.issue.bits.page := tlb_resp.paddr >> pgIdxBits
+  io.issue.bits.page := s2_tlb_resp.paddr >> pgIdxBits
   io.xcpt.valid := false.B
   io.pc := inst.pc
-  io.xcpt.bits.cause := cause
-  io.xcpt.bits.tval := s1_tlb_addr
+  io.xcpt.bits.cause := s2_cause
+  io.xcpt.bits.tval := s2_tlb_addr
   io.vstart.valid := false.B
-  io.vstart.bits := s1_eidx
+  io.vstart.bits := s2_eidx
   io.retire := false.B
   io.vconfig.valid := false.B
   io.vconfig.bits := inst.vconfig
-  io.vconfig.bits.vl := s1_eidx
+  io.vconfig.bits.vl := s2_eidx
   im_access.io.pop.valid := false.B
-  im_access.io.pop.bits := s1_eidx
+  im_access.io.pop.bits := s2_eidx
   im_access.io.flush := false.B
 
-  when (s1_valid) {
-    io.issue.valid := !tlb_resp.miss && !xcpt && s1_eidx >= inst.vstart && !s1_masked
-    when (inst.seg_nf =/= 0.U && !s1_seg_single_page) {
-      when (!s1_seg_hi) {
-        io.issue.bits.segend := s1_seg_nf_consumed - 1.U
+  when (s2_valid) {
+    io.issue.valid := !s2_tlb_resp.miss && !s2_xcpt && s2_eidx >= inst.vstart && !s2_masked
+    when (inst.seg_nf =/= 0.U && !s2_seg_single_page) {
+      when (!s2_seg_hi) {
+        io.issue.bits.segend := s2_seg_nf_consumed - 1.U
       } .otherwise {
-        io.issue.bits.segstart := s1_seg_nf_consumed
+        io.issue.bits.segstart := s2_seg_nf_consumed
       }
     }
 
-    when (s1_seg_hi || s1_seg_single_page || inst.seg_nf === 0.U) {
+    when (s2_seg_hi || s2_seg_single_page || inst.seg_nf === 0.U) {
       im_access.io.pop.valid := true.B
     }
 
-    when (tlb_resp.miss || !io.issue.ready) {
+    when (s2_tlb_resp.miss || !io.issue.ready) {
       tlb_backoff := 3.U
       replay_kill := true.B
-      eidx := s1_eidx
-      addr := s1_base
-      seg_hi := s1_seg_hi
+      eidx := s2_eidx
+      addr := s2_base
+      seg_hi := s2_seg_hi
+      s1_kill := true.B
       im_access.io.pop.valid := false.B
-    } .elsewhen (xcpt) {
-      val ff_nofault = ff && s1_eidx =/= 0.U
+    } .elsewhen (s2_xcpt) {
+      val ff_nofault = ff && s2_eidx =/= 0.U
       valid := false.B
       replay_kill := true.B
       io.retire := ff_nofault
       io.xcpt.valid := !ff_nofault
       io.vstart.valid := !ff_nofault
       io.vconfig.valid := ff_nofault
+      s1_kill := true.B
       im_access.io.flush := true.B
-    } .elsewhen ((s1_eidx +& 1.U) === inst.vconfig.vl && (s1_seg_hi || s1_seg_single_page || inst.seg_nf === 0.U)) {
+    } .elsewhen ((s2_eidx +& 1.U) === inst.vconfig.vl && (s2_seg_hi || s2_seg_single_page || inst.seg_nf === 0.U)) {
       valid := false.B
       replay_kill := true.B
       io.retire := true.B
       io.vstart.valid := true.B
       io.vstart.bits := 0.U
       im_access.io.flush := true.B
+      s1_kill := true.B
     }
   }
 }

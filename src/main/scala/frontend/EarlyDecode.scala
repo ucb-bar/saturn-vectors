@@ -33,7 +33,7 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
 
   val v_load = opcode === opcLoad
   val v_store = opcode === opcStore
-  val v_arith = opcode === opcVector && funct3 =/= 7.U && new VectorDecoder(funct3, funct6, rs1, rs2, supported_ex_insns, Nil).matched
+  val v_arith = opcode === opcVector && funct3 =/= 7.U && new VectorDecoder(rs1, rs2, funct3, funct6, io.vconfig.vtype.vsew, supported_ex_insns, Nil).matched
 
   when (v_load || v_store) {
     io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U)

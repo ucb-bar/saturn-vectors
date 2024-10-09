@@ -13,6 +13,7 @@ object F6            extends XDefaultInstructionField { override val width: Int 
 object F3            extends XDefaultInstructionField { override val width: Int = 3 }
 object RS1           extends XDefaultInstructionField { override val width: Int = 5 }
 object RS2           extends XDefaultInstructionField { override val width: Int = 5 }
+object SEW           extends XDefaultInstructionField { override val width: Int = 2 }
 
 object AlwaysReadsVM     extends NDefaultInstructionField
 object VMBitReadsVM      extends YDefaultInstructionField

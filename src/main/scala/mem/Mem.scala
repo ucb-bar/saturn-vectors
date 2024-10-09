@@ -323,7 +323,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   lss.io.op := liq(liq_lss_ptr).op
   lcu.io.pop <> lss.io.compactor
   lss.io.compactor_data := lcu.io.pop_data.asUInt
-  io.vu.lresp <> lss.io.resp
+  io.vu.lresp <> Queue(lss.io.resp)
   liq_lss_fire := lss.io.done
 
   // Store segment sequencing
@@ -359,7 +359,11 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   store_req.bits := store_req_q.io.deq.bits.request
   store_req.bits.store := true.B
   store_req.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
-  store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & store_req_q.io.deq.bits.request.mask
+  store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & (
+    ~(0.U(dLenB.W)) << store_req_q.io.deq.bits.sifq.head &
+    Mux(store_req_q.io.deq.bits.sifq.tail === 0.U, ~(0.U(dLenB.W)), (1.U << store_req_q.io.deq.bits.sifq.tail) - 1.U)
+  )
+
   store_req.valid := store_req_q.io.deq.valid && !store_req_q.io.deq.bits.sifq.masked && scu.io.pop.ready && sifq.io.enq.ready
   store_req_q.io.deq.ready := sifq.io.enq.ready && scu.io.pop.ready && (store_req_q.io.deq.bits.sifq.masked || store_req.ready)
 

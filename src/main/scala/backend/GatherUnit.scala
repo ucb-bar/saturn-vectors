@@ -35,12 +35,14 @@ class GatherUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
 
   val q = Module(new DCEQueue(new PermuteMicroOpWithData, 2))
   val slide_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
+  val eidx_buffer = Module(new Queue(UInt(64.W), 2))
 
   io.vps.ready := q.io.enq.ready
   q.io.enq.valid := io.vps.valid && !io.vps.bits.vmu
   q.io.enq.bits := io.vps.bits
+  io.vxs.gather_eidx <> eidx_buffer.io.deq
 
-  q.io.deq.ready := Mux(q.io.deq.bits.slide, slide_buffer.io.push.ready, io.vxs.gather_eidx.ready)
+  q.io.deq.ready := Mux(q.io.deq.bits.slide, slide_buffer.io.push.ready, eidx_buffer.io.enq.ready)
 
   slide_buffer.io.push.valid := q.io.deq.valid && q.io.deq.bits.slide
   slide_buffer.io.push.bits.head := q.io.deq.bits.eidx << q.io.deq.bits.rvs2_eew
@@ -49,8 +51,8 @@ class GatherUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorP
     0.U)
   slide_buffer.io.push_data := q.io.deq.bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
 
-  io.vxs.gather_eidx.valid := q.io.deq.valid && !q.io.deq.bits.slide
-  io.vxs.gather_eidx.bits := extractElem(q.io.deq.bits.rvs2_data, q.io.deq.bits.rvs2_eew, q.io.deq.bits.eidx)
+  eidx_buffer.io.enq.valid := q.io.deq.valid && !q.io.deq.bits.slide
+  eidx_buffer.io.enq.bits := extractElem(q.io.deq.bits.rvs2_data, q.io.deq.bits.rvs2_eew, q.io.deq.bits.eidx)
 
   slide_buffer.io.pop <> io.vxs.slide_req
   io.vxs.slide_data := slide_buffer.io.pop_data.asUInt

@@ -82,6 +82,10 @@ class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]
   io.iss.bits.debug_id := inst.debug_id
   io.iss.bits.tail := tail
   io.iss.bits.vat := inst.vat
+  val dlen_mask = ~(0.U(dLenB.W))
+  val head_mask = dlen_mask << (eidx << inst.mem_elem_size)(dLenOffBits-1,0)
+  val tail_mask = dlen_mask >> (0.U(dLenOffBits.W) - (next_eidx << inst.mem_elem_size)(dLenOffBits-1,0))
+  io.iss.bits.eidx_mask := head_mask & tail_mask
 
   when (io.iss.fire && !tail) {
     if (vParams.enableChaining) {

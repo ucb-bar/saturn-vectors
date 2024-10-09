@@ -15,7 +15,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   def accepts(inst: VectorIssueInst) = {
     val needs_mask = inst.vmu && (!inst.vm && inst.mop =/= mopUnit)
     val needs_index = inst.vmu && inst.mop(0)
-    val arith = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, exu_insns, Seq(UsesPermuteSeq)).bool(UsesPermuteSeq)
+    val arith = !inst.vmu && new VectorDecoder(inst, exu_insns, Seq(UsesPermuteSeq)).bool(UsesPermuteSeq)
     needs_mask || needs_index || arith
   }
 
@@ -49,7 +49,9 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
 
   when (io.dis.fire) {
     val iss_inst = io.dis.bits
-    val offset = Mux(iss_inst.isOpi, get_max_offset(Mux(iss_inst.funct3(2), iss_inst.rs1_data, iss_inst.imm5)), 1.U)
+    val offset = Mux(iss_inst.isOpi,
+      get_max_offset(Mux(iss_inst.funct3(2), iss_inst.rs1_data, iss_inst.imm5), iss_inst.vconfig.vtype.vsew),
+      1.U)
     val slide = !iss_inst.vmu && iss_inst.funct3 =/= OPIVV
     val slide_up = !iss_inst.funct6(0)
     val slide_start = Mux(slide_up, 0.U, offset)
@@ -97,6 +99,7 @@ class PermuteSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
   io.iss.bits.renv2     := renv2
   io.iss.bits.renvm     := renvm
   io.iss.bits.rvs2_eew  := incr_eew
+  io.iss.bits.sew       := inst.vconfig.vtype.vsew
   io.iss.bits.eidx      := eidx
   io.iss.bits.vl        := eff_vl
   io.iss.bits.vmu       := inst.vmu

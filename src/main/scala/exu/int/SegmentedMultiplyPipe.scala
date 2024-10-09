@@ -10,17 +10,22 @@ import saturn.common._
 import saturn.insns._
 
 case class IntegerMultiplyFactory(depth: Int, segmented: Boolean) extends FunctionalUnitFactory {
-  def base_insns = Seq(
-    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
-    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
+  def wideningInsns = Seq(
     WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
     WMULSU.VV, WMULSU.VX,
-    MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
-    MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
     WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
     WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
-    SMUL.VV, SMUL.VX).map(_.pipelined(depth))
-  def insns = if (segmented) base_insns else base_insns.map(_.elementWise)
+  ).map(_.restrictSEW(0, 1, 2)).flatten
+
+  def baseInsns = (wideningInsns ++ Seq(
+    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
+    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
+    MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
+    MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
+    SMUL.VV, SMUL.VX)
+  ).map(_.pipelined(depth))
+
+  def insns = if (segmented) baseInsns else baseInsns.map(_.elementWise)
   def generate(implicit p: Parameters) = if (segmented) {
     new SegmentedMultiplyPipe(depth)(p)
   } else {
@@ -35,7 +40,7 @@ class SegmentedMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeline
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 
-   val ctrl = new VectorDecoder(io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, 0.U, 0.U, supported_insns, Seq(
+   val ctrl = new VectorDecoder(io.pipe(0).bits, supported_insns, Seq(
      MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
 
   val in_eew = io.pipe(0).bits.rvs1_eew
