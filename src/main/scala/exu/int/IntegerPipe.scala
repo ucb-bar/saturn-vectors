@@ -219,17 +219,14 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) 
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
 
-  val iss_ctrl = new VectorDecoder(
-    io.iss.op,
+  val iss_ctrl = Wire(new VectorDecodedControl(
     supported_insns,
-    Seq(WideningSext))
-
-  val ctrl = new VectorDecoder(
-    io.pipe(0).bits,
-    supported_insns,
-    Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
+    Seq(WideningSext, UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
       DoSub, Averaging,
-      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask))
+      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask)
+  )).decode(io.iss.op)
+
+  val ctrl = RegEnable(iss_ctrl, io.iss.valid)
 
   io.stall := false.B
 

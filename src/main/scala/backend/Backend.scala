@@ -121,13 +121,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     issq.io.enq.bits.rs1_is_rs2 := false.B
   }
 
-  val dis_ctrl = new VectorDecoder(vdq.io.deq.bits, all_supported_insns, Seq(
-      Reduction, Wide2VD, Wide2VS2, WritesAsMask,
-      ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
-      VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0
-    )
-  )
-
+  val dis_ctrl = Wire(new VectorDecodedControl(all_supported_insns, Seq(
+    Reduction, Wide2VD, Wide2VS2, WritesAsMask,
+    ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
+    VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0
+  ))).decode(vdq.io.deq.bits)
 
   // Load sequencer
   vlissq.io.enq.bits.nf_log2 := log2_up(vdq.io.deq.bits.nf, 8)

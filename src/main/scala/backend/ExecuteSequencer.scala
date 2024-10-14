@@ -90,9 +90,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   when (io.dis.fire) {
     val dis_inst = io.dis.bits
 
-    val dis_ctrl = new VectorDecoder(dis_inst, supported_insns,
-      Seq(SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5,
-        PipelinedExecution, PipelineStagesMinus1, FUSel(nFUs)))
+    val dis_ctrl = Wire(new VectorDecodedControl(supported_insns, Seq(
+      SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5,
+      PipelinedExecution, PipelineStagesMinus1, FUSel(nFUs)
+    ))).decode(dis_inst)
 
     val dis_slide = (dis_inst.funct6.isOneOf(OPIFunct6.slideup.litValue.U, OPIFunct6.slidedown.litValue.U)
       && dis_inst.funct3 =/= OPIVV) && usesPerm.B
