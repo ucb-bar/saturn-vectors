@@ -133,7 +133,7 @@ object VXFunctionalUnitGroups {
     ShiftPipeFactory,
     BitwisePipeFactory,
     IntegerDivideFactory(idivDoesImul),
-    MaskUnitFactory,
+    MaskUnitFactory(2),
     PermuteUnitFactory,
     BitmanipPipeFactory
   )
