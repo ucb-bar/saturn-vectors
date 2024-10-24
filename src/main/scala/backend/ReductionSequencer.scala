@@ -23,7 +23,7 @@ class ReductionSequencerIO(implicit p: Parameters) extends SequencerIO(Bool()) {
 
 // This "sequencer" doesn't sequence ops, it just tracks and refreshes the accumulator register for reductions
 class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Parameters) extends Sequencer[Bool]()(p) {
-  def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns, Seq(Reduction)).bool(Reduction)
+  def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst, supported_insns, Seq(Reduction)).bool(Reduction)
 
   val acc_insns = supported_insns.filter(_.props.contains(Reduction.Y))
 
@@ -38,7 +38,7 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
 
   val vd_eew = inst.vconfig.vtype.vsew + inst.wide_vd
 
-  val ctrl     = new VectorDecoder(inst.funct3, inst.funct6, inst.rs1, inst.rs2, supported_insns,
+  val ctrl     = new VectorDecoder(inst, supported_insns,
     Seq(Elementwise))
 
   val acc_elementwise = ctrl.bool(Elementwise)
@@ -47,8 +47,7 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
   when (io.dis.fire) {
     val dis_inst = io.dis.bits
     val dis_vd_eew = dis_inst.vconfig.vtype.vsew + dis_inst.wide_vd
-    val dis_ctrl = new VectorDecoder(dis_inst.funct3, dis_inst.funct6,
-      dis_inst.rs1, dis_inst.rs2, acc_insns, Seq(AccInitZeros, AccInitOnes, AccInitPos, AccInitNeg))
+    val dis_ctrl = new VectorDecoder(dis_inst, acc_insns, Seq(AccInitZeros, AccInitOnes, AccInitPos, AccInitNeg))
     valid := true.B
     inst := io.dis.bits
 
@@ -75,7 +74,7 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
 
   val raw_hazard = (UIntToOH(io.rvs.req.bits.eg) & io.older_writes) =/= 0.U
 
-  io.rvs.req.valid := valid && acc_e0 && !raw_hazard
+  io.rvs.req.valid := valid && acc_e0
   io.rvs.req.bits.eg := getEgId(inst.rs1, 0.U, vd_eew, false.B)
   io.rvs.req.bits.oldest := inst.vat === io.vat_head
 
@@ -98,7 +97,7 @@ class ReductionSequencer(supported_insns: Seq[VectorInstruction])(implicit p: Pa
     VecInit.tabulate(4)({sew => Fill(dLenB >> sew, minNegFPUInt(sew))})(vd_eew)
   ))
 
-  when (io.rvs.req.fire) {
+  when (io.rvs.req.fire && !raw_hazard) {
     val v0_mask = eewByteMask(vd_eew)
     val init_resp = io.acc_init_resp.asTypeOf(Vec(dLenB, UInt(8.W)))
     for (i <- 0 until 8) {

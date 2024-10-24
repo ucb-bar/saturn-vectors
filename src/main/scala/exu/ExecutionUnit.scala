@@ -8,7 +8,9 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
 
-class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+  override def desiredName = s"ExecutionUnit$desc"
+
   val fus = genFUs.map(gen => Module(gen.generate(p)))
   val nFUs = fus.size
 
@@ -105,7 +107,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
 
     for (i <- 1 until maxPipeDepth) {
       val fire = pipe_valids(i-1)
-      pipe_valids(i) := fire && pipe_fus.map(t => pipe_bits(i-1).fu_sel(t._2) && (t._1.depth > i).B).orR
+      pipe_valids(i) := fire && pipe_bits(i-1).pipe_depth =/= (i-1).U
       when (fire) {
         pipe_bits(i)      := pipe_bits(i-1)
       }
@@ -118,16 +120,22 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory])(implicit p: Parameters) 
       }
     }
 
-    val write_sel = pipe_fus.map(_._1.io.pipe.last.valid)
-    assert(PopCount(write_sel) <= 1.U)
-    pipe_write := write_sel.orR
-    when (write_sel.orR) {
-      val acc = Mux1H(write_sel, pipe_fus.map(_._1.io.pipe.last.bits.acc))
-      val tail = Mux1H(write_sel, pipe_fus.map(_._1.io.pipe.last.bits.tail))
-      io.pipe_write.valid := Mux1H(write_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
-      io.pipe_write.bits := Mux1H(write_sel, pipe_fus.map(_._1.io.write.bits))
+    // Selects which pipe register has the write
+    val write_pipe_sel = pipe_valids.zip(pipe_bits).zipWithIndex.map { case ((v,b),i) =>
+      v && b.pipe_depth === i.U
+    }
+    // Selects which of all FUs has the write
+    val write_fu_sel = pipe_fus.map { case (_, j) => Mux1H(write_pipe_sel, pipe_bits.map(_.fu_sel))(j) }
+    assert(PopCount(write_pipe_sel) <= 1.U)
+    pipe_write := write_pipe_sel.orR
+    when (write_pipe_sel.orR) {
+      assert(PopCount(write_fu_sel) <= 1.U)
+      val acc = Mux1H(write_pipe_sel, pipe_bits.map(_.acc))
+      val tail = Mux1H(write_pipe_sel, pipe_bits.map(_.tail))
+      io.pipe_write.valid := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
+      io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
       io.acc_write.valid := acc && !tail
-      io.acc_write.bits := Mux1H(write_sel, pipe_fus.map(_._1.io.write.bits))
+      io.acc_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
     }
 
     when (pipe_valids.orR) { io.busy := true.B }

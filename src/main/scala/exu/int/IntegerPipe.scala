@@ -175,13 +175,12 @@ class SaturatedSumArray(dLenB: Int) extends Module {
 }
 
 case object IntegerPipeFactory extends FunctionalUnitFactory {
-  def insns = Seq(
+
+  def baseInsns = Seq(
     ADD.VV, ADD.VX, ADD.VI, SUB.VV, SUB.VX, RSUB.VX, RSUB.VI,
-    WADDU.VV, WADDU.VX, WADD.VV, WADD.VX, WSUBU.VV, WSUBU.VX, WSUB.VV, WSUB.VX,
-    WADDUW.VV, WADDUW.VX, WADDW.VV, WADDW.VX, WSUBUW.VV, WSUBUW.VX, WSUBW.VV, WSUBW.VX,
     ADC.VV, ADC.VX, ADC.VI, MADC.VV, MADC.VX, MADC.VI,
     SBC.VV, SBC.VX, MSBC.VV, MSBC.VX,
-    NEXT.VV,
+    NEXT.VV, // TODO these don't support all SEWs
     MSEQ.VV, MSEQ.VX, MSEQ.VI, MSNE.VV, MSNE.VX, MSNE.VI,
     MSLTU.VV, MSLTU.VX, MSLT.VV, MSLT.VX,
     MSLEU.VV, MSLEU.VX, MSLEU.VI, MSLE.VV, MSLE.VX, MSLE.VI,
@@ -189,41 +188,52 @@ case object IntegerPipeFactory extends FunctionalUnitFactory {
     MINU.VV, MINU.VX, MIN.VV, MIN.VX,
     MAXU.VV, MAXU.VX, MAX.VV, MAX.VX,
     MERGE.VV, MERGE.VX, MERGE.VI,
-    SADDU.VV, SADDU.VX, SADDU.VI, SADD.VV, SADD.VX, SADD.VI,
-    SSUBU.VV, SSUBU.VX, SSUB.VV, SSUB.VX,
     AADDU.VV, AADDU.VX, AADD.VV, AADD.VX,
     ASUBU.VV, ASUBU.VX, ASUB.VV, ASUB.VX,
-    REDSUM.VV, WREDSUM.VV, WREDSUMU.VV,
+    REDSUM.VV,
     REDMINU.VV, REDMIN.VV, REDMAXU.VV, REDMAX.VV,
     FMERGE.VF,
-    // zvbb
-    BREV8.VV, BREV.VV, REV8.VV, CLZ.VV, CTZ.VV, CPOP.VV
-  ).map(_.pipelined(1))
+  )
+
+  // These support only SEW=0/1/2
+  def wideningInsns = Seq(
+    WADDU.VV, WADDU.VX, WADD.VV, WADD.VX, WSUBU.VV, WSUBU.VX, WSUB.VV, WSUB.VX,
+    WADDUW.VV, WADDUW.VX, WADDW.VV, WADDW.VX, WSUBUW.VV, WSUBUW.VX, WSUBW.VV, WSUBW.VX,
+    WREDSUM.VV, WREDSUMU.VV,
+  ).map(_.restrictSEW(0, 1, 2)).flatten
+
+  def satInsns = Seq(
+    SADDU.VV, SADDU.VX, SADDU.VI, SADD.VV, SADD.VX, SADD.VI,
+    SSUBU.VV, SSUBU.VX, SSUB.VV, SSUB.VX,
+  )
+
+  def insns = (baseInsns ++ wideningInsns).map(_.pipelined(1)) ++ satInsns.map(_.pipelined(2))
+
   def generate(implicit p: Parameters) = new IntegerPipe()(p)
 }
 
-class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) {
+class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) {
   val supported_insns = IntegerPipeFactory.insns
 
   val rvs1_eew = io.pipe(0).bits.rvs1_eew
   val rvs2_eew = io.pipe(0).bits.rvs2_eew
   val vd_eew   = io.pipe(0).bits.vd_eew
 
-  val ctrl = new VectorDecoder(
-    io.pipe(0).bits.funct3, io.pipe(0).bits.funct6, io.pipe(0).bits.rs1, io.pipe(0).bits.rs2,
+  val iss_ctrl = Wire(new VectorDecodedControl(
     supported_insns,
-    Seq(UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
-      DoSub, WideningSext, Averaging,
-      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask,
-      UsesBitSwap, UsesCountZeros))
+    Seq(WideningSext, UsesCmp, UsesNarrowingSext, UsesMinMax, UsesMerge, UsesSat,
+      DoSub, Averaging,
+      CarryIn, AlwaysCarryIn, CmpLess, Swap12, WritesAsMask)
+  )).decode(io.iss.op)
+
+  val ctrl = RegEnable(iss_ctrl, io.iss.valid)
 
   io.stall := false.B
 
   val carry_in = ctrl.bool(CarryIn) && (!io.pipe(0).bits.vm || ctrl.bool(AlwaysCarryIn))
 
-  val sat_signed = io.pipe(0).bits.funct6(0)
-  val sat_addu   = io.pipe(0).bits.funct6(1,0) === 0.U
-  val sat_subu   = io.pipe(0).bits.funct6(1,0) === 2.U
+  val iss_rvs1_bytes = io.iss.op.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  val iss_rvs2_bytes = io.iss.op.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
 
   val rvs1_bytes = io.pipe(0).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W)))
   val rvs2_bytes = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -231,12 +241,12 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val in1_bytes = Mux(ctrl.bool(Swap12), rvs2_bytes, rvs1_bytes)
   val in2_bytes = Mux(ctrl.bool(Swap12), rvs1_bytes, rvs2_bytes)
 
-  val narrow_vs1 = narrow2_expand(rvs1_bytes, rvs1_eew,
-    (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0),
-    ctrl.bool(WideningSext))
-  val narrow_vs2 = narrow2_expand(rvs2_bytes, rvs2_eew,
-    (io.pipe(0).bits.eidx >> (dLenOffBits.U - vd_eew))(0),
-    ctrl.bool(WideningSext))
+  val narrow_vs1 = RegEnable(narrow2_expand(iss_rvs1_bytes, io.iss.op.rvs1_eew,
+    (io.iss.op.eidx >> (dLenOffBits.U - io.iss.op.vd_eew))(0),
+    iss_ctrl.bool(WideningSext)), io.iss.valid)
+  val narrow_vs2 = RegEnable(narrow2_expand(iss_rvs2_bytes, io.iss.op.rvs2_eew,
+    (io.iss.op.eidx >> (dLenOffBits.U - io.iss.op.vd_eew))(0),
+    iss_ctrl.bool(WideningSext)), io.iss.valid)
 
   val add_mask_carry = VecInit.tabulate(4)({ eew =>
     VecInit((0 until dLenB >> eew).map { i => io.pipe(0).bits.rmask(i) | 0.U((1 << eew).W) }).asUInt
@@ -278,13 +288,13 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
   val mask_out = Fill(8, Mux(ctrl.bool(UsesCmp), cmp_arr.io.result, carryborrow_res ^ Fill(dLenB, ctrl.bool(DoSub))))
 
   val sat_arr = Module(new SaturatedSumArray(dLenB))
-  sat_arr.io.sum      := add_out
-  sat_arr.io.carry    := add_carry
-  sat_arr.io.in1_sign := rvs1_bytes.map(_(7))
-  sat_arr.io.in2_sign := rvs2_bytes.map(_(7))
-  sat_arr.io.sub      := ctrl.bool(DoSub)
-  sat_arr.io.eew      := vd_eew
-  sat_arr.io.signed   := io.pipe(0).bits.funct6(0)
+  sat_arr.io.sum      := RegEnable(add_out, io.pipe(0).valid && ctrl.bool(UsesSat))
+  sat_arr.io.carry    := RegEnable(add_carry, io.pipe(0).valid && ctrl.bool(UsesSat))
+  sat_arr.io.in1_sign := io.pipe(1).bits.rvs1_data.asTypeOf(Vec(dLenB, UInt(8.W))).map(_(7))
+  sat_arr.io.in2_sign := io.pipe(1).bits.rvs2_data.asTypeOf(Vec(dLenB, UInt(8.W))).map(_(7))
+  sat_arr.io.sub      := RegEnable(ctrl.bool(DoSub), io.pipe(0).valid && ctrl.bool(UsesSat))
+  sat_arr.io.eew      := io.pipe(1).bits.vd_eew
+  sat_arr.io.signed   := io.pipe(1).bits.funct6(0)
   val sat_out = sat_arr.io.out.asUInt
 
   val narrowing_ext_eew_mul = io.pipe(0).bits.vd_eew - rvs2_eew
@@ -309,59 +319,16 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     }
   }}.flatten)
 
-  val brev_bytes = VecInit(in2_bytes.map(b => Reverse(b))).asUInt
-  val brev_elements = VecInit((0 until 4).map { eew =>
-    VecInit(in2_bytes.asTypeOf(Vec(dLenB >> eew, UInt((8 << eew).W))).map(b => Reverse(b))).asUInt
-  })(vd_eew)
-  val rev8_elements = VecInit((0 until 4).map { eew =>
-    VecInit(in2_bytes.asTypeOf(Vec(dLenB >> eew, Vec(1 << eew, UInt(8.W)))).map(b => VecInit(b.reverse))).asUInt
-  })(vd_eew)
-  val swap_out = Mux1H(Seq(
-    (io.pipe(0).bits.rs1(1,0) === 0.U) -> brev_bytes,
-    (io.pipe(0).bits.rs1(1,0) === 1.U) -> rev8_elements,
-    (io.pipe(0).bits.rs1(1,0) === 2.U) -> brev_elements
-  ))
-
-  val tz_in = Mux(io.pipe(0).bits.rs1(0), in2_bytes, brev_elements.asTypeOf(Vec(dLenB, UInt(8.W))))
-  val tz_8b = tz_in.map(b => (b === 0.U, (PriorityEncoderOH(1.U ## b) - 1.U)(7,0)))
-  val tz_16b = tz_8b.grouped(2).toSeq.map(t =>
-    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(8.W)), t(0)._2))
-  )
-  val tz_32b = tz_16b.grouped(2).toSeq.map(t =>
-    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(16.W)), t(0)._2))
-  )
-  val tz_64b = tz_32b.grouped(2).toSeq.map(t =>
-    (t.map(_._1).andR, Mux(t(0)._1, t(1)._2 ## ~(0.U(32.W)), t(0)._2))
-  )
-  val tz_out = WireInit(VecInit(
-    VecInit(tz_8b.map(_._2)).asUInt,
-    VecInit(tz_16b.map(_._2)).asUInt,
-    VecInit(tz_32b.map(_._2)).asUInt,
-    VecInit(tz_64b.map(_._2)).asUInt
-  )(vd_eew).asTypeOf(Vec(dLenB, UInt(8.W))))
-
-  val cpop_in = Mux(io.pipe(0).bits.rs1(1), in2_bytes, tz_out)
-  val cpop_8b = cpop_in.map(b => PopCount(b))
-  val cpop_16b = cpop_8b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpop_32b = cpop_16b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpop_64b = cpop_32b.grouped(2).toSeq.map(_.reduce(_ +& _))
-  val cpops = Seq(cpop_8b, cpop_16b, cpop_32b, cpop_64b)
-  val count_out = WireInit(VecInit((0 until 4).map { eew =>
-    val out = Wire(Vec(dLenB >> eew, UInt((8 << eew).W)))
-    out := VecInit(cpops(eew))
-    out.asUInt
-  })(vd_eew))
-
   val outs = Seq(
     (ctrl.bool(UsesNarrowingSext)        , narrowing_ext_out),
     (ctrl.bool(WritesAsMask)             , mask_out),
     (ctrl.bool(UsesMinMax)               , minmax_out),
     (ctrl.bool(UsesMerge)                , merge_out),
-    (ctrl.bool(UsesSat)                  , sat_out),
-    (ctrl.bool(UsesBitSwap)              , swap_out),
-    (ctrl.bool(UsesCountZeros)           , count_out)
   )
+
   val out = Mux(outs.map(_._1).orR, Mux1H(outs), add_out.asUInt)
+
+  assert(!(io.pipe(1).valid && io.pipe(0).valid && !ctrl.bool(UsesSat)))
 
   val mask_write_offset = VecInit.tabulate(4)({ eew =>
     Cat(io.pipe(0).bits.eidx(log2Ceil(dLen)-1, dLenOffBits-eew), 0.U((dLenOffBits-eew).W))
@@ -370,13 +337,15 @@ class IntegerPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(1)(p) 
     VecInit(io.pipe(0).bits.wmask.asBools.grouped(1 << eew).map(_.head).toSeq).asUInt
   })(rvs1_eew) << mask_write_offset)(dLen-1,0)
 
-  io.write.valid     := io.pipe(0).valid
-  io.write.bits.eg   := io.pipe(0).bits.wvd_eg
-  io.write.bits.mask := Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask))
-  io.write.bits.data := out
+  io.write.valid     := io.pipe(1).valid || (io.pipe(0).valid && !ctrl.bool(UsesSat))
+  io.write.bits.eg   := Mux(io.pipe(1).valid, io.pipe(1).bits.wvd_eg, io.pipe(0).bits.wvd_eg)
+  io.write.bits.mask := Mux(io.pipe(1).valid,
+    FillInterleaved(8, io.pipe(1).bits.wmask),
+    Mux(ctrl.bool(WritesAsMask), mask_write_mask, FillInterleaved(8, io.pipe(0).bits.wmask)))
+  io.write.bits.data := Mux(io.pipe(1).valid, sat_out.asUInt, out)
 
-  val sat_vxsat   = Mux(ctrl.bool(UsesSat)  , sat_arr.io.set_vxsat  , 0.U) & io.pipe(0).bits.wmask
-  io.set_vxsat := io.pipe(0).valid && (sat_vxsat =/= 0.U)
+  val sat_vxsat   = Mux(io.pipe(1).valid, sat_arr.io.set_vxsat, 0.U) & io.pipe(1).bits.wmask
+  io.set_vxsat := io.pipe(1).valid && (sat_vxsat =/= 0.U)
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
 

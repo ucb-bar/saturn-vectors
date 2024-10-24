@@ -32,8 +32,6 @@ class ScatterGatherAddrGen(sgSize: BigInt)(implicit p: Parameters) extends CoreM
   })
   val vsgifqEntries = vParams.vsgifqEntries
 
-  def min(a: UInt, b: UInt) = Mux(a > b, b, a)
-
   val resp_buffer = Reg(Vec(vsgifqEntries, Vec(sgPorts, UInt(8.W))))
   val resp_busys  = Reg(Vec(vsgifqEntries, Vec(sgPorts, Bool())))
   val resp_bytes  = Reg(Vec(vsgifqEntries, UInt(log2Ceil(dLenB).W)))

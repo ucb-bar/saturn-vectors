@@ -57,7 +57,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 2)) // permute/reduction
   val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size)).suggestName(s"vxissq_${q.name}"))
 
-  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus)).suggestName(s"vxu${s.name}")))
+  val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus, s.name)).suggestName(s"vxu${s.name}")))
   val flat_vxus = vxus.flatten
   val maxPipeDepth = flat_vxus.map(_.maxPipeDepth).max
 
@@ -121,14 +121,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     issq.io.enq.bits.rs1_is_rs2 := false.B
   }
 
-  val dis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6,
-    vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, all_supported_insns, Seq(
-      Reduction, Wide2VD, Wide2VS2, WritesAsMask,
-      ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
-      VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0
-    )
-  )
-
+  val dis_ctrl = Wire(new VectorDecodedControl(all_supported_insns, Seq(
+    Reduction, Wide2VD, Wide2VS2, WritesAsMask,
+    ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
+    VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0
+  ))).decode(vdq.io.deq.bits)
 
   // Load sequencer
   vlissq.io.enq.bits.nf_log2 := log2_up(vdq.io.deq.bits.nf, 8)
@@ -397,14 +394,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   )
   // TODO: this conservatively assumes a index data hazard against anything in the vdq
 
-  frontend_rindex.req.valid := io.index_access.valid && !index_access_hazard
+  frontend_rindex.req.valid := io.index_access.valid
   io.index_access.ready := frontend_rindex.req.ready && !index_access_hazard
   frontend_rindex.req.bits.eg  := index_access_eg
   frontend_rindex.req.bits.oldest  := false.B
   io.index_access.idx   := frontend_rindex.resp >> ((io.index_access.eidx << io.index_access.eew)(dLenOffBits-1,0) << 3) & eewBitMask(io.index_access.eew)
 
   val vm_busy = Wire(Bool())
-  frontend_rmask.req.valid    := io.mask_access.valid && !vm_busy
+  frontend_rmask.req.valid    := io.mask_access.valid
   frontend_rmask.req.bits.eg  := getEgId(0.U, io.mask_access.eidx, 0.U, true.B)
   frontend_rmask.req.bits.oldest := false.B
   io.mask_access.ready  := frontend_rmask.req.ready && !vm_busy
@@ -428,8 +425,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     ~(0.U(dLenB.W))
   ).asBools
   vmu_mask_q.io.push.bits.head  := 0.U
-  vmu_mask_q.io.push.bits.tail  := Mux(vps.io.iss.bits.tail, vps.io.iss.bits.vl, 0.U) - vps.io.iss.bits.eidx
-
+  vmu_mask_q.io.push.bits.tail  := (Mux(vmu_index_q.io.push.bits.tail === 0.U, dLenB.U, vmu_index_q.io.push.bits.tail) - vmu_index_q.io.push.bits.head) >> vps.io.iss.bits.rvs2_eew
 
   vps.io.iss.ready := Mux(vps.io.iss.bits.vmu,
     vmu_index_q.io.push.ready && vmu_mask_q.io.push.ready,
@@ -441,7 +437,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   io.vmu.sdata.valid   := vss.io.iss.valid
   vss.io.iss.ready     := io.vmu.sdata.ready
   io.vmu.sdata.bits.stdata    := vrf.io.vss.rvd.resp
-  io.vmu.sdata.bits.stmask    := Mux(vss.io.iss.bits.use_stmask,
+  io.vmu.sdata.bits.stmask    := vss.io.iss.bits.eidx_mask & Mux(vss.io.iss.bits.use_stmask,
     get_vm_mask(vrf.io.vss.rvm.resp, vss.io.iss.bits.eidx, vss.io.iss.bits.elem_size),
     ~(0.U(dLenB.W))
   )

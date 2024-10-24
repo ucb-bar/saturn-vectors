@@ -11,33 +11,37 @@ import saturn.common._
 import saturn.insns._
 
 case class IntegerDivideFactory(supportsMul: Boolean) extends FunctionalUnitFactory {
-  def mul_insns = Seq(
-    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
-    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
+  def wideningMulInsns = Seq(
     WMUL.VV, WMUL.VX, WMULU.VV, WMULU.VX,
     WMULSU.VV, WMULSU.VX,
+    WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
+    WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX
+  ).map(_.restrictSEW(0, 1, 2)).flatten
+
+
+  def mulInsns = (wideningMulInsns ++ Seq(
+    MUL.VV, MUL.VX, MULH.VV, MULH.VX,
+    MULHU.VV, MULHU.VX, MULHSU.VV, MULHSU.VX,
     MACC.VV, MACC.VX, NMSAC.VV, NMSAC.VX,
     MADD.VV, MADD.VX, NMSUB.VV, NMSUB.VX,
-    WMACC.VV, WMACC.VX, WMACCU.VV, WMACCU.VX,
-    WMACCSU.VV , WMACCSU.VX, WMACCUS.VV, WMACCUS.VX,
     SMUL.VV, SMUL.VX
-  ).map(_.elementWise)
+  )).map(_.elementWise)
 
-  def div_insns = Seq(
+  def divInsns = Seq(
     DIVU.VV, DIVU.VX,
     DIV.VV, DIV.VX,
     REMU.VV, REMU.VX,
     REM.VV, REM.VX
   ).map(_.elementWise)
 
-  def insns = (div_insns ++ (if (supportsMul) mul_insns else Nil)).map(_.iterative)
+  def insns = (divInsns ++ (if (supportsMul) mulInsns else Nil)).map(_.iterative)
 
   def generate(implicit p: Parameters) = new IterativeIntegerDivider(supportsMul)(p)
 }
 
 class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) extends IterativeFunctionalUnit()(p) {
-  val div_insns = IntegerDivideFactory(supportsMul).div_insns
-  val mul_insns = IntegerDivideFactory(supportsMul).mul_insns
+  val div_insns = IntegerDivideFactory(supportsMul).divInsns
+  val mul_insns = IntegerDivideFactory(supportsMul).mulInsns
 
   val div = Module(new MulDiv(MulDivParams(mulUnroll = if (supportsMul) 8 else 0), 64, 1)) // 128 to make smul work
   io.stall := !div.io.req.ready || (valid && !last)
@@ -54,7 +58,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   val ctrl_swapvdv2 = WireInit(false.B)
 
   if (supportsMul) {
-    val mul_ctrl = new VectorDecoder(io.iss.op.funct3, io.iss.op.funct6, 0.U, 0.U, mul_insns, Seq(
+    val mul_ctrl = new VectorDecoder(io.iss.op, mul_insns, Seq(
       MULHi, MULSign1, MULSign2, MULSwapVdV2))
     when (mul_ctrl.matched) {
       ctrl_fn       := Mux(mul_ctrl.bool(MULHi),
@@ -88,7 +92,7 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   val wdata = VecInit.tabulate(4)({ eew => Fill(dLenB >> eew, write_elem((8<<eew)-1,0)) })(op.rvd_eew)
 
   if (supportsMul) {
-    val mul_ctrl = new VectorDecoder(op.funct3, op.funct6, 0.U, 0.U, mul_insns, Seq(
+    val mul_ctrl = new VectorDecoder(op, mul_insns, Seq(
       MULHi, MULSign1, MULSign2, MULSwapVdV2, MULAccumulate, MULSub))
     val is_smul = op.isOpi
     val prod = div.io.resp.bits.full_data.asSInt

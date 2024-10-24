@@ -7,6 +7,8 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
+import saturn.insns.{HasVectorDecoderSignals}
+
 // Per-instruction bundle in the VLSU
 class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val debug_id = UInt(debugIdSz.W)
@@ -36,10 +38,11 @@ class VectorMemMacroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
 }
 
 // Bundle between VDQ and Backend
-class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams with HasVectorDecoderSignals {
   val pc = UInt(vaddrBitsExtended.W)
   val bits = UInt(32.W)
   val vconfig = new VConfig
+  val fission_vl = Valid(UInt((1+log2Ceil(maxVLMax)).W))
 
   val vstart = UInt(log2Ceil(maxVLMax).W)
   val segstart = UInt(3.W)
@@ -76,6 +79,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def funct6 = bits(31,26)
   def writes_xrf = !vmu && ((funct3 === OPMVV && opmf6 === OPMFunct6.wrxunary0) || (funct3 === OPFVV && opff6 === OPFFunct6.wrfunary0))
   def writes_frf = !vmu && (funct3 === OPFVV)
+  def sew = vconfig.vtype.vsew
 
   def isOpi = funct3.isOneOf(OPIVV, OPIVI, OPIVX)
   def isOpm = funct3.isOneOf(OPMVV, OPMVX)
@@ -163,7 +167,7 @@ class MaskedByte(implicit p: Parameters) extends CoreBundle()(p) with HasVectorP
   val mask = Bool()
 }
 
-class ExecuteMicroOp(nFUs: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class ExecuteMicroOp(nFUs: Int)(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams with HasVectorDecoderSignals {
   val fu_sel = UInt(nFUs.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
@@ -172,6 +176,7 @@ class ExecuteMicroOp(nFUs: Int)(implicit p: Parameters) extends CoreBundle()(p) 
   val rvs2_eew = UInt(2.W)
   val rvd_eew = UInt(2.W)
   val vd_eew  = UInt(2.W)
+  val sew     = UInt(2.W)
 
   val scalar = UInt(64.W)
 
@@ -243,6 +248,7 @@ class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val use_stmask = Bool()
   val elem_size = UInt(2.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
+  val eidx_mask = UInt(dLenB.W)
   val debug_id = UInt(debugIdSz.W)
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
@@ -265,6 +271,7 @@ class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val renvm = Bool()
   val eidx = UInt(log2Ceil(maxVLMax).W)
   val rvs2_eew = UInt(2.W)
+  val sew = UInt(2.W)
   val vmu = Bool()
   val vl = UInt((1+log2Ceil(maxVLMax)).W)
   val tail = Bool()
