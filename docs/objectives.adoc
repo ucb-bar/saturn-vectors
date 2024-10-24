@@ -8,13 +8,13 @@ Saturn was developed with the following objectives:
  * Support *full compliance* with the complete RVV specification, including support for virtual memory and precise traps
  * Target performant *ASIC implementations*, rather than FPGA deployments
  * Be sufficiently *parameterized* to support configurations across a wide power/performance/area design space
- * Demonstrate efficient scheduling of vector operations on a microarchitecture with a *short hardware vector length*
+ * Demonstrate efficient scheduling of vector operations on a microarchitecture with a *short hardware vector length* and *SIMD-style* microarchitecture
  * Integrate with existing *efficient area-compact scalar core* implementations
  * Support *extensibility* with custom vector instructions, functional units, and accelerators that leverage the baseline capability in the standard RVV ISA
  * Target deployment as part of a *DSP core* or similarly domain-specialized core, instead of general-purpose systems
 
 This chapter presents a background discussion of deployment scenarios for data-parallel systems as well as the dominant architectures in the commercial space for such systems.
-Saturn, as an implementation of a modern scalable vector ISA targeting deployment in specialized cores, fills an underexplored niche in the space of data-parallel microarchitectures.
+Saturn, as an implementation of a modern scalable vector ISA targeting deployment in specialized cores, fills an underexplored niche in the space of open-source data-parallel microarchitectures.
 
 === Data-parallel Workloads
 
@@ -33,7 +33,7 @@ image::diag/domains.png[DLP Domains,align=center,title-align=center]
 ==== HPC, Scientific Computing, and Datacenter ML
 
 HPC, scientific computing, and ML training workloads are typically characterized by very long application vector lengths, exhibiting a high degree of data-level parallelism.
-Systems targeting these workloads are generally designed and deployed at datacenter scale, with available data-level-parallelism exploited across the many nodes in a warehouse-scale computer.
+Systems targeting these workloads are generally designed and deployed at datacenter scale, with available data-level-parallelism exploited across the many processors in a multi-node cluster.
 
 
 [discrete]
@@ -48,7 +48,7 @@ Compared to the other domains, compiler and programmer-friendly ISAs are particu
 
 Digital signal processing (DSP) and similar domain-specialized workloads feature a modest-to-high degree of data-level parallelism, and additionally often have strict latency requirements.
 These workloads are often offloaded in modern SoCs to specialized "DSP cores" optimized towards power and area-efficient exploitation of data-level parallelism.
-Large modern SoCs typically integrate many of such "DSP cores" across various design points to provide optimized compute for different subsystems of the SoC.
+Large SoCs typically integrate many of such "DSP cores" across various design points to provide optimized compute for different subsystems.
 //To meet the application QoS requirements and system-wide power/area requirements, these cores must target extreme power and area efficiency while maintaining high utilization of SIMD functional units.
 
 [discrete]
@@ -135,7 +135,7 @@ The dominant examples of such ISAs include ARM's proprietary SVE and MVE extensi
 Existing academic implementations of RVV have broadly targeted the HPC and general-purpose deployment scenarios.
 Compared to prior academic implementations, Saturn targets DSP and domain-specialized cores, and represents a class of designs we call *"short-vector"*.
 Saturn demonstrates that these "short-vector" designs, without the distributed-lane microarchitecture of the long-vector units, can still retain high performance and efficiency for vector kernels.
-Notably, Saturn also demonstrates that these "short-vector" designs do not need to sacrifice any fundamental requirements of modern vector ISAs to be performant and efficient.
+Notably, Saturn also demonstrates that these "short-vector" designs do not need to sacrifice any fundamental requirements of modern vector ISAs in order to be performant and efficient.
 
 
 === The RISC-V Vector ISA
@@ -225,7 +225,7 @@ image::diag/short-vectors.png[Saturn Pipeline,width=50%,align=center,title-align
 In this example, each vector chime is 2 cycles.
 
 Notably, Saturn can fully saturate both the arithmetic and memory pipelines with such short vector lengths and chimes.
-Instruction throughput requirements are moderate, but can still be fulfilled with a modest in-order scalar core.
+Instruction throughput requirements are moderate, but can still be fulfilled with a modest superscalar in-order scalar core.
 
 [.text-center]
 [#short-dead]
@@ -245,8 +245,6 @@ image::diag/short-vectors-in-order.png[Saturn In-order Pipeline,width=60%,align=
 Unlike in <<short>>, the machine in this example requires the instructions to enter the datapath in-order.
 Requiring strict in-order execution would substantially degrade performance for suboptimally scheduled vector code.
 Despite the same zero-cycle dead-time, the restriction on in-order execution prevents the machine from aggressively issuing instructions to hide the latency in the M pipe.
-
-Saturn's architecture and short-vector microarchitecture differentiate its behavior from that of the most relevant similar data-parallel archetypes.
 
 [discrete]
 ==== Compared to Long-Vector Units
@@ -290,7 +288,7 @@ While these features are costly in power and area, they are fundamental necessar
 [.text-center]
 [#ooo]
 .Pipeline diagram of instruction execution in an out-of-order SIMD machine.
-image::diag/ooo-simd.png[OOO SIMD Pipeline,width=50%,align=center,title-align=center]
+image::diag/ooo-simd.png[OOO SIMD Pipeline,width=40%,align=center,title-align=center]
 
 
 <<ooo>> depicts an example pipeline diagram of a SIMD loop in an out-of-order core with SIMD extensions.
