@@ -80,7 +80,7 @@ class IndexMaskAccess(implicit p: Parameters) extends CoreModule()(p) with HasVe
   }
 }
 
-class IterativeTrapCheck(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val status = Input(new MStatus)
     val in         = Input(Valid(new VectorIssueInst))

@@ -12,7 +12,7 @@ import freechips.rocketchip.diplomacy._
 import saturn.common._
 import saturn.backend.{VectorBackend}
 
-class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
+class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
 
   val unified_addresses = AddressSet.unify(edge.manager.managers.map(_.address).flatten)
   require(unified_addresses.forall(_.alignment >= (1 << pgIdxBits)),
@@ -174,7 +174,7 @@ class EarlyTrapCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Parameter
   val s2_generate_xcpt = WireInit(s2_xcpt)
 
   // masked checks, even in the fast case, need to
-  // to to ITC to get the precise element+address of the trap
+  // to to ITC to get the precise element+address of the fault
   when (s2_inst.vmu && s2_xcpt && !s2_inst.vm) {
     s2_go_to_itc := true.B
     s2_generate_xcpt := false.B
