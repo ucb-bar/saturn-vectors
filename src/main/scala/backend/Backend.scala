@@ -64,12 +64,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
   val vps = Module(new SpecialSequencer(all_supported_insns))
-  val vrs = Module(new ReductionSequencer(all_supported_insns))
   val vxs = xissParams.map(q => q.seqs.map(s =>
     Module(new ExecuteSequencer(s.insns, maxPipeDepth, s.fus.size)).suggestName(s"vxs${s.name}")
   ))
 
-  val allSeqs = Seq(vls, vss, vps, vrs) ++ vxs.flatten
+  val allSeqs = Seq(vls, vss, vps) ++ vxs.flatten
   val allIssQs = Seq(vlissq, vsissq, vpissq) ++ vxissqs
 
   val flat_vxs = vxs.flatten
@@ -95,7 +94,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val issGroups = Seq(
     IssueGroup(vlissq, Seq(vls)),
     IssueGroup(vsissq, Seq(vss)),
-    IssueGroup(vpissq, Seq(vps, vrs)),
+    IssueGroup(vpissq, Seq(vps)),
   ) ++ (vxissqs.zip(vxs).map { case (q, seqs) =>
     IssueGroup(q, seqs)
   })
@@ -265,8 +264,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrf.io.vss.rvm.req <> vss.io.rvm
   vrf.io.vps.rvs2.req <> vps.io.rvs2
   vrf.io.vps.rvm.req <> vps.io.rvm
-  vrs.io.rvs <> vrf.io.vrs.rvs
-  vrs.io.acc_init_resp := vrf.io.vrs.rvs.resp
+  vps.io.acc_init_resp := vrf.io.vps.rvs2.resp
 
   for (i <- 0 until flat_vxs.size) {
     val vxs = flat_vxs(i)
@@ -317,14 +315,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxu.io.iss.bits.viewAsSupertype(new ExecuteMicroOp(vxu.nFUs)) := vxs.io.iss.bits
 
     when (vxs_iss.acc) {
-      val acc_data = vrs.io.acc_data.bits
+      val acc_data = vps.io.acc_data.bits
       when (vxs_iss.acc_fold) {
         val acc_fold_id = vxs_iss.acc_fold_id
         val folded = VecInit.tabulate(log2Ceil(dLenB))(i => acc_data((dLen >> i) - 1, dLen >> (i + 1)))(acc_fold_id)
 
         vxu_iss.wmask := Mux(vxs_iss.tail, eewByteMask(vxs_iss.vd_eew), ~(0.U(dLenB.W)))
-        vxu_iss.rvs1_elem := Mux(vxs_iss.acc_copy, vrs.io.acc_init, folded)
-        vxu_iss.rvs1_data := Mux(vxs_iss.acc_copy, vrs.io.acc_init, folded)
+        vxu_iss.rvs1_elem := Mux(vxs_iss.acc_copy, vps.io.acc_init, folded)
+        vxu_iss.rvs1_data := Mux(vxs_iss.acc_copy, vps.io.acc_init, folded)
         vxu_iss.rvs1_eew := vxs_iss.vd_eew
         vxu_iss.rvs2_elem := acc_data
         vxu_iss.rvs2_data := acc_data
@@ -469,17 +467,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // =================================
   // Connect ReductionSeq to sequencer
 
-  vrs.io.iss.ready := true.B
-  vrs.io.acc_data.ready := false.B
-  vrs.io.done := false.B
+  vps.io.acc_data.ready := false.B
+  vps.io.acc_done := false.B
   for (vxs <- flat_vxs) {
     vxs.io.acc_valid := false.B
     if (vxs.usesAcc) {
-      when (vxs.io.vat === vrs.io.vat && vxs.io.busy) {
-        vrs.io.acc_data.ready := vxs.io.acc_ready
-        vxs.io.acc_valid := vrs.io.acc_data.valid
+      when (vxs.io.vat === vps.io.vat && vxs.io.busy) {
+        vps.io.acc_data.ready := vxs.io.acc_ready
+        vxs.io.acc_valid := vps.io.acc_data.valid
         when (vxs.io.iss.fire && vxs.io.iss.bits.tail) {
-          vrs.io.done := true.B
+          vps.io.acc_done := true.B
         }
       }
     }
@@ -491,8 +488,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val acc_wbs = flat_vxus.map(_.io.acc_write)
   assert(PopCount(acc_wbs.map(_.valid)) <= 1.U)
 
-  vrs.io.acc_fu_resp.valid := acc_wbs.map(_.valid).orR
-  vrs.io.acc_fu_resp.bits := Mux1H(acc_wbs.map(_.valid), acc_wbs.map(_.bits))
+  vps.io.acc_fu_resp.valid := acc_wbs.map(_.valid).orR
+  vps.io.acc_fu_resp.bits := Mux1H(acc_wbs.map(_.valid), acc_wbs.map(_.bits))
 
   // Clear the age tags
   var r_idx = 0

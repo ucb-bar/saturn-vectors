@@ -204,12 +204,12 @@ object FCVT_SGL  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary
 object FCVT_WID  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary0), F3(VectorConsts.OPFVV), RS1(BitPat("b01???")), Wide2VD.Y, FPAdd.N, FPMul.N) }
 object FCVT_NRW  extends VectorInstruction { val props = Seq(F6(OPFFunct6.funary0), F3(VectorConsts.OPFVV), RS1(BitPat("b10???")), Wide2VD.N, Wide2VS2.Y, FPAdd.N, FPMul.N) }
 
-object SLIDEUP     extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slideup)    , UsesGatherUnit.Y, ReadsVS2.N) }
-object SLIDEDOWN   extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slidedown)  , UsesGatherUnit.Y, ReadsVS2.N) }
-object SLIDE1UP    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slide1up)   , UsesGatherUnit.Y, ReadsVS2.N) }
-object SLIDE1DOWN  extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slide1down) , UsesGatherUnit.Y, ReadsVS2.N) }
-object FSLIDE1UP   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1up)  , UsesGatherUnit.Y, ReadsVS2.N) }
-object FSLIDE1DOWN extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1down), UsesGatherUnit.Y, ReadsVS2.N) }
+object SLIDEUP     extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slideup)    , UsesGatherUnit.Y, ReadsVS2.N, Slide.Y) }
+object SLIDEDOWN   extends OPIInstruction    { val props = Seq(F6(OPIFunct6.slidedown)  , UsesGatherUnit.Y, ReadsVS2.N, Slide.Y) }
+object SLIDE1UP    extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slide1up)   , UsesGatherUnit.Y, ReadsVS2.N, Slide.Y) }
+object SLIDE1DOWN  extends OPMInstruction    { val props = Seq(F6(OPMFunct6.slide1down) , UsesGatherUnit.Y, ReadsVS2.N, Slide.Y) }
+object FSLIDE1UP   extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1up)  , UsesGatherUnit.Y, ReadsVS2.N, Slide.Y) }
+object FSLIDE1DOWN extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fslide1down), UsesGatherUnit.Y, ReadsVS2.N, Slide.Y) }
 
 object RGATHER_VX  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather)    , F3(VectorConsts.OPIVX)) }
 object RGATHER_VI  extends VectorInstruction    { val props = Seq(F6(OPIFunct6.rgather)    , F3(VectorConsts.OPIVI)) }
