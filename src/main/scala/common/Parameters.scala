@@ -57,8 +57,14 @@ object VectorParams {
     issStructure = VectorIssueStructure.MultiFMA
   )
 
+  // multiALUParams:
+  // Provides a second sequencer and set of functional units for integer ALU operations
+  def multiALUParams = genParams.copy(
+    issStructure = VectorIssueStructure.MultiALU
+  )
+
   // multiMACParams:
-  // Provides a second sequencer and set of functional units for integer MAC operations
+  // Provides a second sequencer and set of functional units for integer ALU+MAC operations
   def multiMACParams = genParams.copy(
     issStructure = VectorIssueStructure.MultiMAC
   )
@@ -128,14 +134,16 @@ case class VXIssuePathParams(
 }
 
 object VXFunctionalUnitGroups {
-  def integerFUs(idivDoesImul: Boolean = false) = Seq(
+  def integerALUs = Seq(
     IntegerPipeFactory,
     ShiftPipeFactory,
     BitwisePipeFactory,
-    IntegerDivideFactory(idivDoesImul),
     MaskUnitFactory(2),
-    PermuteUnitFactory,
     BitmanipPipeFactory
+  )
+  def integerFUs(idivDoesImul: Boolean = false) = integerALUs ++ Seq(
+    IntegerDivideFactory(idivDoesImul),
+    PermuteUnitFactory,
   )
   def integerMAC(pipeDepth: Int, useSegmented: Boolean) = Seq(
     IntegerMultiplyFactory(pipeDepth, useSegmented)
@@ -248,6 +256,28 @@ object VectorIssueStructure {
     }
   }
 
+  case object MultiALU extends VectorIssueStructure {
+    def generate(params: VectorParams) = {
+      require(!params.useIterativeIMul && params.useSegmentedIMul)
+      val int_path = VXIssuePathParams(
+        name = "int",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("int0", integerFUs(false) ++ integerMAC(params.imaPipeDepth, true)),
+          VXSequencerParams("int1", integerALUs)
+        )
+      )
+      val fp_path = VXIssuePathParams(
+        name = "fp",
+        depth = params.vxissqEntries,
+        seqs = Seq(
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA))
+        )
+      )
+      Seq(int_path, fp_path)
+    }
+  }
+
   case object MultiMAC extends VectorIssueStructure {
     def generate(params: VectorParams) = {
       require(!params.useIterativeIMul && params.useSegmentedIMul)
@@ -256,7 +286,7 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("int0", integerFUs(false) ++ integerMAC(params.imaPipeDepth, true)),
-          VXSequencerParams("int1", integerMAC(params.imaPipeDepth, true))
+          VXSequencerParams("int1", integerALUs ++ integerMAC(params.imaPipeDepth, true))
         )
       )
       val fp_path = VXIssuePathParams(
