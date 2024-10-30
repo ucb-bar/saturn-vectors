@@ -29,7 +29,7 @@ object WritesAsMask      extends NDefaultInstructionField
 object ReadsVS1AsMask    extends NDefaultInstructionField
 object ReadsVS2AsMask    extends NDefaultInstructionField
 object WritesScalar      extends NDefaultInstructionField
-object UsesPermuteSeq    extends NDefaultInstructionField
+object UsesGatherUnit    extends NDefaultInstructionField
 object ZextImm5          extends NDefaultInstructionField
 object PipelinedExecution extends XDefaultInstructionField
 object PipelineStagesMinus1 extends XDefaultInstructionField { override val width: Int = 3 }

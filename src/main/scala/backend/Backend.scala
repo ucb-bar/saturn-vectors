@@ -63,7 +63,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vps = Module(new PermuteSequencer(all_supported_insns))
+  val vps = Module(new SpecialSequencer(all_supported_insns))
   val vrs = Module(new ReductionSequencer(all_supported_insns))
   val vxs = xissParams.map(q => q.seqs.map(s =>
     Module(new ExecuteSequencer(s.insns, maxPipeDepth, s.fus.size)).suggestName(s"vxs${s.name}")
@@ -453,7 +453,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Connect Permute-to-Execute path
 
   vgu.io.vps.valid := vps.io.iss.valid && !vps.io.iss.bits.vmu
-  vgu.io.vps.bits.viewAsSupertype(new PermuteMicroOp) := vps.io.iss.bits
+  vgu.io.vps.bits.viewAsSupertype(new SpecialMicroOp) := vps.io.iss.bits
   vgu.io.vps.bits.rvs2_data := vrf.io.vps.rvs2.resp
 
   // Only the first VSU can handle permutations TODO clean this up

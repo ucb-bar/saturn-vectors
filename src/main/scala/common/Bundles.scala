@@ -265,7 +265,7 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val vat = UInt(vParams.vatSz.W)
 }
 
-class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
+class SpecialMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val slide = Bool()
   val renv2 = Bool()
   val renvm = Bool()
@@ -277,7 +277,7 @@ class PermuteMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVec
   val tail = Bool()
 }
 
-class PermuteMicroOpWithData(implicit p: Parameters) extends PermuteMicroOp {
+class SpecialMicroOpWithData(implicit p: Parameters) extends SpecialMicroOp {
   val rvs2_data = UInt(dLen.W)
 }
 

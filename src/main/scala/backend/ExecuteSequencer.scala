@@ -23,7 +23,7 @@ class ExecuteSequencerIO(maxDepth: Int, nFUs: Int)(implicit p: Parameters) exten
 }
 
 class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: Int, nFUs: Int)(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
-  def usesPerm = supported_insns.count(_.props.contains(UsesPermuteSeq.Y)) > 0
+  def usesPerm = supported_insns.count(_.props.contains(UsesGatherUnit.Y)) > 0
   def usesAcc = supported_insns.count(_.props.contains(Reduction.Y)) > 0
   def usesRvd = supported_insns.count(_.props.contains(ReadsVD.Y)) > 0
   def usesCompress = supported_insns.count(_.props.contains(F6(OPMFunct6.compress))) > 0
@@ -91,7 +91,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_inst = io.dis.bits
 
     val dis_ctrl = Wire(new VectorDecodedControl(supported_insns, Seq(
-      SetsWMask, UsesPermuteSeq, Elementwise, UsesNarrowingSext, ZextImm5,
+      SetsWMask, UsesGatherUnit, Elementwise, UsesNarrowingSext, ZextImm5,
       PipelinedExecution, PipelineStagesMinus1, FUSel(nFUs)
     ))).decode(dis_inst)
 
@@ -142,7 +142,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     acc_fold      := false.B
     acc_fold_id   := 0.U
     sets_wmask    := dis_ctrl.bool(SetsWMask)
-    uses_perm     := dis_ctrl.bool(UsesPermuteSeq) && usesPerm.B
+    uses_perm     := dis_ctrl.bool(UsesGatherUnit) && usesPerm.B
     elementwise   := dis_ctrl.bool(Elementwise)
     zext_imm5     := dis_ctrl.bool(ZextImm5)
     pipelined     := dis_ctrl.bool(PipelinedExecution)

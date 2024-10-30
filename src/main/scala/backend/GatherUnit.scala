@@ -30,10 +30,10 @@ class GatherToExecuteIO(implicit p: Parameters) extends CoreBundle()(p) with Has
 class GatherUnit(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val vxs = new GatherToExecuteIO
-    val vps = Flipped(Decoupled(new PermuteMicroOpWithData))
+    val vps = Flipped(Decoupled(new SpecialMicroOpWithData))
   })
 
-  val q = Module(new DCEQueue(new PermuteMicroOpWithData, 2))
+  val q = Module(new DCEQueue(new SpecialMicroOpWithData, 2))
   val slide_buffer = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
   val eidx_buffer = Module(new Queue(UInt(64.W), 2))
 
