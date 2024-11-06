@@ -1,5 +1,5 @@
 = The Saturn Microarchitecture Manual
-Authors: Jerry Zhao, Daniel Grubb, Tianrui Wei, Miles Rusch, Borivoje Nikolic, Krste Asanovic
+Authors: Jerry Zhao, Daniel Grubb, Miles Rusch, Tianrui Wei, Kevin Anderson, Borivoje Nikolic, Krste Asanovic
 :docgroup: University of California, Berkeley Technical Report
 :description: Micro-architecture of the Saturn Vector Unit
 :company: University of California, Berkeley
