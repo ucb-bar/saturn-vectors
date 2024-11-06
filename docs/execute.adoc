@@ -13,7 +13,7 @@ The register file, load-path, store-path, and most functional units are designed
 === Issue Queues
 
 Vector instructions entering the VU are immediately assigned a unique age tag and enqueued into an in-order dispatch queue (VDQ).
-The age tag is used to disambiguate age for determining data hazards in the out-of-order sequencing stage.
+The age tag is used to disambiguate age when determining data hazards in the out-of-order sequencing stage.
 This means the age tag is wide enough to assign a unique tag to every inflight operation in the backend.
 Age tags are recovered when instructions complete execution.
 
@@ -24,21 +24,23 @@ However, execution across the VIQs may be out-of-order, as the VIQs may naturall
 
 Each sequencing path has an independent issue queue.
 The load issue queue only needs to track a destination address and mask enable, while the store issue queue only needs to track a source address and mask enable.
-The arithmetic issue queue(s) must track up to two source operands along with the destination and mask enable.
-The permute issue queue, used for index generation and register gathers, tracks only a source operand.
+The arithmetic issue queue(s) must track up to three source operands along with the destination and mask enable.
+The special issue queue, used for index generation, register gathers, slides, compress, and reductions, tracks only a source operand.
 
-There are three configuration options for the arithmetic issue queues.
+There are six currently supported configuration options for the issue queue and sequencer topology.
 
 [.text-center]
 .Issue queue configurations
 image::diag/iqconfigs.png[Issue queue configurations,width=900,align=center,title-align=center]
 
 
- * In the *unified* configuration, there is a single sequencer for all arithmetic operations fed by a VIQ. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and floating-point functional units.
- * In the *shared* configuration, there are separate integer and floating-point sequencers fed by a common VIQ.
+ * The *unified* configuration features a single sequencer for all arithmetic operations fed by a VIQ. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and floating-point functional units.
+ * The *shared* configuration features separate integer and floating-point sequencers fed by a common VIQ.
  Instructions are issued from the shared VIQ to either the integer or floating-point sequencer.
  This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code.
- * In the *split* configuration, there are separate integer and floating-point sequencers that are each fed by an independent issue queue. This configuration is the most performant, as it can dynamically schedule out-of-order across integer and floating-point instructions, but is also the most costly, owing to the separate floating-point issue queue.
+ * The *split* configuration features separate integer and floating-point sequencers each fed by an independent issue queue. This configuration is the most performant, as it can dynamically schedule out-of-order across integer and floating-point instructions, but is also the most costly, owing to the separate floating-point issue queue.
+ * The *multi-ALU* configuration adds an additional integer sequencer and functional units to enable dual-issue of integer ALU operations
+ * The *multi-MAC* and *multi-FMA* configurations add additional integer or floating point sequencers along with functional units to enable dual-issue of integer or floating-point multiply-accumulate operations, respectively
 
 === Operation Sequencers
 
@@ -55,59 +57,70 @@ Notably, the sequencers enact "fire-and-forget" operation issue.
 Once an operation is issued by a sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipelined VFU datapaths.
 This eliminates the need for costly back-pressured operand or result queues.
 
-[discrete]
+
 ==== Load/Store Sequencers
 
-The load-store sequencers are the simplest, as they only track one vector operand or destination.
+The load-store sequencers (VLS/VSS) are the simplest, as they only track one vector operand or destination.
 
-The load sequencer sequences load writebacks into the VRF.
-The load sequencer will stall if the decoupled load response port from the VLSU has not presented a requested element group of write-back data.
-Since the VLSU's load path and the load-issue path are both in-order, issued operations from the sequencer pop the next element group from the decoupled load-response port and write into the VRF.
+The VLS sequences load writebacks into the VRF.
+The VLS will stall if the decoupled load response port from the VLSU has not presented a requested element group of write-back data.
+Since the VLSU's load path and the load-issue path are both in-order, issued operations from the VLS pop the next element group from the decoupled load-response port and write into the VRF.
 
-The store sequencer behaves similarly to the load sequencer, except it sequences element groups of data into the decoupled store-data port.
-The store data-port can deassert ready to stall the store sequencer.
+The VSS behaves similarly to the VLS, except it sequences element groups of data into the decoupled store-data port.
+The store data-port can de-assert ready to stall the store sequencer.
 
-Both the load and store sequencers additionally handle the complex case of segmented operations, which write a set of consecutive vector registers.
+Both the VLS and VSS handle the additional complexity segmented operations, which write a set of consecutive vector registers.
 To align with the data order expected in the segment buffers in the VLSU, the sequencers execute two nested loops to handle these instructions. The outer loop iterates over element group index, just as in normal vector instructions, while the inner loop iterates over the number of fields in the segmented instruction.
 
-[discrete]
+
 ==== Execute Sequencer
 
-The execute sequencers sequence all arithmetic operations.
+The execute sequencers (VXSs) sequence all arithmetic operations.
 They track up to three register operands, with up to four reads and one write per operation (for a masked FMA).
-Each execute sequencer issues to a single vector execution unit (VXU).
+Each VXS issues to a single vector execution unit (VXU).
 A VXU is a collection of vector functional units (VFUs).
-The execute sequencers will stall operation execution if the requested VFU within its VXU is unavailable.
+The VXXs will stall operation execution if the requested VFU within its VXU is unavailable.
 
-The execute sequencers additionally contain a DLEN-wide accumulation register for vector reductions.
-Vector reductions will accumulate into this register iteratively before generating a final writeback into the VRF.
 
-[discrete]
-==== Permute Sequencer
+==== Special Sequencer
 
-The permute sequencer handles index generation for register-gather and indexed-memory operations.
-For memory operations, it sequences into the index-port to the VLSU.
-For register-gather operations, it sequences register reads into an index queue that feeds the arithmetic sequencer for register gathers.
-For slides, the index queue is reused to align the slide operand to the result. In other words, the register-read for slides is performed by the permute sequencer, while the writeback is sequenced by the integer arithmetic sequencer.
+The special sequencer (VPS) handles three classes of special-case instructions which enqueue a special sequencing operation into this sequencer, while the main instruction control is still consumed by either the VLS, VSS, or VXS.
+Using the VPS as an independent sequencer divides the read operand hazard tracking from the destination operand hazard tracking, enabling chaining naturally for both source and destination operands even if they are consumed at different rates.
+
+For *indexed memory instructions*, the VLSU's address-sequencing unit needs to process indices fetched from the register file.
+These instructions enter the VPS in addition to the VLS or VSS.
+The out-of-order sequencing support enables the VPS to run ahead of the VLS or VSS, feeding indices to the VLSU while older loads or stores might still be inflight.
+
+For *slides*, the VPS sequences reads for the source operand.
+DLEN-wide read-data is fed to a rotation circuit and buffer to align them for writeback, which is sequenced by a VXS.
+This enables slides to proceed at DLEN bits/cycle.
+
+For *compress* and *register gather*, the VPS sequences element-wise reads for the source operand.
+Elements enter an element buffer, which is accessed by the VXS when it sequences element-wise writebacks.
+
+For *reductions*, the VPS maintains a DLEN-wide accumulation buffer.
+The VPS performs the initial read of element 0 to populate the accumulation buffer.
+Once available, the VPS provides the accumulation buffer for the VXSs to access, and stalls the VXS for long-latency accumulates.
+
 
 === Hazards
 
 Due to the out-of-order execution across the different sequences, RAW, WAW and WAR hazards are all possible.
 Furthermore, supporting vector chaining implies that these hazards should be resolved at sub-vector-register granularity.
-Since Saturn is designed around `DLEN`-wide element groups as the core unit of compute, Saturn resolves data hazards at `DLEN` granularity.
-The scheduling mechanism precisely tracks which element groups an instruction or operation is yet-to-read-or-write to interlock the sequencers.
+Since Saturn is designed around `DLEN`-wide element groups as the base throughput of the machine, Saturn resolves data hazards at `DLEN` granularity.
+The scheduling mechanism precisely tracks which element groups an instruction or operation has yet to read-or-write to interlock the sequencers.
 
 In Saturn, the "out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
 All instructions in this window must advertise a precise set of element groups they have not yet read or written, along with the age tag of the instruction.
 
  * Instructions in the issue queues already contain their operand specifiers. Since these instructions have not yet been sequenced, a conservative bound on the element groups to be accessed can be easily computed using the `LMUL` and the base register operand.
  * The sequencers track a precise bit-vector of element groups that the currently-sequenced instruction may still access. For regular vector instructions that access their operands sequentially, the sequencers can clear these bits with each issued operation. For irregular vector instructions, the sequencers can conservatively leave these bits set.
- * Operations in the functional unit that have yet to write back track a single element group of the write destination.
+ * Operations in the functional unit that have yet to write-back track a single element group of the write destination.
 
 The advertised information across the out-of-order window is aggregated into a pending-read and pending-write one-hot vector for each sequencer.
 These one-hot vectors each contain one element for each architectural element group in the VRF, which is 32xVLEN/DLEN.
-These one-hot vectors are constructed using an age filter based on the age tag of the current instruction in the sequencer along with the age of each operation in the out-of-order window.
-The age filter restricts the pending-read and pending-write tables to only contain pending reads and writes from instructions older than the currently sequenced instruction.
+These one-hot vectors are constructed using an age filter based on the age tag of the current instruction in the sequencer and the age of each operation in the out-of-order window.
+The age filter restricts the pending-read and pending-write vectors to only pending reads and writes from instructions older than the currently sequenced instruction.
 
 In some cases, the relative age is unambiguous, so no age filter is needed.
 Instructions in the sequencer are inherently older than instructions from the feeding issue queue for that sequencer, so no age filter is needed.
@@ -128,11 +141,21 @@ Each bank contains 3 read ports and 1 write port, to fulfill the minimum read re
 The generator supports generating VRFs with 1, 2, or 4 banks.
 Configurations that expect to keep multiple integer sequencers utilized simultaneously will prefer more banks to meet the increased read bandwidth requirements.
 
+As an optimization, Saturn implements per-bank single-entry fall-through write buffers, effectively emulating a 3R2W memory with a 3R1W memory.
+Write bank conflicts between pipelined writebacks and load writebacks can result in a performance penalty.
+The write buffer 
+
+[.text-center]
+.Banked vector register file for a 4-bank configuration
+image::diag/vrf.png[Register File,width=300,align=center,title-align=center]
+
+
 A shadow copy of  vector mask register `v0` is maintained in a 1R1W memory to avoid provisioning an extra read port for the bulk banked register file.
 
 A read crossbar connects the issue port of the sequencers to the register file read ports.
 The read crossbar resolves structural hazards during the read stage and stalls the sequencers if necessary.
 The read stage also arbitrates for access to the write ports across multiple fixed-latency execution paths.
+
 
 === Functional Units
 
@@ -147,78 +170,82 @@ If a conflict is detected, the younger operation will be stalled and will likely
 Iterative functional units have variable execution latencies or contain expensive hardware such that it is desirable to execute at a rate of just one element per cycle.
 Once an iterative functional unit has completed its operation on a given element, it will arbitrate for the target VRF write port, write the result, then assert readiness to accept a new operation from the sequencer.
 
-[cols="1,2,2,2,3"]
+[cols="2,3,2,2,3"]
 |===
 |Name|Instruction support|Microarchitecture/s|Structure|Notes
 
-|ALU
+|IntegerPipe
 |Integer add/sub/max/min
 |SIMD-array of ALUs
-|1-stage pipeline
-|
+|2-stage pipeline
+|Only saturating-adds writing back in the second stage, while all other instructions write-back in the first stage
 
-|ISU
+|ShiftPipe
 |Shift instructions
 |SIMD-array of barrel-shifters
 |2-stage pipeline
 |
 
-|BWU
+|BitwisePipe
 |Bitwise operations
 |Bitwise array
 |1-stage pipeline
 |
 
-|IDU
+|BitmanipPipe
+|Bit-manipulation instructions (Zvbb)
+|Mixed-element-width priority-encoders
+|2-stage pipeline
+|
+
+|PrefixUnit
+|Prefix-like instructions (popc/first/sbf/iota/etc.) and scalar-writebacks
+|Prefix-sum circuit with accumulator
+|Stateful 1-stage pipeline
+|
+
+
+|IntegerDivider
 |Integer divide (opt. multiply)
 |Iterative FSM
 |Iterative-elementwise
 |Can also support integer-multiply in area-minimal configurations
 
-.2+|IMU
+
+.2+|MultiplyPipe
 .2+|Integer multiply
 |Single elementwise multiplier
 .2+|3-stage pipeline
 .2+|For area-minimal configurations, avoid building the SIMD array
-
 |SIMD array of multipliers
 
-|PMU
+|PermuteUnit
 |Slides, gathers, compress
 |Minimal logic
 |1-stage pipeline
-|Generates the writebacks for its instructions
-
-|PFU
-|Prefix-like instructions (popc/first/sbf/iota/etc.)
-|Prefix-sum circuit with accumulator
-|1-stage pipeline
-|
+|Manages the writebacks for register-permutation instructions
 
 .2+|FMA
 .2+|Floating-point multiply/adds
 |Port to host CPU's FPU
 .2+|4-stage pipeline
 .2+|For area-minimal vector units, share the FPU with the host CPU
-
 |SIMD array of FMAs
 
-|FDU
+|FPDivSqrtUnit
 |Floating-point divide, square-root
 |Single iterative unit
 |Iterative-elementwise
 |
 
-|FCU
+|FPConvPipe
 |Floating-point convert/compare
 |SIMD array of FP units
-|1-stage pipeline
+|2-stage pipeline
 |
 
 |===
 
-For slide and register-gather instructions, a separate permute-sequencer reads out the source operand for slides, and index operand for register-gather.
-These operands enter a permute-buffer, which is read by the main arithmetic sequencer to generate aligned operands for slides, and read addresses for register-gathers.
 
 
 // === EVA (Extended Vector Architecture) Port

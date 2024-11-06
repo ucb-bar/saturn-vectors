@@ -17,9 +17,9 @@ Maximizing `LMUL` decreases dynamic instruction count and increases chime length
 
 === Optimizing Towards Chaining
 
-Making use of vector chaining is critical for achieving high utilization of the functional units.
+Leveraging vector chaining is critical for achieving high utilization of the functional units.
 Saturn implements vector chaining at `DLEN`, or element-group granularity, through the vector register file (direct functional unit to functional unit bypasses are not implemented).
-Chaining enables a dependent vector instructions to begin sequencing operations as soon as its parent instruction writes back its first element group, assuming no other structural or data hazards.
+Chaining enables a dependent vector instruction to begin sequencing operations as soon as its parent instruction writes back its first element group, assuming no other structural or data hazards.
 
 Chaining only occurs between instructions occupying different sequencers, as the sequencers are single-issue in-order.
 All sequencers can chain between each other.
@@ -39,7 +39,7 @@ In the "Shared" configuration, since the sequencers share a single in-order issu
 In the "Split" configuration, each sequencer has its own issue queue, reducing the importance of software-scheduled load balancing.
 
 When the issue queue sizes are shallow, the issue queues may fill up and back-pressure the decoupling queue, and consequently, the scalar core's frontend.
-Even modest configurations of Saturn should contain enough buffering within the issue queues and decoupling queue to avoid back-pressure for well-load-balanced code.
+Even modest configurations of Saturn should contain enough buffering within the issue and decoupling queues to avoid back-pressure for well-load-balanced code.
 
 
 === Optimizing Around the Scalar Core
@@ -65,7 +65,7 @@ When this chime length is less than the pipeline depth of the relevant functiona
 This situation is rare due to the support for chaining, but might still appear in a sequence of low-`LMUL` floating point instructions.
 
 To saturate the FMA units in this scenario, either a longer `LMUL` should be used, or independent FMAs must be scheduled back-to-back.
-Generally, performant code should use the highest `LMUL` possible that avoids vector register spilling to maximize performance.
+Generally, performant code should use the highest `LMUL` possible that avoids vector register spilling.
 
 Refer to <<execute>> for details on each of the vector functional units and their default pipeline depths.
 
@@ -73,7 +73,7 @@ Refer to <<execute>> for details on each of the vector functional units and thei
 === Optimizing Segmented Memory Accesses
 
 Saturn's implementation strives to implement complex instructions efficiently.
-In particular, the vector segmented loads and stores that reformat memory into vector registers are implemented to be able to fully utilize the wide memory port.
+In particular, the segmented loads and stores that reformat memory into vector registers are implemented to be able to fully utilize the wide memory port.
 As a general rule, using such complex instructions should never induce a performance penalty over an equivalent longer sequence of simpler instructions.
 Thus, programmers should use complex instructions whenever possible, even if the kernel could be equivalently implemented by a longer sequence of simpler instructions.
 

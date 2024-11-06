@@ -1,4 +1,6 @@
 [bibliography]
 == Bibliography
 
+:prose-text-indent-inner: 0
 bibliography::[]
+

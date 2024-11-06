@@ -17,9 +17,9 @@ Authors: Jerry Zhao, Daniel Grubb, Tianrui Wei, Miles Rusch, Borivoje Nikolic, K
 :reproducible:
 :imagesoutdir: ../build/images
 :srcdir: ./
-:bibtex-file: {srcdir}/example.bib
+:bibtex-file: {srcdir}/refs.bib
 :bibtex-order: alphabetical
-:bibtex-style: apa
+:bibtex-style: ieee
 :icons: font
 :lang: en
 :listing-caption: Listing
@@ -35,6 +35,7 @@ endif::[]
 :stem: latexmath
 :footnote:
 :xrefstyle: short
+:toclevels: 2
 
 [preface]
 
@@ -42,7 +43,7 @@ endif::[]
 
 include::intro.adoc[]
 
-include::objectives.adoc[]
+include::background.adoc[]
 
 include::system.adoc[]
 
@@ -52,7 +53,7 @@ include::memory.adoc[]
 
 include::execute.adoc[]
 
-include::design-space.adoc[]
+//include::design-space.adoc[]
 
 include::programming.adoc[]
 

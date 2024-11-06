@@ -51,15 +51,15 @@ page:
   size: letter
 base:
   font-family: body
-  font_size: 9
+  font_size: 11
   line_height_length: 9
   font_style: normal
-  font_size_large: round($base_font_size * 1.25)
-  font_size_small: round($base_font_size * 0.85)
-  font_size_min: $base_font_size * 0.75
+  font_size_large: round($base_font_size * 1.10)
+  font_size_small: round($base_font_size * 0.90)
+  font_size_min: $base_font_size * 0.90
   border_radius: 3
   border_width: 0.25
-vertical_rhythm: $base_line_height_length * 0.75
+vertical_rhythm: $base_line_height_length * 0.5
 horizontal_rhythm: $base_line_height_length
   # QUESTION should vertical_spacing be block_spacing instead?
 vertical_spacing: $vertical_rhythm
@@ -76,14 +76,16 @@ heading:
   align: left
   font_color: 000000
   font_family: headings
-  font_style: normal
-  h1_font_size: floor($base_font_size * 2.0)
+  font_style: bold
+  h1_font_size: $base_font_size + 6
   # h2 is used for chapter titles (book doctype only)
-  h2_font_size: floor($base_font_size * 1.7)
-  h3_font_size: round($base_font_size * 1.5)
-  h4_font_size: $base_font_size_large
+  h2_font_size: $base_font_size + 4
+  h3_font_size: $base_font_size + 2
+  h4_font_size: $base_font_size + 1
   h5_font_size: $base_font_size
-  h6_font_size: $base_font_size_small
+  h6_font_size: $base_font_size - 1
+  margin_top: 10
+  margin_bottom: 10
 title_page:
   align: center
   logo:
@@ -91,7 +93,7 @@ title_page:
   title:
     font_family: headings
     font_style: normal
-    font_size: floor($base_font_size * 2.8)
+    font_size: floor($base_font_size * 2.0)
     top: 55%
     font_color: 000000
   subtitle:
@@ -107,15 +109,15 @@ title_page:
     margin_top: $base_font_size * 1.25
 block:
   margin_top: 0
-  margin_bottom: $vertical_rhythm
+  margin_bottom: 10
 caption:
   align: center
-  font_size: $base_font_size * 0.95
+  font_size: $base_font_size * 1.0
   font_style: italic
   # FIXME perhaps set line_height instead of / in addition to margins?
   margin_inside: $vertical_rhythm / 3
   #margin_inside: $vertical_rhythm / 4
-  margin_outside: 0
+  margin_outside: 10
 lead:
   font_size: $base_font_size_large
   line_height: 1.1
@@ -203,9 +205,12 @@ example:
   padding: [$vertical_rhythm, $horizontal_rhythm, 0, $horizontal_rhythm]
 image:
   align: left
+  float_gap: 30
 prose:
-  margin_top: $block_margin_top
-  margin_bottom: $block_margin_bottom
+  margin_top: 0
+  margin_bottom: 3
+  text_indent: 20
+  text_indent_inner: 20
 thematic_break:
 #  border_color: $base_border_color
   border_style: solid

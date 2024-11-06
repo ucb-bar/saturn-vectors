@@ -1,0 +1,1005 @@
+@inproceedings{al2023eve,
+  title={EVE: Ephemeral vector engines},
+  author={Al-Hawaj, Khalid and Ta, Tuan and Cebry, Nick and Agwa, Shady and Afuye, Olalekan and Hall, Eric and Golden, Courtney and Apsel, Alyssa B and Batten, Christopher},
+  journal={2023 IEEE International Symposium on High-Performance Computer Architecture (HPCA)},
+  pages={691--704},
+  year={2023},
+  organization={IEEE},
+  url={https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=10071074}
+}
+
+@article{ramirez2020risc,
+  title={A risc-v simulator and benchmark suite for designing and evaluating vector architectures},
+  author={Ram{\'\i}rez, Crist{\'o}bal and Hern{\'a}ndez, C{\'e}sar Alejandro and Palomar, Oscar and Unsal, Osman and Ram{\'\i}rez, Marco Antonio and Cristal, Adri{\'a}n},
+  journal={ACM Transactions on Architecture and Code Optimization (TACO)},
+  volume={17},
+  number={4},
+  pages={1--30},
+  year={2020},
+  publisher={ACM New York, NY, USA}
+}
+
+@misc{swan,
+  title = {Vector-{{Processing}} for {{Mobile Devices}}: {{Benchmark}} and {{Analysis}}},
+  shorttitle = {Vector-{{Processing}} for {{Mobile Devices}}},
+  author = {Khadem, Alireza and Fujiki, Daichi and Talati, Nishil and Mahlke, Scott and Das, Reetuparna},
+  year = {2023},
+  month = sep,
+  number = {arXiv:2309.02680},
+  eprint = {2309.02680},
+  primaryclass = {cs},
+  publisher = {arXiv},
+  doi = {10.48550/arXiv.2309.02680},
+  url = {http://arxiv.org/abs/2309.02680},
+  urldate = {2024-06-26},
+  abstract = {Vector processing has become commonplace in today's CPU microarchitectures. Vector instructions improve performance and energy which is crucial for resource-constraint mobile devices. The research community currently lacks a comprehensive benchmark suite to study the benefits of vector processing for mobile devices. This paper presents Swan-an extensive vector processing benchmark suite for mobile applications. Swan consists of a diverse set of data-parallel workloads from four commonly used mobile applications: operating system, web browser, audio/video messaging application, and PDF rendering engine. Using Swan benchmark suite, we conduct a detailed analysis of the performance, power, and energy consumption of vectorized workloads, and show that: (a) Vectorized kernels increase the pressure on cache hierarchy due to the higher rate of memory requests. (b) Vector processing is more beneficial for workloads with lower precision operations and higher cache hit rates. (c) Limited Instruction-Level Parallelism and strided memory accesses to multi-dimensional data structures prevent vector processing benefits from scaling with more SIMD functional units and wider registers. (d) Despite lower computation throughput than domain-specific accelerators, such as GPU, vector processing outperforms these accelerators for kernels with lower operation counts. Finally, we show five common computation patterns in mobile data-parallel workloads that dominate the execution time.},
+  archiveprefix = {arXiv},
+  keywords = {Computer Science - Hardware Architecture},
+  file = {/Users/tianruiwei/Zotero/storage/DBE5N2VC/Khadem et al. - 2023 - Vector-Processing for Mobile Devices Benchmark and Analysis.pdf;/Users/tianruiwei/Zotero/storage/9ZJSB289/2309.html}
+}
+
+@article{codrescu2014hexagon,
+  title = {Hexagon {{DSP}}: {{An Architecture Optimized}} for {{Mobile Multimedia}} and {{Communications}}},
+  shorttitle = {Hexagon {{DSP}}},
+  author = {Codrescu, Lucian and Anderson, Willie and Venkumanhanti, Suresh and Zeng, Mao and Plondke, Erich and Koob, Chris and Ingle, Ajay and Tabony, Charles and Maule, Rick},
+  year = {2014},
+  month = mar,
+  journal = {IEEE Micro},
+  volume = {34},
+  number = {2},
+  pages = {34--43},
+  issn = {1937-4143},
+  doi = {10.1109/MM.2014.12},
+  url = {https://ieeexplore-ieee-org.libproxy.berkeley.edu/document/6762801},
+  urldate = {2024-06-26},
+  abstract = {Heterogeneous computing is essential for mobile products to meet power and performance targets. The Qualcomm Hexagon DSP, now in its fifth generation, is used for both modem processing and multimedia acceleration. By offloading multimedia tasks such as voice, audio, sensor, and image processing from the CPU to the DSP, Hexagon achieves significant power savings. Hexagon features a unique architecture that combines application-specific instructions, a VLIW instruction set architecture, and hardware multithreading. The design approach is to maximize work per cycle for performance, but run at modest clock speeds and focus the implementation on low power. This article provides an overview of the Hexagon architecture. The processor is designed to deliver far superior energy efficiency compared to mobile CPU alternatives and thereby help achieve long battery life for important mobile applications.},
+  keywords = {Computer architecture,Digital signal processing,digital signal processor,Hexagon DSP,instruction set architecture,Instruction sets,multimedia,Multimedia communication,Program processors}
+}
+
+@misc{armshareholder,
+  title={FYE24-Q3 Shareholder Letter},
+  author={Arm Holdings plc},
+  month={December},
+  year={2023},
+  url={https://investors.arm.com/static-files/4404a89a-d033-419e-aa0f-d7b15d40e11f}
+}
+
+
+@inproceedings{codrescu2015architecture,
+  title = {Architecture of the {{Hexagon}}™ 680 {{DSP}} for Mobile Imaging and Computer Vision},
+  booktitle = {2015 {{IEEE Hot Chips}} 27 {{Symposium}} ({{HCS}})},
+  author = {Codrescu, Lucian},
+  year = {2015},
+  month = aug,
+  pages = {1--26},
+  doi = {10.1109/HOTCHIPS.2015.7477329},
+  url = {https://ieeexplore.ieee.org/document/7477329},
+  urldate = {2024-06-26},
+  abstract = {Presents a collection of slides covering the following topics: Hexagon Vector eXtensions (HVX); HVX Architecture; DSP with HVX; System Features; Imaging \& Vision Kernel Benchmarks; Hexagon SDK 3.0; and Hexagon600TM.},
+  keywords = {Computer vision,Digital signal processing,Multithreading,Streaming media}
+}
+
+@article{frison2018blasfeo,
+  title = {{{BLASFEO}}: {{Basic Linear Algebra Subroutines}} for {{Embedded Optimization}}},
+  shorttitle = {{{BLASFEO}}},
+  author = {Frison, Gianluca and Kouzoupis, Dimitris and Sartor, Tommaso and Zanelli, Andrea and Diehl, Moritz},
+  year = {2018},
+  month = jul,
+  journal = {ACM Trans. Math. Softw.},
+  volume = {44},
+  number = {4},
+  pages = {42:1--42:30},
+  issn = {0098-3500},
+  doi = {10.1145/3210754},
+  url = {https://doi.org/10.1145/3210754},
+  urldate = {2024-06-26},
+  abstract = {Basic Linear Algebra Subroutines for Embedded Optimization (BLASFEO) is a dense linear algebra library providing high-performance implementations of BLAS- and LAPACK-like routines for use in embedded optimization and small-scale high-performance computing, in general. A key difference with respect to existing high-performance implementations of BLAS is that the computational performance is optimized for small- to medium-scale matrices, i.e., for sizes up to a few hundred. BLASFEO comes with three different implementations: a high-performance implementation aimed at providing the highest performance for matrices fitting in cache, a reference implementation providing portability and embeddability and optimized for very small matrices, and a wrapper to standard BLAS and LAPACK providing high performance on large matrices. The three implementations of BLASFEO together provide high-performance dense linear algebra routines for matrices ranging from very small to large. Compared to both open-source and proprietary highly tuned BLAS libraries, for matrices of size up to about 100, the high-performance implementation of BLASFEO is about 20--30\% faster than the corresponding level 3 BLAS routines and two to three times faster than the corresponding LAPACK routines.},
+  file = {/Users/tianruiwei/Zotero/storage/NX6YAY5E/Frison et al. - 2018 - BLASFEO Basic Linear Algebra Subroutines for Embedded Optimization.pdf}
+}
+
+@misc{ara2,
+  title = {Ara2: {{Exploring Single-}} and {{Multi-Core Vector Processing}} with an {{Efficient RVV1}}.0 {{Compliant Open-Source Processor}}},
+  shorttitle = {Ara2},
+  author = {Perotti, Matteo and Cavalcante, Matheus and Andri, Renzo and Cavigelli, Lukas and Benini, Luca},
+  year = {2023},
+  month = nov,
+  number = {arXiv:2311.07493},
+  eprint = {2311.07493},
+  primaryclass = {cs},
+  publisher = {arXiv},
+  doi = {10.48550/arXiv.2311.07493},
+  url = {http://arxiv.org/abs/2311.07493},
+  urldate = {2024-04-15},
+  abstract = {Vector processing is highly effective in boosting processor performance and efficiency for data-parallel workloads. In this paper, we present Ara2, the first fully open-source vector processor to support the RISC-V V 1.0 frozen ISA. We evaluate Ara2's performance on a diverse set of data-parallel kernels for various problem sizes and vector-unit configurations, achieving an average functional-unit utilization of 95\% on the most computationally intensive kernels. We pinpoint performance boosters and bottlenecks, including the scalar core, memories, and vector architecture, providing insights into the main vector architecture's performance drivers. Leveraging the openness of the design, we implement Ara2 in a 22nm technology, characterize its PPA metrics on various configurations (2-16 lanes), and analyze its microarchitecture and implementation bottlenecks. Ara2 achieves a state-of-the-art energy efficiency of 37.8 DP-GFLOPS/W (0.8V) and 1.35GHz of clock frequency (critical path: {\textasciitilde}40 FO4 gates). Finally, we explore the performance and energy-efficiency trade-offs of multi-core vector processors: we find that multiple vector cores help overcome the scalar core issue-rate bound that limits short-vector performance. For example, a cluster of eight 2-lane Ara2 (16 FPUs) achieves more than 3x better performance than a 16-lane single-core Ara2 (16 FPUs) when executing a 32x32x32 matrix multiplication, with 1.5x improved energy efficiency.},
+  archiveprefix = {arxiv},
+  keywords = {Computer Science - Hardware Architecture},
+  file = {/Users/tianruiwei/Zotero/storage/QHYGTKV8/Perotti et al. - 2023 - Ara2 Exploring Single- and Multi-Core Vector Processing with an Efficient RVV1.0 Compliant Open-Sou.pdf;/Users/tianruiwei/Zotero/storage/S55SPL6X/2311.html}
+}
+
+@article{arm_sve,
+  title = {The {{ARM Scalable Vector Extension}}},
+  author = {Stephens, Nigel and Biles, Stuart and Boettcher, Matthias and Eapen, Jacob and Eyole, Mbou and Gabrielli, Giacomo and Horsnell, Matt and Magklis, Grigorios and Martinez, Alejandro and Premillieu, Nathanael and Reid, Alastair and Rico, Alejandro and Walker, Paul},
+  year = {2017},
+  month = mar,
+  journal = {IEEE Micro},
+  volume = {37},
+  number = {2},
+  pages = {26--39},
+  issn = {0272-1732},
+  doi = {10.1109/MM.2017.35},
+  url = {http://ieeexplore.ieee.org/document/7924233/},
+  urldate = {2024-04-15},
+  copyright = {https://ieeexplore.ieee.org/Xplorehelp/downloads/license-information/IEEE.html},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/KIGP5R2H/Stephens et al. - 2017 - The ARM Scalable Vector Extension.pdf}
+}
+
+@article{cray1,
+  title = {The {{CRAY-1}} Computer System},
+  author = {Russell, Richard M.},
+  year = {1978},
+  month = jan,
+  journal = {Communications of the ACM},
+  volume = {21},
+  number = {1},
+  pages = {63--72},
+  issn = {0001-0782},
+  doi = {10.1145/359327.359336},
+  url = {https://dl.acm.org/doi/10.1145/359327.359336},
+  urldate = {2024-04-15},
+  abstract = {This paper describes the CRAY-1, discusses the evolution of its architecture, and gives an account of some of the problems that were overcome during its manufacture. The CRAY-1 is the only computer to have been built to date that satisfies ERDA's Class VI requirement (a computer capable of processing from 20 to 60 million floating point operations per second) [1]. The CRAY-1's Fortran compiler (CFT) is designed to give the scientific user immediate access to the benefits of the CRAY-1's vector processing architecture. An optimizing compiler, CFT, ``vectorizes'' innermost DO loops. Compatible with the ANSI 1966 Fortran Standard and with many commonly supported Fortran extensions, CFT does not require any source program modifications or the use of additional nonstandard Fortran statements to achieve vectorization. Thus the user's investment of hundreds of man months of effort to develop Fortran programs for other contemporary computers is protected.},
+  keywords = {architecture,computer systems},
+  file = {/Users/tianruiwei/Zotero/storage/YWSQUG5K/Russell - 1978 - The CRAY-1 computer system.pdf}
+}
+
+@techreport{hwacha_manual,
+  title = {The Hwacha Vector-Fetch Architecture Manual, Version 3.8.1},
+  author = {Lee, Yunsup and Schmidt, Colin and Ou, Albert and Waterman, Andrew and Asanovi{\'c}, Krste},
+  year = {2015},
+  month = dec,
+  number = {UCB/EECS-2015-262},
+  url = {http://www2.eecs.berkeley.edu/Pubs/TechRpts/2015/EECS-2015-262.html}
+}
+
+@article{maven,
+  title = {Simplified {{Vector-Thread Architectures}} for {{Flexible}} and {{Efficient Data-Parallel Accelerators}}},
+  author = {Batten, Christopher},
+  abstract = {This thesis explores a new approach to building data-parallel accelerators that is based on simplifying the instruction set, microarchitecture, and programming methodology for a vector-thread architecture. The thesis begins by categorizing regular and irregular data-level parallelism (DLP), before presenting several architectural design patterns for data-parallel accelerators including the multipleinstruction multiple-data (MIMD) pattern, the vector single-instruction multiple-data (vector-SIMD) pattern, the single-instruction multiple-thread (SIMT) pattern, and the vector-thread (VT) pattern. Our recently proposed VT pattern includes many control threads that each manage their own array of microthreads. The control thread uses vector memory instructions to efficiently move data and vector fetch instructions to broadcast scalar instructions to all microthreads. These vector mechanisms are complemented by the ability for each microthread to direct its own control flow.},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/B5RAMG3F/Batten - Simplified Vector-Thread Architectures for Flexible and Efficient Data-Parallel Accelerators.pdf}
+}
+
+@misc{nec_aurora,
+  title = {{{SX-Aurora TSUBASA Architecture}}},
+  url = {https://www.nec.com/en/global/solutions/hpc/sx/architecture.html?},
+  urldate = {2024-04-15}
+}
+
+@article{SCALE,
+  title = {Vector-{{Thread Architecture And Implementation}}},
+  author = {Krashinsky, Ronny},
+  abstract = {This thesis proposes vector-thread architectures as a performance-efficient solution for all-purpose computing. The VT architectural paradigm unifies the vector and multithreaded compute models. VT provides the programmer with a control processor and a vector of virtual processors. The control processor can use vector-fetch commands to broadcast instructions to all the VPs or each VP can use thread-fetches to direct its own control flow. A seamless intermixing of the vector and threaded control mechanisms allows a VT architecture to flexibly and compactly encode application parallelism and locality. VT architectures can efficiently exploit a wide variety of loop-level parallelism, including non-vectorizable loops with cross-iteration dependencies or internal control flow.},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/GIUVCCGJ/Krashinsky - Vector-Thread Architecture And Implementation.pdf}
+}
+
+@inproceedings{hwacha_tapeout,
+  title = {4.3 {{An Eight-Core}} 1.{{44GHz RISC-V Vector Machine}} in 16nm {{FinFET}}},
+  booktitle = {2021 {{IEEE International Solid-State Circuits Conference}} ({{ISSCC}})},
+  author = {Schmidt, Colin and Wright, John and Wang, Zhongkai and Chang, Eric and Ou, Albert and Bae, Woorham and Huang, Sean and Flynn, Anita and Richards, Brian and Asanovi{\'c}, Krste and Alon, Elad and Nikoli{\'c}, Borivoje},
+  year = {2021},
+  month = feb,
+  volume = {64},
+  pages = {58--60},
+  issn = {2376-8606},
+  doi = {10.1109/ISSCC42613.2021.9365789},
+  url = {https://ieeexplore.ieee.org/document/9365789},
+  urldate = {2024-04-15},
+  abstract = {Modern workloads, such as deep neural networks (DNNs), increasingly rely on dense arithmetic compute patterns that are ill-suited for general-purpose processors, leading to a rise in domain-specific compute accelerators [1]. Many of these workloads can benefit from varying precision during computation, e.g. different precisions among layers and between training and inference for DNNs has been shown to improve energy efficiency [2].},
+  keywords = {Energy efficiency,FinFETs,Neural networks,Program processors,Solid state circuits,Support vector machines,Training},
+  file = {/Users/tianruiwei/Zotero/storage/6F8QLHMF/Schmidt et al. - 2021 - 4.3 An Eight-Core 1.44GHz RISC-V Vector Machine in 16nm FinFET.pdf}
+}
+
+@inproceedings{spatz,
+  title = {Spatz: {{A Compact Vector Processing Unit}} for {{High-Performance}} and {{Energy-Efficient Shared-L1 Clusters}}},
+  shorttitle = {Spatz},
+  booktitle = {Proceedings of the 41st {{IEEE}}/{{ACM International Conference}} on {{Computer-Aided Design}}},
+  author = {Cavalcante, Matheus and W{\"u}thrich, Domenic and Perotti, Matteo and Riedel, Samuel and Benini, Luca},
+  year = {2022},
+  month = dec,
+  series = {{{ICCAD}} '22},
+  pages = {1--9},
+  publisher = {Association for Computing Machinery},
+  address = {New York, NY, USA},
+  doi = {10.1145/3508352.3549367},
+  url = {https://dl.acm.org/doi/10.1145/3508352.3549367},
+  urldate = {2024-04-15},
+  abstract = {While parallel architectures based on clusters of Processing Elements (PEs) sharing L1 memory are widespread, there is no consensus on how lean their PE should be. Architecting PEs as vector processors holds the promise to greatly reduce their instruction fetch bandwidth, mitigating the Von Neumann Bottleneck (VNB). However, due to their historical association with supercomputers, classical vector machines include microarchitectural tricks to improve the Instruction Level Parallelism (ILP), which increases their instruction fetch and decode energy overhead. In this paper, we explore for the first time vector processing as an option to build small and efficient PEs for large-scale shared-L1 clusters. We propose Spatz, a compact, modular 32-bit vector processing unit based on the integer embedded subset of the RISC-V Vector Extension version 1.0. A Spatz-based cluster with four Multiply-Accumulate Units (MACUs) needs only 7.9 pJ per 32-bit integer multiply-accumulate operation, 40\% less energy than an equivalent cluster built with four Snitch scalar cores. We analyzed Spatz' performance by integrating it within MemPool, a large-scale many-core shared-L1 cluster. The Spatz-based MemPool system achieves up to 285 GOPS when running a 256 {\texttimes} 256 32-bit integer matrix multiplication, 70\% more than the equivalent Snitch-based MemPool system. In terms of energy efficiency, the Spatz-based MemPool system achieves up to 266 GOPS/W when running the same kernel, more than twice the energy efficiency of the Snitch-based MemPool system, which reaches 128 GOPS/W. Those results show the viability of lean vector processors as high-performance and energy-efficient PEs for large-scale clusters with tightly-coupled L1 memory.},
+  isbn = {978-1-4503-9217-4},
+  keywords = {many-core,RISC-V vector extension,SIMD,vector processing},
+  file = {/Users/tianruiwei/Zotero/storage/E7QIASHS/Cavalcante et al. - 2022 - Spatz A Compact Vector Processing Unit for High-Performance and Energy-Efficient Shared-L1 Clusters.pdf}
+}
+
+@phdthesis{t0,
+  title = {Vector Microprocessors},
+  author = {Asanovi{\'c}, Krste},
+  year = {1998},
+  number = {UCB/CSD-98-1014},
+  url = {http://www2.eecs.berkeley.edu/Pubs/TechRpts/1998/6404.html},
+  abstract = {Most previous research into vector architectures has concentrated on supercomputing applications and small enhancements to existing vector supercomputer implementations. This thesis expands the body of vector research by examining designs appropriate for single-chip full-custom vector microprocessor implementations targeting a much broader range of applications. {\textexclamdown}p{\textquestiondown} I present the design, implementation, and evaluation of T0 (Torrent-0): the first single-chip vector microprocessor. T0 is a compact but highly parallel processor that can sustain over 24 operations per cycle while issuing only a single 32-bit instruction per cycle. T0 demonstrates that vector architectures are well suited to full-custom VLSI implementation and that they perform well on many multimedia and human-machine interface tasks. {\textexclamdown}p{\textquestiondown} The remainder of the thesis contains proposals for future vector microprocessor designs. I show that the most area-efficient vector register file designs have several banks with several ports, rather than many banks with few ports as used by traditional vector supercomputers, or one bank with many ports as used by superscalar microprocessors. To extend the range of vector processing, I propose a vector flag processing model which enables speculative vectorization of "while" loops. To improve the performance of inexpensive vector memory systems, I introduce virtual processor caches, a new form of primary vector cache which can convert some forms of strided and indexed vector accesses into unit-stride bursts. (Spring 1998)},
+  school = {EECS Department, University of California, Berkeley},
+  file = {/Users/tianruiwei/Zotero/storage/FM7QDBEM/thesis.pdf}
+}
+
+@article{vicuna,
+  title = {Vicuna: {{A Timing-Predictable RISC-V Vector Coprocessor}} for {{Scalable Parallel Computation}}},
+  shorttitle = {Vicuna},
+  author = {Platzer, Michael and Puschner, Peter},
+  year = {2021},
+  pages = {18 pages, 831915 bytes},
+  publisher = {[object Object]},
+  issn = {1868-8969},
+  doi = {10.4230/LIPICS.ECRTS.2021.1},
+  url = {https://drops.dagstuhl.de/entities/document/10.4230/LIPIcs.ECRTS.2021.1},
+  urldate = {2024-04-15},
+  abstract = {In this work, we present Vicuna, a timing-predictable vector coprocessor. A vector processor can be scaled to satisfy the performance requirements of massively parallel computation tasks, yet its timing behavior can remain simple enough to be efficiently analyzable. Therefore, vector processors are promising for highly parallel real-time applications, such as advanced driver assistance systems and autonomous vehicles. Vicuna has been specifically tailored to address the needs of real-time applications. It features predictable and repeatable timing behavior and is free of timing anomalies, thus enabling effective and tight worst-case execution time (WCET) analysis while retaining the performance and efficiency commonly seen in other vector processors. We demonstrate our architecture's predictability, scalability, and performance by running a set of benchmark applications on several configurations of Vicuna synthesized on a Xilinx 7 Series FPGA with a peak performance of over 10 billion 8-bit operations per second, which is in line with existing non-predictable soft vector-processing architectures.},
+  collaborator = {Brandenburg, Bj{\"o}rn B.},
+  copyright = {Creative Commons Attribution 4.0 International license, info:eu-repo/semantics/openAccess},
+  isbn = {9783959771924},
+  langid = {english},
+  keywords = {Computer systems organization  Real-time system architecture,Real-time Systems,RISC-V,Vector Processors},
+  file = {/Users/tianruiwei/Zotero/storage/V34GU8AZ/Platzer and Puschner - 2021 - Vicuna A Timing-Predictable RISC-V Vector Coprocessor for Scalable Parallel Computation.pdf}
+}
+
+@article{minervini_vitruvius_2023,
+  title = {Vitruvius+: {{An Area-Efficient RISC-V Decoupled Vector Coprocessor}} for {{High Performance Computing Applications}}},
+  shorttitle = {Vitruvius+},
+  author = {Minervini, Francesco and Palomar, Oscar and Unsal, Osman and Reggiani, Enrico and Quiroga, Josue and Marimon, Joan and Rojas, Carlos and Figueras, Roger and Ruiz, Abraham and Gonzalez, Alberto and Mendoza, Jonnatan and Vargas, Ivan and Hernandez, C{\'e}sar and Cabre, Joan and Khoirunisya, Lina and Bouhali, Mustapha and Pavon, Julian and Moll, Francesc and Olivieri, Mauro and Kovac, Mario and Kovac, Mate and Dragic, Leon and Valero, Mateo and Cristal, Adrian},
+  year = {2023},
+  month = mar,
+  journal = {ACM Transactions on Architecture and Code Optimization},
+  volume = {20},
+  number = {2},
+  pages = {28:1--28:25},
+  issn = {1544-3566},
+  doi = {10.1145/3575861},
+  url = {https://dl.acm.org/doi/10.1145/3575861},
+  urldate = {2024-04-15},
+  abstract = {The maturity level of RISC-V and the availability of domain-specific instruction set extensions, like vector processing, make RISC-V a good candidate for supporting the integration of specialized hardware in processor cores for the High Performance Computing (HPC) application domain. In this article,1 we present Vitruvius+, the vector processing acceleration engine that represents the core of vector instruction execution in the HPC challenge that comes within the EuroHPC initiative. It implements the RISC-V vector extension (RVV) 0.7.1 and can be easily connected to a scalar core using the Open Vector Interface standard. Vitruvius+ natively supports long vectors: 256 double precision floating-point elements in a single vector register. It is composed of a set of identical vector pipelines (lanes), each containing a slice of the Vector Register File and functional units (one integer, one floating point). The vector instruction execution scheme is hybrid in-order/out-of-order and is supported by register renaming and arithmetic/memory instruction decoupling. On a stand-alone synthesis, Vitruvius+ reaches a maximum frequency of 1.4 GHz in typical conditions (TT/0.80V/25{$^\circ$}C) using GlobalFoundries 22FDX FD-SOI. The silicon implementation has a total area of 1.3 mm2 and maximum estimated power of {$\sim$}920 mW for one instance of Vitruvius+ equipped with eight vector lanes.},
+  keywords = {HPC,RISC-V,SIMD,vector accelerator},
+  file = {/Users/tianruiwei/Zotero/storage/3JU4A5QY/Minervini et al. - 2023 - Vitruvius+ An Area-Efficient RISC-V Decoupled Vector Coprocessor for High Performance Computing App.pdf}
+}
+
+
+@inproceedings{patsidis_risc-v2_2020,
+  title = {{{RISC-V2}}: {{A Scalable RISC-V Vector Processor}}},
+  shorttitle = {{{RISC-V2}}},
+  booktitle = {2020 {{IEEE International Symposium}} on {{Circuits}} and {{Systems}} ({{ISCAS}})},
+  author = {Patsidis, Kariofyllis and Nicopoulos, Chrysostomos and Sirakoulis, Georgios Ch. and Dimitrakopoulos, Giorgos},
+  year = {2020},
+  month = oct,
+  pages = {1--5},
+  issn = {2158-1525},
+  doi = {10.1109/ISCAS45731.2020.9181071},
+  url = {https://ieeexplore.ieee.org/document/9181071},
+  urldate = {2024-04-15},
+  abstract = {Machine learning adoption has seen a widespread bloom in recent years, with neural network implementations being at the forefront. In light of these developments, vector processors are currently experiencing a resurgence of interest, due to their inherent amenability to accelerate data-parallel algorithms required in machine learning environments. In this paper, we propose a scalable and high-performance RISC-V vector processor core. The presented processor employs a triptych of novel mechanisms that work synergistically to achieve the desired goals. An enhanced vector-specific incarnation of register renaming is proposed to facilitate dynamic hardware loop unrolling and alleviate instruction dependencies. Moreover, a cost-efficient decoupled execution scheme splits instructions into execution and memory-access streams, while hardware support for reductions accelerates the execution of key instructions in the RISC-V ISA. Extensive performance evaluation and hardware synthesis analysis validate the efficiency of the new architecture.},
+  keywords = {Acceleration,Artificial neural networks,Computer architecture,Hardware,Pipelines,Registers,Vector processors},
+  file = {/Users/tianruiwei/Zotero/storage/L98B4CSX/Patsidis et al. - 2020 - RISC-V2 A Scalable RISC-V Vector Processor.pdf}
+}
+
+
+@misc{noauthor_5g_advanced_nodate,
+  title = {{{5G-Advanced Powerful Vector DSP}} {\textbar} {{Ceva-XC22}} {\textbar} {{Ceva IP}}},
+  journal = {Ceva},
+  url = {https://www.ceva-ip.com/product/ceva-xc22/},
+  urldate = {2024-04-15},
+  abstract = {Ceva-XC22, the cutting-edge most advanced and efficient vector DSP, designed to power the 5G advanced networks of tomorrow and Massive compute.},
+  langid = {american}
+}
+
+@misc{noauthor_hexagon_nodate,
+  title = {Hexagon {{DSP SDK Processor}}},
+  journal = {Qualcomm Developer Network},
+  url = {https://developer.qualcomm.com/software/hexagon-dsp-sdk/dsp-processor},
+  urldate = {2024-04-15},
+  abstract = {The Hexagon DSP processor has both CPU and DSP functionality to support deeply embedded processing needs of the mobile platform for both multimedia and modem functions.},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/ERWML2SM/dsp-processor.html}
+}
+
+@misc{noauthor_technologies_nodate,
+  title = {Technologies},
+  url = {https://www.cadence.com/home/tools/silicon-solutions/compute-ip/technologies.html},
+  urldate = {2024-04-15},
+  abstract = {Enables configuring and customizing Tensilica processors and DSPs to differentiate, reduce time to market, add flexibility, and get the best PPA.},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/EDP75K75/technologies.html}
+}
+
+
+@article{decoupled_execute,
+  title = {Decoupled Access/Execute Computer Architectures},
+  author = {Smith, James E.},
+  year = {1982},
+  month = apr,
+  journal = {ACM SIGARCH Computer Architecture News},
+  volume = {10},
+  number = {3},
+  pages = {112--119},
+  issn = {0163-5964},
+  doi = {10.1145/1067649.801719},
+  url = {https://dl.acm.org/doi/10.1145/1067649.801719},
+  urldate = {2024-04-15},
+  abstract = {An architecture for improving computer performance is presented and discussed. The main feature of the architecture is a high degree of decoupling between operand access and execution. This results in an implementation which has two separate instruction streams that communicate via queues. A similar architecture has been previously proposed for array processors, but in that context the software is called on to do most of the coordination and synchronization between the instruction streams. This paper emphasizes implementation features that remove this burden from the programmer. Performance comparisons with a conventional scalar architecture are given, and these show that considerable performance gains are possible. Single instruction stream versions, both physical and conceptual, are discussed with the primary goal of minimizing the differences with conventional architectures. This would allow known compilation and programming techniques to be used. Finally, the problem of deadlock in such a system is discussed, and one possible solution is given.},
+  file = {/Users/tianruiwei/Zotero/storage/L3ADP6S2/Smith - 1982 - Decoupled accessexecute computer architectures.pdf}
+}
+
+@inproceedings{scoreboard,
+  title = {Parallel Operation in the Control Data 6600},
+  booktitle = {Proceedings of the {{October}} 27-29, 1964, Fall Joint Computer Conference, Part {{II}}: Very High Speed Computer Systems},
+  author = {Thornton, James E.},
+  year = {1964},
+  month = oct,
+  series = {{{AFIPS}} '64 ({{Fall}}, Part {{II}})},
+  pages = {33--40},
+  publisher = {Association for Computing Machinery},
+  address = {New York, NY, USA},
+  doi = {10.1145/1464039.1464045},
+  url = {https://dl.acm.org/doi/10.1145/1464039.1464045},
+  urldate = {2024-04-15},
+  abstract = {About four years ago, in the summer of 1960, Control Data began a project which culminated last month in the delivery of the first 6600 Computer. In 1960 it was apparent that brute force circuit performance and parallel operation were the two main approaches to any advanced computer.},
+  isbn = {978-1-4503-7888-8},
+  file = {/Users/tianruiwei/Zotero/storage/RMF7HPQF/Thornton - 1964 - Parallel operation in the control data 6600.pdf}
+}
+
+
+@book{chime_length,
+  title = {Computer Architecture: A Quantitative Approach, Appendix G},
+  shorttitle = {Computer Architecture},
+  author = {Asanovic, Krste},
+  year = {2019},
+  urldate = {2022-04-20},
+  abstract = {Computer Architecture: A Quantitative Approach, Sixth Edition has been considered essential reading by instructors, students and practitioners of computer design for over 20 years. The sixth edition of this classic textbook from Hennessy and Patterson, winners of the 2017 ACM A.M. Turing Award recognizing contributions of lasting and major technical importance to the computing field, is fully revised with the latest developments in processor and system architecture. The text now features examples from the RISC-V (RISC Five) instruction set architecture, a modern RISC instruction set developed and designed to be a free and openly adoptable standard. It also includes a new chapter on domain-specific architectures and an updated chapter on warehouse-scale computing that features the first public information on Google's newest WSC. True to its original mission of demystifying computer architecture, this edition continues the longstanding tradition of focusing on areas where the most exciting computing innovation is happening, while always keeping an emphasis on good engineering design.},
+  isbn = {978-0-12-811906-8},
+  langid = {english},
+  annotation = {OCLC: 1124543485}
+}
+
+
+@article{precise_trap,
+  title = {Implementing Precise Interrupts in Pipelined Processors},
+  author = {Smith, J.E. and Pleszkun, A.R.},
+  year = {1988},
+  month = may,
+  journal = {IEEE Transactions on Computers},
+  volume = {37},
+  number = {5},
+  pages = {562--573},
+  issn = {1557-9956},
+  doi = {10.1109/12.4607},
+  url = {https://ieeexplore.ieee.org/document/4607},
+  urldate = {2024-04-15},
+  abstract = {Five solutions to the precise interrupt problem in pipelined processors are described and evaluated. An interrupt is precise if the saved process state corresponds to a sequential model of program execution in which one instruction completes before the next begins. In a pipelined processor, precise interrupts are difficult to implement because an instruction may be initiated before its predecessors have completed. The first solution forces instructions to complete and modify the process state in architectural order. The other four solutions allow instructions to complete in any order, but additional hardware is used, so that a precise state can be restored when an interrupt occurs. All the methods are discussed in the context of a parallel pipeline structure. Simulation results for the Cray-1S scalar architecture are used to show that the first solution results in a performance degradation of at least 16\%. The remaining four solutions offer better performance, and three of them result in as little as a 3\% performance loss. Several extensions, including vector architectures, virtual memory, and linear pipeline structures, are briefly discussed.{$<>$}},
+  keywords = {Checkpointing,Computational modeling,Computer architecture,Computer simulation,Counting circuits,Degradation,Hardware,Performance loss,Pipelines,Vectors},
+  file = {/Users/tianruiwei/Zotero/storage/MMPGYSYS/Smith and Pleszkun - 1988 - Implementing precise interrupts in pipelined processors.pdf;/Users/tianruiwei/Zotero/storage/N6KYZ9GR/4607.html}
+}
+
+
+@inproceedings{pastpresentfuture,
+author = {Espasa, Roger and Valero, Mateo and Smith, James E.},
+title = {Vector architectures: past, present and future},
+year = {1998},
+isbn = {089791998X},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/277830.277935},
+doi = {10.1145/277830.277935},
+booktitle = {Proceedings of the 12th International Conference on Supercomputing},
+pages = {425–432},
+numpages = {8},
+location = {Melbourne, Australia},
+series = {ICS '98}
+}
+
+@INPROCEEDINGS{ooo_espasa,
+  author={Espasa, R. and Valero, M. and Smith, J.E.},
+  booktitle={Proceedings of 30th Annual International Symposium on Microarchitecture}, 
+  title={Out-of-order vector architectures}, 
+  year={1997},
+  volume={},
+  number={},
+  pages={160-170},
+  keywords={Out of order;Delay;Registers;Vector processors;Computer architecture;Bandwidth;Degradation;Hardware;Supercomputers;Contracts},
+  doi={10.1109/MICRO.1997.645807}}
+
+@inproceedings{villa1998performance,
+title={A performance study of out-of-order vector architectures and short registers},
+  author={Villa, Luis and Espasa, Roger and Valero, Mateo},
+  booktitle={Proceedings of the 12th international conference on Supercomputing},
+  pages={37--44},
+  year={1998}
+}
+
+@INPROCEEDINGS{6307065,
+  author={Lee, Yunsup and Avizienis, Rimas and Bishara, Alex and Xia, Richard and Lockhart, Derek and Batten, Christopher and Asanović, Krste},
+  booktitle={2011 38th Annual International Symposium on Computer Architecture (ISCA)}, 
+  title={Exploring the tradeoffs between programmability and efficiency in data-parallel accelerators}, 
+  year={2011},
+  volume={},
+  number={},
+  pages={129-140},
+  keywords={Vectors;Microarchitecture;Tiles;Instruction sets;Registers;Kernel;Programming;Design},
+  doi={}}
+
+@inproceedings{quintana1999adding,
+  title={Adding a vector unit to a superscalar processor},
+  author={Quintana, Francisca and Corbal, Jesus and Espasa, Roger and Valero, Mateo},
+  booktitle={Proceedings of the 13th international conference on Supercomputing},
+  pages={1--10},
+  year={1999}
+}
+
+@INPROCEEDINGS{389176,
+  author={Espasa, R. and Valero, M. and Padua, D. and Jimenez, M. and Ayguade, E.},
+  booktitle={Proceedings Euromicro Workshop on Parallel and Distributed Processing}, 
+  title={Quantitative analysis of vector code}, 
+  year={1995},
+  volume={},
+  number={},
+  pages={452-461},
+  keywords={Costs;Program processors;Postal services;Performance evaluation;Educational programs;Contracts;Frequency;Hazards;Measurement techniques},
+  doi={10.1109/EMPDP.1995.389176}}
+
+@inproceedings{10.1145/859618.859664,
+author = {Kozyrakis, Christos and Patterson, David},
+title = {Overcoming the limitations of conventional vector processors},
+year = {2003},
+isbn = {0769519458},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/859618.859664},
+doi = {10.1145/859618.859664},
+abstract = {Despite their superior performance for multimedia applications, vector processors have three limitations that hinder their widespread acceptance. First, the complexity and size of the centralized vector register file limits the number of functional units. Second, precise exceptions for vector instructions are difficult to implement. Third, vector processors require an expensive on-chip memory system that supports high bandwidth at low access latency.This paper introduces CODE, a scalable vector microarchitecture that addresses these three shortcomings. It is designed around a clustered vector register file and uses a separate network for operand transfers across functional units. With extensive use of decoupling, it can hide the latency of communication across functional units and provides 26\% performance improvement over a centralized organization. CODE scales efficiently to 8 functional units without requiring wide instruction issue capabilities. A renaming table makes the clustered register file transparent at the instruction set level. Renaming also enables precise exceptions for vector instructions at a performance loss of less than 5\%. Finally, decoupling allows CODE to tolerate large increases in memory latency at sub-linear performance degradation without using on-chip caches. Thus, CODE can use economical, off-chip, memory systems.},
+booktitle = {Proceedings of the 30th Annual International Symposium on Computer Architecture},
+pages = {399–409},
+numpages = {11},
+location = {San Diego, California},
+series = {ISCA '03}
+}
+
+
+@article{10.1145/871656.859664,
+author = {Kozyrakis, Christos and Patterson, David},
+title = {Overcoming the limitations of conventional vector processors},
+year = {2003},
+issue_date = {May 2003},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {31},
+number = {2},
+issn = {0163-5964},
+url = {https://doi.org/10.1145/871656.859664},
+doi = {10.1145/871656.859664},
+abstract = {Despite their superior performance for multimedia applications, vector processors have three limitations that hinder their widespread acceptance. First, the complexity and size of the centralized vector register file limits the number of functional units. Second, precise exceptions for vector instructions are difficult to implement. Third, vector processors require an expensive on-chip memory system that supports high bandwidth at low access latency.This paper introduces CODE, a scalable vector microarchitecture that addresses these three shortcomings. It is designed around a clustered vector register file and uses a separate network for operand transfers across functional units. With extensive use of decoupling, it can hide the latency of communication across functional units and provides 26\% performance improvement over a centralized organization. CODE scales efficiently to 8 functional units without requiring wide instruction issue capabilities. A renaming table makes the clustered register file transparent at the instruction set level. Renaming also enables precise exceptions for vector instructions at a performance loss of less than 5\%. Finally, decoupling allows CODE to tolerate large increases in memory latency at sub-linear performance degradation without using on-chip caches. Thus, CODE can use economical, off-chip, memory systems.},
+journal = {SIGARCH Comput. Archit. News},
+month = {may},
+pages = {399–409},
+numpages = {11}
+}
+
+@ARTICLE{1261385,
+  author={Kozyrakis, C.E. and Patterson, D.A.},
+  journal={IEEE Micro}, 
+  title={Scalable, vector processors for embedded systems}, 
+  year={2003},
+  volume={23},
+  number={6},
+  pages={36-45},
+  keywords={Vector processors;Embedded system;Registers;VLIW;Computer architecture;Energy consumption;Embedded computing;Parallel processing;Process design;High performance computing},
+  doi={10.1109/MM.2003.1261385}}
+
+@INPROCEEDINGS{501193,
+  author={Espasa, R. and Valero, M.},
+  booktitle={Proceedings. Second International Symposium on High-Performance Computer Architecture}, 
+  title={Decoupled vector architectures}, 
+  year={1996},
+  volume={},
+  number={},
+  pages={281-290},
+  keywords={Delay;Parallel processing;Yarn;Hardware;Computer aided instruction;Computer architecture;Vector processors;Computational modeling;Costs;Multithreading},
+  doi={10.1109/HPCA.1996.501193}}
+
+@phdthesis{Kozyrakis:CSD-02-1183,
+    Author = {Kozyrakis, Christoforos},
+    Title = {Scalable Vector Media-processors for Embedded Systems},
+    School = {EECS Department, University of California, Berkeley},
+    Year = {2002},
+    Month = {May},
+    URL = {http://www2.eecs.berkeley.edu/Pubs/TechRpts/2002/5659.html},
+    Number = {UCB/CSD-02-1183},
+    Abstract = {Over the past twenty years, processor designers have concentrated on superscalar and VLIW architectures that exploit the instruction-level parallelism (ILP) available in engineering applications for workstation systems. Recently, however, the focus in computing has shifted from engineering to multimedia applications and from workstations to embedded systems. In this new computing environment, the performance, energy consumption, and development cost of ILP processors renders them ineffective despite their theoretical generality. <p>This thesis focuses on the development of efficient architectures for embedded multimedia systems. We argue that it is possible to design processors that deliver high performance, have low energy consumption, and are simple to implement. The basis for the argument is the ability of vector architectures to exploit efficiently the data-level parallelism in multimedia applications. Furthermore, the increasing density of CMOS chips enables the design of cost-effective, on-chip, memory systems that can support the high bandwidth necessary for a vector processor. <p>To test our hypothesis, we present VIRAM, a vector architecture for multimedia processing. We demonstrate that the vector instructions in VIRAM can capture the data-level parallelism in multimedia tasks and lead to smaller code size than RISC, CISC, and VLIW architectures. We also describe two scalable microarchitectures for vector media-processors: VIRAM-1 and CODE. VIRAM-1 integrates a simple, yet highly parallel, vector processor with an embedded DRAM memory system in a prototype chip with 120 million transistors. CODE uses a composite and decoupled organization for the vector processor in order to simplify the vector register file design, tolerate high memory latency, and allow for precise exceptions support. Both microarchitectures provide up to 10 times higher performance than alternative approaches without using out-of-order or wide instruction issue techniques that exacerbate energy consumption and design complexity.}
+}
+
+
+@inproceedings{vector_present_past,
+  title = {Vector Architectures: Past, Present and Future},
+  shorttitle = {Vector Architectures},
+  booktitle = {Proceedings of the 12th International Conference on {{Supercomputing}}},
+  author = {Espasa, Roger and Valero, Mateo and Smith, James E.},
+  year = {1998},
+  month = jul,
+  pages = {425--432},
+  publisher = {ACM},
+  address = {Melbourne Australia},
+  doi = {10.1145/277830.277935},
+  url = {https://dl.acm.org/doi/10.1145/277830.277935},
+  urldate = {2024-04-16},
+  isbn = {978-0-89791-998-2},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/XL5HR8W2/Espasa et al. - 1998 - Vector architectures past, present and future.pdf}
+}
+
+@inproceedings{ooova,
+  title = {Out-of-Order Vector Architectures},
+  booktitle = {Proceedings of 30th {{Annual International Symposium}} on {{Microarchitecture}}},
+  author = {Espasa, R. and Valero, M. and Smith, J.E.},
+  year = {1997},
+  pages = {160--170},
+  publisher = {IEEE Comput. Soc},
+  address = {Research Triangle Park, NC, USA},
+  doi = {10.1109/MICRO.1997.645807},
+  url = {http://ieeexplore.ieee.org/document/645807/},
+  urldate = {2024-04-16},
+  abstract = {Register renaming and out-of-order instruction issue are now commonly used in superscalar processors. These techniques can also be used to significant advantage in vector processors, as this paper shows. Performance is improved and available memoy bandwidth is used more effectively. Using a trace driven simulation we compare a conventional vector implementation, based OIL the Convex C3400, with an out-of-order, register renaming, vector implementation. When the number of physical registers is above 12, out-of-order execution coupled with register renaming provides a speedup of 1.24-1.72 for realistic memory latencies. Out-of-order techniques also tolerate main *memory latencies of 100 cycles with a performance degradation less than 6\%. The mechanisms used for register renaming and out-of-order issue can be used to support precise interrupts - generally a dificult problem in vector machines. When precise interrupts are implemented, there is typically less than a 10\% degradation in performance. A new technique based on register renaming is targeted at dynamically eliminating spill code; this technique is shown to provide an extra speedup ranging between 1.10 and 1.80 while reducing total memory traffic by an average of 15-20\%.},
+  isbn = {978-0-8186-7977-3},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/LACMGAXW/Espasa et al. - 1997 - Out-of-order vector architectures.pdf}
+}
+
+@inproceedings{next_gen_vector,
+  title = {{{EVE}}: {{Ephemeral Vector Engines}}},
+  shorttitle = {{{EVE}}},
+  booktitle = {2023 {{IEEE International Symposium}} on {{High-Performance Computer Architecture}} ({{HPCA}})},
+  author = {{Al-Hawaj}, Khalid and Ta, Tuan and Cebry, Nick and Agwa, Shady and Afuye, Olalekan and Hall, Eric and Golden, Courtney and Apsel, Alyssa B. and Batten, Christopher},
+  year = {2023},
+  month = feb,
+  pages = {691--704},
+  publisher = {IEEE},
+  address = {Montreal, QC, Canada},
+  doi = {10.1109/HPCA56546.2023.10071074},
+  url = {https://ieeexplore.ieee.org/document/10071074/},
+  urldate = {2024-04-16},
+  abstract = {There has been a resurgence of interest in vector architectures evident by recent adoption of vector extensions in mainstream instruction set architectures. Traditionally, vector engines leverage this abstraction by exploiting its inherent regularity to increase performance and efficiency. Recent work on SRAMbased compute-in-memory has shown promise in reducing the area overhead of these engines. In this work, we propose ephemeral vector engines (EVE) where we leverage SRAM-based computein-memory techniques as well as bit-peripheral computations to facilitate efficient vector execution. EVE uses a novel approach of bit-hybrid execution, striking a balance between throughput and latency. Evaluated on the Rodinia and RiVEC benchmark suites, EVE achieves almost 8{\texttimes} speed-up compared to an out-of-order processor and 4.59{\texttimes} compared to an integrated vector unit. EVE achieves speed-ups comparable to an aggressive decoupled vector unit and increases the area-normalized performance by over 2{\texttimes} . By repurposing SRAM arrays in the L2 cache to create ephemeral vector execution units, EVE is able to efficiently achieve high performance while incurring as little as 11.7\% area overhead.},
+  copyright = {https://doi.org/10.15223/policy-029},
+  isbn = {978-1-66547-652-2},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/GBK7M23G/Al-Hawaj et al. - 2023 - EVE Ephemeral Vector Engines.pdf}
+}
+
+
+@misc{nx27v,
+  title = {{{RISC-V}}:{{NX27V}}},
+  shorttitle = {{{RISC-V}}},
+  journal = {Andes Technology},
+  url = {https://www.andestech.com/en/products-solutions/andescore-processors/riscv-nx27v/},
+  urldate = {2024-04-16},
+  abstract = {AndesCore™ NX27V Processor 64-bit CPU with RISC-V Vector Extension AndesCore™ NX27V Overview AndeStar™ V5 Instruction Set Architecture (ISA), compliant to RISC-V technology RISC-V vector extension Vector Processing Unit (VPU) boost [{\dots}]},
+  langid = {english}
+}
+
+@misc{sifivex,
+  title = {{{SiFive Intelligence X280}}},
+  journal = {SiFive},
+  url = {https://www.sifive.com/cores/intelligence-x280},
+  urldate = {2024-04-16},
+  abstract = {The SiFive Intelligence™ X280 is a multi-core capable RISC-V processor with vector extensions and SiFive Intelligence Extensions and is optimized for AI/ML compute at the edge.},
+  langid = {american}
+}
+
+
+@inproceedings{c910,
+  title = {Xuantie-910: {{A Commercial Multi-Core}} 12-{{Stage Pipeline Out-of-Order}} 64-Bit {{High Performance RISC-V Processor}} with {{Vector Extension}} : {{Industrial Product}}},
+  shorttitle = {Xuantie-910},
+  booktitle = {2020 {{ACM}}/{{IEEE}} 47th {{Annual International Symposium}} on {{Computer Architecture}} ({{ISCA}})},
+  author = {Chen, Chen and Xiang, Xiaoyan and Liu, Chang and Shang, Yunhai and Guo, Ren and Liu, Dongqi and Lu, Yimin and Hao, Ziyi and Luo, Jiahui and Chen, Zhijian and Li, Chunqiang and Pu, Yu and Meng, Jianyi and Yan, Xiaolang and Xie, Yuan and Qi, Xiaoning},
+  year = {2020},
+  month = may,
+  pages = {52--64},
+  doi = {10.1109/ISCA45697.2020.00016},
+  url = {https://ieeexplore.ieee.org/document/9138983},
+  urldate = {2024-04-16},
+  abstract = {The open source RISC-V ISA has been quickly gaining momentum. This paper presents Xuantie-910, an industry leading 64-bit high performance embedded RISC-V processor from Alibaba T-Head division. It is fully based on the RV64GCV instruction set and it features custom extensions to arithmetic operation, bit manipulation, load and store, TLB and cache operations. It also implements the 0.7.1 stable release of RISCV vector extension specification for high efficiency vector processing. Xuantie-910 supports multi-core multi-cluster SMP with cache coherence. Each cluster contains 1 to 4 core(s) capable of booting the Linux operating system. Each single core utilizes the state-of-the-art 12-stage deep pipeline, out-of-order, multi-issue superscalar architecture, achieving a maximum clock frequency of 2.5 GHz in the typical process, voltage and temperature condition in a TSMC 12nm FinFET process technology. Each single core with the vector execution unit costs an area of 0.8 mm2, (excluding the L2 cache). The toolchain is enhanced significantly to support the vector extension and custom extensions. Through hardware and toolchain co-optimization, to date Xuantie-910 delivers the highest performance (in terms of IPC, speed, and power efficiency) for a number of industrial control flow and data computing benchmarks, when compared with its predecessors in the RISC-V family. Xuantie-910 FPGA implementation has been deployed in the data centers of Alibaba Cloud, for applicationspecific acceleration (e.g., blockchain transaction). The ASIC deployment at low-cost SoC applications, such as IoT endpoints and edge computing, is planned to facilitate Alibaba's end-to-end and cloud-to-edge computing infrastructure.},
+  keywords = {cache,extension,memory architectures,multi-core,out of order,RISC-V,vector},
+  file = {/Users/tianruiwei/Zotero/storage/MAUXZZCE/Chen et al. - 2020 - Xuantie-910 A Commercial Multi-Core 12-Stage Pipeline Out-of-Order 64-bit High Performance RISC-V P.pdf}
+}
+
+@inproceedings{sifivep,
+  title = {P870 {{High-Performance RISC-V Processor}}},
+  booktitle = {2023 {{IEEE Hot Chips}} 35 {{Symposium}} ({{HCS}})},
+  year = {2023},
+  month = aug,
+  pages = {1--19},
+  issn = {2573-2048},
+  doi = {10.1109/HCS59251.2023.10254712},
+  url = {https://ieeexplore.ieee.org/document/10254712},
+  urldate = {2024-04-16},
+  abstract = {Standards Accelerate Software Adoption and Portability},
+  keywords = {Software,Standards}
+}
+
+@inproceedings{ventana,
+  title = {Veyron {{V1 Data Center-Class RISC-V Processor}}},
+  booktitle = {2023 {{IEEE Hot Chips}} 35 {{Symposium}} ({{HCS}})},
+  year = {2023},
+  month = aug,
+  pages = {1--16},
+  issn = {2573-2048},
+  doi = {10.1109/HCS59251.2023.10254710},
+  url = {https://ieeexplore.ieee.org/document/10254710},
+  urldate = {2024-04-16},
+  abstract = {{$\bullet$} Superscalar aggressive out-of-order instruction pipeline},
+  keywords = {Out of order,Pipelines},
+  file = {/Users/tianruiwei/Zotero/storage/J575NIE6/2023 - Veyron V1 Data Center-Class RISC-V Processor.pdf}
+}
+
+
+@inproceedings{a64fx,
+  title = {Preliminary {{Performance Evaluation}} of the {{Fujitsu A64FX Using HPC Applications}}},
+  booktitle = {2020 {{IEEE International Conference}} on {{Cluster Computing}} ({{CLUSTER}})},
+  author = {Odajima, Tetsuya and Kodama, Yuetsu and Tsuji, Miwako and Matsuda, Motohiko and Maruyama, Yutaka and Sato, Mitsuhisa},
+  year = {2020},
+  month = sep,
+  pages = {523--530},
+  issn = {2168-9253},
+  doi = {10.1109/CLUSTER49012.2020.00075},
+  url = {https://ieeexplore.ieee.org/document/9229635},
+  urldate = {2024-04-16},
+  abstract = {RIKEN Center for Computational Science has been installing the supercomputer Fugaku. The Fujitsu A64FX, based on the Armv8.2-A+SVE architecture, is used in the system. In this paper, we evaluated the seven HPC applications and benchmarks on the A64FX. In a performance comparison with Marvell (Cavium) ThunderX2 processor and Intel Xeon Skylake processor, the A64FX achieved higher performance in a memory bandwidth-intensive application thanks to its high memory bandwidth. However, we confirmed that the performance of the A64FX decreased from a lack of out-of-order resources. To mitigate this problem, the ``loop fission'' function of the Fujitsu compiler was used to improve the performance.},
+  keywords = {A64FX,Arm,Bandwidth,Benchmark testing,Computer architecture,Out of order,Performance Evaluation,Scientific computing,Supercomputers,Throughput},
+  file = {/Users/tianruiwei/Zotero/storage/BBAP8XR7/Odajima et al. - 2020 - Preliminary Performance Evaluation of the Fujitsu A64FX Using HPC Applications.pdf}
+}
+
+
+@inproceedings{armv9,
+  title = {Arm {{Neoverse N2}}: {{Arm}}'s 2nd Generation High Performance Infrastructure {{CPUs}} and System {{IPs}}},
+  shorttitle = {Arm {{Neoverse N2}}},
+  booktitle = {2021 {{IEEE Hot Chips}} 33 {{Symposium}} ({{HCS}})},
+  author = {Pellegrini, Andrea},
+  year = {2021},
+  month = aug,
+  pages = {1--27},
+  issn = {2573-2048},
+  doi = {10.1109/HCS52781.2021.9567483},
+  url = {https://ieeexplore.ieee.org/document/9567483},
+  urldate = {2024-04-16},
+  abstract = {This benchmark presentation made by Arm Ltd and its subsidiaries (Arm) contains forward-looking statements and information. The information contained herein is therefore provided by Arm on an ``as-is`` basis without warranty or liability of any kind. While Arm has made every attempt to ensure that the information contained in the benchmark presentation is accurate and reliable at the time of its publication, it cannot accept responsibility for any errors, omissions or inaccuracies or for the results obtained from the use of such information and should be used for guidance purposes only and is not intended to replace discussions with a duly appointed representative of Arm. Any results or comparisons shown are for general information purposes only and any particular data or analysis should not be interpreted as demonstrating a cause and effect relationship. Comparable performance on any performance indicator does not guarantee comparable performance on any other performance indicator.},
+  keywords = {Benchmark testing,Reliability,Warranties}
+}
+
+
+@article{ara,
+  title = {Ara: {{A}} 1-{{GHz}}+ {{Scalable}} and {{Energy-Efficient RISC-V Vector Processor With Multiprecision Floating-Point Support}} in 22-Nm {{FD-SOI}}},
+  shorttitle = {Ara},
+  author = {Cavalcante, Matheus and Schuiki, Fabian and Zaruba, Florian and Schaffner, Michael and Benini, Luca},
+  year = {2020},
+  month = feb,
+  journal = {IEEE Transactions on Very Large Scale Integration (VLSI) Systems},
+  volume = {28},
+  number = {02},
+  pages = {530--543},
+  publisher = {IEEE Computer Society},
+  issn = {1063-8210},
+  doi = {10.1109/TVLSI.2019.2950087},
+  url = {https://www.computer.org/csdl/journal/si/2020/02/08918510/1fr0v2hD6zm},
+  urldate = {2024-04-16},
+  abstract = {In this article, we present Ara, a 64-bit vector processor based on the version 0.5 draft of RISC-V's vector extension, implemented in GlobalFoundries 22FDX fully depleted silicon-on-insulator (FD-SOI) technology. Ara's microarchitecture is scalable, as it is composed of a set of identical lanes, each containing part of the processor's vector register file and functional units. It achieves up to 97\% floating-point unit (FPU) utilization when running a 256 {\texttimes} 256 double-precision matrix multiplication on 16 lanes. Ara runs at more than 1 GHz in the typical corner (TT/0.80 V/25 {$^\circ$}C), achieving a performance up to 33 DP-GFLOPS. In terms of energy efficiency, Ara achieves up to 41 DP-GFLOPS W-1 under the same conditions, which is slightly superior to similar vector processors found in the literature. An analysis on several vectorizable linear algebra computation kernels for a range of different matrix and vector sizes gives insight into performance limitations and bottlenecks for vector processors and outlines directions to maintain high energy efficiency even for small matrix sizes where the vector architecture achieves suboptimal utilization of the available FPUs.},
+  langid = {english}
+}
+
+
+@article{scalable_vector_embedded,
+  title = {Scalable Vector Processors for Embedded Systems},
+  author = {Kozyrakis, C.E. and Patterson, D.A.},
+  year = {2003},
+  month = nov,
+  journal = {IEEE Micro},
+  volume = {23},
+  number = {6},
+  pages = {36--45},
+  issn = {0272-1732},
+  doi = {10.1109/MM.2003.1261385},
+  url = {http://ieeexplore.ieee.org/document/1261385/},
+  urldate = {2024-04-17},
+  copyright = {https://ieeexplore.ieee.org/Xplorehelp/downloads/license-information/IEEE.html},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/WIXBA5BL/Kozyrakis and Patterson - 2003 - Scalable vector processors for embedded systems.pdf}
+}
+
+
+@misc{arrow_vector,
+  title = {Arrow: {{A RISC-V Vector Accelerator}} for {{Machine Learning Inference}}},
+  shorttitle = {Arrow},
+  author = {Assir, Imad Al and Iskandarani, Mohamad El and Sandid, Hadi Rayan Al and Saghir, Mazen A. R.},
+  year = {2021},
+  month = jul,
+  number = {arXiv:2107.07169},
+  eprint = {2107.07169},
+  primaryclass = {cs},
+  publisher = {arXiv},
+  doi = {10.48550/arXiv.2107.07169},
+  url = {http://arxiv.org/abs/2107.07169},
+  urldate = {2024-04-17},
+  abstract = {In this paper we present Arrow, a configurable hardware accelerator architecture that implements a subset of the RISC-V v0.9 vector ISA extension aimed at edge machine learning inference. Our experimental results show that an Arrow co-processor can execute a suite of vector and matrix benchmarks fundamental to machine learning inference 2 - 78x faster than a scalar RISC processor while consuming 20\% - 99\% less energy when implemented in a Xilinx XC7A200T-1SBG484C FPGA.},
+  archiveprefix = {arxiv},
+  keywords = {B.5.1,C.1.4,C.3,C.4,Computer Science - Hardware Architecture},
+  file = {/Users/tianruiwei/Zotero/storage/RQFP3R4H/Assir et al. - 2021 - Arrow A RISC-V Vector Accelerator for Machine Learning Inference.pdf}
+}
+
+
+@inproceedings{krste_embedded_vector,
+  title = {Vector {{Processors}} for {{Energy-Efficient Embedded Systems}}},
+  booktitle = {Proceedings of the {{Third ACM International Workshop}} on {{Many-core Embedded Systems}}},
+  author = {Dabbelt, Daniel and Schmidt, Colin and Love, Eric and Mao, Howard and Karandikar, Sagar and Asanovic, Krste},
+  year = {2016},
+  month = jun,
+  pages = {10--16},
+  publisher = {ACM},
+  address = {Seoul Republic of Korea},
+  doi = {10.1145/2934495.2934497},
+  url = {https://dl.acm.org/doi/10.1145/2934495.2934497},
+  urldate = {2024-04-17},
+  abstract = {High-performance embedded processors are frequently designed as arrays of small, in-order scalar cores, even when their workloads exhibit high degrees of data-level parallelism (DLP). We show that these multiple instruction, multiple data (MIMD) systems can be made more efficient by instead directly exploiting DLP using a modern vector architecture. In our study, we compare arrays of scalar cores to vector machines of comparable silicon area and power consumption. Since vectors provide greater performance across the board - in some cases even with better programmability - we believe that embedded system designers should increasingly pursue vector architectures for machines at this scale.},
+  isbn = {978-1-4503-4262-9},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/VSN7GI56/Dabbelt et al. - 2016 - Vector Processors for Energy-Efficient Embedded Systems.pdf}
+}
+
+
+@article{soft_vector_processing,
+  title = {Vector {{Processing}} as a {{Soft Processor Accelerator}}},
+  author = {Yu, Jason and Eagleston, Christopher and Chou, Christopher Han-Yu and Perreault, Maxime and Lemieux, Guy},
+  year = {2009},
+  month = jun,
+  journal = {ACM Transactions on Reconfigurable Technology and Systems},
+  volume = {2},
+  number = {2},
+  pages = {12:1--12:34},
+  issn = {1936-7406},
+  doi = {10.1145/1534916.1534922},
+  url = {https://dl.acm.org/doi/10.1145/1534916.1534922},
+  urldate = {2024-04-17},
+  abstract = {Current FPGA soft processor systems use dedicated hardware modules or accelerators to speed up data-parallel applications. This work explores an alternative approach of using a soft vector processor as a general-purpose accelerator. The approach has the benefits of a purely software-oriented development model, a fixed ISA allowing parallel software and hardware development, a single accelerator that can accelerate multiple applications, and scalable performance from the same source code. With no hardware design experience needed, a software programmer can make area-versus-performance trade-offs by scaling the number of functional units and register file bandwidth with a single parameter. A soft vector processor can be further customized by a number of secondary parameters to add or remove features for a specific application to optimize resource utilization. This article introduces VIPERS, a soft vector processor architecture that maps efficiently into an FPGA and provides a scalable amount of performance for a reasonable amount of area. Compared to a Nios II/s processor, instances of VIPERS with 32 processing lanes achieve up to 44{\texttimes} speedup using up to 26{\texttimes} the area.},
+  keywords = {Computer architecture,embedded processor,multimedia processing,parallelism,soft processor,vector processor},
+  file = {/Users/tianruiwei/Zotero/storage/LK3YPBCT/Yu et al. - 2009 - Vector Processing as a Soft Processor Accelerator.pdf}
+}
+
+
+@inproceedings{soft_vector_processing2,
+  title = {{{VEGAS}}: Soft Vector Processor with Scratchpad Memory},
+  shorttitle = {{{VEGAS}}},
+  booktitle = {Proceedings of the 19th {{ACM}}/{{SIGDA}} International Symposium on {{Field}} Programmable Gate Arrays},
+  author = {Chou, Christopher H. and Severance, Aaron and Brant, Alex D. and Liu, Zhiduo and Sant, Saurabh and Lemieux, Guy G.F.},
+  year = {2011},
+  month = feb,
+  series = {{{FPGA}} '11},
+  pages = {15--24},
+  publisher = {Association for Computing Machinery},
+  address = {New York, NY, USA},
+  doi = {10.1145/1950413.1950420},
+  url = {https://dl.acm.org/doi/10.1145/1950413.1950420},
+  urldate = {2024-04-17},
+  abstract = {This paper presents VEGAS, a new soft vector architecture, in which the vector processor reads and writes directly to a scratchpad memory instead of a vector register file. The scratchpad memory is a more efficient storage medium than a vector register file, allowing up to 9x more data elements to fit into on-chip memory. In addition, the use of fracturable ALUs in VEGAS allow efficient processing of bytes, halfwords and words in the same processor instance, providing up to 4x the operations compared to existing fixed-width soft vector ALUs. Benchmarks show the new VEGAS architecture is 10x to 208x faster than Nios II and has 1.7x to 3.1x better area-delay product than previous vector work, achieving much higher throughput per unit area. To put this performance in perspective, VEGAS is faster than a leading-edge Intel processor at integer matrix multiply. To ease programming effort and provide full debug support, VEGAS uses a C macro API that outputs vector instructions as standard NIOS II/f custom instructions.},
+  isbn = {978-1-4503-0554-9},
+  keywords = {fpga,scratchpad memory,simd,soft processors,vector},
+  file = {/Users/tianruiwei/Zotero/storage/7VKGUJX3/Chou et al. - 2011 - VEGAS soft vector processor with scratchpad memory.pdf}
+}
+
+
+@inproceedings{asic_vector,
+  title = {{{ASIC Design}} of {{Shared Vector Accelerators}} for {{Multicore Processors}}},
+  booktitle = {2014 {{IEEE}} 26th {{International Symposium}} on {{Computer Architecture}} and {{High Performance Computing}}},
+  author = {Beldianu, Spiridon F. and Ziavras, Sotirios G.},
+  year = {2014},
+  month = oct,
+  pages = {182--189},
+  issn = {1550-6533},
+  doi = {10.1109/SBAC-PAD.2014.13},
+  url = {https://ieeexplore.ieee.org/document/6970663},
+  urldate = {2024-04-17},
+  abstract = {Vector coprocessor (VP) resources are often underutilized due to the lack of sustained DLP (data-level parallelism) or the presence of vector-length variations in application code. Our work is motivated by: a) the omnipresence of vector operations in high-performance scientific and embedded applications, b) the need for performance and energy efficiency, and c) applications that must often handle various vector sizes. Our design for VP sharing in multicores enhances performance while maintaining low area and energy costs. Our 40nm ASIC design yields 16.66 GFLOPs/Watt. Also, a detailed clock and power gating analysis further proves the viability of our approach.},
+  keywords = {Application specific integrated circuits,ASIC design,Clocks,Logic gates,Multicore processing,multicore processor,Power demand,power management,Registers,vector processor,Vectors},
+  file = {/Users/tianruiwei/Zotero/storage/XZILSBCW/Beldianu and Ziavras - 2014 - ASIC Design of Shared Vector Accelerators for Multicore Processors.pdf}
+}
+
+
+@article{vector_smt,
+  title = {Vector {{Coprocessor Virtualization}} for {{Simultaneous Multithreading}}},
+  author = {Lu, Yaojie and Rooholamin, Seyedamin and Ziavras, Sotirios G.},
+  year = {2016},
+  month = may,
+  journal = {ACM Transactions on Embedded Computing Systems},
+  volume = {15},
+  number = {3},
+  pages = {57:1--57:25},
+  issn = {1539-9087},
+  doi = {10.1145/2898364},
+  url = {https://dl.acm.org/doi/10.1145/2898364},
+  urldate = {2024-04-17},
+  abstract = {Vector coprocessors (VPs), commonly being assigned exclusively to a single thread/core, are not often performance and energy efficient due to mismatches with the vector needs of individual applications. We present in this article an easy-to-implement VP virtualization technique that, when applied, enables a multithreaded VP to simultaneously execute multiple threads of similar or arbitrary vector lengths to achieve improved aggregate utilization. With a vector register file (VRF) virtualization technique invented to dynamically allocate physical vector registers to threads, our VP virtualization approach improves programmer productivity by providing at runtime a distinct physical register name space to each competing thread, thus eliminating the need to solve register-name conflicts statically. We applied our virtualization technique to a multithreaded VP and prototyped an FPGA-based multicore processor system that supports VP sharing as well as power gating for better energy efficiency. Under the dynamic creation of disparate threads, our benchmarking results show impressive VP speedups of up to 333\% and total energy savings of up to 37\% with proper thread scheduling and power gating compared to a similar-sized system that allows VP access to just one thread at a time.},
+  keywords = {energy savings,FPGA prototyping,multicore,Vector processor,virtualization},
+  file = {/Users/tianruiwei/Zotero/storage/5QRRMGZY/Lu et al. - 2016 - Vector Coprocessor Virtualization for Simultaneous Multithreading.pdf}
+}
+
+
+@inproceedings{minimal_vector,
+  title = {A {{Minimal RISC-V Vector Processor}} for {{Embedded Systems}}},
+  booktitle = {2020 {{Forum}} for {{Specification}} and {{Design Languages}} ({{FDL}})},
+  author = {Johns, Matthew and Kazmierski, Tom J.},
+  year = {2020},
+  month = sep,
+  pages = {1--4},
+  issn = {1636-9874},
+  doi = {10.1109/FDL50818.2020.9232940},
+  url = {https://ieeexplore.ieee.org/document/9232940},
+  urldate = {2024-04-17},
+  abstract = {This paper presents the first RISC-V vector processor design aimed at microcontrollers that uses the new RISC-V `V' extension for vectors, part of the open-source RISC-V instruction set architecture (ISA). Being aimed at small embedded devices, it demonstrates a simpler method of parallel execution than traditional vector architectures to minimise logic. It has been synthesised for testing on an FPGA at 50MHz. Typical vector-compatible applications have been used as benchmarks. Performance has been improved by up to 5.8x for the demonstrated applications relative to a comparable scalar RISC-V processor, for an increase in FPGA resource utilisation of at most 2.6x.},
+  keywords = {Accelerator architectures,Benchmark testing,Computer architecture,Field programmable gate arrays,Microcontrollers,Random access memory,Registers,Vector processors},
+  file = {/Users/tianruiwei/Zotero/storage/XG6VVN9P/Johns and Kazmierski - 2020 - A Minimal RISC-V Vector Processor for Embedded Systems.pdf}
+}
+
+
+@inproceedings{adaptable_regfile,
+  title = {Adaptable {{Register File Organization}} for {{Vector Processors}}},
+  booktitle = {2022 {{IEEE International Symposium}} on {{High-Performance Computer Architecture}} ({{HPCA}})},
+  author = {Lazo, Crist{\'o}bal Ram{\'i}rez and Reggiani, Enrico and Morales, Carlos Rojas and Bagu{\'e}, Roger Figueras and Vargas, Luis Alfonso Villa and Salinas, Marco Antonio Ram{\'i}rez and Cort{\'e}s, Mateo Valero and Unsal, Osman Sabri and Cristal, Adri{\'a}n},
+  year = {2022},
+  month = apr,
+  eprint = {2111.05301},
+  primaryclass = {cs},
+  pages = {786--799},
+  doi = {10.1109/HPCA53966.2022.00063},
+  url = {http://arxiv.org/abs/2111.05301},
+  urldate = {2024-04-18},
+  abstract = {Modern scientific applications are getting more diverse, and the vector lengths in those applications vary widely. Contemporary Vector Processors (VPs) are designed either for short vector lengths, e.g., Fujitsu A64FX with 512-bit ARM SVE vector support, or long vectors, e.g., NEC Aurora Tsubasa with 16Kbits Maximum Vector Length (MVL). Unfortunately, both approaches have drawbacks. On the one hand, short vector length VP designs struggle to provide high efficiency for applications featuring long vectors with high Data Level Parallelism (DLP). On the other hand, long vector VP designs waste resources and underutilize the Vector Register File (VRF) when executing low DLP applications with short vector lengths. Therefore, those long vector VP implementations are limited to a specialized subset of applications, where relatively high DLP must be present to achieve excellent performance with high efficiency. To overcome these limitations, we propose an Adaptable Vector Architecture (AVA) that leads to having the best of both worlds. AVA is designed for short vectors (MVL=16 elements) and is thus area and energy-efficient. However, AVA has the functionality to reconfigure the MVL, thereby allowing to exploit the benefits of having a longer vector (up to 128 elements) microarchitecture when abundant DLP is present. We model AVA on the gem5 simulator and evaluate the performance with six applications taken from the RiVEC Benchmark Suite. To obtain area and power consumption metrics, we model AVA on McPAT for 22nm technology. Our results show that by reconfiguring our small VRF (8KB) plus our novel issue queue scheme, AVA yields a 2X speedup over the default configuration for short vectors. Additionally, AVA shows competitive performance when compared to a long vector VP, while saving 50\% of area.},
+  archiveprefix = {arxiv},
+  keywords = {Computer Science - Hardware Architecture}
+}
+
+
+@inproceedings{villa_effective_1998,
+  title = {Effective Usage of Vector Registers in Decoupled Vector Architectures},
+  booktitle = {Proceedings of the {{Sixth Euromicro Workshop}} on {{Parallel}} and {{Distributed Processing}} - {{PDP}} '98 -},
+  author = {Villa, L. and Espasa, R. and Valero, M.},
+  year = {1998},
+  pages = {495--501},
+  publisher = {IEEE Comput. Soc},
+  address = {Madrid, Spain},
+  doi = {10.1109/EMPDP.1998.647238},
+  url = {http://ieeexplore.ieee.org/document/647238/},
+  urldate = {2024-04-18},
+  isbn = {978-0-8186-8332-9},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/M55V3LKY/Villa et al. - 1998 - Effective usage of vector registers in decoupled vector architectures.pdf}
+}
+
+@inproceedings{villa_performance_1998,
+  title = {A Performance Study of Out-of-Order Vector Architectures and Short Registers},
+  booktitle = {Proceedings of the 12th International Conference on {{Supercomputing}}},
+  author = {Villa, Luis and Espasa, Roger and Valero, Mateo},
+  year = {1998},
+  month = jul,
+  pages = {37--44},
+  publisher = {ACM},
+  address = {Melbourne Australia},
+  doi = {10.1145/277830.277844},
+  url = {https://dl.acm.org/doi/10.1145/277830.277844},
+  urldate = {2024-04-18},
+  isbn = {978-0-89791-998-2},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/YG5W7L7Z/Villa et al. - 1998 - A performance study of out-of-order vector architectures and short registers.pdf}
+}
+
+
+@inproceedings{intel_avx,
+  title = {Enhanced {{Vector Math Support}} on the {{Intel}}{{AVX-512 Architecture}}},
+  booktitle = {2018 {{IEEE}} 25th {{Symposium}} on {{Computer Arithmetic}} ({{ARITH}})},
+  author = {Anderson, Cristina S. and Zhang, Jingwei and Cornea, Marius},
+  year = {2018},
+  month = jun,
+  pages = {120--124},
+  publisher = {IEEE},
+  address = {Amherst, MA, USA},
+  doi = {10.1109/ARITH.2018.8464794},
+  url = {https://ieeexplore.ieee.org/document/8464794/},
+  urldate = {2024-04-18},
+  abstract = {The Intel{\textregistered}AVX-512 architecture adds new capabilities such as masked execution, floating-point exception suppression and static rounding modes, as well as a small set of new instructions for mathematical library support. These new features allow for better compliance with floating-point or language standards (e.g. no spurious floating-point exceptions, and faster or more accurate code for directed rounding modes), as well as simpler, smaller footprint implementations that eliminate branches and special case paths. Performance is also improved, in particular for vector mathematical functions (which benefit from easier processing in the main path, and fast access to small lookup tables). In this paper, we describe the relevant new features and their possible applications to floating-point computation. The code examples include a few compact implementation sequences for some common vector mathematical functions.},
+  isbn = {978-1-5386-2613-9},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/FIBSNJLX/Anderson et al. - 2018 - Enhanced Vector Math Support on the Intel®AVX-512 Architecture.pdf}
+}
+
+
+@article{arm_mve,
+  title = {Armv8-{{M Architecture Reference Manual}}},
+  year = {2015},
+  url = {https://developer.arm.com/documentation/ddi0553/bx/?lang=en},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/RU2NLX4B/2015 - Armv8-M Architecture Reference Manual.pdf}
+}
+
+
+@inproceedings{vector_vs_vliw,
+  title = {Vector vs. Superscalar and {{VLIW}} Architectures for Embedded Multimedia Benchmarks},
+  booktitle = {35th {{Annual IEEE}}/{{ACM International Symposium}} on {{Microarchitecture}}, 2002. ({{MICRO-35}}). {{Proceedings}}.},
+  author = {Kozyrakis, C. and Patterson, D.},
+  year = {2002},
+  pages = {283--293},
+  publisher = {IEEE Comput. Soc},
+  address = {Istanbul, Turkey},
+  doi = {10.1109/MICRO.2002.1176257},
+  url = {http://ieeexplore.ieee.org/document/1176257/},
+  urldate = {2024-04-18},
+  abstract = {Multimedia processing on embedded devices requires an architecture that leads to high performance, low power consumption, reduced design complexity, and small code size. In this paper, we use EEMBC, an industrial benchmark suite, to compare the VIRAM vector architecture to superscalar and VLIW processors for embedded multimedia applications. The comparison covers the VIRAM instruction set, vectorizing compiler, and the prototype chip that integrates a vector processor with DRAM main memory.},
+  isbn = {978-0-7695-1859-6},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/GTCTA46K/Kozyrakis and Patterson - 2002 - Vector vs. superscalar and VLIW architectures for embedded multimedia benchmarks.pdf}
+}
+
+
+@misc{semidynamics,
+  title = {Semidynamics {{Vector Unit}} - {{Only}} 100\% Customisable {{RISC-V Vector Unit}}},
+  url = {https://semidynamics.com/en/technology/vector-unit},
+  urldate = {2024-04-18},
+  abstract = {Semidynamics Vector Unit - Only 100\% customisable RISC-V Vector Unit},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/HQ49JICG/vector-unit.html}
+}
+
+@misc{vector_extension,
+  title = {{{RISC-V}} "{{V}}" {{Vector Extension}}},
+  year = {2021},
+  month = sep,
+  url = {https://github.com/riscv/riscv-v-spec/releases/download/v1.0/riscv-v-spec-1.0.pdf},
+  urldate = {2024-04-17},
+  file = {/Users/tianruiwei/Zotero/storage/Z9P2VJW9/riscv-v-spec-1.0 (5).pdf}
+}
+
+
+@inproceedings{chisel_paper,
+  title = {Chisel: {{Constructing}} Hardware in a {{Scala}} Embedded Language},
+  shorttitle = {Chisel},
+  booktitle = {{{DAC Design Automation Conference}} 2012},
+  author = {Bachrach, Jonathan and Vo, Huy and Richards, Brian and Lee, Yunsup and Waterman, Andrew and Avi{\v z}ienis, Rimas and Wawrzynek, John and Asanovi{\'c}, Krste},
+  year = {2012},
+  month = jun,
+  pages = {1212--1221},
+  issn = {0738-100X},
+  doi = {10.1145/2228360.2228584},
+  url = {https://ieeexplore.ieee.org/document/6241660},
+  urldate = {2024-04-18},
+  abstract = {In this paper we introduce Chisel, a new hardware construction language that supports advanced hardware design using highly parameterized generators and layered domain-specific hardware languages. By embedding Chisel in the Scala programming language, we raise the level of hardware design abstraction by providing concepts including object orientation, functional programming, parameterized types, and type inference. Chisel can generate a high-speed C++-based cycle-accurate software simulator, or low-level Verilog designed to map to either FPGAs or to a standard ASIC flow for synthesis. This paper presents Chisel, its embedding in Scala, hardware examples, and results for C++ simulation, Verilog emulation and ASIC synthesis.},
+  keywords = {CAD,Finite impulse response filter,Generators,Hardware,Hardware design languages,Registers,Vectors,Wires},
+  file = {/Users/tianruiwei/Zotero/storage/XFWY6KK9/Bachrach et al. - 2012 - Chisel Constructing hardware in a Scala embedded language.pdf}
+}
+
+@misc{die_itanium_die,
+  title = {Intel's {{Itanium}}, Once Destined to Replace X86 Processors in {{PCs}}, Hits End of Line},
+  journal = {PCWorld},
+  url = {https://www.pcworld.com/article/406745/intels-itanium-once-destined-to-replace-x86-in-pcs-hits-end-of-line.html},
+  urldate = {2024-04-18},
+  abstract = {It's the end of the line for Intel's Itanium chip, a troubled processor family that spawned many product delays and bad blood between HP and Oracle.},
+  langid = {english},
+  file = {/Users/tianruiwei/Zotero/storage/NE5GE334/intels-itanium-once-destined-to-replace-x86-in-pcs-hits-end-of-line.html}
+}
+
+ @article{juve2013characterizing,
+  title={Characterizing and profiling scientific workflows},
+  author={Juve, Gideon and Chervenak, Ann and Deelman, Ewa and Bharathi, Shishir and Mehta, Gaurang and Vahi, Karan},
+  journal={Future generation computer systems},
+  volume={29},
+  number={3},
+  pages={682--692},
+  year={2013},
+  publisher={Elsevier}
+}
