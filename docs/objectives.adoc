@@ -217,7 +217,7 @@ When `LMUL` is short (1 or 2), vector chimes may be only 2-4 cycles long, requir
 
 [.text-center]
 [#short]
-.Pipeline diagram of instruction execution with short vector lengths, zero dead-time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other
+.Pipeline diagram of instruction execution with short vector lengths, zero dead time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other
 image::diag/short-vectors.png[Saturn Pipeline,width=50%,align=center,title-align=center]
 
 <<short>> depicts a simplified pipeline visualization of a short vector loop, consisting of a load and dependent arithmetic instruction, executing on a simplified Saturn datapath.
@@ -228,22 +228,22 @@ Instruction throughput requirements are moderate, but can still be fulfilled wit
 
 [.text-center]
 [#short-dead]
-.Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead-time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other
-image::diag/short-vectors-dead.png[Saturn Dead-time Pipeline,width=55%,align=center,title-align=center]
+.Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other
+image::diag/short-vectors-dead.png[Saturn Dead time Pipeline,width=55%,align=center,title-align=center]
 
-<<short-dead>> highlights the importance of zero dead-time for short-vector microarchitectures like Saturn.
-Unlike in <<short>>, the machine in this example has 1-cycle dead-time for each functional unit, perhaps due to an inefficiency in freeing structural resources as instructions are sequenced.
-Notably, a single cycle of dead-time in a short-chime machine substantially degrades the utilizations of the datapaths.
+<<short-dead>> highlights the importance of zero dead time for short-vector microarchitectures like Saturn.
+Unlike in <<short>>, the machine in this example has 1-cycle dead time for each functional unit, perhaps due to an inefficiency in freeing structural resources as instructions are sequenced.
+Notably, a single cycle of dead time in a short-chime machine substantially degrades the utilizations of the datapaths.
 
 [.text-center]
 [#short-inorder]
-.Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead-time, strict in-order execution, and chaining. Instructions in the `X` and `M` pipelines must begin execution in-order
+.Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead time, strict in-order execution, and chaining. Instructions in the `X` and `M` pipelines must begin execution in-order
 image::diag/short-vectors-in-order.png[Saturn In-order Pipeline,width=60%,align=center,title-align=center]
 
 <<short-inorder>> highlights the importance of limited out-of-order execution for short-vector microarchitectures like Saturn.
 Unlike in <<short>>, the machine in this example requires the instructions to enter the datapath in-order.
 Requiring strict in-order execution would substantially degrade performance for suboptimally scheduled vector code.
-Despite the same zero-cycle dead-time, the restriction on in-order execution prevents the machine from aggressively issuing instructions to hide the latency in the M pipe.
+Despite the same zero-cycle dead time, the restriction on in-order execution prevents the machine from aggressively issuing instructions to hide the latency in the M pipe.
 
 [discrete]
 ==== Compared to Long-Vector Units
@@ -257,7 +257,7 @@ Instead, long-vector microarchitectures typically derive efficiency and high uti
 
 [.text-center]
 [#long]
-.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with zero dead-time.
+.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with zero dead time.
 image::diag/long-vectors.png[Long-vector Pipeline,width=900,align=center,title-align=center]
 
 <<long>> shows an example pipeline diagram of a vector loop in a deeply temporal long-vector machine.
@@ -265,11 +265,11 @@ Instruction throughput requirements are minimal and strict in-order execution is
 
 [.text-center]
 [#long-dead]
-.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with 1-cycle dead-time.
+.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with 1-cycle dead time.
 image::diag/long-vectors-dead.png[Long-vector Pipeline,width=900,align=center,title-align=center]
 
-<<long-dead>> highlights how dead-time in a deeply-temporal vector-unit is amortized over many cycles of temporal execution per instruction.
-This is in contrast to the Saturn-like short-vector machine, in which short chimes cannot hide dead-time.
+<<long-dead>> highlights how dead time in a deeply-temporal vector-unit is amortized over many cycles of temporal execution per instruction.
+This is in contrast to the Saturn-like short-vector machine, in which short chimes cannot hide dead time.
 
 For DSP deployments, the long-vectors paradigm is particularly ill-suited when compared to short-vectors Saturn-like cores.
 

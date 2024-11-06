@@ -33,7 +33,7 @@ Hwacha's ISA also does not require scala-vector memory ordering or support preci
 
 The component of Hwacha's microarchitecture most relevant to modern scalable vector ISAs is the instruction sequencer.
 However, Hwacha's instruction sequencer is designed for the needs of a deeply temporal long-vector implementation, rather than a short-chime vector unit like Saturn.
-Hwacha's sequencer imposes a small structural dead-time overhead as instructions do not drain from the sequencer until their final element has been written back fully.
+Hwacha's sequencer imposes a small structural dead time overhead as instructions do not drain from the sequencer until their final element has been written back fully.
 This results in high sequencer entry pressure for short-chime vector code blocks.
 Compared to Hwacha's sequencer, Saturn's sequencers aggressively drain short-chime instructions without requiring long occupancies in limited structural resources.
 
