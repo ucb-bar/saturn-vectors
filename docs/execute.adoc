@@ -143,7 +143,8 @@ Configurations that expect to keep multiple integer sequencers utilized simultan
 
 As an optimization, Saturn implements per-bank single-entry fall-through write buffers, effectively emulating a 3R2W memory with a 3R1W memory.
 Write bank conflicts between pipelined writebacks and load writebacks can result in a performance penalty.
-The write buffer 
+The write buffers allow two writes into a single bank, with the second write delayed onto the next cycle.
+Due to the bank striping of the vector register file, the delayed write is unlikely to induce further bank conflicts.
 
 [.text-center]
 .Banked vector register file for a 4-bank configuration
