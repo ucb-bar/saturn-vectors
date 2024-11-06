@@ -1,5 +1,3 @@
-DOCS := \
-	specs.adoc
 
 DATE ?= $(shell date +%Y-%m-%d)
 VERSION ?= v1.0.0
@@ -7,8 +5,12 @@ REVMARK ?= Release
 
 BUILD_DIR := build
 
-DOCS_PDF := $(DOCS:%.adoc=%.pdf)
-DOCS_HTML := $(DOCS:%.adoc=%.html)
+DOCS_ADOC := $(wildcard *.adoc)
+DOCS_PNG := $(wildcard diag/*.png)
+DOCS_SRCS := $(DOCS_ADOC) $(DOCS_PNG)
+
+DOCS_PDF := build/specs.pdf
+DOCS_HTML := build/specs.html
 
 XTRA_ADOC_OPTS :=
 ASCIIDOCTOR_PDF := asciidoctor-pdf
@@ -36,11 +38,14 @@ all: build
 build: $(DOCS_PDF) $(DOCS_HTML)
 
 
-%.pdf: %.adoc
+$(DOCS_PDF): $(DOCS_SRCS)
 	$(ASCIIDOCTOR_PDF) $(OPTIONS) $(REQUIRES) $<
 
-%.html: %.adoc
+$(DOCS_HTML): $(DOCS_SRCS)
 	$(ASCIIDOCTOR_HTML) $(OPTIONS) $(REQUIRES) $<
+
+publish: $(DOCS_PDF) $(DOCS_HTML)
+	cp $(DOCS_HTML) index.html
 
 clean:
 	@echo "Cleaning up generated files..."
