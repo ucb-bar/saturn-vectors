@@ -101,4 +101,4 @@ Conversations with Albert Ou, Colin Schmidt, Andrew Waterman and Chris Batten ha
 === Funding
 
 Research was partially funded by SLICE Lab industrial sponsors and affiliates, and by the NSF CCRI ENS Chipyard Award #2016662.
-The views and opinions of authors expressed herin do not necessarily state or reflect those of the United States Government or any agency thereof.
+Any opinions, findings, conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation.
