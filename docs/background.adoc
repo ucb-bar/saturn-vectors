@@ -24,7 +24,7 @@ image::diag/domains.png[DLP Domains,align=center,title-align=center]
 
 *HPC, scientific computing, and ML training workloads* are typically characterized by very long application vector lengths, exhibiting a high degree of data-level parallelism.
 Systems targeting these workloads are generally designed and deployed at datacenter scale, with available data-level-parallelism exploited across the many processors in a multi-node cluster.
-While single-core efficiency and performance remain important for this domain, scalability towards multi-core, multi-node systems are of more critical concern.
+While single-core efficiency and performance remain important for this domain, scalability towards multi-core, multi-node systems is of more critical concern.
 
 
 //[discrete]
@@ -103,7 +103,7 @@ Intel and AMD out-of-order cores support some form of the SSE or AVX extensions 
 
 *VLIW ISAs with SIMD extensions* have traditionally dominated the space of DSP and similar domain-specialized cores, as well as embedded cores.
 For these deployment scenarios, power and area constraints preclude the deployment of costly microarchitectural features towards high instruction throughput in a general-purpose ISA, such as speculative execution and register renaming.
-The structure of DSP kernels presents a good fit for the VLIW paradigm, such as regular loops, rather than branch-dense control code, are easier to optimize on a VLIW microarchitecture.
+The structure of DSP kernels presents a good fit for the VLIW paradigm, since regular loops, rather than branch-dense control code, are easier to optimize on a VLIW microarchitecture.
 
 Furthermore, DSP applications often require more regularly behaved memory systems to achieve strict QoS requirements, leading to DSP cores often integrating low-or-fixed-latency software-managed scratchpad memories, rather than caches with dynamic, unpredictable behavior.
 Applications and microarchitectures which prefer statically predictable memory systems are especially well-suited for VLIW ISAs.

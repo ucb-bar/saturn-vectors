@@ -40,7 +40,7 @@ image::diag/iqconfigs.png[Issue queue configurations,width=900,align=center,titl
  This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code, requiring the interleaving of integer and floating-point operations.
  * The *split* configuration features separate integer and floating-point sequencers each fed by an independent issue queue. This configuration is the most performant and the most flexible, as it can dynamically schedule out-of-order across integer and floating-point instructions. It incurs additional area costs owing to the separate floating-point issue queue.
  * The *multi-ALU* configuration adds an additional integer sequencer and functional units to enable dual-issue of integer ALU operations
- * The *multi-MAC* and *multi-FMA* configurations add additional integer or floating point sequencers along with functional units to enable dual-issue of integer or floating-point multiply-accumulate operations, respectively. This creates an "unbalanced" machine with respect to the vector memory bandwidth that increases the maximum performance of the machine for kernels with sufficient reuse.
+ * The *multi-MAC* and *multi-FMA* configurations add additional integer or floating point sequencers along with functional units to enable dual-issue of integer or floating-point multiply-accumulate operations, respectively. These configurations increase the ratio of arithmetic throughput to memory bandwidthm, increasing the maximum performance of the machine for kernels with sufficient reuse.
 
 === Operation Sequencers
 
@@ -111,7 +111,7 @@ Since Saturn is designed around `DLEN`-wide element groups as the base throughpu
 The scheduling mechanism precisely tracks which element groups an instruction or operation has yet to read-or-write to interlock the sequencers.
 
 In Saturn, the "out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
-All instructions in this window must advertise a precise set of element groups that have not yet read or written, along with the age tag of the instruction.
+Each instruction in this window must advertise a precise set of element groups that it will read from or write to in future cycles, along with its age tag.
 
  * Instructions in the issue queues already contain their operand specifiers. Since these instructions have not yet been sequenced, a conservative bound on the element groups to be accessed can be easily computed using the `LMUL` and the base register operand.
  * The sequencers track a precise bit-vector of element groups that the currently-sequenced instruction may still access. For regular vector instructions that access their operands sequentially, the sequencers can clear these bits with each issued operation. For irregular vector instructions, the sequencers can conservatively leave these bits set.
@@ -166,7 +166,6 @@ Functional units can either be pipelined or iterative.
 Pipelined functional units have fixed execution latencies, so once an operation is issued, it will execute without stalling.
 The sequencing mechanism checks for future write port conflicts on the target VRF bank across inflight and simultaneously sequenced operations to ensure that the next sequenced operation will not induce a structural hazard on the write port in the future.
 If a conflict is detected, the younger operation will be stalled and will likely start executing the very next cycle.
-This allows the operations to then proceed across the banks without any further conflicts with each other, barring other hazards.
 
 Iterative functional units have variable execution latencies or contain expensive hardware such that it is desirable to execute at a rate of just one element per cycle.
 Once an iterative functional unit has completed its operation on a given element, it will arbitrate for the target VRF write port, write the result, then assert readiness to accept a new operation from the sequencer.
