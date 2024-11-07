@@ -17,7 +17,6 @@ This document discusses the microarchitectural details of all Saturn components.
  * <<frontend>> describes the microarchitecture of Saturn's vector frontend unit
  * <<memory>> describes the microarchitecture of Saturn's vector load-store unit
  * <<execute>> describes the microarchitecture of Saturn's datapath and vector instruction sequencers
- * <<design-space>> describes the parameter space of the Saturn generator
  * <<programming>> provides guidance on writing efficient vector code for Saturn
  * <<history>> discusses the historical context of Saturn within past academic vector units
 
