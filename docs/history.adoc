@@ -40,7 +40,7 @@ Compared to Hwacha's sequencer, Saturn's sequencers aggressively drain short-chi
 
 ==== LEM
 
-LEM was an experimental microcoded RVV vector unit designed around an early variant of the Shuttle superscalar core.
+LEM cite:[fang2022lem] was an experimental microcoded RVV vector unit designed around an early variant of the Shuttle superscalar core.
 Some ideas around instruction decode in LEM inspired the vector decode generators in Saturn.
 LEM was the first Chisel implementation of an RVV-compliant vector unit.
 
