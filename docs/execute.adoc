@@ -114,7 +114,7 @@ In Saturn, the "out-of-order instruction window" includes all instructions in th
 Each instruction in this window must advertise a precise set of element groups that it will read from or write to in future cycles, along with its age tag.
 
  * Instructions in the issue queues already contain their operand specifiers. Since these instructions have not yet been sequenced, a conservative bound on the element groups to be accessed can be easily computed using the `LMUL` and the base register operand.
- * The sequencers track a precise bit-vector of element groups that the currently-sequenced instruction may still access. For regular vector instructions that access their operands sequentially, the sequencers can clear these bits with each issued operation. For irregular vector instructions, the sequencers can conservatively leave these bits set.
+ * The sequencers track a precise bit-mask of element groups that the currently-sequenced instruction may still access. For regular vector instructions that access their operands sequentially, the sequencers can clear these bits with each issued operation. For irregular vector instructions, the sequencers can conservatively leave these bits set.
  * Operations inflight in the functional units that have yet to write back track a single element group of the write destination.
 
 The advertised information across the out-of-order window is aggregated into a pending-read and pending-write one-hot vector for each sequencer.
@@ -129,7 +129,7 @@ Sequenced operations in the VFUs are inherently the oldest writes to any element
 Each sequencer computes the element groups that will be accessed or written to by the next operation to be issued, and determines if a pending older read or write to those element groups would induce a RAW, WAR or WAR hazard.
 If there is no data hazard and there is no structural hazard, the operation can be issued, with the sequencer incrementing its internal element index counter, or draining the instruction.
 
-For vector instructions with regular consecutive access patterns, the last issued operation that accesses some element group can clear the sequencer's internal bit-vector of pending reads and/or writes.
+For vector instructions with regular consecutive access patterns, the last issued operation that accesses some element group can clear the sequencer's internal bit-mask of pending reads and/or writes.
 This frees younger vector instructions in other sequencers to chain off this element group as soon as possible.
 
 === Vector Register File

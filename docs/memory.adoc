@@ -120,7 +120,9 @@ Vector memory disambiguation is performed when instructions enter either the LAS
 The cross-check compares the to-be-address-sequenced instruction's extent with the extent of older instructions in the relevant inflight queue with a CAM-like structure.
 Since the VLIQ and VSIQ do not need to be deep, as they hold complete vector instructions, this CAM structure has tolerable cost.
 
-Address disambiguation based on the precise extents of vector accesses, as opposed to a coarse cache-line or page-based granularity, while costly in terms of the CAM circuit, is necessary to avoid stalls on false-positive conflicts between consecutive contiguous vector loads and stores.
+Address disambiguation based on the precise extents of vector accesses, as opposed to a coarse cache-line or page-based granularity, requires a more costly CAM-like circuit.
+While a static-granularity address CAM can just compare the upper bits of the physical address, determine overlap by precise extents require comparators on the base and bounds of each access, where the width of each comparator is the page offset in Saturn's case.
+This costly circuit is necessary to avoid stalls on false-positive conflicts between consecutive contiguous vector loads and stores.
 
 === Memory Response Ordering
 

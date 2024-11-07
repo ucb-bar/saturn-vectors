@@ -90,9 +90,9 @@ Future modifications to Saturn could supply a dedicated vector TLB instead.
 The Pipelined Fault Checker is designed to handle common vector instructions without stalling the pipeline at 1 IPC.
 Vector instructions fall into one of the following categories:
 
- * *Single-page* vector instructions include arithmetic and vector memory instructions for which the extent of the access can be bound to one physical page, at most. This includes unit-strided vector loads and stores that do not cross pages, as well as physically addressed accesses that access a large contiguous physical region. These are the most common vector instructions and need to proceed at high throughput through the VFU
- * *Multi-page* vector instructions are memory instructions for which the extent of the instruction's memory access can be easily determined, but the range crosses pages. These are somewhat common vector instructions, and must not incur a substantial penalty
- * *Iterative* vector instructions include masked, indexed, or strided memory instructions that might access arbitrarily many pages. These instructions would fundamentally be performance-bound by the single-ported TLB, so the VFU can process these instructions iteratively
+ * *Single-page* vector instructions include arithmetic and vector memory instructions for which the extent of the access can be bound to one physical page, at most. This includes unit-strided vector loads and stores that do not cross pages, as well as physically addressed accesses that access a large contiguous physical region. These are the most common vector instructions and need to proceed at high throughput through the VFU.
+ * *Multi-page* vector instructions are memory instructions for which the extent of the instruction's memory access can be easily determined, but the range crosses pages. These are somewhat common vector instructions, and must not incur a substantial penalty.
+ * *Iterative* vector instructions include masked, indexed, or strided memory instructions that might access arbitrarily many pages. These instructions would fundamentally be performance-bound by the single-ported TLB, so the VFU can process these instructions iteratively.
 
 In stage-0 (VF0), the PFC establishes which category a vector instruction belongs to.
 Note that this does not require memory translation, and can be quickly determined from the instruction opcode, base address offset, and current settings of `vtype` and `vl`.
@@ -106,7 +106,7 @@ If the VF2 TLB response indicates an access or page fault, retirement of the ins
 This is done because masked vector memory elements that access invalid addresses do not generate faults.
 The IFC maintains the capability to access the vector register file for the mask operand, if present.
 
-Multi-page instructions incur multi-cycle occupancy of the PFC.
+Page-crossing instructions incur multiple cycles of occupancy in the PFC.
 The VF1 stage computes the number of elements within the first page, then updates `vstart` and requests a replay from the scalar core at the same PC.
 The replayed instruction will repeatedly see a non-zero `vstart`, compute an updated base address at the next page, and request a replay if the remaining elements cross pages, until all the pages have been checked.
 In the VF2 stage, the PFC will set the `vstart` and `vl` signals for the vector instructions dispatched into the VU and VLSU to correctly set the partial execution of such instructions.
