@@ -24,13 +24,13 @@ image::diag/domains.png[DLP Domains,align=center,title-align=center]
 
 *HPC, scientific computing, and ML training workloads* are typically characterized by very long application vector lengths, exhibiting a high degree of data-level parallelism.
 Systems targeting these workloads are generally designed and deployed at datacenter scale, with available data-level-parallelism exploited across the many processors in a multi-node cluster.
-While single-core efficiency and performance remain important for this domain, scalability towards multi-core, multi-node systems is a more critical concern.
+While single-core efficiency and performance remain important for this domain, scalability towards multi-core, multi-node systems is of more critical concern.
 
 
 //[discrete]
 //==== General-purpose Server, Desktop, and Mobile
 
-*General-purpose server, desktop, and mobile workloads* intersperse data-level-parallel codes with sequential, control-flow heavy non-data-parallel blocks .
+*General-purpose server, desktop, and mobile workloads* intersperse data-level-parallel codes with sequential, control-flow heavy non-data-parallel blocks.
 The implications of Amdahl's Law dictate the design of these systems; exploiting data-level parallelism must not come at the expense of single-thread performance or thread-level-parallelism.
 Compared to the other domains, compiler and programmer-friendly ISAs are particularly important for these systems, as they must remain performant on the greatest diversity of workloads.
 
@@ -39,7 +39,8 @@ Compared to the other domains, compiler and programmer-friendly ISAs are particu
 
 *Digital signal processing (DSP) and similar domain-specialized workloads* are fundamentally data-parallel algorithms.
 These workloads are often offloaded in modern SoCs to specialized "DSP cores" optimized towards power and area-efficient exploitation of data-level parallelism, with less consideration towards general-purpose performance.
-Large SoCs typically integrate many of such "DSP cores" across various design points to provide optimized compute for different subsystems.
+"DSP cores" usually run optimized kernels written by programmers at a low level to maximize efficiency. 
+Large SoCs typically integrate many such "DSP cores" across various design points to provide optimized compute for different subsystems.
 //To meet the application QoS requirements and system-wide power/area requirements, these cores must target extreme power and area efficiency while maintaining high utilization of SIMD functional units.
 
 //[discrete]
@@ -51,7 +52,7 @@ As these cores often provide a self-contained memory system, code and data size 
 
 === Data-parallel Architectures
 
-The requirements of the common data-parallel workload domains have induced the commercial space to reduce towards several fundamental architectural and microarchitectural archetypes.
+The requirements of the common data-parallel workload domains have induced the commercial space to converge towards several fundamental architectural and microarchitectural archetypes.
 
 ==== Long-vector Implementations
 
@@ -61,7 +62,7 @@ Modern incarnations of such systems primarily target the HPC and datacenter spac
 Microarchitecturally, these implementations distribute the vector register file, functional units, and memory access ports across many vector lanes, with scalability towards many lanes being a key requirement.
 A single core of such a vector unit might have upwards of 32 parallel vector lanes, with a hardware vector length of over 16384 bits.
 
-Notably, the lane-oriented microarchitecture with distributed memory ports and a high-radix memory interconnect enables high performance on codes which require high address generation throughput.
+Notably, a lane-oriented microarchitecture with distributed memory ports and a high-radix memory interconnect enables high performance on codes which require high address generation throughput.
 Indexed loads and stores can leverage the distributed memory access ports to maintain high memory utilization, while register-register scatters and gathers can leverage a complex yet scalable cross-lane interconnect.
 
 The NEC Aurora is a modern example of a commercial long-vector microarchitecture, while Hwacha, Ara, and Vitruvius are examples of academic long-vector implementations.
@@ -88,7 +89,7 @@ These vendors all provide developer SDKs for supporting general purpose applicat
 
 *General-purpose ISAs with SIMD extensions* enable exploiting data-level parallelism in a microarchitecture already optimized towards scalar IPC.
 SIMD extensions evolved from subword-SIMD ISAs designed to pack a small fixed-length vector of sub-register-width elements within a single scalar register.
-Subword-SIMD is a cheap way to integrate limited forms of data-parallel compute into a general-purpose processor, without requiring substantial redesign of complex microarchitectural components.
+Subword-SIMD is a cheap way to integrate limited forms of data-parallel compute, particularly for multimedia applications, into a general-purpose processor, without requiring substantial redesign of complex microarchitectural components.
 Modern SIMD ISAs have generally moved beyond subword-SIMD (except in the embedded space) towards wider SIMD registers.
 
 Microarchitectures of general-purpose cores perform instruction scheduling of SIMD instructions using similar mechanisms as they do for scalar instructions.
@@ -102,10 +103,9 @@ Intel and AMD out-of-order cores support some form of the SSE or AVX extensions 
 
 *VLIW ISAs with SIMD extensions* have traditionally dominated the space of DSP and similar domain-specialized cores, as well as embedded cores.
 For these deployment scenarios, power and area constraints preclude the deployment of costly microarchitectural features towards high instruction throughput in a general-purpose ISA, such as speculative execution and register renaming.
+The structure of DSP kernels presents a good fit for the VLIW paradigm, since regular loops, rather than branch-dense control code, are easier to optimize on a VLIW microarchitecture.
 
-Additionally, the structure of DSP kernels presents a good fit for the VLIW paradigm, as regular loops, rather than branch-dense control code, are easier to optimize on a VLIW microarchitecture.
-
-Furthermore, DSP applications often require more regularly behaved memory systems to achieve strict QoS requirements, leading to DSP cores often integrating low-or-fixed-latency software-managed scratchpad memories, rather than caches with dynamically unpredictable behavior.
+Furthermore, DSP applications often require more regularly behaved memory systems to achieve strict QoS requirements, leading to DSP cores often integrating low-or-fixed-latency software-managed scratchpad memories, rather than caches with dynamic, unpredictable behavior.
 Applications and microarchitectures which prefer statically predictable memory systems are especially well-suited for VLIW ISAs.
 
 However, VLIW-based ISAs are notoriously difficult to program compared to general-purpose ISAs or vector ISAs.
@@ -122,8 +122,8 @@ The dominant examples of such ISAs include ARM's proprietary SVE and MVE cite:[a
 
 Existing academic implementations of RVV have broadly targeted the HPC and general-purpose deployment scenarios.
 Compared to prior academic implementations, Saturn targets DSP and domain-specialized cores, and represents a class of designs we call *"short-vector"*.
-Saturn demonstrates that these "short-vector" designs, without the distributed-lane microarchitecture of the long-vector units, can still retain high performance and efficiency for vector kernels.
-Notably, Saturn also demonstrates that these "short-vector" designs do not need to sacrifice any fundamental requirements of modern vector ISAs to be performant and efficient.
+Saturn demonstrates that these "short-vector" designs, without the lane-distributed microarchitecture of the long-vector units, can still retain high performance and efficiency for vector kernels.
+Notably, Saturn also demonstrates that these "short-vector" designs do not need to sacrifice any fundamental requirements of modern vector ISAs to be performant, compact, and efficient.
 
 
 === The RISC-V Vector ISA
@@ -181,11 +181,11 @@ For example, vector `memcpy` induces no register pressure and can trivially set 
 
 Thus, implementations should not penalize code which uses high `LMUL` to reduce instruction fetch pressure.
 The general intuition around vector code should be to use the highest `LMUL` setting while avoiding register spills.
-Implementations should avoid violating this intuition.
+Implementations should should strive to support this intuition.
 
 One tempting approach to implementing register grouping behavior would be to crack `LMUL > 1` instructions early in the pipeline and implement the backend instruction scheduling around `LMUL = 1`.
-While this strategy is easy to implement, as it simplifies the instruction scheduling, it may cause performance issues.
-The many micro-ops from cracked high-`LMUL` instructions would induce greater pressure on datapath scheduling resources.
+While this strategy is straightforward to implement as it simplifies the instruction scheduling, it may cause performance issues due to pressure on datapath scheduling resources from the many micro-ops generated by cracked high-`LMUL` instructions.
+Alternatively, the addition of queueing resources to reduce this pressure would add significant area and power overhead.
 
 
 ==== Segmented Memory Instructions
@@ -206,7 +206,7 @@ When `LMUL` is short (1 or 2), vector chimes may be only 2-4 cycles long, requir
 
 [.text-center]
 [#short]
-.Pipeline diagram of instruction execution with short vector lengths, zero dead-time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other.
+.Pipeline diagram of instruction execution with short vector lengths, zero dead time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other.
 image::diag/short-vectors.png[Saturn Pipeline,width=50%,align=center,title-align=center]
 
 <<short>> depicts a simplified pipeline visualization of a short vector loop, consisting of a load and dependent arithmetic instruction, executing on a simplified Saturn-like short-vector datapath.
@@ -218,22 +218,22 @@ Notably, some degree of out-of-order execution, beyond just chaining, is necessa
 
 [.text-center]
 [#short-dead]
-.Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead-time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other.
-image::diag/short-vectors-dead.png[Saturn Dead-time Pipeline,width=55%,align=center,title-align=center]
+.Pipeline diagram of instruction execution with short vector lengths, 1-cycle dead time, limited out-of-order execution, and chaining. Instructions in the `X` and `M` pipelines can execute out-of-order w.r.t. each other.
+image::diag/short-vectors-dead.png[Saturn Dead Time Pipeline,width=55%,align=center,title-align=center]
 
-<<short-dead>> highlights the importance of zero dead-time for short-vector microarchitectures.
-Unlike in <<short>>, the machine in this example has 1-cycle dead-time for each functional unit, perhaps due to an inefficiency in freeing structural resources as instructions are sequenced.
-Notably, a single cycle of dead-time in a short-chime machine substantially degrades the utilizations of the datapaths, as the dead time cannot be amortized 
+<<short-dead>> highlights the importance of zero dead time for short-vector microarchitectures.
+Unlike in <<short>>, the machine in this example has 1-cycle dead time for each functional unit, perhaps due to an inefficiency in freeing structural resources as instructions are sequenced.
+Notably, a single cycle of dead time in a short-chime machine substantially degrades the utilizations of the datapaths, as the dead time cannot be amortized. 
 
 [.text-center]
 [#short-inorder]
-.Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead-time, strict in-order execution, and chaining. Instructions in the `X` and `M` pipelines must begin execution in-order.
+.Pipeline diagram of instruction execution with short vector lengths, zero-cycle dead time, strict in-order execution, and chaining. Instructions in the `X` and `M` pipelines must begin execution in-order.
 image::diag/short-vectors-in-order.png[Saturn In-order Pipeline,width=60%,align=center,title-align=center]
 
 <<short-inorder>> highlights the importance of limited out-of-order execution for short-vector microarchitectures like Saturn.
 Unlike in <<short>>, the machine in this example requires the instructions to enter the datapath in-order.
 Requiring strict in-order execution would substantially degrade performance for suboptimally scheduled vector code.
-Despite the same zero-cycle dead-time, the restriction on in-order execution prevents the machine from aggressively issuing instructions to hide the latency in the M pipe.
+Despite the same zero-cycle dead time, the restriction on in-order execution prevents the machine from aggressively issuing instructions to hide the latency in the M pipe.
 
 
 ==== Compared to Long-Vector Units
@@ -247,7 +247,7 @@ Instead, long-vector microarchitectures typically derive efficiency and high uti
 
 [.text-center]
 [#long]
-.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with zero dead-time.
+.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with zero dead time.
 image::diag/long-vectors.png[Long-vector Pipeline,width=900,align=center,title-align=center]
 
 <<long>> shows an example pipeline diagram of a vector loop in a deeply temporal long-vector machine.
@@ -255,17 +255,17 @@ Unlike in the short-vector example in <<short>>, Instruction throughput requirem
 
 [.text-center]
 [#long-dead]
-.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with 1-cycle dead-time.
+.Pipeline diagram of instruction execution in a deeply-temporal long-vector machine with 1-cycle dead time.
 image::diag/long-vectors-dead.png[Long-vector Pipeline,width=900,align=center,title-align=center]
 
-<<long-dead>> highlights how dead-time in a deeply-temporal vector-unit is amortized over many cycles of temporal execution per instruction.
-This contrasts with the Saturn-like short-vector machine, in which short chimes cannot hide dead-time.
+<<long-dead>> highlights how dead time in a deeply-temporal vector-unit is amortized over many cycles of temporal execution per instruction.
+This contrasts with the Saturn-like short-vector machine, in which short chimes cannot hide dead time.
 
 For DSP deployments, the long-vectors paradigm is particularly ill-suited when compared to short-vectors Saturn-like cores.
 
  * Many DSP applications feature short and/or widely varying application vector lengths. This makes it difficult for long-vector machines to effectively utilize their resources as it precludes deep temporal execution. Short-vector machines can achieve higher utilization on these shorter application vector lengths.
  * Short-vector machines use an inherently lower capacity vector register file, which has positive implications in terms of silicon area and power consumption.
- * Short-vector machines can still reduce IPC requirements on applications with long vector lengths by leveraging the register grouping capabilities of modern vector ISAs
+ * Short-vector machines can still reduce IPC requirements and dynamic instruction counts on applications with long vector lengths by leveraging the register grouping capabilities of modern vector ISAs.
 
 
 ==== Compared to General-purpose SIMD Cores
@@ -300,7 +300,7 @@ VLIW instructions enable low-cost, low-complexity superscalar fetch and provide 
 image::diag/vliw-simd.png[VLIW SIMD Pipeline,width=60%,align=center,title-align=center]
 
 <<vliw>> depicts an example software-pipelined loop executing on a VLIW-SIMD machine.
-While VLIW instruction encodings effectively provide high operation throughput to the datapath, leveraging them requires precisely optimized software-pipelined loops.
+While VLIW instruction encodings effectively provide high operation throughput to the datapath, leveraging them typically requires precisely optimized static scheduling, such as with extensive loop unrolling and software-pipelining.
 Notably, the verbose prologue and epilogue sections of such loops inflate the code size beyond what a normal vector or scalar loop would require.
 
 Unlike SIMD datapaths in VLIW cores, a Saturn-like short-vector design does not require the high instruction throughput of VLIW fetch.

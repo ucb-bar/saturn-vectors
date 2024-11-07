@@ -15,7 +15,7 @@ Saturn is organized into three main components, as shown in <<overview>>.
 The *Vector Frontend (VFU)* integrates into the pipeline of the host RISC-V core.
 In in-order cores, the stages of the VFU align with the pre-commit pipeline stages of the host core.
 All vector instructions are passed into the vector frontend.
-The VFU performs early decode of vector instructions and checks vector instructions for the possibility of generating a fault, through performing address translation of vector memory address operands.
+The VFU performs early decode of vector instructions and checks them for the possibility of generating a fault by performing address translation of vector memory address operands.
 Instructions that do not fault are passed to the other vector components once they have also passed the commit stage of the scalar core.
 
 The *Vector Load-Store Unit (VLSU)* performs vector address generation and memory access.
@@ -43,7 +43,7 @@ The load-response and store-data interfaces into the VU are also latency-insensi
 Within the VU, each execution path (load/store/arithmetic) executes instructions in-order.
 The in-order execution of the load/store paths aligns with the in-order load-response and store-data ports.
 
-Saturn is organized around a *decoupled access-execute (DAE)* cite:[decoupled_execute] architecture, where the VLSU acts as the "access processor" and the VU acts as the "execute processor".
+Saturn is organized as a *decoupled access-execute (DAE)* cite:[decoupled_execute] architecture, where the VLSU acts as the "access processor" and the VU acts as the "execute processor".
 Shallow instruction queues in the VU act as "decoupling" queues, enabling the VLSU's load-path to run many instructions ahead of the VU.
 Similarly, the VLSU's store path can run many cycles behind the VU through the decoupling enabled by the VSIQ.
 This approach can tolerate high memory latencies with minimal hardware cost.

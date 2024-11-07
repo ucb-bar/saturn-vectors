@@ -20,7 +20,7 @@ Age tags are recovered when instructions complete execution.
 The VDQ provides a low-cost decoupling queue between the VU and the VLSU.
 The dequeue side of the VDQ is connected to the vector issue queues (VIQs).
 Each VIQ issues instructions in-order into its corresponding instruction sequencer.
-However, execution across the VIQs may be out-of-order, as the VIQs may naturally "slip" against each other.
+Execution across the VIQs may be out-of-order, as the VIQs may naturally "slip" against each other.
 
 Each sequencing path has an independent issue queue.
 The load issue queue only needs to track a destination address and mask enable, while the store issue queue only needs to track a source address and mask enable.
@@ -37,10 +37,10 @@ image::diag/iqconfigs.png[Issue queue configurations,width=900,align=center,titl
  * The *unified* configuration features a single sequencer for all arithmetic operations fed by a VIQ. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and floating-point functional units.
  * The *shared* configuration features separate integer and floating-point sequencers fed by a common VIQ.
  Instructions are issued from the shared VIQ to either the integer or floating-point sequencer.
- This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code.
- * The *split* configuration features separate integer and floating-point sequencers each fed by an independent issue queue. This configuration is the most performant, as it can dynamically schedule out-of-order across integer and floating-point instructions, but is also the most costly, owing to the separate floating-point issue queue.
+ This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code, requiring the interleaving of integer and floating-point operations.
+ * The *split* configuration features separate integer and floating-point sequencers each fed by an independent issue queue. This configuration is the most performant and the most flexible, as it can dynamically schedule out-of-order across integer and floating-point instructions. It incurs additional area costs owing to the separate floating-point issue queue.
  * The *multi-ALU* configuration adds an additional integer sequencer and functional units to enable dual-issue of integer ALU operations
- * The *multi-MAC* and *multi-FMA* configurations add additional integer or floating point sequencers along with functional units to enable dual-issue of integer or floating-point multiply-accumulate operations, respectively
+ * The *multi-MAC* and *multi-FMA* configurations add additional integer or floating point sequencers along with functional units to enable dual-issue of integer or floating-point multiply-accumulate operations, respectively. These configurations increase the ratio of arithmetic throughput to memory bandwidthm, increasing the maximum performance of the machine for kernels with sufficient reuse.
 
 === Operation Sequencers
 
@@ -51,11 +51,11 @@ image::diag/sequencer.png[Instruction sequencer,width=900,align=center,title-ali
 The instruction sequencers convert a vector instruction into a sequence of operations that execute down the functional unit datapaths, one operation per cycle.
 The sequencers advertise the requested register file read and write addresses for the next operation, as well as the age tag for the currently sequenced instruction.
 If there are no structural hazards from non-pipelined functional units or register file ports and there are no data hazards against older vector instructions, a sequencer will issue an operation and update its internal state.
-An instruction will depart a sequencer along with the last operation it sequences, eliminating dead-time between successive vector instructions.
+An instruction will depart a sequencer along with the last operation it sequences, eliminating dead time between successive vector instructions.
 
 Notably, the sequencers enact "fire-and-forget" operation issue.
 Once an operation is issued by a sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipelined VFU datapaths.
-This eliminates the need for costly back-pressured operand or result queues.
+This eliminates the need for costly operand or result queues and obviates back-pressure in the functional unit pipelines.
 
 
 ==== Load/Store Sequencers
@@ -79,7 +79,7 @@ The execute sequencers (VXSs) sequence all arithmetic operations.
 They track up to three register operands, with up to four reads and one write per operation (for a masked FMA).
 Each VXS issues to a single vector execution unit (VXU).
 A VXU is a collection of vector functional units (VFUs).
-The VXXs will stall operation execution if the requested VFU within its VXU is unavailable.
+The VXSs will stall operation execution if the requested VFU within its VXU is unavailable.
 
 
 ==== Special Sequencer
@@ -111,14 +111,14 @@ Since Saturn is designed around `DLEN`-wide element groups as the base throughpu
 The scheduling mechanism precisely tracks which element groups an instruction or operation has yet to read-or-write to interlock the sequencers.
 
 In Saturn, the "out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
-All instructions in this window must advertise a precise set of element groups they have not yet read or written, along with the age tag of the instruction.
+Each instruction in this window must advertise a precise set of element groups that it will read from or write to in future cycles, along with its age tag.
 
  * Instructions in the issue queues already contain their operand specifiers. Since these instructions have not yet been sequenced, a conservative bound on the element groups to be accessed can be easily computed using the `LMUL` and the base register operand.
  * The sequencers track a precise bit-vector of element groups that the currently-sequenced instruction may still access. For regular vector instructions that access their operands sequentially, the sequencers can clear these bits with each issued operation. For irregular vector instructions, the sequencers can conservatively leave these bits set.
- * Operations in the functional unit that have yet to write-back track a single element group of the write destination.
+ * Operations inflight in the functional units that have yet to write back track a single element group of the write destination.
 
 The advertised information across the out-of-order window is aggregated into a pending-read and pending-write one-hot vector for each sequencer.
-These one-hot vectors each contain one element for each architectural element group in the VRF, which is 32xVLEN/DLEN.
+These one-hot vectors each contain one element for each architectural element group in the VRF, which is 32xVLEN/DLEN (a typical total value being 64).
 These one-hot vectors are constructed using an age filter based on the age tag of the current instruction in the sequencer and the age of each operation in the out-of-order window.
 The age filter restricts the pending-read and pending-write vectors to only pending reads and writes from instructions older than the currently sequenced instruction.
 
