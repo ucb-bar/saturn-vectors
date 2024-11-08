@@ -65,7 +65,7 @@ A single core of such a vector unit might have upwards of 32 parallel vector lan
 Notably, a lane-oriented microarchitecture with distributed memory ports and a high-radix memory interconnect enables high performance on codes which require high address generation throughput.
 Indexed loads and stores can leverage the distributed memory access ports to maintain high memory utilization, while register-register scatters and gathers can leverage a complex yet scalable cross-lane interconnect.
 
-The NEC Aurora is a modern example of a commercial long-vector microarchitecture, while Hwacha, Ara, and Vitruvius are examples of academic long-vector implementations.
+The NEC Aurora cite:[nec_aurora] is a modern example of a commercial long-vector microarchitecture, while Hwacha cite:[hwacha_manual], Ara cite:[ara2], and Vitruvius cite:[minervini_vitruvius_2023] are examples of academic long-vector implementations.
 
 
 ==== SIMT GPGPUs
@@ -97,7 +97,7 @@ Existing features like superscalar issue, out-of-order execution, and register r
 This paradigm has largely held even in modern general-purpose-SIMD cores, which feature much wider SIMD registers than scalar registers for improved performance on data-parallel workloads.
 
 Practically all widely deployed commercial general-purpose cores ship with SIMD extensions.
-Intel and AMD out-of-order cores support some form of the SSE or AVX extensions cite:[intel_avx], while ARM's A-profile architecture requires NEON.
+Intel and AMD out-of-order cores support some form of the SSE or AVX extensions cite:[intel_avx], while ARM's A-profile cite:[armv8a] architecture requires NEON.
 
 ==== VLIW ISAs with SIMD
 
@@ -118,12 +118,19 @@ Cadence, Synopsys, and CEVA cores are IP products typically integrated into a cu
 ==== Scalable Vector ISAs
 
 In contrast to the above patterns, modern *scalable vector ISAs* aspire to provide a common unified ISA that can support a range of microarchitectural implementation styles, supporting long-vector Cray-like machines, general-purpose out-of-order machines with vector extensions, specialized DSP cores with vector extensions, as well as ultra-compact embedded vector units.
-The dominant examples of such ISAs include ARM's proprietary SVE and MVE cite:[arm_mve] extensions, as well as the open RISC-V Vector extension.
+The dominant examples of such ISAs include ARM's proprietary SVE and MVE cite:[arm_mve] extensions, as well as the open RISC-V Vector extension cite:[vector_extension].
 
-Existing academic implementations of RVV have broadly targeted the HPC and general-purpose deployment scenarios.
-Compared to prior academic implementations, Saturn targets DSP and domain-specialized cores, and represents a class of designs we call *"short-vector"*.
-Saturn demonstrates that these "short-vector" designs, without the lane-distributed microarchitecture of the long-vector units, can still retain high performance and efficiency for vector kernels.
-Notably, Saturn also demonstrates that these "short-vector" designs do not need to sacrifice any fundamental requirements of modern vector ISAs to be performant, compact, and efficient.
+Existing academic implementations of RVV have broadly targeted the HPC and general-purpose deployment scenarios with long-vector or out-of-order-core-integrated microarchitectures.
+Compared to most prior academic implementations, Saturn targets DSP and domain-specialized cores, and represents a class of designs we call *"short-vector"*.
+
+Existing open-source "short-vector" implementations like Spatz cite:[spatz], Vicuna cite:[vicuna], and RISCV2 cite:[patsidis_risc-v2_2020] require either register-renaming or constricted memory systems.
+RISCV2 requires register-renaming, while Spatz and Vicuna assume a low-latency memory system.
+Vicuna further requires a global stall to adapt to variable memory latencies.
+Unlike these designs, Saturn demonstrates that a "short-vector" design can achieve high performance and efficiency without any architectural or microarchitectural sacrifices.
+
+
+//Saturn demonstrates that these "short-vector" designs, without the lane-distributed microarchitecture of the long-vector units, can still retain high performance and efficiency for vector kernels.
+//Notably, Saturn also demonstrates that these "short-vector" designs do not need to sacrifice any fundamental requirements of modern vector ISAs to be performant, compact, and efficient.
 
 
 === The RISC-V Vector ISA
