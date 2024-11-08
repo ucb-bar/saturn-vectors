@@ -8,7 +8,7 @@ This repository contains the Chisel source RTL for the Saturn Vector Unit, a par
 Saturn supports the entire RVV 1.0 application-profile specification, including
 
  * `V`-extension (Full application-profile V)
- * `Zved64` - supports FP64, `ELEN`=64
+ * `Zve64d` - supports FP64, `ELEN`=64
  * `Zvfh` - supports FP16
  * `Zvbb` - support basic vector bit manipulation
  * `Zvl64/128/256/512/1024` - configurable `VLEN`
