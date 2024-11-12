@@ -1,0 +1,44 @@
+\documentclass[titlepage]{article}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{setspace}
+\usepackage{cite}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage{ragged2e}
+\usepackage{array}
+\graphicspath{{../diag}}
+\onehalfspacing
+
+\begin{document}
+
+\title{\textbf{The Saturn Microarchitecture Manual}}
+\author{Jerry Zhao, Daniel Grubb, Miles Rusch, Tianrui Wei, \\
+  Kevin Anderson, Borivoje Nikolic, Krste Asanovic \\
+  CS Division, EECS Department, University of California, Berkeley \\
+  \texttt{\{jzh|dpgrubb|miles.rusch|tianruiwei|kevinand|bora|krste\}@berkeley.edu}}
+\date{November 1, 2024}
+
+\maketitle
+
+\setcounter{tocdepth}{2}
+\tableofcontents
+
+\newpage
+
+\input{intro.tex}
+\input{background.tex}
+\input{system.tex}
+\input{frontend.tex}
+\input{memory.tex}
+\input{execute.tex}
+\input{programming.tex}
+\input{history.tex}
+
+\newpage
+\bibliographystyle{IEEEtran}
+\newpage
+\bibliography{../refs}
+
+
+\end{document}

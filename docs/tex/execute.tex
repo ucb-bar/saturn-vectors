@@ -1,0 +1,210 @@
+\newpage
+\section{Vector Backend}
+\label{sec:execute}
+
+
+The vector datapath (VU) handles all vector instruction scheduling, computation, and register file access.
+The VU is organized around independent "sequencing paths", which issue instructions independently to a per-sequencer vector execution unit (VXU).
+
+The datapath is organized around a "vector element group" as the base unit of register access and compute.
+An element group is a fixed-width \texttt{DLEN}-bits-wide contiguous slice of the architectural register file space.
+\texttt{DLEN} guides the parameterization of most critical components in the backend.
+The register file, load-path, store-path, and most functional units are designed to process \texttt{DLEN} bits per cycle (or 1 element group/cycle), regardless of element width (\texttt{ELEN}).
+
+\subsection{Issue Queues}
+
+Vector instructions entering the VU are immediately assigned a unique age tag and enqueued into an in-order dispatch queue (VDQ).
+The age tag is used to disambiguate age when determining data hazards in the out-of-order sequencing stage.
+This means the age tag is wide enough to assign a unique tag to every inflight operation in the backend.
+Age tags are recovered when instructions complete execution.
+
+The VDQ provides a low-cost decoupling queue between the VU and the VLSU.
+The dequeue side of the VDQ is connected to the vector issue queues (VIQs).
+Each VIQ issues instructions in-order into its corresponding instruction sequencer.
+Execution across the VIQs may be out-of-order, as the VIQs may naturally "slip" against each other.
+
+Each sequencing path has an independent issue queue.
+The load issue queue only needs to track a destination address and mask enable, while the store issue queue only needs to track a source address and mask enable.
+The arithmetic issue queue(s) must track up to three source operands along with the destination and mask enable.
+The special issue queue, used for index generation, register gathers, slides, compress, and reductions, tracks only a source operand.
+
+There are six currently supported configuration options for the issue queue and sequencer topology.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{iqconfigs.png}
+  \caption{Issue Queue Configurations}
+  \label{fig:iqs}
+\end{figure}
+
+\begin{itemize}
+\item The \textbf{unified} configuration features a single sequencer for all arithmetic operations fed by a VIQ. This configuration has the lowest hardware cost, but cannot simultaneously saturate integer and floating-point functional units.
+\item The \textbf{shared} configuration features separate integer and floating-point sequencers fed by a common VIQ.
+ Instructions are issued from the shared VIQ to either the integer or floating-point sequencer.
+ This configuration can simultaneously saturate integer and floating-point execution units with well-scheduled code, requiring the interleaving of integer and floating-point operations.
+\item The \textbf{split} configuration features separate integer and floating-point sequencers each fed by an independent issue queue. This configuration is the most performant and the most flexible, as it can dynamically schedule out-of-order across integer and floating-point instructions. It incurs additional area costs owing to the separate floating-point issue queue.
+\item The \textbf{multi-ALU} configuration adds an additional integer sequencer and functional units to enable dual-issue of integer ALU operations
+\item The \textbf{multi-MAC} and \textbf{multi-FMA} configurations add additional integer or floating point sequencers along with functional units to enable dual-issue of integer or floating-point multiply-accumulate operations, respectively. These configurations increase the ratio of arithmetic throughput to memory bandwidthm, increasing the maximum performance of the machine for kernels with sufficient reuse.
+ \end{itemize}
+
+\subsection{Operation Sequencers}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\linewidth]{sequencer.png}
+  \caption{Vector Instruction Sequencer}
+  \label{fig:seq}
+\end{figure}
+
+The instruction sequencers convert a vector instruction into a sequence of operations that execute down the functional unit datapaths, one operation per cycle.
+The sequencers advertise the requested register file read and write addresses for the next operation, as well as the age tag for the currently sequenced instruction.
+If there are no structural hazards from non-pipelined functional units or register file ports and there are no data hazards against older vector instructions, a sequencer will issue an operation and update its internal state.
+An instruction will depart a sequencer along with the last operation it sequences, eliminating dead time between successive vector instructions.
+
+Notably, the sequencers enact "fire-and-forget" operation issue.
+Once an operation is issued by a sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipelined functional unit datapaths.
+This eliminates the need for costly operand or result queues and obviates back-pressure in the functional unit pipelines.
+
+
+\subsubsection{Load/Store Sequencers}
+
+The load-store sequencers (VLS/VSS) are the simplest, as they only track one vector operand or destination.
+
+The VLS sequences load writebacks into the VRF.
+The VLS will stall if the decoupled load response port from the VLSU has not presented a requested element group of write-back data.
+Since the VLSU's load path and the load-issue path are both in-order, issued operations from the VLS pop the next element group from the decoupled load-response port and write into the VRF.
+
+The VSS behaves similarly to the VLS, except it sequences element groups of data into the decoupled store-data port.
+The store data-port can de-assert ready to stall the store sequencer.
+
+Both the VLS and VSS handle the additional complexity segmented operations, which write a set of consecutive vector registers.
+To align with the data order expected in the segment buffers in the VLSU, the sequencers execute two nested loops to handle these instructions. The outer loop iterates over element group index, just as in normal vector instructions, while the inner loop iterates over the number of fields in the segmented instruction.
+
+
+\subsubsection{Execute Sequencer}
+
+The execute sequencers (VXSs) sequence all arithmetic operations.
+They track up to three register operands, with up to four reads and one write per operation (for a masked FMA).
+Each VXS issues to a single vector execution unit (VXU).
+A VXU is a collection of vector functional units, which may or may not be pipelined.
+The VXSs will stall operation execution if the requested functional unit within its VXU is unavailable.
+
+
+\subsubsection{Special Sequencer}
+
+The special sequencer (VPS) handles four classes of special-case instructions which enqueue a special sequencing operation into this sequencer, while the main instruction control is still consumed by either the VLS, VSS, or VXS.
+Using the VPS as an independent sequencer divides the read operand hazard tracking from the destination operand hazard tracking, enabling chaining naturally for both source and destination operands even if they are consumed at different rates.
+
+\begin{itemize}
+\item For \textbf{indexed memory instructions}, the VLSU's address-sequencing unit needs to process indices fetched from the register file.
+These instructions enter the VPS in addition to the VLS or VSS.
+The out-of-order sequencing support enables the VPS to run ahead of the VLS or VSS, feeding indices to the VLSU while older loads or stores might still be inflight.
+\item For \textbf{slides}, the VPS sequences reads for the source operand.
+DLEN-wide read-data is fed to a rotation circuit and buffer to align them for writeback, which is sequenced by a VXS.
+This enables slides to proceed at DLEN bits/cycle.
+\item For \textbf{compress} and \textbf{register gather}, the VPS sequences element-wise reads for the source operand.
+Elements enter an element buffer, which is accessed by the VXS when it sequences element-wise writebacks.
+\item For \textbf{reductions}, the VPS maintains a DLEN-wide accumulation buffer.
+The VPS performs the initial read of element 0 to populate the accumulation buffer.
+Once available, the VPS provides the accumulation buffer for the VXSs to access, and stalls the VXS for long-latency accumulates.
+\end{itemize}
+
+\subsection{Hazards}
+
+Due to the out-of-order execution across the different sequences, RAW, WAW and WAR hazards are all possible.
+Furthermore, supporting vector chaining implies that these hazards should be resolved at sub-vector-register granularity.
+Since Saturn is designed around \texttt{DLEN}-wide element groups as the base throughput of the machine, Saturn resolves data hazards at \texttt{DLEN} granularity.
+The scheduling mechanism precisely tracks which element groups an instruction or operation has yet to read-or-write to interlock the sequencers.
+
+In Saturn, the "out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
+Each instruction in this window must advertise a precise set of element groups that it will read from or write to in future cycles, along with its age tag.
+
+\begin{itemize}
+\item Instructions in the issue queues already contain their operand specifiers. Since these instructions have not yet been sequenced, a conservative bound on the element groups to be accessed can be easily computed using the \texttt{LMUL} and the base register operand.
+\item The sequencers track a precise bit-mask of element groups that the currently-sequenced instruction may still access. For regular vector instructions that access their operands sequentially, the sequencers can clear these bits with each issued operation. For irregular vector instructions, the sequencers can conservatively leave these bits set.
+\item Operations inflight in the functional units that have yet to write back track a single element group of the write destination.
+\end{itemize}
+ 
+The advertised information across the out-of-order window is aggregated into a pending-read and pending-write one-hot vector for each sequencer.
+These one-hot vectors each contain one element for each architectural element group in the VRF, which is 32xVLEN/DLEN (a typical total value being 64).
+These one-hot vectors are constructed using an age filter based on the age tag of the current instruction in the sequencer and the age of each operation in the out-of-order window.
+The age filter restricts the pending-read and pending-write vectors to only pending reads and writes from instructions older than the currently sequenced instruction.
+
+In some cases, the relative age is unambiguous, so no age filter is needed.
+Instructions in the sequencer are inherently older than instructions from the feeding issue queue for that sequencer, so no age filter is needed.
+Sequenced operations in the VXUs are inherently the oldest writes to any element group, so no age filter is needed for these either.
+
+Each sequencer computes the element groups that will be accessed or written to by the next operation to be issued, and determines if a pending older read or write to those element groups would induce a RAW, WAR or WAR hazard.
+If there is no data hazard and there is no structural hazard, the operation can be issued, with the sequencer incrementing its internal element index counter, or draining the instruction.
+
+For vector instructions with regular consecutive access patterns, the last issued operation that accesses some element group can clear the sequencer's internal bit-mask of pending reads and/or writes.
+This frees younger vector instructions in other sequencers to chain off this element group as soon as possible.
+
+\subsection{Vector Register File}
+
+The VRF is organized as a multi-ported banked array of flops.
+The architectural register file is striped across the banks by element group index.
+Neighboring element groups reside in neighboring banks.
+Each bank contains 3 read ports and 1 write port, to fulfill the minimum read requirements of a three-input fused-multiply-add.
+The generator supports generating VRFs with 1, 2, or 4 banks.
+Configurations that expect to keep multiple integer sequencers utilized simultaneously will prefer more banks to meet the increased read bandwidth requirements.
+
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.6\linewidth]{vrf.png}
+  \caption{Banked vector register file for a 4-bank configuration}
+  \label{fig:vrf}
+\end{figure}
+
+
+As an optimization, Saturn implements per-bank single-entry fall-through write buffers, effectively emulating a 3R2W memory with a 3R1W memory.
+Write bank conflicts between pipelined writebacks and load writebacks can result in a performance penalty.
+The write buffers allow two writes into a single bank, with the second write delayed onto the next cycle.
+Due to the bank striping of the vector register file, the delayed write is unlikely to induce further bank conflicts.
+
+
+A shadow copy of  vector mask register \texttt{v0} is maintained in a 1R1W memory to avoid provisioning an extra read port for the bulk banked register file.
+
+A read crossbar connects the issue port of the sequencers to the register file read ports.
+The read crossbar resolves structural hazards during the read stage and stalls the sequencers if necessary.
+The read stage also arbitrates for access to the write ports across multiple fixed-latency execution paths.
+
+\subsection{Functional Units}
+
+Each execution unit is composed of some set of functional units.
+Operations are issued to functional units along with their vector operands.
+Functional units can either be pipelined or iterative.
+
+Pipelined functional units have fixed execution latencies, so once an operation is issued, it will execute without stalling.
+The sequencing mechanism checks for future write port conflicts on the target VRF bank across inflight and simultaneously sequenced operations to ensure that the next sequenced operation will not induce a structural hazard on the write port in the future.
+If a conflict is detected, the younger operation will be stalled and will likely start executing the very next cycle.
+
+Iterative functional units have variable execution latencies or contain expensive hardware such that it is desirable to execute at a rate of just one element per cycle.
+Once an iterative functional unit has completed its operation on a given element, it will arbitrate for the target VRF write port, write the result, then assert readiness to accept a new operation from the sequencer.
+
+Table \ref{tab:fus} conveys the default design of all the functional units in Saturn, including their supported instructions, microarchitectures, and latencies.
+Many of these parameters can be adjusted in the generator; the default settings are shown.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{|l|>{\RaggedRight\arraybackslash}p{7.5em}|>{\RaggedRight\arraybackslash}p{7.5em}|>{\RaggedRight\arraybackslash}p{5em}|>{\RaggedRight\arraybackslash}p{11em}|}
+\hline
+\textbf{Name} & \textbf{Instructions Supported} & \textbf{Micro-Arch.} & \textbf{Structure} & \textbf{Notes} \\ \hline
+\texttt{IntPipe} & Integer add/sub \newline Integer max/min & Multi-element-width adders and comparators & 2-stage pipe & Only saturating adds write back in stage 2, all others write back in stage 1 \\ \hline
+\texttt{ShiftPipe} & Shifts & SIMD array of barrel-shifters & 2-stage pipe & \\ \hline
+\texttt{BitwisePipe} & Bitwise insns. & Bitwise array & 1-stage pipe & \\ \hline
+\texttt{BitmanipPipe} & Zvbb insns. & Multi-element-width priority encoders & 2-stage pipe & \\ \hline
+\texttt{PrefixUnit} & Prefix-like insns. (popc/first/etc.) \newline Scalar write-backs & Prefix-sum circuit w. accumulator & Stateful 1-stage pipe & \\ \hline
+\texttt{IntDivide} & Integer divides \newline Opt. multiplies & Iterative FSM & Iterative elem-wise & Can be configured to support multiplies in min-area configurations \\ \hline
+\multirow{2}{*}{\texttt{MulPipe}} & \multirow{2}{*}{Integer multiply} & Single elem-wise multiplier & \multirow{2}{*}{\parbox{5em}{\raggedright 3-stage pipe}} & \multirow{2}{*}{\parbox{11em}{\raggedright Build the elem-wise multiplier in min-area configurations}} \\ \cline{3-3}
+& & SIMD-array of multipliers & & \\ \hline
+\texttt{PermuteUnit} & Slides, gathers, compress & Minimal logic & 1-stage pipe & Manages write-backs for register-permutations \\ \hline
+\multirow{2}{*}{\texttt{FMAPipe}} & \multirow{2}{*}{\parbox{7.5em}{\raggedright FP multiplies,\newline adds}} & SIMD array of FMAs & \multirow{2}{*}{\parbox{5em}{\raggedright 4-stage pipe}} & \multirow{2}{*}{\parbox{11em}{\raggedright Share the host core's FPU in min-area configurations}} \\ \cline{3-3}
+& & Port to host CPU's FPU & & \\ \hline
+\texttt{FPDivSqrtUnit} & FP Divide, Square root & Iterative unit & Iterative elem-wise & \\ \hline
+\texttt{FPConvPipe} & FP convert, compare & SIMD array of FP units & 2-stage pipe & \\ \hline
+\end{tabular}
+\caption{Saturn functional unit configurations}
+\label{tab:fus}
+\end{table}
