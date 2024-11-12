@@ -205,7 +205,7 @@ For instance, complex numbers and image pixel data are conventionally stored in 
 These instructions can significantly reduce programmer burden, and thus performant RVV implementations should not impose an excess performance overhead from their execution.
 Vector code which uses these memory operations to reduce dynamic instruction count should perform no worse than the equivalent code which explicitly transforms the data over many vector instructions.
 
-=== Comparing Short-Vector Units
+=== Short-Vector Execution
 
 Saturn's instruction scheduling mechanism differentiates it from the relevant comparable archetypes for data-parallel microarchitectures.
 Fundamentally, Saturn relies on efficient dynamic scheduling of short-chime short-vectors, without relying on costly register renaming.

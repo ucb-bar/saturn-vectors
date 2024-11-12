@@ -1,7 +1,7 @@
 [[system]]
 == System Overview
 
-Saturn is implemented using the Chisel hardware description language cite:[chisel_paper], and is intended to integrate into existing Chisel-based cores as part of the open-source Chipyard SoC framework.
+Saturn is implemented using the Chisel hardware description language cite:[chisel_paper], and is intended to integrate into existing Chisel-based cores as part of the open-source Chipyard cite:[chipyard] SoC framework.
 The generator is a parameterized Scala program that uses the Chisel embedded DSL to generate a synthesizable RTL circuit given a user-defined configuration.
 
 === Organization
@@ -22,7 +22,8 @@ The *Vector Load-Store Unit (VLSU)* performs vector address generation and memor
 Inflight vector memory instructions are tracked in the vector load-instruction-queue (VLIQ) and store-instruction-queue (VSIQ).
 The load/store paths within the VLSU execute independently and communicate with the VU through load-response and store-data ports.
 
-The *Vector Datapath (VU)* contains instruction issue queues (VIQs), vector sequencers (VXS/VLS/VSS), the vector register file (VRF), and the SIMD arithmetic functional units (VEUs/VFUs).
+The *Vector Datapath (VU)* contains instruction issue queues (VIQs), vector sequencers (VXS/VLS/VSS), and the vector register file (VRF), and the SIMD arithmetic functional units.
+The functional units (VFUs) are arranged in execution unit clusters (VEUs), where each VEU is fed by one sequencer.
 The sequencers schedule register read/write and issue operations into the VEUs, while interlocking on structural and data hazards.
 The VU is organized as a unified structure with a SIMD datapath, instead of distributing the VRF and VEUs across vector lanes.
 This approach is better suited for compact designs, where scalability to ultra-wide datapaths is less of a concern.

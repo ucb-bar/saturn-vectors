@@ -157,7 +157,7 @@ We observe that this requirement has minimal impact on most vector codes, as sca
 
 === Interface to VU and VLSU
 
-The `VectorIssueInst` bundle presented to the VU and VLSU contains the instruction bits, scalar operands, and current `vtype`/`vstart`/`vl` settings for this instruction.
+The micro-op presented to the VU and VLSU contains the instruction bits, scalar operands, and current `vtype`/`vstart`/`vl` settings for this instruction.
 For memory operations, this bundle also provides the physical page index of the accessed page for this instruction, since the PFC and IFC crack vector memory instructions into single-page accesses.
 For segmented instructions where a segment crosses a page, `segstart` and `segend` bits are additionally included in the bundle, to indicate which slice of a segment resides in the current page.
 

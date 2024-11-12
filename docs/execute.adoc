@@ -54,7 +54,7 @@ If there are no structural hazards from non-pipelined functional units or regist
 An instruction will depart a sequencer along with the last operation it sequences, eliminating dead time between successive vector instructions.
 
 Notably, the sequencers enact "fire-and-forget" operation issue.
-Once an operation is issued by a sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipelined VFU datapaths.
+Once an operation is issued by a sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipelined functional unit datapaths.
 This eliminates the need for costly operand or result queues and obviates back-pressure in the functional unit pipelines.
 
 
@@ -78,8 +78,8 @@ To align with the data order expected in the segment buffers in the VLSU, the se
 The execute sequencers (VXSs) sequence all arithmetic operations.
 They track up to three register operands, with up to four reads and one write per operation (for a masked FMA).
 Each VXS issues to a single vector execution unit (VXU).
-A VXU is a collection of vector functional units (VFUs).
-The VXSs will stall operation execution if the requested VFU within its VXU is unavailable.
+A VXU is a collection of vector functional units.
+The VXSs will stall operation execution if the requested functional unit within its VXU is unavailable.
 
 
 ==== Special Sequencer
@@ -124,7 +124,7 @@ The age filter restricts the pending-read and pending-write vectors to only pend
 
 In some cases, the relative age is unambiguous, so no age filter is needed.
 Instructions in the sequencer are inherently older than instructions from the feeding issue queue for that sequencer, so no age filter is needed.
-Sequenced operations in the VFUs are inherently the oldest writes to any element group, so no age filter is needed for these either.
+Sequenced operations in the functional units are inherently the oldest writes to any element group, so no age filter is needed for these either.
 
 Each sequencer computes the element groups that will be accessed or written to by the next operation to be issued, and determines if a pending older read or write to those element groups would induce a RAW, WAR or WAR hazard.
 If there is no data hazard and there is no structural hazard, the operation can be issued, with the sequencer incrementing its internal element index counter, or draining the instruction.
