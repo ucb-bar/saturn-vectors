@@ -27,7 +27,7 @@ The \textbf{Vector Load-Store Unit (VLSU)} performs vector address generation an
 Inflight vector memory instructions are tracked in the vector load-instruction-queue (VLIQ) and store-instruction-queue (VSIQ).
 The load/store paths within the VLSU execute independently and communicate with the VU through load-response and store-data ports.
 
-The \textbf{Vector Datapath (VU)} contains instruction issue queues (VIQs), vector sequencers (VXS/VLS/VSS), and the vector register file (VRF), and the SIMD arithmetic functional units.
+The \textbf{Vector Datapath (VU)} contains instruction issue queues (VIQs), vector sequencers (VXS/VLS/VSS), the vector register file (VRF), and the SIMD arithmetic functional units.
 The functional units (VFUs) are arranged in execution unit clusters (VEUs), where each VEU is fed by one sequencer.
 The sequencers schedule register read/write and issue operations into the VEUs, while interlocking on structural and data hazards.
 The VU is organized as a unified structure with a SIMD datapath, instead of distributing the VRF and VEUs across vector lanes.
@@ -60,6 +60,13 @@ The load, store, and execute paths in the VU execute independently, dynamically 
 Allowing dynamic "slip" between these paths naturally implies out-of-order execution.
 To track data hazards, all vector instructions in the VU and VLSU are tagged with a "vector age tag (VAT)".
 The VATs are eagerly allocated and freed, and referenced in the machine wherever the relative age of two instructions is ambiguous.
+
+Saturn is designed around two key parameters. \textbf{\texttt{VLEN} and \texttt{DLEN}}.
+\texttt{VLEN} is the vector length of each register file, as defined in the architecture specification.
+\texttt{DLEN} is a micro-architectural detail that describes the datapath width for each of the SIMD-stype datapaths in Saturn.
+Specifically, the load pipe, store pipe, and SIMD arithmetic pipes are all designed to fulfill \texttt{DLEN} bits per cycle, regardless of element width.
+Future versions of Saturn may allow a narrower memory interface width (\texttt{MLEN}) than \texttt{DLEN}.
+
 
 To decode vector instructions, the Saturn generator implements a \textbf{decode-database}-driven methodology for vector decode.
 The Saturn generator tabularly describes a concise list of all vector control signals for all vector instructions.

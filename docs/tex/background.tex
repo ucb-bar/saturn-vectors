@@ -95,7 +95,7 @@ Furthermore, DSP applications often require more regularly behaved memory system
 Applications and microarchitectures which prefer statically predictable memory systems are especially well-suited for VLIW ISAs.
 
 However, VLIW-based ISAs are notoriously difficult to program compared to general-purpose ISAs or vector ISAs.
-Performant VLIW code can also suffer from issues such as large static code size due to the need for extensive static scheduling and software-pipelned loops.
+Performant VLIW code can also suffer from issues such as large static code size due to the need for extensive static scheduling and software-pipelined loops.
 Nonetheless, specialized VLIW ISAs provide a microarchitecturally simple and efficient programmer-visible mechanism for maintaining high instruction throughput into SIMD functional units.
 
 Cadence, Synopsys, CEVA, and Qualcomm all ship commercial VLIW DSPs with SIMD extensions.
@@ -166,6 +166,7 @@ The \texttt{LMUL} (length multiplier) register grouping field of \texttt{vtype} 
 In addition to enabling mixed-precision operations, this feature allows kernels that do not induce vector register pressure to access an effectively longer hardware vector length.
 Generally, performance programmers for RISC-V will use this feature to reduce the dynamic instruction count of their loops and potentially improve the utilization of hardware compute resources.
 For example, vector \texttt{memcpy} induces no register pressure and can trivially set a high \texttt{LMUL} to reduce dynamic instruction count.
+Since higher \texttt{LMUL} settings will unroll instructions in hardware, \texttt{LMUL} also reduces static code size byreducing the need for unrolling loops in in software.
 
 Thus, implementations should not penalize code which uses high \texttt{LMUL} to reduce instruction fetch pressure.
 The general intuition around vector code should be to use the highest \texttt{LMUL} setting while avoiding register spills.
@@ -182,8 +183,11 @@ Segmented memory instructions enable a "transpose" of an "array-of-structs" data
 Such instructions, while very complex behaviorally, are fundamental to many algorithms and datatypes.
 For instance, complex numbers and image pixel data are conventionally stored in memory as "arrays-of-structs".
 
-These instructions can significantly reduce programmer burden, and thus performant RVV implementations should not impose an excess performance overhead from their execution.
-Vector code which uses these memory operations to reduce dynamic instruction count should perform no worse than the equivalent code which explicitly transforms the data over many vector instructions.
+The instructions are critical for repacking data in memory into element-wise format for vector instructions.
+Compared to other vector or SIMD ISAs, RVV provides few facilities for register-register repacking, instead relying on segmented memory instructions to perform ``on-the-fly'' repacking between memory and registers.
+
+Given the importance of these instructions, performant RVV implementations should not impose an excess performance overhead from their execution.
+Vector codes which use these memory operations should perform no worse than the equivalent code which explicitly transforms the data over many vector instructions.
 
 \newpage
 \subsection{Short-Vector Execution}
@@ -287,7 +291,7 @@ Figure \ref{fig:ooo} depicts an example pipeline diagram of a SIMD loop in an ou
 Notably, as these machines are typically designed with single-chime instruction execution, high instruction throughput is necessary to maintain high utilization of multiple datapaths.
 Furthermore, register renaming is required to enable execution past the WAW and WAR hazards in this example loop.
 
-Unlike these cores, a Saturn-like short-vector design does not rely on costly features like high-throughput instruction fetch, out-of-order execution, or speculative execution, or register-renaming.
+Unlike these cores, a Saturn-like short-vector design does not rely on costly features like high-throughput instruction fetch, out-of-order execution, speculative execution, or register-renaming.
 Efficient scheduling of short-chime vector instructions with a limited capability for out-of-order execution is sufficient for maintaining datapath utilization on memory workloads, even with a minimal in-order scalar core.
 
 \subsubsection{Compared to VLIW + SIMD DSP Cores}

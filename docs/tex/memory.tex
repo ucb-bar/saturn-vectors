@@ -72,7 +72,7 @@ Figure \ref{fig:mem-default} depicts such a memory system.
 
 Saturn configurations with high \texttt{DLEN} would generally require higher memory bandwidth.
 However, scaling up the system-level interconnect to meet Saturn's bandwidth demands may be prohibitively costly.
-Instead, the preferred approach for high-\texttt{DLEN} Saturn configs is to integrate a high-bandwidth local TCM (tightly-coupled-memory), which software should treat as a software-managed cache for vector accesses.
+Instead, the preferred approach for high-\texttt{DLEN} Saturn configs is to integrate a high-bandwidth local TCM (tightly-coupled memory), which software should treat as a software-managed cache for vector accesses.
 This TCM should be tile-local and globally addressable, but not necessarily cacheable.
 Figure \ref{fig:mem-tcm} depicts a Saturn configuration with a high-bandwidth TCM, but a reduced-bandwidth system interconnect.
 

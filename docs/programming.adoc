@@ -67,8 +67,6 @@ This situation is rare due to the support for chaining, but might still appear i
 To saturate the FMA units in this scenario, either a longer `LMUL` should be used, or independent FMAs must be scheduled back-to-back.
 Generally, performant code should use the highest `LMUL` possible that avoids vector register spilling.
 
-Refer to <<execute>> for details on each of the vector functional units and their default pipeline depths.
-
 
 === Optimizing Segmented Memory Accesses
 
