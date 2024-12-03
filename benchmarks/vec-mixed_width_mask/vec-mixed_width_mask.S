@@ -23,3 +23,4 @@ vec_mixed_width_mask:
   vse32.v v4, (a2) # Store b[i].
     add a2, a2, t1 # Bump pointer.
     bnez a0, vec_mixed_width_mask # Any more?
+  ret
