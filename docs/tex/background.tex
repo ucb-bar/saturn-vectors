@@ -28,9 +28,9 @@ The implications of Amdahl's Law dictate the design of these systems; exploiting
 Compared to the other domains, compiler and programmer-friendly ISAs are particularly important for these systems, as they must remain performant on the greatest diversity of workloads.
 
 \textbf{Digital signal processing (DSP) and similar domain-specialized workloads} exploit fundamentally data-parallel algorithms.
-These workloads are often offloaded in modern SoCs to specialized "DSP cores" optimized towards power and area-efficient exploitation of data-level parallelism, with less consideration towards general-purpose performance.
-"DSP cores" usually run optimized kernels written by programmers at a low level to maximize efficiency. 
-Large SoCs typically integrate many such "DSP cores" across various design points to provide optimized compute for different subsystems.
+These workloads are often offloaded in modern SoCs to specialized ``DSP cores" optimized towards power and area-efficient exploitation of data-level parallelism, with less consideration towards general-purpose performance.
+``DSP cores" usually run optimized kernels written by programmers at a low level to maximize efficiency. 
+Large SoCs typically integrate many such ``DSP cores" across various design points to provide optimized compute for different subsystems.
 
 \textbf{Applications executing on embedded devices} face extreme constraints around power, area, and code size.
 Exploiting data-level parallelism can be critical for these workloads as well, but might come as a secondary concern compared to power and area.
@@ -62,7 +62,7 @@ GPU implementations similarly became more general-purpose, eventually maturing i
 
 Notably, the multi-core SIMT archetype in GP-GPUs naturally adapts to a range of deployment domains.
 By scaling the number of multi-threaded cores, GP-GPU microarchitectures can target integrated GPUs in general-purpose SoCs, graphics accelerator cards for desktop/consumer systems, as well as interconnected compute cards for datacenter-scale HPC systems.
-The rise of GP-GPUs can thus be associated with the decline of specialized long-vector microarchitectures for datacenter HPC systems.
+The rise of GP-GPUs is a contributing factor to the decline of specialized long-vector microarchitectures for datacenter HPC systems.
 
 In the commercial space, NVIDIA and AMD dominate the GP-GPU market.
 Their HPC and datacenter products, while originally derived from consumer GPU architectures, have since diverged towards a more differentiated, yet still multi-core-SIMT microarchitecture.
@@ -107,12 +107,12 @@ In contrast to the above patterns, modern \textbf{scalable vector ISAs} aspire t
 The dominant examples of such ISAs include ARM's proprietary SVE~\cite{arm_sve} and MVE~\cite{arm_mve} extensions, as well as the open RISC-V Vector extension~\cite{vector_extension}.
 
 Existing academic implementations of RVV have broadly targeted the HPC and general-purpose deployment scenarios with long-vector or out-of-order-core-integrated microarchitectures.
-Compared to most prior academic implementations, Saturn targets DSP and domain-specialized cores, and represents a class of designs we call *"short-vector"*.
+Compared to most prior academic implementations, Saturn targets DSP and domain-specialized cores, and represents a class of designs we call *``short-vector"*.
 
-Existing open-source "short-vector" implementations like Spatz~\cite{spatz}, Vicuna~\cite{vicuna}, and RISCV-2~\cite{patsidis_risc-v2_2020} require either register-renaming or constricted memory systems.
+Existing open-source ``short-vector" implementations like Spatz~\cite{spatz}, Vicuna~\cite{vicuna}, and RISCV-2~\cite{patsidis_risc-v2_2020} require either register-renaming or constricted memory systems.
 RISCV2 requires register-renaming, while Spatz and Vicuna assume a low-latency memory system.
 Vicuna further requires a global stall to adapt to variable memory latencies.
-Unlike these designs, Saturn demonstrates that a "short-vector" design can achieve high performance and efficiency without any architectural or microarchitectural sacrifices.
+Unlike these designs, Saturn demonstrates that a ``short-vector" design can achieve high performance and efficiency without any architectural or microarchitectural sacrifices.
 
 \subsection{The RISC-V Vector ISA}
 
@@ -179,12 +179,12 @@ Alternatively, the addition of queueing resources to reduce this pressure would 
 
 \subsubsection{Segmented Memory Instructions}
 
-Segmented memory instructions enable a "transpose" of an "array-of-structs" data representation in memory into a "struct-of-arrays" in consecutive vector registers.
+Segmented memory instructions enable a ``transpose" of an ``array-of-structs" data representation in memory into a ``struct-of-arrays" in consecutive vector registers.
 Such instructions, while very complex behaviorally, are fundamental to many algorithms and datatypes.
-For instance, complex numbers and image pixel data are conventionally stored in memory as "arrays-of-structs".
+For instance, complex numbers and image pixel data are conventionally stored in memory as ``arrays-of-structs".
 
 The instructions are critical for repacking data in memory into element-wise format for vector instructions.
-Compared to other vector or SIMD ISAs, RVV provides few facilities for register-register repacking, instead relying on segmented memory instructions to perform ``on-the-fly'' repacking between memory and registers.
+Compared to other vector or SIMD ISAs, RVV provides few facilities for register-register repacking, instead relying on segmented memory instructions to perform ``on-the-fly`` repacking between memory and registers.
 
 Given the importance of these instructions, performant RVV implementations should not impose an excess performance overhead from their execution.
 Vector codes which use these memory operations should perform no worse than the equivalent code which explicitly transforms the data over many vector instructions.

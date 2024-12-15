@@ -34,10 +34,10 @@ Optimized vector code should seek to load-balance instructions across the sequen
 To maximize the utilization of all functional units, the issue structure of the machine should be considered.
 The issue queue structure and depths are parameterized in Saturn and may differ across different configurations.
 
-In the "Unified" structure, all vector arithmetic instructions, whether integer or floating-point, execute from the same sequencer, so no parallel arithmetic execution is possible.
-In the "Shared" and "Split" structures, independent sequencers drive the integer and floating-point execution units, so parallel execution is possible under certain conditions.
-In the "Shared" configuration, since the sequencers share a single in-order issue queue, interleaving vector instructions across the integer and floating-point paths is critical.
-In the "Split" configuration, each sequencer has its own issue queue, reducing the importance of software-scheduled load balancing.
+In the ``Unified" structure, all vector arithmetic instructions, whether integer or floating-point, execute from the same sequencer, so no parallel arithmetic execution is possible.
+In the ``Shared" and ``Split" structures, independent sequencers drive the integer and floating-point execution units, so parallel execution is possible under certain conditions.
+In the ``Shared" configuration, since the sequencers share a single in-order issue queue, interleaving vector instructions across the integer and floating-point paths is critical.
+In the ``Split" configuration, each sequencer has its own issue queue, reducing the importance of software-scheduled load balancing.
 
 When the issue queue sizes are shallow, the issue queues may fill up and back-pressure the decoupling queue, and consequently, the scalar core's frontend.
 Even modest configurations of Saturn should contain enough buffering within the issue and decoupling queues to avoid back-pressure for well-load-balanced code.

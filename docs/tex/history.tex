@@ -10,7 +10,7 @@ Saturn draws from a long line of prior vector units.
 
 T-0 \cite{t0} was an early demonstration of the principles of instruction scheduling in short-vector microarchitectures.
 Torrent demonstrated a decoupled-access-execute-style microarchitecture with efficient scheduling of short-chime vector instructions.
-However, Torrent relied on fixed memory and pipeline latencies for instruction scheduling, relying on a global stall to handle cache misses.
+However, Torrent relied on fixed memory and pipeline latencies for instruction scheduling, relying on a global stall to handle memory stalls.
 
 Many ideas presented in Torrent have been refined toward implementations of a modern vector ISA like RVV.
 Precise faults, segmented memory operations, register grouping, and mixed-precision instructions are modern innovations in vector architectures that have significant implications on vector microarchitectures and instruction scheduling.
@@ -19,14 +19,14 @@ Precise faults, segmented memory operations, register grouping, and mixed-precis
 \subsubsection{Hwacha}
 
 Hwacha \cite{hwacha_manual} was a decoupled-fetch vector unit designed to support scalability to many-lane designs.
-Microarchitecturally, Hwacha is a classic "long-vector" machine, with deeply temporal vector execution distributed across parallel independent vector lanes.
+Microarchitecturally, Hwacha is a classic ``long-vector" machine, with deeply temporal vector execution distributed across parallel independent vector lanes.
 Each vector lane contained an independent instruction sequencer, independent functional units, a slice of the register file, and an independent memory port.
 Like Saturn, Hwacha was implemented in Chisel and could integrate with Rocket as a post-commit decoupled unit.
 
-Notably, Hwacha executes a unique "decoupled vector fetch" ISA.
-In Hwacha's ISA, vector code is encoded in "vector fetch blocks".
+Notably, Hwacha executes a unique ``decoupled vector fetch" ISA.
+In Hwacha's ISA, vector code is encoded in ``vector fetch blocks".
 These vector fetch blocks are independently fetched and executed by a limited frontend in the vector unit, instead of being embedded in the same sequential instruction stream as scalar code.
-Programmers are expected to describe stripmine loops as these vector fetch blocks, and dispatch pointers to these blocks to the vector unit via "vector fetch" instructions.
+Programmers are expected to describe stripmine loops as these vector fetch blocks, and dispatch pointers to these blocks to the vector unit via ``vector fetch" instructions.
 Hwacha's ISA also does not require scala-vector memory ordering or support precise faults, simplfying Hwacha's microarchitecture for address translation and disambiguation.
 
 The component of Hwacha's microarchitecture most relevant to modern scalable vector ISAs is the instruction sequencer.
@@ -67,7 +67,7 @@ Saturn 0.2 did implement the first version of the instruction sequencing mechani
 
 Saturn 0.9 began development in the fall of 2023 with a complete rewrite over prior versions.
 The desire to support complete RVV alongside a fully-featured scalar core was motivated by the observation that accelerator architects generally expect mature software stacks and well-behaved core implementations for scalar control code.
-Furthermore, learnings from Saturn 0.1 and 0.2 suggested that a "three-stage" load path, with ahead-of-commit fault checking, early post-commit load-address-generation, and late post-commit load write-back, would adequately address performance requirements while remaining compliant to the ISA.
+Furthermore, learnings from Saturn 0.1 and 0.2 suggested that a ``three-stage" load path, with ahead-of-commit fault checking, early post-commit load-address-generation, and late post-commit load write-back, would adequately address performance requirements while remaining compliant to the ISA.
 
 The decoupled-access-execute architecture with an aggressive yet precise vector frontend became the dominant design paradigm driving the rest of Saturn 0.9's microarchitecture.
 The implementation of Saturn focused on developing a robust precise fault mechanism, load-store path, and dynamic out-of-order instruction issue in that order.

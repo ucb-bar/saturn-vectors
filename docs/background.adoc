@@ -77,7 +77,7 @@ GPU microarchitectures similarly became more general-purpose, eventually maturin
 
 Notably, the multi-core SIMT archetype in GPGPUs naturally adapts to a range of deployment domains.
 By scaling the number of multi-threaded cores, GPGPU microarchitectures can target integrated GPUs in general-purpose SoCs, graphics accelerator cards for desktop/consumer systems, as well as interconnected compute cards for datacenter-scale HPC systems.
-The rise of GPGPUs can thus be associated with the decline of specialized long-vector microarchitectures for datacenter HPC systems.
+The rise of GPGPUs is a contributing factor to the decline of specialized long-vector microarchitectures for datacenter HPC systems.
 
 In the commercial space, NVIDIA and AMD dominate the GPGPU market.
 Their HPC and datacenter products, while originally derived from consumer GPU architectures, have since diverged towards a more differentiated, yet still multi-core-SIMT microarchitecture.

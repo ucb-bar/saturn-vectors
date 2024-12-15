@@ -4,9 +4,9 @@
 
 
 The vector datapath (VU) handles all vector instruction scheduling, computation, and register file access.
-The VU is organized around independent "sequencing paths", which issue instructions independently to a per-sequencer vector execution unit (VXU).
+The VU is organized around independent ``sequencing paths", which issue instructions independently to a per-sequencer vector execution unit (VXU).
 
-The datapath is organized around a "vector element group" as the base unit of register access and compute.
+The datapath is organized around a ``vector element group" as the base unit of register access and compute.
 An element group is a fixed-width \texttt{DLEN}-bits-wide contiguous slice of the architectural register file space.
 \texttt{DLEN} guides the parameterization of most critical components in the backend.
 The register file, load-path, store-path, and most functional units are designed to process \texttt{DLEN} bits per cycle (or 1 element group/cycle), regardless of element width (\texttt{ELEN}).
@@ -21,7 +21,7 @@ Age tags are recovered when instructions complete execution.
 The VDQ provides a low-cost decoupling queue between the VU and the VLSU.
 The dequeue side of the VDQ is connected to the vector issue queues (VIQs).
 Each VIQ issues instructions in-order into its corresponding instruction sequencer.
-Execution across the VIQs may be out-of-order, as the VIQs may naturally "slip" against each other.
+Execution across the VIQs may be out-of-order, as the VIQs may naturally ``slip" against each other.
 
 Each sequencing path has an independent issue queue.
 The load issue queue only needs to track a destination address and mask enable, while the store issue queue only needs to track a source address and mask enable.
@@ -61,7 +61,7 @@ The sequencers advertise the requested register file read and write addresses fo
 If there are no structural hazards from non-pipelined functional units or register file ports and there are no data hazards against older vector instructions, a sequencer will issue an operation and update its internal state.
 An instruction will depart a sequencer along with the last operation it sequences, eliminating dead time between successive vector instructions.
 
-Notably, the sequencers enact "fire-and-forget" operation issue.
+Notably, the sequencers enact ``fire-and-forget" operation issue.
 Once an operation is issued by a sequencer, it is guaranteed to be free of further structural or data hazards as it proceeds down the pipelined functional unit datapaths.
 This eliminates the need for costly operand or result queues and obviates back-pressure in the functional unit pipelines.
 
@@ -116,7 +116,7 @@ Furthermore, supporting vector chaining implies that these hazards should be res
 Since Saturn is designed around \texttt{DLEN}-wide element groups as the base throughput of the machine, Saturn resolves data hazards at \texttt{DLEN} granularity.
 The scheduling mechanism precisely tracks which element groups an instruction or operation has yet to read-or-write to interlock the sequencers.
 
-In Saturn, the "out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
+In Saturn, the ``out-of-order instruction window" includes all instructions in the issue queues (but not the VDQ), the instructions currently in progress within the sequencers, and any operations which have not yet completed execution in the functional unit datapaths.
 Each instruction in this window must advertise a precise set of element groups that it will read from or write to in future cycles, along with its age tag.
 
 \begin{itemize}
