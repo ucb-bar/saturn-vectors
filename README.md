@@ -1,4 +1,4 @@
-The Saturn Vector Unit (Version 0.9)
+The Saturn Vector Unit
 ====================================
 
 <img src="docs/diag/overview.png">
@@ -23,3 +23,19 @@ Using Saturn
 
 This repository cannot be used stand-alone.
 Saturn is intended to be used to generate vector-enabled RISC-V cores and SoCs through the [Chipyard](https://github.com/ucb-bar/chipyard) SoC design framework.
+
+
+Citing Saturn
+--------------
+
+```
+@techreport{Zhao:EECS-2024-215,
+    Author = {Zhao, Jerry and Grubb, Daniel and Rusch, Miles and Wei, Tianrui and Anderson, Kevin and Nikolic, Borivoje and Asanović, Krste},
+    Title = {The Saturn Microarchitecture Manual},
+    Institution = {EECS Department, University of California, Berkeley},
+    Year = {2024},
+    Month = {Dec},
+    URL = {http://www2.eecs.berkeley.edu/Pubs/TechRpts/2024/EECS-2024-215.html},
+    Number = {UCB/EECS-2024-215}
+}
+```
