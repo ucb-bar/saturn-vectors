@@ -30,8 +30,8 @@ class LSIQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorPa
 }
 
 class IFQEntry(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val head   = UInt(log2Ceil(dLenB).W)
-  val tail   = UInt(log2Ceil(dLenB).W)
+  val head   = UInt(log2Ceil(mLenB).W)
+  val tail   = UInt(log2Ceil(mLenB).W)
   val masked = Bool()
   val last   = Bool()
   val lsiq_id  = UInt(lsiqIdBits.W)
@@ -59,10 +59,10 @@ class ScalarMemOrderCheckIO(implicit p: Parameters) extends CoreBundle()(p) with
 }
 
 class VectorMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val load_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
-  val load_resp = Input(Valid(new MemResponse(dLenB, dmemTagBits)))
-  val store_req = Decoupled(new MemRequest(dLenB, dmemTagBits))
-  val store_ack = Input(Valid(new MemResponse(dLenB, dmemTagBits)))
+  val load_req = Decoupled(new MemRequest(mLenB, dmemTagBits))
+  val load_resp = Input(Valid(new MemResponse(mLenB, dmemTagBits)))
+  val store_req = Decoupled(new MemRequest(mLenB, dmemTagBits))
+  val store_ack = Input(Valid(new MemResponse(mLenB, dmemTagBits)))
 }
 
 class VectorSGMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
@@ -71,12 +71,12 @@ class VectorSGMemIO(implicit p: Parameters) extends CoreBundle()(p) with HasVect
 }
 
 class VectorStoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
-  val stdata = UInt(dLen.W)
-  val stmask = UInt(dLenB.W)
+  val stdata = UInt(mLen.W)
+  val stmask = UInt(mLenB.W)
   val debug_id = UInt(debugIdSz.W)
   def asMaskedBytes = {
-    val bytes = Wire(Vec(dLenB, new MaskedByte))
-    for (i <- 0 until dLenB) {
+    val bytes = Wire(Vec(mLenB, new MaskedByte))
+    for (i <- 0 until mLenB) {
       bytes(i).data := stdata(((i+1)*8)-1,i*8)
       bytes(i).mask := stmask(i)
       bytes(i).debug_id := debug_id
@@ -88,15 +88,15 @@ class VectorStoreData(implicit p: Parameters) extends CoreBundle()(p) with HasVe
 
 class VectorMemDatapathIO(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {
   val lresp = Decoupled(new Bundle {
-    val data = UInt(dLen.W)
+    val data = UInt(mLen.W)
     val debug_id = UInt(debugIdSz.W)
   })
   val sdata = Flipped(Decoupled(new VectorStoreData))
 
-  val mask_pop = Decoupled(new CompactorReq(dLenB))
-  val mask_data = Input(Vec(dLenB, Bool()))
-  val index_pop = Decoupled(new CompactorReq(dLenB))
-  val index_data = Input(Vec(dLenB, UInt(8.W)))
+  val mask_pop = Decoupled(new CompactorReq(mLenB))
+  val mask_data = Input(Vec(mLenB, Bool()))
+  val index_pop = Decoupled(new CompactorReq(mLenB))
+  val index_data = Input(Vec(mLenB, UInt(8.W)))
 }
 
 class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
@@ -121,10 +121,10 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
 
   val las = Module(new AddrGen)
   val lifq = Module(new LoadOrderBuffer(vParams.vlifqEntries, vParams.vlrobEntries))
-  val lcu = Module(new Compactor(dLenB, dLenB, UInt(8.W), true))
+  val lcu = Module(new Compactor(mLenB, mLenB, UInt(8.W), true))
   val lss = Module(new LoadSegmenter)
 
-  val scu = Module(new Compactor(dLenB, dLenB, new MaskedByte, false))
+  val scu = Module(new Compactor(mLenB, mLenB, new MaskedByte, false))
   val sss = Module(new StoreSegmenter)
   val sas = Module(new AddrGen)
   val sifq = Module(new DCEQueue(new IFQEntry, vParams.vsifqEntries))
@@ -291,7 +291,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   lifq.io.push.bits.data := io.dmem.load_resp.bits.data
   lifq.io.push.bits.tag := io.dmem.load_resp.bits.tag
 
-  val load_arb = Module(new Arbiter(new MemRequest(dLenB, dmemTagBits), 2))
+  val load_arb = Module(new Arbiter(new MemRequest(mLenB, dmemTagBits), 2))
   load_arb.io.in(1) <> las.io.req
   load_arb.io.in(1).bits.store := false.B
   load_arb.io.in(0) <> lifq.io.replay
@@ -305,7 +305,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   lcu.io.push.valid := lifq.io.deq.valid
   lcu.io.push.bits.head := lifq.io.deq.bits.head
   lcu.io.push.bits.tail := lifq.io.deq.bits.tail
-  lcu.io.push_data := lifq.io.deq_data.asTypeOf(Vec(dLenB, UInt(8.W)))
+  lcu.io.push_data := lifq.io.deq_data.asTypeOf(Vec(mLenB, UInt(8.W)))
   lifq.io.deq.ready := lcu.io.push.ready
 
   sgas.foreach { sgas =>
@@ -346,7 +346,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
 
   val store_req_q = Module(new DCEQueue(new Bundle {
     val sifq = new IFQEntry
-    val request = new MemRequest(dLenB, dmemTagBits)
+    val request = new MemRequest(mLenB, dmemTagBits)
   }, 2))
 
   store_req_q.io.enq.valid := sas.io.out.valid
@@ -355,13 +355,13 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   sas.io.out.ready := store_req_q.io.enq.ready
   sas.io.req.ready := store_req_q.io.enq.ready
 
-  val store_req = Wire(Decoupled(new MemRequest(dLenB, dmemTagBits)))
+  val store_req = Wire(Decoupled(new MemRequest(mLenB, dmemTagBits)))
   store_req.bits := store_req_q.io.deq.bits.request
   store_req.bits.store := true.B
   store_req.bits.data := VecInit(scu.io.pop_data.map(_.data)).asUInt
   store_req.bits.mask := VecInit(scu.io.pop_data.map(_.mask)).asUInt & (
-    ~(0.U(dLenB.W)) << store_req_q.io.deq.bits.sifq.head &
-    Mux(store_req_q.io.deq.bits.sifq.tail === 0.U, ~(0.U(dLenB.W)), (1.U << store_req_q.io.deq.bits.sifq.tail) - 1.U)
+    ~(0.U(mLenB.W)) << store_req_q.io.deq.bits.sifq.head &
+    Mux(store_req_q.io.deq.bits.sifq.tail === 0.U, ~(0.U(mLenB.W)), (1.U << store_req_q.io.deq.bits.sifq.tail) - 1.U)
   )
 
   store_req.valid := store_req_q.io.deq.valid && !store_req_q.io.deq.bits.sifq.masked && scu.io.pop.ready && sifq.io.enq.ready
@@ -379,7 +379,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   scu.io.pop.bits.tail := store_req_q.io.deq.bits.sifq.tail
 
   when (scu.io.pop.fire) {
-    for (i <- 0 until dLenB) {
+    for (i <- 0 until mLenB) {
       assert(scu.io.pop_data(i).debug_id === siq(store_req_q.io.deq.bits.sifq.lsiq_id).op.debug_id ||
         i.U < scu.io.pop.bits.head ||
         (i.U >= scu.io.pop.bits.tail && scu.io.pop.bits.tail =/= 0.U))
@@ -414,8 +414,8 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     latency := PlusArg("saturn_mem_latency")
     val delay_timer = RegInit(0.U(64.W))
     delay_timer := delay_timer + 1.U
-    val load_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
-    val store_delay = Module(new DelayQueue(new MemRequest(dLenB, dmemTagBits), 1024, 64))
+    val load_delay = Module(new DelayQueue(new MemRequest(mLenB, dmemTagBits), 1024, 64))
+    val store_delay = Module(new DelayQueue(new MemRequest(mLenB, dmemTagBits), 1024, 64))
     load_delay.io.timer := delay_timer
     store_delay.io.timer := delay_timer
     load_delay.io.delay := latency
@@ -428,7 +428,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
     io.dmem.load_req <> load_arb.io.out
     io.dmem.store_req <> store_req
   }
-  io.dmem.load_req.bits.mask := ~(0.U(dLenB.W))
+  io.dmem.load_req.bits.mask := ~(0.U(mLenB.W))
 
   io.busy := liq_valids.orR || siq_valids.orR
 }

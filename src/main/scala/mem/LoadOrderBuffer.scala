@@ -28,14 +28,14 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
     val reserve = Decoupled(UInt(tagBits.W))
     val entry = Input(new IFQEntry)
     val push = Input(Valid(new Bundle {
-      val data = UInt(dLen.W)
+      val data = UInt(mLen.W)
       val tag = UInt(tagBits.W)
     }))
 
     val replay_liq_id = Output(UInt(log2Ceil(vParams.vliqEntries).W))
-    val replay = Decoupled(new MemRequest(dLenB, dmemTagBits))
+    val replay = Decoupled(new MemRequest(mLenB, dmemTagBits))
     val deq = Decoupled(new IFQEntry)
-    val deq_data = Output(UInt(dLen.W))
+    val deq_data = Output(UInt(mLen.W))
     val busy = Output(Bool())
   })
 
@@ -45,7 +45,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
   val must_replay = RegInit(VecInit.fill(nEntries)(false.B))
   val entries = Reg(Vec(nEntries, new IFQEntry))
   val rob_idxs = Reg(Vec(nEntries, UInt(log2Ceil(nRobEntries).W)))
-  val rob = Reg(Vec(nRobEntries, UInt(dLen.W)))
+  val rob = Reg(Vec(nRobEntries, UInt(mLen.W)))
   val rob_valids = RegInit(VecInit.fill(nRobEntries)(false.B))
 
   val enq_ptr = Counter(nEntries)
@@ -98,7 +98,7 @@ class LoadOrderBuffer(nEntries: Int, nRobEntries: Int)(implicit p: Parameters) e
   io.replay.valid := replay_valid
   io.replay.bits.addr := entries(next_replay).page_offset
   io.replay.bits.data := DontCare
-  io.replay.bits.mask := ~(0.U(dLenB.W))
+  io.replay.bits.mask := ~(0.U(mLenB.W))
   io.replay.bits.tag  := next_replay
   io.replay.bits.store := false.B
 

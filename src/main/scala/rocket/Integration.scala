@@ -25,12 +25,12 @@ class SaturnRocketUnit(implicit p: Parameters) extends RocketVectorUnit()(p) wit
   }
 
   val tl_if = LazyModule(new TLSplitInterface)
-  atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(dLen/8) := tl_if.node
+  atlNode := TLBuffer(vParams.tlBuffer) := TLWidthWidget(mLenB) := tl_if.node
 
   override lazy val module = new SaturnRocketImpl
   class SaturnRocketImpl extends RocketVectorUnitModuleImp(this) with HasVectorParams with HasCoreParameters {
 
-    val useL1DCache = dLen == vMemDataBits
+    val useL1DCache = mLen == vMemDataBits
 
     val dis = Module(new VectorDispatcher)
     val vfu = Module(new SaturnRocketFrontend(tl_if.edge))

@@ -24,13 +24,13 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
       val valid = Input(Bool())
       val ready = Output(Bool())
     }
-    val req = Decoupled(new MemRequest(dLenB, dmemTagBits))
+    val req = Decoupled(new MemRequest(mLenB, dmemTagBits))
 
     val out = Decoupled(new IFQEntry)
   })
 
   def getElems(off: UInt, eew: UInt): UInt = {
-    (dLenB.U - off(dLenOffBits-1,0)) >> eew
+    (mLenB.U - off(mLenOffBits-1,0)) >> eew
   }
 
   val r_eaddr = Reg(UInt(paddrBits.W))
@@ -63,7 +63,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   val next_contig_elems = Mux(fast_segmented,
     max_eidx - eidx,
     io.op.seg_nf +& 1.U - sidx)
-  val next_act_elems = min(next_contig_elems, next_max_elems)(dLenOffBits,0)
+  val next_act_elems = min(next_contig_elems, next_max_elems)(mLenOffBits,0)
   val next_act_bytes = next_act_elems << mem_size
 
   val next_sidx = sidx +& next_act_elems
@@ -96,7 +96,7 @@ class AddrGen(implicit p: Parameters) extends CoreModule()(p) with HasVectorPara
   io.req.valid := io.valid && io.out.ready && !block_maskindex && !masked && io.tag.valid
   io.req.bits.addr := Cat(io.op.page, saddr(pgIdxBits-1,0))
   io.req.bits.data := DontCare
-  io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(dLenOffBits-1,0)
+  io.req.bits.mask := ((1.U << next_act_bytes) - 1.U) << saddr(mLenOffBits-1,0)
   io.req.bits.tag := io.tag.bits
   io.req.bits.store := DontCare
 

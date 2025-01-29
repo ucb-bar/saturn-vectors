@@ -9,7 +9,7 @@ image::diag/lsu.png[LSU,width=900,align=center,title-align=center]
 The Vector Load-Store Unit (VLSU) contains independent paths for loads and stores and is decoupled from the vector datapath (VU).
 The load path performs load address generation and reformats load responses into load writebacks.
 The store path performs store address generation and reformats vector register data into store requests.
-Each path is designed to saturate a block memory interface that is DLEN bits wide.
+Each path is designed to saturate a block memory interface that is `MLEN` bits wide.
 
 The load and store paths are each designed as an in-order pipeline of units with latency-insensitive interfaces.
 The control signals for each unit are driven by pointers into the load/store instruction queues (VLIQ/VSIQ).
@@ -61,9 +61,9 @@ While the Saturn integration with Rocket does support this approach, the standar
 .Example Saturn memory system with high-bandwidth local TCM (Tightly-coupled memory)
 image::diag/memtcm.png[TCM memory system,width=55%,align=center,title-align=center]
 
-Saturn configurations with high `DLEN` would generally require higher memory bandwidth.
+Saturn configurations with high `DLEN` would generally require higher memory bandwidth, with `MLEN=DLEN`.
 However, scaling up the system-level interconnect to meet Saturn's bandwidth demands may be prohibitively costly.
-Instead, the preferred approach for high-`DLEN` Saturn configs is to integrate a high-bandwidth local TCM (tightly-coupled memory), which software should treat as a software-managed cache for vector accesses.
+Instead, the preferred approach for high-`MLEN` Saturn configs is to integrate a high-bandwidth local TCM (tightly-coupled memory), which software should treat as a software-managed cache for vector accesses.
 This TCM should be tile-local and globally addressable, but not necessarily cacheable.
 <<mem-tcm>> depicts a Saturn configuration with a high-bandwidth TCM, but a reduced-bandwidth system interconnect.
 
@@ -188,11 +188,11 @@ For the LMU, the push base and extent (head and tail) are set by the address off
 For block-contiguous accesses, only the first and last beat of a single access would encode a non-aligned head or tail, respectively.
 For element-indexed or strided accesses where each memory request contains only a single valid element, the push head and tail denote the start and end byte of the active element.
 In this way, the LMU serves two roles, either rotating block-contiguous accesses or compressing indexed on strided accesses.
-This behavior decouples load-response alignment from writeback; regardless of addressing mode or alignment, the LMU generates aligned `DLEN`-wide contiguous bytes for writeback in the VU.
+This behavior decouples load-response alignment from writeback; regardless of addressing mode or alignment, the LMU generates aligned `MLEN`-wide contiguous bytes for writeback in the VU.
 
 For segmented loads, the LMU serves an additional purpose; it enables decoupling of the load write-back scheduling performed by the datapath from the segment restructuring performed by the segment buffer.
-That is, the segment buffer does not necessarily proceed at `DLEN` bits per cycle for all segment sizes.
-Depending on the segment size, the segment buffer may request a sub-`DLEN` slice of bytes, which the LMU will provide once available.
+That is, the segment buffer does not necessarily proceed at `MLEN` bits per cycle for all segment sizes.
+Depending on the segment size, the segment buffer may request a sub-`MLEN` slice of bytes, which the LMU will provide once available.
 
 The SMU operates as the reversed path of the LMU.
 The push head and tail of the SMU are usually aligned, except for the last element group when `VL` is misaligned.
@@ -210,14 +210,14 @@ The double-buffering enables full-rate segmented accesses.
 For instance, in the LSB, one half is filled by load responses while the other is drained by load writeback.
 
 Each segment buffer is 8 rows deep to support up to 8 fields in a segment, as required by the specification.
-Each segment buffer is `DLEN` bits wide to buffer entire element groups of writeback data.
+Each segment buffer is `MLEN` bits wide to buffer entire element groups of writeback data.
 
 Load responses from the LMU write columns into the LSB, while the LSB emits rows into the load writeback port to the VU.
 Store data from the VU writes rows into the SSB, while the SSB emits columns into the SMU.
 
 [.text-center]
 [#segbuf]
-.Table depicting behavior, storage layout, and throughput of the double-buffered LSB for varying NF/ELEN on a DLEN=64b configuration.
+.Table depicting behavior, storage layout, and throughput of the double-buffered LSB for varying NF/ELEN on a DLEN=MLEN=64b configuration.
 image::diag/segbuf.png[Merge unit,width=900,align=center,title-align=center]
 
 <<segbuf>> depicts how the LSB requests aligned segments from the LMU, stores them in a 2D segment buffer array, and presents a stream of aligned write-back data to the datapath.

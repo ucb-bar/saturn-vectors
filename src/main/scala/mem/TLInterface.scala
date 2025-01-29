@@ -65,7 +65,7 @@ class TLSplitInterface(implicit p: Parameters) extends LazyModule()(p) with HasC
   val writer = LazyModule(new TLInterface(dmemTagBits))
 
   val arb = LazyModule(new TLXbar)
-  def node = TLWidthWidget(dLenB) := arb.node
+  def node = TLWidthWidget(mLenB) := arb.node
   def edge = arb.node.edges.out(0)
 
   arb.node := reader.node

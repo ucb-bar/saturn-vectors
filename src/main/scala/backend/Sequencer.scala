@@ -35,13 +35,20 @@ abstract class Sequencer[T <: Data](implicit p: Parameters) extends CoreModule()
 
   def accepts(inst: VectorIssueInst): Bool
 
-  def get_head_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask << (eidx << eew)(dLenOffBits-1,0)
-  def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt) = bit_mask >> (0.U(dLenOffBits.W) - (eidx << eew)(dLenOffBits-1,0))
-  def get_next_eidx(vl: UInt, eidx: UInt, eew: UInt, sub_dlen: UInt, reads_mask: Bool, elementwise: Bool) = {
+  def get_head_mask(bit_mask: UInt, eidx: UInt, eew: UInt, len: Int) = {
+    val lenOffBits = log2Ceil(len / 8)
+    bit_mask << (eidx << eew)(lenOffBits-1,0)
+  }
+  def get_tail_mask(bit_mask: UInt, eidx: UInt, eew: UInt, len: Int) = {
+    val lenOffBits = log2Ceil(len / 8)
+    bit_mask >> (0.U(lenOffBits.W) - (eidx << eew)(lenOffBits-1,0))
+  }
+  def get_next_eidx(vl: UInt, eidx: UInt, eew: UInt, sub_len: UInt, reads_mask: Bool, elementwise: Bool, len: Int) = {
+    val lenOffBits = log2Ceil(len / 8)
     val next = Wire(UInt((1+log2Ceil(maxVLMax)).W))
     next := Mux(elementwise, eidx +& 1.U, Mux(reads_mask,
-      eidx +& dLen.U,
-      (((eidx >> (dLenOffBits.U - eew - sub_dlen)) +& 1.U) << (dLenOffBits.U - eew - sub_dlen))
+      eidx +& len.U,
+      (((eidx >> (lenOffBits.U - eew - sub_len)) +& 1.U) << (lenOffBits.U - eew - sub_len))
     ))
     min(vl, next)
   }

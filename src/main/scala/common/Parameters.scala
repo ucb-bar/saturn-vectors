@@ -326,8 +326,8 @@ case class VectorParams(
   vpissqEntries: Int = 0,
 
   dLen: Int = 64,
+  mLen: Int = 64,
   vatSz: Int = 3,
-
 
   useSegmentedIMul: Boolean = false,
   useScalarFPFMA: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
@@ -354,6 +354,11 @@ case class VectorParams(
   tlBuffer: BufferParams = BufferParams.default,
 ) {
   def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
+
+  require(dLen >= 64, "dLen must be >= 64")
+  require((dLen & (dLen - 1)) == 0, "dLen must be power of 2")
+  require(mLen >= 64 && mLen <= 512, "mLen must be >= 64 and <= 512")
+  require((mLen & (mLen - 1)) == 0, "mLen must be power of 2")
 }
 
 case object VectorParamsKey extends Field[VectorParams]
@@ -361,9 +366,15 @@ case object VectorParamsKey extends Field[VectorParams]
 trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   implicit val p: Parameters
   def vParams: VectorParams = p(VectorParamsKey)
+
   def dLen = vParams.dLen
   def dLenB = dLen / 8
   def dLenOffBits = log2Ceil(dLenB)
+
+  def mLen = vParams.mLen
+  def mLenB = mLen / 8
+  def mLenOffBits = log2Ceil(mLenB)
+
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
   def sgmemTagBits = log2Ceil(vParams.vsgifqEntries)
   def egsPerVReg = vLen / dLen
@@ -437,10 +448,11 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
     }.toSeq).asUInt
   }
 
-  def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt) = {
-    val vm_off  = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
+  def get_vm_mask(mask_resp: UInt, eidx: UInt, eew: UInt, len: Int) = {
+    val lenOffBits = log2Ceil(len / 8)
+    val vm_off  = ((1 << lenOffBits) - 1).U(log2Ceil(dLen).W)
     val vm_eidx = (eidx & ~(vm_off >> eew))(log2Ceil(dLen)-1,0)
-    val vm_resp = (mask_resp >> vm_eidx)(dLenB-1,0)
+    val vm_resp = (mask_resp >> vm_eidx)((len / 8)-1,0)
     Mux1H(UIntToOH(eew), (0 until 4).map { w => FillInterleaved(1 << w, vm_resp) })
   }
 

@@ -248,7 +248,7 @@ class StoreDataMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasV
   val use_stmask = Bool()
   val elem_size = UInt(2.W)
   val eidx = UInt(log2Ceil(maxVLMax).W)
-  val eidx_mask = UInt(dLenB.W)
+  val eidx_mask = UInt(mLenB.W)
   val debug_id = UInt(debugIdSz.W)
   val tail = Bool()
   val vat = UInt(vParams.vatSz.W)
