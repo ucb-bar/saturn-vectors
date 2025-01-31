@@ -150,10 +150,10 @@ object VXFunctionalUnitGroups {
   )
 
   def sharedFPFMA(pipeDepth: Int) = Seq(
-    FPFMAFactory(pipeDepth, true)
+    SharedScalarFPFMAFactory(pipeDepth)
   )
   def fpFMA(pipeDepth: Int) = Seq(
-    FPFMAFactory(pipeDepth, false)
+    FPFMAFactory(pipeDepth)
   )
   def fpMisc = Seq(
     FPDivSqrtFactory,

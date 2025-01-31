@@ -9,6 +9,11 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
+case class SharedScalarFPFMAFactory(depth: Int) extends FMAFactory {
+  def insns = base_insns.map(_.elementWise)
+  def generate(implicit p: Parameters) = new SharedScalarElementwiseFPFMA(depth)
+}
+
 trait HasSharedFPUIO {
   implicit val p: Parameters
   val io_fp_req = IO(Decoupled(new FPInput()))
@@ -20,7 +25,7 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
     with HasFPUParameters
     with HasSharedFPUIO {
 
-  val supported_insns = FPFMAFactory(depth, true).insns
+  val supported_insns = SharedScalarFPFMAFactory(depth).insns
 
   val ctrl = new VectorDecoder(io.pipe(0).bits, supported_insns, Seq(
     FPAdd, FPMul, FPSwapVdV2, FPFMACmd, ReadsVD, FPSpecRM, Wide2VD, Wide2VS2, Reduction))

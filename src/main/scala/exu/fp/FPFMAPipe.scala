@@ -114,7 +114,8 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   }}
 }
 
-case class FPFMAFactory(depth: Int, sharedScalar: Boolean) extends FunctionalUnitFactory {
+trait FMAFactory extends FunctionalUnitFactory {
+  def depth: Int
   def base_insns = Seq(
     FADD.VV, FADD.VF, FSUB.VV, FSUB.VF, FRSUB.VF,
     FMUL.VV, FMUL.VF,
@@ -129,16 +130,15 @@ case class FPFMAFactory(depth: Int, sharedScalar: Boolean) extends FunctionalUni
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV
   ).map(_.pipelined(depth))
-  def insns = if (sharedScalar) base_insns.map(_.elementWise) else base_insns
-  def generate(implicit p: Parameters) = if (sharedScalar) {
-    new SharedScalarElementwiseFPFMA(depth)(p)
-  } else {
-    new FPFMAPipe(depth)(p)
-  }
+}
+
+case class FPFMAFactory(depth: Int) extends FMAFactory {
+  def insns = base_insns
+  def generate(implicit p: Parameters) = new FPFMAPipe(depth)(p)
 }
 
 class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
-  val supported_insns = FPFMAFactory(depth, false).insns
+  val supported_insns = FPFMAFactory(depth).insns
 
   io.stall := false.B
   io.set_vxsat := false.B
