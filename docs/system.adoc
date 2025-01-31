@@ -49,11 +49,11 @@ Shallow instruction queues in the VU act as "decoupling" queues, enabling the VL
 Similarly, the VLSU's store path can run many cycles behind the VU through the decoupling enabled by the VSIQ.
 This approach can tolerate high memory latencies with minimal hardware cost.
 
-Saturn is designed around two key parameters. *`VLEN` and `DLEN`*.
+Saturn is designed around three key parameters. *`VLEN`, `DLEN`, and `MLEN`*.
 `VLEN` is the vector length of each register file, as defined in the architecture specification.
 `DLEN` is a micro-architectural detail that describes the datapath width for each of the SIMD-stype datapaths in Saturn.
-Specifically, the load pipe, store pipe, and SIMD arithmetic pipes are all designed to fulfill `DLEN` bits per cycle, regardless of element width.
-Future versions of Saturn may allow a narrower memory interface width (`MLEN`) than `DLEN`.
+Specifically, the SIMD arithmetic pipes are all designed to fulfill `DLEN` bits per cycle, regardless of element width.
+`MLEN` is a micro-architectural detail that describes the bandwidth of the load and store pipelines, each.
 
 Saturn still supports a limited, but sufficient capability for *out-of-order execution*.
 The load, store, and execute paths in the VU execute independently, dynamically stalling for structural and data hazards without requiring full in-order execution.

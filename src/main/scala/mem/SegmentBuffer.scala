@@ -11,7 +11,7 @@ import saturn.common._
 class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
-      val data = UInt(dLen.W)
+      val data = UInt(mLen.W)
       val eew = UInt(2.W)
       val nf = UInt(3.W)
       val eidx = UInt(log2Ceil(maxVLMax).W)
@@ -22,7 +22,7 @@ class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends C
       val debug_id = UInt(debugIdSz.W)
     }))
     val out = Decoupled(new Bundle {
-      val data = UInt(dLen.W)
+      val data = UInt(mLen.W)
       val debug_id = UInt(debugIdSz.W)
     })
     val busy = Output(Bool())
@@ -31,7 +31,7 @@ class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends C
   val nB = if (doubleBuffer) 2 else 1
 
   val rows = 8
-  val cols = dLenB
+  val cols = mLenB
 
   val wdata = Wire(Vec(4, UInt((rows*8*8).W)))
   val warr = wdata(io.in.bits.eew).asTypeOf(Vec(rows, Vec(8, UInt(8.W))))
@@ -63,15 +63,15 @@ class LoadSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends C
   io.out.bits.debug_id := out_id(out_sel)
 
   when (io.in.fire) {
-    wrow := ((1.U << (dLenB.U >> io.in.bits.eew)) - 1.U)(7,0) << io.in.bits.sidx
+    wrow := ((1.U << (mLenB.U >> io.in.bits.eew)) - 1.U)(7,0) << io.in.bits.sidx
   }
-  wcol := ((1.U << (1.U << io.in.bits.eew)) - 1.U)(7,0) << (io.in.bits.eidx(log2Ceil(dLenB)-1,0) << io.in.bits.eew)(log2Ceil(dLenB)-1,0)
+  wcol := ((1.U << (1.U << io.in.bits.eew)) - 1.U)(7,0) << (io.in.bits.eidx(log2Ceil(mLenB)-1,0) << io.in.bits.eew)(log2Ceil(mLenB)-1,0)
   wmode := in_sel
 
   for (eew <- 0 until 4) {
-    val in_rows = 8 min (dLenB >> eew)
+    val in_rows = 8 min (mLenB >> eew)
     val in_cols = 8 >> eew
-    val in_elems = dLenB >> eew
+    val in_elems = mLenB >> eew
 
     val col = Wire(Vec(in_rows, UInt((8 << eew).W)))
     val arr = Wire(Vec(in_rows, Vec(in_cols, UInt((8 << eew).W))))
@@ -110,8 +110,8 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
 
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
-      val data = UInt(dLen.W)
-      val mask = UInt(dLenB.W)
+      val data = UInt(mLen.W)
+      val mask = UInt(mLenB.W)
       val debug_id = UInt(debugIdSz.W)
       val eew = UInt(2.W)
       val nf = UInt(3.W)
@@ -123,15 +123,15 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
 
     val out = Decoupled(new Bundle {
       val data = new VectorStoreData
-      val head = UInt(log2Ceil(dLenB).W)
-      val tail = UInt(log2Ceil(dLenB).W)
+      val head = UInt(log2Ceil(mLenB).W)
+      val tail = UInt(log2Ceil(mLenB).W)
     })
     val busy = Output(Bool())
   })
 
   val nB = if (doubleBuffer) 2 else 1
   val rows = 8
-  val cols = dLenB
+  val cols = mLenB
 
   val wdata = Wire(Vec(4, UInt((rows*8*8).W)))
   val warr = wdata(io.in.bits.eew).asTypeOf(Vec(rows, Vec(8, UInt(8.W))))
@@ -139,7 +139,7 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
   val wcol = WireInit(0.U(cols.W))
   val wmode = Wire(Bool())
   val array = Seq.tabulate(rows, cols, nB) { case (_,_,_) => Reg(UInt(8.W)) }
-  val mask = Seq.fill(nB) { Reg(UInt(dLenB.W)) }
+  val mask = Seq.fill(nB) { Reg(UInt(mLenB.W)) }
 
   for (r <- 0 until 8) {
     for (c <- 0 until cols) {
@@ -168,11 +168,11 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
   io.out.valid := modes(out_sel)
   val row_sel = out_row + sidxOff(out_sidx(out_sel), out_eew(out_sel))
   io.out.bits.data.stdata := Mux1H(UIntToOH(row_sel), array.map(row => VecInit(row.map(_(out_sel))).asUInt))
-  io.out.bits.data.stmask := Fill(dLenB, (Mux1H(UIntToOH(out_sel), mask) >> (out_row << out_eew(out_sel)))(0))
+  io.out.bits.data.stmask := Fill(mLenB, (Mux1H(UIntToOH(out_sel), mask) >> (out_row << out_eew(out_sel)))(0))
   io.out.bits.data.debug_id := out_id(out_sel)
   io.out.bits.head := out_sidx(out_sel) << out_eew(out_sel)
   val remaining_bytes = (out_nf(out_sel) +& 1.U - out_sidx(out_sel)) << out_eew(out_sel)
-  io.out.bits.tail := Mux((remaining_bytes +& io.out.bits.head) >= dLenB.U, dLenB.U, remaining_bytes + io.out.bits.head)
+  io.out.bits.tail := Mux((remaining_bytes +& io.out.bits.head) >= mLenB.U, mLenB.U, remaining_bytes + io.out.bits.head)
 
   when (io.in.fire) {
     wrow := ((1.U << (1.U << (log2Ceil(cols).U - io.in.bits.eew))) - 1.U)(7,0) << sidxOff(io.in.bits.sidx, io.in.bits.eew)
@@ -187,7 +187,7 @@ class StoreSegmentBuffer(doubleBuffer: Boolean)(implicit p: Parameters) extends 
   wmode := in_sel
 
   for (eew <- 0 until 4) {
-    val in_rows = 8 min (dLenB >> eew)
+    val in_rows = 8 min (mLenB >> eew)
     val in_cols = 8 >> eew
     val in_elems = cols >> eew
 

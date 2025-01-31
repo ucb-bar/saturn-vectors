@@ -23,7 +23,7 @@ class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()
   val head     = Reg(Bool())
 
   val renvm     = !inst.vm
-  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U, false.B, false.B)
+  val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, 0.U, false.B, false.B, mLen)
   val tail      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
   io.dis.ready := !valid || (tail && io.iss.fire) && !io.dis_stall
@@ -74,9 +74,8 @@ class LoadSequencer(implicit p: Parameters) extends Sequencer[LoadRespMicroOp]()
   io.iss.bits.debug_id   := inst.debug_id
   io.iss.bits.eidx       := eidx
 
-  val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size)
-  val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size)
-
+  val head_mask = get_head_mask(~(0.U(dLenB.W)), eidx     , inst.mem_elem_size, dLen)
+  val tail_mask = get_tail_mask(~(0.U(dLenB.W)), next_eidx, inst.mem_elem_size, dLen)
   io.iss.bits.eidx_wmask := Mux(sidx > inst.segend && inst.seg_nf =/= 0.U, 0.U, head_mask & tail_mask)
   io.iss.bits.use_rmask := renvm
   io.iss.bits.elem_size := inst.mem_elem_size

@@ -15,13 +15,15 @@ class WithShuttleVectorUnit(
   dLen: Int = 64,
   params: VectorParams = VectorParams(),
   cores: Option[Seq[Int]] = None,
-  location: HierarchicalLocation = InSubsystem
+  location: HierarchicalLocation = InSubsystem,
+  mLen: Option[Int] = None
 ) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: ShuttleTileAttachParams => {
       val buildVector = cores.map(_.contains(tp.tileParams.tileId)).getOrElse(true)
       val vParams = params.copy(
         dLen=dLen,
+        mLen=mLen.getOrElse(dLen),
         useScalarFPFMA = false,
       )
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(

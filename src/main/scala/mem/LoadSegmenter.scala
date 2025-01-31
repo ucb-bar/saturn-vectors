@@ -14,11 +14,11 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val done = Output(Bool())
     val op = Input(new VectorMemMacroOp)
 
-    val compactor = Decoupled(new CompactorReq(dLenB))
-    val compactor_data = Input(UInt(dLen.W))
+    val compactor = Decoupled(new CompactorReq(mLenB))
+    val compactor_data = Input(UInt(mLen.W))
 
     val resp = Decoupled(new Bundle {
-      val data = UInt(dLen.W)
+      val data = UInt(mLen.W)
       val debug_id = UInt(debugIdSz.W)
     })
   })
@@ -32,7 +32,7 @@ class LoadSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val sidx = Mux(r_head, io.op.segstart, r_sidx)
 
   val mem_size = io.op.elem_size
-  val incr = (dLenB.U - (Mux(io.op.seg_nf === 0.U, eidx, sidx) << mem_size)(dLenOffBits-1,0)) >> mem_size
+  val incr = (mLenB.U - (Mux(io.op.seg_nf === 0.U, eidx, sidx) << mem_size)(mLenOffBits-1,0)) >> mem_size
   val eidx_incr = Mux(io.op.seg_nf =/= 0.U, 1.U, incr)
   val sidx_incr = incr
   val next_eidx = eidx +& eidx_incr

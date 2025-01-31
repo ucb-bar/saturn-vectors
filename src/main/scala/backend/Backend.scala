@@ -364,9 +364,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vls.io.iss.ready := io.vmu.lresp.valid && load_write.ready
   load_write.valid := vls.io.iss.valid && io.vmu.lresp.valid
   load_write.bits.eg   := vls.io.iss.bits.wvd_eg
-  load_write.bits.data := io.vmu.lresp.bits.data
+  load_write.bits.data := Fill(dLen / mLen, io.vmu.lresp.bits.data)
   val load_wmask = Mux(vls.io.iss.bits.use_rmask,
-    get_vm_mask(vrf.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size),
+    get_vm_mask(vrf.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size, dLen),
     ~(0.U(dLenB.W)))
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.eidx_wmask & load_wmask)
   when (io.vmu.lresp.fire) {
@@ -408,8 +408,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // =====================================
   // Connect VMU index/mask access ports
 
-  val vmu_index_q = Module(new Compactor(dLenB, dLenB, UInt(8.W), false))
-  val vmu_mask_q = Module(new Compactor(dLenB, dLenB, Bool(), false))
+  val vmu_index_q = Module(new Compactor(dLenB, mLenB, UInt(8.W), false))
+  val vmu_mask_q = Module(new Compactor(dLenB, mLenB, Bool(), false))
   val vgu = Module(new GatherUnit)
 
   vmu_index_q.io.push_data      := vrf.io.vps.rvs2.resp.asTypeOf(Vec(dLenB, UInt(8.W)))
@@ -434,10 +434,16 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   io.vmu.sdata.valid   := vss.io.iss.valid
   vss.io.iss.ready     := io.vmu.sdata.ready
-  io.vmu.sdata.bits.stdata    := vrf.io.vss.rvd.resp
+  val iss_stdata = if (mLen < dLen) {
+    val select = (vss.io.iss.bits.eidx << vss.io.iss.bits.elem_size)(dLenOffBits-1,mLenOffBits)
+    vrf.io.vss.rvd.resp.asTypeOf(Vec(dLen/mLen, UInt(mLen.W)))(select)
+  } else {
+    vrf.io.vss.rvd.resp
+  }
+  io.vmu.sdata.bits.stdata    := iss_stdata
   io.vmu.sdata.bits.stmask    := vss.io.iss.bits.eidx_mask & Mux(vss.io.iss.bits.use_stmask,
-    get_vm_mask(vrf.io.vss.rvm.resp, vss.io.iss.bits.eidx, vss.io.iss.bits.elem_size),
-    ~(0.U(dLenB.W))
+    get_vm_mask(vrf.io.vss.rvm.resp, vss.io.iss.bits.eidx, vss.io.iss.bits.elem_size, mLen),
+    ~(0.U(mLenB.W))
   )
   io.vmu.sdata.bits.debug_id := vss.io.iss.bits.debug_id
 

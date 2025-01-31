@@ -101,7 +101,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     val dis_vl           = dis_inst.vconfig.vl
     val dis_sew          = dis_inst.vconfig.vtype.vsew
     val dis_vlmax        = dis_inst.vconfig.vtype.vlMax
-    val dis_next_eidx    = get_next_eidx(dis_vl, 0.U, dis_sew, 0.U, false.B, false.B)
+    val dis_next_eidx    = get_next_eidx(dis_vl, 0.U, dis_sew, 0.U, false.B, false.B, dLen)
     val dis_slide1       = !dis_inst.isOpi
     val dis_uscalar      = Mux(dis_inst.funct3(2), dis_inst.rs1_data, dis_inst.imm5)
     val dis_slide_offset = Mux(!dis_slide1, get_max_offset(dis_uscalar, dis_sew), 1.U)
@@ -157,7 +157,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     vd_eew        := dis_vd_eew
     eff_vl        := dis_eff_vl
     incr_eew      := dis_incr_eew
-    next_eidx     := get_next_eidx(dis_eff_vl, 0.U, dis_incr_eew, 0.U, dis_increments_as_mask, dis_ctrl.bool(Elementwise))
+    next_eidx     := get_next_eidx(dis_eff_vl, 0.U, dis_incr_eew, 0.U, dis_increments_as_mask, dis_ctrl.bool(Elementwise), dLen)
     increments_as_mask := dis_increments_as_mask
 
     when (dis_mvnrr) {
@@ -357,7 +357,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
     }
 
     eidx := next_eidx
-    val next_next_eidx = get_next_eidx(eff_vl, next_eidx, incr_eew, 0.U, increments_as_mask, elementwise)
+    val next_next_eidx = get_next_eidx(eff_vl, next_eidx, incr_eew, 0.U, increments_as_mask, elementwise, dLen)
     next_eidx := next_next_eidx
 
     if (usesAcc) {

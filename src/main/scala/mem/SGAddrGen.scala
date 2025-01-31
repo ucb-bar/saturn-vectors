@@ -11,30 +11,30 @@ import saturn.common._
 
 class ScatterGatherAddrGen(sgSize: BigInt)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   val sgPorts = vParams.vsgPorts
-  assert(sgPorts <= dLenB && sgPorts >= 8)
+  assert(sgPorts <= mLenB && sgPorts >= 8)
   val io = IO(new Bundle {
     val valid = Input(Bool())
     val lsiq_id = Input(UInt(lsiqIdBits.W))
     val done = Output(Bool())
     val op = Input(new VectorMemMacroOp)
-    val index_pop = Decoupled(new CompactorReq(dLenB))
-    val index_data = Input(Vec(dLenB, UInt(8.W)))
-    val mask_pop = Decoupled(new CompactorReq(dLenB))
-    val mask_data = Input(Vec(dLenB, Bool()))
-    val store_pop = Decoupled(new CompactorReq(dLenB))
-    val store_data = Input(Vec(dLenB, UInt(8.W)))
+    val index_pop = Decoupled(new CompactorReq(mLenB))
+    val index_data = Input(Vec(mLenB, UInt(8.W)))
+    val mask_pop = Decoupled(new CompactorReq(mLenB))
+    val mask_data = Input(Vec(mLenB, Bool()))
+    val store_pop = Decoupled(new CompactorReq(mLenB))
+    val store_data = Input(Vec(mLenB, UInt(8.W)))
  
     val req = Vec(sgPorts, Decoupled(new MemRequest(1, sgmemTagBits)))
     val resp = Vec(sgPorts, Input(Valid(new MemResponse(1, sgmemTagBits))))
 
-    val load_resp = Decoupled(new CompactorReq(dLenB))
-    val load_data = Output(Vec(dLenB, UInt(8.W)))
+    val load_resp = Decoupled(new CompactorReq(mLenB))
+    val load_data = Output(Vec(mLenB, UInt(8.W)))
   })
   val vsgifqEntries = vParams.vsgifqEntries
 
   val resp_buffer = Reg(Vec(vsgifqEntries, Vec(sgPorts, UInt(8.W))))
   val resp_busys  = Reg(Vec(vsgifqEntries, Vec(sgPorts, Bool())))
-  val resp_bytes  = Reg(Vec(vsgifqEntries, UInt(log2Ceil(dLenB).W)))
+  val resp_bytes  = Reg(Vec(vsgifqEntries, UInt(log2Ceil(mLenB).W)))
   val resp_valids = RegInit(VecInit.fill(vsgifqEntries)(false.B))
   val fired = RegInit(VecInit.fill(sgPorts)(false.B))
 
@@ -45,7 +45,7 @@ class ScatterGatherAddrGen(sgSize: BigInt)(implicit p: Parameters) extends CoreM
   val r_done = RegInit(false.B)
 
   val eidx = Mux(r_head, io.op.vstart, r_eidx)
-  val idx_incr = dLenB.U >> io.op.idx_size
+  val idx_incr = mLenB.U >> io.op.idx_size
   val elem_incr = sgPorts.U >> io.op.elem_size
   val incr = min(idx_incr, elem_incr)
   val next_act_elems = min(incr, io.op.vl - eidx)
@@ -60,7 +60,7 @@ class ScatterGatherAddrGen(sgSize: BigInt)(implicit p: Parameters) extends CoreM
 
   val base = Cat(io.op.page, io.op.base_offset)
   val addrs: Seq[Vec[UInt]] = (0 until 4).map { sew =>
-    val offsets = io.index_data.asTypeOf(Vec(dLenB >> sew, UInt((8 << sew).W)))
+    val offsets = io.index_data.asTypeOf(Vec(mLenB >> sew, UInt((8 << sew).W)))
     VecInit(offsets.map(o => Cat(base >> log2Ceil(sgSize), (o +& base)(log2Ceil(sgSize)-1,0))))
   }
 
@@ -125,7 +125,7 @@ class ScatterGatherAddrGen(sgSize: BigInt)(implicit p: Parameters) extends CoreM
   io.load_resp.valid := io.valid && resp_valids(r_deq) && !resp_busys(r_deq).orR && !store
   io.load_resp.bits.head := 0.U
   io.load_resp.bits.tail := Mux(resp_bytes(r_deq) === 0.U, sgSize.U, resp_bytes(r_deq))
-  io.load_data := resp_buffer(r_deq).asUInt.asTypeOf(Vec(dLenB, UInt(8.W)))
+  io.load_data := resp_buffer(r_deq).asUInt.asTypeOf(Vec(mLenB, UInt(8.W)))
 
   when (resp_fire) {
     r_deq := Mux(r_deq === (sgSize-1).U, 0.U, r_deq + 1.U)

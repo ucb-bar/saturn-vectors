@@ -195,14 +195,14 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   }
 
   val xcpts = Seq(
+    (tlb_resp.ma.st, Causes.misaligned_store.U),
+    (tlb_resp.ma.ld, Causes.misaligned_load.U),
     (tlb_resp.pf.st, Causes.store_page_fault.U),
     (tlb_resp.pf.ld, Causes.load_page_fault.U),
     (tlb_resp.gf.st, Causes.store_guest_page_fault.U),
     (tlb_resp.gf.ld, Causes.load_guest_page_fault.U),
     (tlb_resp.ae.st, Causes.store_access.U),
     (tlb_resp.ae.ld, Causes.load_access.U),
-    (tlb_resp.ma.st, Causes.misaligned_store.U),
-    (tlb_resp.ma.ld, Causes.misaligned_load.U)
   )
   val xcpt = xcpts.map(_._1).orR && s1_eidx >= inst.vstart && !s1_masked
   val cause = PriorityMux(xcpts)

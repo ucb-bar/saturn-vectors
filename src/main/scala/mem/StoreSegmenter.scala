@@ -14,8 +14,8 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
     val done = Output(Bool())
     val op = Input(new VectorMemMacroOp)
 
-    val compactor = Decoupled(new CompactorReq(dLenB))
-    val compactor_data = Output(Vec(dLenB, new MaskedByte))
+    val compactor = Decoupled(new CompactorReq(mLenB))
+    val compactor_data = Output(Vec(mLenB, new MaskedByte))
     val stdata = Flipped(Decoupled(new VectorStoreData))
   })
 
@@ -28,10 +28,10 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
   val sidx = Mux(r_head, 0.U, r_sidx)
 
   val mem_size = io.op.elem_size
-  val sub_dlen = Mux(io.op.seg_nf =/= 0.U && (log2Ceil(dLenB).U > (3.U +& mem_size)),
-    log2Ceil(dLenB).U - 3.U - mem_size,
+  val sub_mlen = Mux(io.op.seg_nf =/= 0.U && (log2Ceil(mLenB).U > (3.U +& mem_size)),
+    log2Ceil(mLenB).U - 3.U - mem_size,
     0.U)
-  val eidx_incr = (dLenB.U - ((eidx << (mem_size +& sub_dlen))(dLenOffBits-1,0))) >> (mem_size +& sub_dlen)
+  val eidx_incr = (mLenB.U - ((eidx << (mem_size +& sub_mlen))(mLenOffBits-1,0))) >> (mem_size +& sub_mlen)
   val next_eidx = eidx +& eidx_incr
   val next_sidx = sidx +& 1.U
 
@@ -47,8 +47,8 @@ class StoreSegmenter(implicit p: Parameters) extends CoreModule()(p) with HasVec
     segbuf.io.in.ready)
 
   segbuf.io.in.valid := io.valid && io.op.seg_nf =/= 0.U && io.stdata.valid
-  segbuf.io.in.bits.data := io.stdata.bits.stdata >> ((eidx << mem_size)(dLenOffBits-1,0) << 3)
-  segbuf.io.in.bits.mask := io.stdata.bits.stmask >> (eidx << mem_size)(dLenOffBits-1,0)
+  segbuf.io.in.bits.data := io.stdata.bits.stdata >> ((eidx << mem_size)(mLenOffBits-1,0) << 3)
+  segbuf.io.in.bits.mask := io.stdata.bits.stmask >> (eidx << mem_size)(mLenOffBits-1,0)
   segbuf.io.in.bits.eew := mem_size
   segbuf.io.in.bits.nf := io.op.nf
   segbuf.io.in.bits.rows := Mux(next_eidx >= io.op.vl, (io.op.vl - eidx), eidx_incr)

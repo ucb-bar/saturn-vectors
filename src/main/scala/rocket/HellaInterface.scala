@@ -45,7 +45,7 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
   io.vec.load_req.ready        := hella_load_q.io.enq.ready
   hella_load_q.io.enq.valid       := io.vec.load_req.valid
   hella_load_q.io.enq.bits.addr   := io.vec.load_req.bits.addr
-  hella_load_q.io.enq.bits.size   := log2Ceil(dLenB).U
+  hella_load_q.io.enq.bits.size   := log2Ceil(mLenB).U
   hella_load_q.io.enq.bits.tag    := Cat(0.U, io.vec.load_req.bits.tag)
   hella_load_q.io.enq.bits.cmd    := M_XRD
   hella_load_q.io.enq.bits.signed := false.B
@@ -67,7 +67,7 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
   hella_store_q.io.enq.bits.addr   := io.vec.store_req.bits.addr
   hella_store_q.io.enq.bits.tag    := Cat(1.U, io.vec.store_req.bits.tag)
   hella_store_q.io.enq.bits.cmd    := M_PWR
-  hella_store_q.io.enq.bits.size   := log2Ceil(dLenB).U
+  hella_store_q.io.enq.bits.size   := log2Ceil(mLenB).U
   hella_store_q.io.enq.bits.signed := false.B
   hella_store_q.io.enq.bits.dprv   := io.status.prv
   hella_store_q.io.enq.bits.dv     := io.status.dv
