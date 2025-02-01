@@ -10,7 +10,7 @@ import saturn.common._
 import saturn.insns._
 
 
-class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
+class TandemFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) extends FPUModule()(p) {
   require (depth >= 4)
   val io = IO(new Bundle {
     val valid = Input(Bool())
@@ -86,11 +86,10 @@ class TandemFMAPipe(depth: Int)(implicit p: Parameters) extends FPUModule()(p) {
   io.out := DontCare
   io.exc := DontCare
 
-  Seq(
-    (dfma_valid, FType.D, da_in, db_in, dc_in),
+  (buildFP64.option((dfma_valid, FType.D, da_in, db_in, dc_in)) ++ Seq(
     (sfma_valid, FType.S, sa_in, sb_in, sc_in),
     (hfma_valid, FType.H, ha_in, hb_in, hc_in)
-  ).foreach { case (fma_valid, ftype, a, b, c) => {
+  )).foreach { case (fma_valid, ftype, a, b, c) => {
     val n = 64 / ftype.ieeeWidth
     val s1_valid = RegNext(fma_valid, false.B)
     val res = (0 until n).map { i =>
@@ -129,16 +128,26 @@ trait FMAFactory extends FunctionalUnitFactory {
     FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV
-  ).map(_.pipelined(depth))
+  ).map(_.pipelined(depth)).map(_.restrictSEW(1,2,3)).flatten
 }
 
-case class FPFMAFactory(depth: Int) extends FMAFactory {
-  def insns = base_insns
-  def generate(implicit p: Parameters) = new FPFMAPipe(depth)(p)
+case class SIMDFPFMAFactory(depth: Int, elementWiseFP64: Boolean = false) extends FMAFactory {
+  def insns = if (elementWiseFP64) {
+    base_insns.map { insn =>
+      if (insn.lookup(SEW).value == 3 || (insn.lookup(SEW).value == 2 && insn.lookup(Wide2VD).value == 1)) {
+        insn.elementWise
+      } else {
+        insn
+      }
+    }
+  } else {
+    base_insns
+  }
+  def generate(implicit p: Parameters) = new FPFMAPipe(depth, elementWiseFP64)(p)
 }
 
-class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
-  val supported_insns = FPFMAFactory(depth).insns
+class FPFMAPipe(depth: Int, elementwiseFP64: Boolean)(implicit p: Parameters) extends PipelinedFunctionalUnit(depth)(p) with HasFPUParameters {
+  val supported_insns = SIMDFPFMAFactory(depth, elementwiseFP64).insns
 
   io.stall := false.B
   io.set_vxsat := false.B
@@ -164,7 +173,8 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   val vec_rvs2 = io.pipe(0).bits.rvs2_data.asTypeOf(Vec(nTandemFMA, UInt(64.W)))
   val vec_rvd = io.pipe(0).bits.rvd_data.asTypeOf(Vec(nTandemFMA, UInt(64.W)))
 
-  val fma_pipes = Seq.fill(nTandemFMA)(Module(new TandemFMAPipe(depth))).zipWithIndex.map { case(fma_pipe, i) =>
+  val pipe_out = (0 until nTandemFMA).map { i =>
+    val fma_pipe = Module(new TandemFMAPipe(depth, i == 0 || !elementwiseFP64))
     val widening_vs1_bits = Mux(vd_eew === 3.U,
       0.U(32.W) ## extractElem(io.pipe(0).bits.rvs1_data, 2.U, eidx + i.U)(31,0),
       Cat(
@@ -174,7 +184,11 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
         extractElem(io.pipe(0).bits.rvs1_data, 1.U, eidx + (i << 1).U + 0.U)(15,0)
       )
     )
-    val rs1_bits = Mux(ctrl_widen_vs1, widening_vs1_bits, vec_rvs1(i))
+    val vs1_bits = Mux((i == 0 && elementwiseFP64).B && vd_eew === 3.U,
+      Mux(ctrl_widen_vs1, 0.U(32.W) ## io.pipe(0).bits.rvs1_elem(31,0), io.pipe(0).bits.rvs1_elem),
+      Mux(ctrl_widen_vs1, widening_vs1_bits, vec_rvs1(i))
+    )
+
     val widening_vs2_bits = Mux(vd_eew === 3.U,
       0.U(32.W) ## extractElem(io.pipe(0).bits.rvs2_data, 2.U, eidx + i.U)(31,0),
       Cat(
@@ -184,7 +198,15 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
         extractElem(io.pipe(0).bits.rvs2_data, 1.U, eidx + (i << 1).U + 0.U)(15,0)
       )
     )
-    val vs2_bits = Mux(ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
+    val vs2_bits = Mux((i == 0 && elementwiseFP64).B && vd_eew === 3.U,
+      Mux(ctrl_widen_vs2, 0.U(32.W) ## io.pipe(0).bits.rvs2_elem(32,0), io.pipe(0).bits.rvs2_elem),
+      Mux(ctrl_widen_vs2, widening_vs2_bits, vec_rvs2(i))
+    )
+
+    val vs3_bits = Mux((i == 0 && elementwiseFP64).B && vd_eew === 3.U,
+      io.pipe(0).bits.rvd_elem,
+      vec_rvd(i)
+    )
 
     fma_pipe.io.addsub := ctrl.bool(FPAdd) && !ctrl.bool(FPMul)
     fma_pipe.io.mul := ctrl.bool(FPMul) && !ctrl.bool(FPAdd)
@@ -192,17 +214,17 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
 
     // FMA
     when (ctrl.bool(FPMul) && ctrl.bool(FPAdd)) {
-      fma_pipe.io.b     := rs1_bits
+      fma_pipe.io.b     := vs1_bits
       fma_pipe.io.b_eew := vs1_eew
       when (ctrl.bool(FPSwapVdV2)) {
-        fma_pipe.io.a     := vec_rvd(i)
+        fma_pipe.io.a     := vs3_bits
         fma_pipe.io.a_eew := vd_eew
         fma_pipe.io.c     := vs2_bits
         fma_pipe.io.c_eew := vs2_eew
       } .otherwise {
         fma_pipe.io.a     := vs2_bits
         fma_pipe.io.a_eew := vs2_eew
-        fma_pipe.io.c     := vec_rvd(i)
+        fma_pipe.io.c     := vs3_bits
         fma_pipe.io.c_eew := vd_eew
       }
     }
@@ -210,7 +232,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
     .elsewhen (ctrl.bool(FPMul)) {
       fma_pipe.io.a     := vs2_bits
       fma_pipe.io.a_eew := vs2_eew
-      fma_pipe.io.b     := rs1_bits
+      fma_pipe.io.b     := vs1_bits
       fma_pipe.io.b_eew := vs1_eew
       fma_pipe.io.c     := 0.U
       fma_pipe.io.c_eew := vs2_eew
@@ -221,7 +243,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
       fma_pipe.io.a_eew := vs2_eew
       fma_pipe.io.b     := one_bits
       fma_pipe.io.b_eew := vd_eew
-      fma_pipe.io.c     := rs1_bits
+      fma_pipe.io.c     := vs1_bits
       fma_pipe.io.c_eew := vs1_eew
     } .otherwise {
       fma_pipe.io.a     := 0.U
@@ -231,6 +253,7 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
       fma_pipe.io.c     := 0.U
       fma_pipe.io.c_eew := 0.U
     }
+
 
     fma_pipe.io.valid := io.pipe(0).valid
     fma_pipe.io.frm := io.pipe(0).bits.frm
@@ -242,10 +265,14 @@ class FPFMAPipe(depth: Int)(implicit p: Parameters) extends PipelinedFunctionalU
   io.write.valid := io.pipe(depth-1).valid
   io.write.bits.eg := io.pipe(depth-1).bits.wvd_eg
   io.write.bits.mask := FillInterleaved(8, io.pipe(depth-1).bits.wmask)
-  io.write.bits.data := fma_pipes.map(pipe => pipe.out).asUInt
+  io.write.bits.data := pipe_out.map(_.out).asUInt
+
+  when (elementwiseFP64.B && io.pipe(depth-1).bits.vd_eew === 3.U) {
+    io.write.bits.data := Fill(dLenB >> 3, pipe_out(0).out)
+  }
 
   io.set_fflags.valid := io.write.valid
-  io.set_fflags.bits := fma_pipes.map(pipe => pipe.exc).flatten.zipWithIndex.map {
+  io.set_fflags.bits := pipe_out.map(_.exc).flatten.zipWithIndex.map {
     case (e,i) => Mux(io.pipe(depth-1).bits.wmask(i), e, 0.U)
   }.reduce(_|_)
   io.scalar_write.valid := false.B
