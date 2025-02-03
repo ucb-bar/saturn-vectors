@@ -37,6 +37,32 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
     val busy = Output(Bool())
   })
 
+  // Outer Product Unit
+  val add_ope = desc == "int"
+  val ope_write = Wire(new VectorWrite(dLen))
+  val cnt = RegInit(0.U(32.W))
+
+  ope_write := DontCare
+
+
+  if (add_ope) {
+    val ope_params = OPEParameters(32, 32, 32, 0.U, false.B)
+    val ope = Module(new OPE(ope_params))
+    ope.io.en   := true.B
+    ope.io.acc  := true.B
+    ope.io.msel    := 1.U
+    ope.io.cfg_en  := true.B
+    ope.io.a := io.iss.bits.rvs1_data
+    ope.io.b := io.iss.bits.rvs2_data
+    ope.io.c := 0.U
+
+    ope_write.data := ope.io.out
+    ope_write.mask := 0.U
+    ope_write.eg   := 3.U
+
+    cnt := cnt+1.U
+  }
+
   val sharedFPUnits = fus.collect { case fp: HasSharedFPUIO => fp }
   val hasSharedFPUnits = sharedFPUnits.size > 0
 
@@ -134,6 +160,11 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       val tail = Mux1H(write_pipe_sel, pipe_bits.map(_.tail))
       io.pipe_write.valid := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
       io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
+      if (add_ope) {
+        io.pipe_write.bits := Mux(cnt === 3.U, ope_write, Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))) // KA Added
+      } else {
+        io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
+      }
       io.acc_write.valid := acc && !tail
       io.acc_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
     }
@@ -175,4 +206,6 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       io.iter_hazards(i) := iter_fus(i)._1.io.hazard
     }
   }
+
+
 }
