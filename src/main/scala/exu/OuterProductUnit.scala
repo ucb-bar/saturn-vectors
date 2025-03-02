@@ -10,8 +10,8 @@ import chisel3.util.experimental.decode._
 import saturn.common._
 import hardfloat._
 
-
-case class OPEParameters (
+// Parameters for configured OPU
+case class OPUParameters (
   val A_width : Int,
   val B_width : Int,
   val C_width : Int,
@@ -20,7 +20,7 @@ case class OPEParameters (
 )
 
 
-class OPEUnit(params : OPEParameters)(implicit p: Parameters) extends CoreModule{
+class OuterProductCell(params : OPEParameters)(implicit p: Parameters) extends CoreModule{
   val io = IO(new Bundle{
     val aa = Input(UInt(params.A_width.W))
     val b = Input(UInt(params.B_width.W))
@@ -72,7 +72,7 @@ class OPEUnit(params : OPEParameters)(implicit p: Parameters) extends CoreModule
 }
 
 
-class OPE(params: OPEParameters)(implicit p : Parameters)  extends CoreModule()(p) with HasVectorParams  {
+class OuterProductUnit(params: OPEParameters)(implicit p : Parameters)  extends CoreModule()(p) with HasVectorParams  {
 
   val VLEN = 512
 
