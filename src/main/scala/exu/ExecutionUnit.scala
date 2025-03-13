@@ -46,17 +46,19 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
 
 
   if (add_ope) {
-    val ope_params = OPEParameters(32, 32, 32, 0.U, false.B)
-    val ope = Module(new OPE(ope_params))
+    val ope_params = OPUParameters(32, 32, 32, 0.U, false.B)
+    val ope = Module(new OuterProductUnit(ope_params))
     ope.io.en   := true.B
     ope.io.acc  := true.B
     ope.io.msel    := 1.U
     ope.io.cfg_en  := true.B
     ope.io.a := io.iss.bits.rvs1_data
-    ope.io.b := io.iss.bits.rvs2_data
-    ope.io.c := 0.U
 
-    ope_write.data := ope.io.out
+    ope.io.b := io.iss.bits.rvs2_data 
+    ope.io.c := 0.S 
+    ope.io.rd_out := true.B 
+    
+    ope_write.data := ope.io.out.asUInt
     ope_write.mask := 0.U
     ope_write.eg   := 3.U
 
