@@ -44,21 +44,20 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
 
   ope_write := DontCare
 
-
   if (add_ope) {
-    val ope_params = OPUParameters(32, 32, 32, 0.U, false.B)
-    val ope = Module(new OuterProductUnit(ope_params))
-    ope.io.en   := true.B
-    ope.io.acc  := true.B
-    ope.io.msel    := 1.U
-    ope.io.cfg_en  := true.B
-    ope.io.a := io.iss.bits.rvs1_data
+    val ope_params = OPUParameters(8, 8, 32, 0.U, false.B)
+    val opu = Module(new OuterProductUnit(ope_params))
+    opu.io.en   := true.B
+    opu.io.acc  := true.B
+    opu.io.msel    := 1.U
+    opu.io.cfg_en  := cnt < (16*50).U
+    opu.io.a := io.iss.bits.rvs1_data
 
-    ope.io.b := io.iss.bits.rvs2_data 
-    ope.io.c := 0.S 
-    ope.io.rd_out := true.B 
+    opu.io.b := io.iss.bits.rvs2_data 
+    opu.io.c := 2.U
+    opu.io.rd_out := true.B 
     
-    ope_write.data := ope.io.out.asUInt
+    ope_write.data := opu.io.out.asUInt
     ope_write.mask := 0.U
     ope_write.eg   := 3.U
 
