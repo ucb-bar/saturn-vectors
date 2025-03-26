@@ -27,6 +27,8 @@ case class OPUParameters (
   // val types : Seq[OPUTypes],
 
   // To support floating point FMAs
+  val vLen : Int,
+  val dLen : Int,
   val roundingMode   : UInt,
   val detectTininess : Bool
 )
@@ -39,39 +41,43 @@ case class OPUParameters (
  */
 class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends CoreModule{
   val io = IO(new Bundle{
-    val a   = Input(SInt(params.A_width.W))
-    val b   = Input(SInt(params.B_width.W))
-    val c   = Input(SInt(params.C_width.W))
+    val in0 = Input(SInt(params.A_width.W)) // One input for mult
+    val in1 = Input(SInt(params.C_width.W)) // One input for mult/value to load accummulator register
     val out = Output(SInt(params.C_width.W))
 
+    val op          = Input(Bool())   // Asserted with should be operating
+    val load        = Input(Bool())   // Asserted loads accumulator from in1; should never be asserted with op input
     val read_in     = Input(SInt(params.C_width.W)) // Read out support
+
+    // val mrf_idx     = Input(UInt(log2Ceil(vLen/dLen).W))
 
     val cell_en     = Input(Bool())   // Turn off cell; Controlled by mask and (?; for power saving features)
     val macc_en     = Input(Bool())
     val cfg_en      = Input(Bool())
     val reg_rst     = Input(Bool())
     val read_out_en = Input(Bool())
+    // val active      = Input(Bool()) // From EXU busy signal
   })
 
-  // Constants 
-  val prod_width = (params.A_width + params.B_width).W
+  // Scala Constants 
+  val dLen           = params.dLen
+  val varch_ratio    = vLen/dLen
+  val prod_width     = (params.A_width + params.B_width - 1)
+  val num_local_mreg = scala.math.pow(varch_ratio, 2).toInt
 
-  val macc_en      = RegInit(Bool(), false.B)       // Latch configuration register
-  val prod         = Wire(SInt(32.W))  // Make width dynamic
-  val accum        = Wire(SInt(32.W))  // Make width dynamic
-  val cell_reg     = RegInit(SInt(params.C_width.W), 0.S)   // Accumulation/Read Out
-  // Input padding   
-  val a_sint_padded = Wire(SInt(32.W)) // TODO: Switch to dyanmic selection of parameter to max width for datatype
-  val b_sint_padded = Wire(SInt(32.W)) // TODO: Switch to dyanmic selection of parameter to max width for datatype
-  val c_sint_padded = Wire(SInt(32.W)) // TODO: Switch to dyanmic selection of parameter to max width for datatype
+  val sum        = Wire(SInt(32.W))           // Make width dynamic
+  val prod       = Wire(SInt(prod_width.W))           // Make width dynamic
+  val macc_en    = RegInit(Bool(), false.B)   // Latch configuration register
   // Muxes
-  // val prod_mux     = Wire(SInt(prod_width))  // Mux between multiple multiplier (if present)
-  val out_mux      = Wire(SInt(params.C_width.W))
-  val reg_mux      = Wire(SInt(params.C_width.W))
+  val regin_mux  = Wire(SInt(params.C_width.W))
+  val regout_mux = Wire(SInt(params.C_width.W))
+  // If buffering (Unecessary if using VRF as buffer; true functional unit)
+  val vs1 = Reg(Vec(varch_ratio, UInt(dLen.W)))
+  val vs2 = Reg(Vec(varch_ratio, UInt(dLen.W)))
+  // Matrix Register + Logic
+  val sub_mreg      = Seq.fill(num_local_mreg)(Reg(SInt(params.C_width.W)))
+  val sub_mreg_ind  = RegInit(UInt(log2Ceil(num_local_mreg).W), 0.U)
 
-  a_sint_padded := 0.S
-  b_sint_padded := 0.S
-  c_sint_padded := 0.S
 
   // Load configure settings for op
   when (io.cfg_en === true.B) {
@@ -81,21 +87,36 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   // TODO: Padded inputs to large width of respective datatype (i.e. int8 to int32)
   //       This needs to be dynamic and data type is programmable
 
+  // Iterate over Scala structure and make HW assignments
+  sub_mreg.zipWithIndex.foreach({ case (reg, ind) => {
+    when (ind.U === sub_mreg_ind && io.cell_en) {
+      reg := regin_mux
+    }
+  }})
+
+  // Programmatically create array to construct decoder
+  val mux_contents = (0 until num_local_mreg).map(j => (j.U === sub_mreg_ind) -> sub_mreg(j))
+  regout_mux := MuxCase(0.S, mux_contents)
+
+  when (io.load || io.op) {
+    when (sub_mreg_ind === (num_local_mreg-1).U) {
+      sub_mreg_ind := 0.U
+    } otherwise {
+      sub_mreg_ind := sub_mreg_ind + 1.U
+    }
+  }
+
   // TODO: Need to check for overflow and saturate to accumulator width
-  prod  := io.a*io.b // Save to intermediate to force overflow
-  accum := prod + cell_reg
+  prod := io.in0*io.in1(7, 0) // Save to intermediate to force overflow
+  sum  := prod + regout_mux
 
-  cell_reg := reg_mux
-  out_mux := MuxCase(prod, Array(macc_en -> accum,  
-                                 io.read_out_en -> cell_reg))
-  reg_mux := Mux(io.cell_en, 
-                MuxCase(out_mux, Array(io.reg_rst -> 0.S, 
-                                       io.cfg_en  -> io.c, 
-                                       io.read_out_en -> io.read_in)), 
-                cell_reg)
-
-  // prod_mux := prod // TODO: if multiple data types support switch on this variable
-  io.out := out_mux // Output selected 
+  regin_mux := MuxCase(regout_mux, Array(io.reg_rst  -> 0.S, 
+                                      io.load   -> io.in1,
+                                      macc_en     -> sum,
+                                      ~macc_en    -> prod,
+                                      io.read_out_en -> io.read_in)) 
+  regout_mux := sub_mreg(sub_mreg_ind)
+  io.out := regout_mux // Output selected 
 }
 
 
@@ -154,50 +175,52 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
 
 
 class OuterProductUnit(params: OPUParameters)(implicit p : Parameters)  extends CoreModule()(p) with HasVectorParams  {
-  
-  val VLEN = 512
+  // val vLen = params.vLen
+  // val dLen = params.dLen
 
   val io = IO(new Bundle{
-    val a      = Input(UInt((16*8).W))
-    val b      = Input(UInt((16*8).W))
-    val c      = Input(UInt(dLen.W))
+    val in0    = Input(UInt(dLen.W))
+    val in1    = Input(UInt(dLen.W))
     val out    = Output(SInt(dLen.W))
     val rd_out = Input(Bool())
 
+    val load   = Input(Bool())
     val en     = Input(Bool())
     val acc    = Input(Bool())
     val msel   = Input(UInt(2.W))
     val cfg_en = Input(Bool())
   })
 
-  // Input registers
-  val numel_A  = (16*8)/params.A_width
-  val numel_B  = (16*8)/params.B_width
-  val numel_C  = max(numel_A, numel_B)
-  val a_wire   = WireInit(VecInit(Seq.fill(numel_A)(0.S(params.A_width.W))))  // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
-  val b_wire   = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.B_width.W))))  // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
-  val c_wire   = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.C_width.W))))  // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
+  // Segment inputs for easier manipulation
+  val numel_A   = dLen/params.A_width
+  val numel_B   = dLen/params.B_width
+  val numel_C   = dLen/params.C_width
+  val in0_a_wire  = WireInit(VecInit(Seq.fill(numel_A)(0.S(params.A_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
+  val in1_b_wire  = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.B_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
+  val in0_c_wire = WireInit(VecInit(Seq.fill(numel_C)(0.S(params.C_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
+  val in1_c_wire = WireInit(VecInit(Seq.fill(numel_C)(0.S(params.C_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
 
   val row_read_index = RegInit(UInt(2.W), 0.U)
   val cell_array = Seq.fill(numel_A, numel_B){Module(new OuterProductCell(params))}
 
-  // Wire inputs to cells
+  // Wire inputs as A/B row/cols to cells
   for (i <- (0 until numel_A)) {
     var hi = ((i+1)*params.A_width - 1)%dLen
     var lo = ((i)*params.A_width)%dLen
-    a_wire(i) := io.a(hi, lo).asSInt
+    in0_a_wire(i) := io.in0(hi, lo).asSInt
   }
-
   for (i <- (0 until numel_B)) {
     var hi = ((i+1)*params.B_width - 1)%dLen
     var lo = ((i)*params.B_width)%dLen
-    b_wire(i) := io.b(hi, lo).asSInt
+    in1_b_wire(i) := io.in1(hi, lo).asSInt
   }
 
+  // Wire inputs a C value to cells
   for (i <- (0 until numel_C)) {
     var hi = ((i+1)*params.C_width - 1)%dLen
     var lo = ((i)*params.C_width)%dLen
-    c_wire(i) := io.c(hi, lo).asSInt
+    in0_c_wire(i) := io.in0(hi, lo).asSInt
+    in1_c_wire(i) := io.in1(hi, lo).asSInt
   }
 
   // Logic to drive array (just an fake implementation)
@@ -224,12 +247,17 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters)  extends 
   // Connect Cells 
   cell_array.zipWithIndex.foreach({ case(row,j) => {
     row.zipWithIndex.foreach({case (cell,i) => {
-      cell.io.a       := a_wire(i)
-      cell.io.b       := b_wire(i)
-      cell.io.c       := c_wire(i)
+      cell.io.in0       := in0_a_wire(i)
+      if (j % 2 == 1) { 
+        cell.io.in1 := Mux(io.load, in0_c_wire(i%8), in1_b_wire(i))
+      } else {
+        cell.io.in1 := Mux(io.load, in1_c_wire(i%8), in1_b_wire(i))
+      }
       cell.io.cell_en := io.en      // hardcoded
       cell.io.macc_en := io.acc     // hardcoded
       cell.io.cfg_en  := io.cfg_en  // hardcoded
+      cell.io.op      := io.load    // hardcoded
+      cell.io.load    := io.en      // hardcoded
     }})
   }})
 
