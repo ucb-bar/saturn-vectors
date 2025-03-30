@@ -114,9 +114,9 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
     req.in1 := rvd_recoded
   } .elsewhen (vs2_eew === 3.U) {
     req.in1 := d_rvs2
-  } .elsewhen (ctrl.bool(Wide2VD) && vd_eew64) {
+  } .elsewhen ((vd_eew === 3.U) && (vs2_eew === 2.U)) {
     req.in1 := s_widen_rvs2.io.out
-  } .elsewhen (ctrl.bool(Wide2VD) && vd_eew32) {
+  } .elsewhen ((vd_eew === 2.U) && (vs2_eew === 1.U)) {
     req.in1 := h_widen_rvs2.io.out
   } .elsewhen (vs2_eew === 2.U) {
     req.in1 := s_rvs2
@@ -127,9 +127,9 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   // Set req.in2
   when (vs1_eew === 3.U) {
     req.in2 := d_rvs1
-  } .elsewhen (ctrl.bool(Wide2VD) && (vs1_eew === 2.U) && !io.pipe(0).bits.acc) {
+  } .elsewhen ((vd_eew === 3.U) && (vs1_eew === 2.U) && !io.pipe(0).bits.acc) {
     req.in2 := s_widen_rvs1.io.out
-  } .elsewhen (ctrl.bool(Wide2VD) && (vs1_eew === 1.U) && !io.pipe(0).bits.acc) {
+  } .elsewhen ((vd_eew === 2.U) && (vs1_eew === 1.U) && !io.pipe(0).bits.acc) {
     req.in2 := h_widen_rvs1.io.out
   } .elsewhen (vs1_eew === 2.U) {
     req.in2 := s_rvs1
