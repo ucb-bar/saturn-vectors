@@ -195,8 +195,8 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters)  extends 
   val numel_A   = dLen/params.A_width
   val numel_B   = dLen/params.B_width
   val numel_C   = dLen/params.C_width
-  val in0_a_wire  = WireInit(VecInit(Seq.fill(numel_A)(0.S(params.A_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
-  val in1_b_wire  = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.B_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
+  val in0_a_wire = WireInit(VecInit(Seq.fill(numel_A)(0.S(params.A_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
+  val in1_b_wire = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.B_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
   val in0_c_wire = WireInit(VecInit(Seq.fill(numel_C)(0.S(params.C_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
   val in1_c_wire = WireInit(VecInit(Seq.fill(numel_C)(0.S(params.C_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
 
