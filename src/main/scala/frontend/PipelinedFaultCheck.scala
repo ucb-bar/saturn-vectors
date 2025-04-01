@@ -75,7 +75,12 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
   s0_inst.segend   := s0_inst.seg_nf
   s0_inst.rs1_data := io.s0.in.bits.rs1
   s0_inst.rs2_data := io.s0.in.bits.rs2
-  s0_inst.emul     := Mux(io.s0.in.bits.vconfig.vtype.vlmul_sign, 0.U, io.s0.in.bits.vconfig.vtype.vlmul_mag)
+  val base_mul = Mux(io.s0.in.bits.vconfig.vtype.vlmul_sign, 0.U, io.s0.in.bits.vconfig.vtype.vlmul_mag)
+  val adj_mul = base_mul +& Mux(s0_inst.vmu && s0_inst.mem_elem_size > io.s0.in.bits.vconfig.vtype.vsew,
+    s0_inst.mem_elem_size - io.s0.in.bits.vconfig.vtype.vsew,
+    0.U
+  )
+  s0_inst.emul     := Mux(adj_mul > 3.U, 3.U, adj_mul)
   s0_inst.page     := DontCare
   s0_inst.vat      := DontCare
   s0_inst.debug_id := DontCare
