@@ -40,8 +40,9 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
   io.vector := v_load || v_store || v_arith_maybe
 
   when (v_load || v_store) {
-    io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U)
     val unit = mop === 0.U
+    val whole = unit && ((v_load && lumop === lumopWhole) || (v_store && sumop === sumopWhole))
+    io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U) && (!io.vconfig.vtype.vill || whole)
     when (unit) {
       when (v_load && !lumop.isOneOf(lumopUnit, lumopWhole, lumopMask, lumopFF)) { io.legal := false.B }
       when (v_store && !sumop.isOneOf(sumopUnit, sumopWhole, sumopMask)) { io.legal := false.B }
@@ -50,7 +51,7 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
     io.read_rs1 := true.B
     io.read_rs2 := mop === mopStrided
   } .elsewhen (v_arith) {
-    io.legal := true.B
+    io.legal := !io.vconfig.vtype.vill
     io.read_rs1 := funct3.isOneOf(OPIVX, OPMVX)
     io.read_frs1 := funct3 === OPFVF
     io.write_rd := funct3 === OPMVV && OPMFunct6(funct6) === OPMFunct6.wrxunary0
