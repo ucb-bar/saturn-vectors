@@ -1,6 +1,6 @@
 package saturn.exu
 
-\import chisel3._
+import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config._
 import freechips.rocketchip.rocket._
@@ -49,7 +49,7 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
     val load        = Input(Bool())   // Asserted loads accumulator from in1; should never be asserted with op input
     val read_in     = Input(SInt(params.C_width.W)) // Read out support
 
-    val mrf_idx     = Input(UInt(log2Ceil(params.n_mrf_regs).W)
+    // val mrf_idx     = Input(UInt(log2Ceil(params.n_mrf_regs).W))
 
     val cell_en     = Input(Bool())   // Turn off cell; Controlled by mask and (?; for power saving features)
     val macc_en     = Input(Bool())
@@ -63,7 +63,7 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   val dLen           = params.dLen
   val varch_ratio    = vLen/dLen
   val prod_width     = (params.A_width + params.B_width - 1)
-  val num_local_mreg = params*n_mrf_regs * scala.math.pow(varch_ratio, 2).toInt
+  val num_local_mreg = params.n_mrf_regs * scala.math.pow(varch_ratio, 2).toInt
 
   val sum        = Wire(SInt(32.W))           // Make width dynamic
   val prod       = Wire(SInt(prod_width.W))           // Make width dynamic

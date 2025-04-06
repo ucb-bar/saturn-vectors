@@ -45,7 +45,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
   ope_write := DontCare
 
   if (add_ope) {
-    val ope_params = OPUParameters(8, 8, 32, vLen, dLen, 0.U, false.B)
+    val ope_params = OPUParameters(8, 8, 32, 1, vLen, dLen, 0.U, false.B)
     val opu = Module(new OuterProductUnit(ope_params))
     opu.io.en     := (cnt > (20*50).U) && (cnt % 101.U) === 0.U
     opu.io.acc    := true.B
