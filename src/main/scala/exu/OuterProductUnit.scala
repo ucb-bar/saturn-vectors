@@ -37,7 +37,6 @@ case class OPUParameters (
  * A single cell in the Outer Product Unit MACC array
  * Accumulation register alse serve as pipeline registers
  * during read out 
- *
  */
 class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends CoreModule{
   val io = IO(new Bundle{
@@ -45,83 +44,107 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
     val in1 = Input(SInt(params.C_width.W)) // One input for mult/value to load accummulator register
     val out = Output(SInt(params.C_width.W))
 
-    val op          = Input(Bool())   // Asserted with should be operating
-    val load        = Input(Bool())   // Asserted loads accumulator from in1; should never be asserted with op input
+    // val op          = Input(Bool())   // Asserted with should be operating
+    val op_load     = Input(Bool())   // Asserted loads accumulator from in1; deasserted means the cell is in operating mode should never be asserted with op input
     val read_in     = Input(SInt(params.C_width.W)) // Read out support
 
-    // val mrf_idx     = Input(UInt(log2Ceil(params.n_mrf_regs).W))
+    val mrf_idx     = Input(UInt(log2Ceil(params.n_mrf_regs).W))
 
     val cell_en     = Input(Bool())   // Turn off cell; Controlled by mask and (?; for power saving features)
-    val macc_en     = Input(Bool())
-    val cfg_en      = Input(Bool())
-    val reg_rst     = Input(Bool())
-    val read_out_en = Input(Bool())
-    // val active      = Input(Bool()) // From EXU busy signal
+    val macc_en     = Input(Bool())   // Asserted performs MACC, deasserted just multiplication
+    val cfg_en      = Input(Bool())   // Asserted loads config registers
+    val reg_rst     = Input(Bool())   // Asserted zeros MRF registers
+    val read_out_en = Input(Bool())   // Asserted indicates readout in progress (output readout regiseter and load from read_in)
   })
 
   // Scala Constants 
   val dLen           = params.dLen
-  val varch_ratio    = vLen/dLen
-  val prod_width     = (params.A_width + params.B_width - 1)
-  val num_local_mreg = params.n_mrf_regs * scala.math.pow(varch_ratio, 2).toInt
+  val varch_ratio    = vLen/params.dLen
+  val prod_width     = params.A_width + params.B_width
+  val regs_per_mrf_reg = scala.math.pow(varch_ratio, 2).toInt
 
-  val sum        = Wire(SInt(32.W))           // Make width dynamic
-  val prod       = Wire(SInt(prod_width.W))           // Make width dynamic
-  val macc_en    = RegInit(Bool(), false.B)   // Latch configuration register
+  // Signals
+  val sum     = Wire(SInt(params.C_width.W))  // Make width dynamic
+  val prod    = Wire(SInt(prod_width.W))      // Make width dynamic
+  val macc_en = RegInit(Bool(), false.B)      // Latch configuration register
   // Muxes
-  val regin_mux  = Wire(SInt(params.C_width.W))
-  val regout_mux = Wire(SInt(params.C_width.W))
+  val read_pp_mux   = Wire(SInt(params.C_width.W))
+  val mrf_in_mux    = Wire(SInt(params.C_width.W))
+  val mrf_out_demux = Wire(SInt(params.C_width.W))
+  val mrf_reg_demux = Wire(Vec(params.n_mrf_regs, SInt(params.C_width.W)))   // Mux per MRF reg
+  val cell_out_mux  = Wire(SInt(params.C_width.W))
   // Matrix Register + Logic
-  val sub_mreg      = Seq.fill(num_local_mreg)(Reg(SInt(params.C_width.W)))
-  val sub_mreg_ind  = RegInit(UInt(log2Ceil(num_local_mreg).W), 0.U)
+  val mrf_ind       = io.mrf_idx
+  val mregs         = Seq.fill(params.n_mrf_regs)(Reg(Vec(regs_per_mrf_reg, SInt(params.C_width.W))))
+  val sub_mreg_ind  = RegInit(UInt(log2Ceil(regs_per_mrf_reg).W), 0.U)
+  // Pipeline register for readout 
+  val read_pp = Reg(SInt(params.C_width.W))
   // If buffering (Unecessary if using VRF as buffer; true functional unit)
-  val vs1 = Reg(Vec(varch_ratio, UInt(dLen.W)))
-  val vs2 = Reg(Vec(varch_ratio, UInt(dLen.W)))
+  val vs1 = Reg(Vec(varch_ratio, UInt(params.dLen.W)))
+  val vs2 = Reg(Vec(varch_ratio, UInt(params.dLen.W)))
 
+  // // Load configure settings for op
+  // when (io.cfg_en === true.B) {
+  //   macc_en  := io.macc_en
+  // }
 
-  // Load configure settings for op
-  when (io.cfg_en === true.B) {
-    macc_en  := io.macc_en
-  }
-
-  // TODO: Padded inputs to large width of respective datatype (i.e. int8 to int32)
-  //       This needs to be dynamic and data type is programmable
-
-  // Iterate over Scala structure and make HW assignments
-  sub_mreg.zipWithIndex.foreach({ case (reg, ind) => {
-    when (ind.U === sub_mreg_ind && io.cell_en) {
-      reg := regin_mux
-    }
-  }})
-
-  // Programmatically create array to construct decoder
-  val mux_contents = (0 until num_local_mreg).map(j => (j.U === sub_mreg_ind) -> sub_mreg(j))
-  regout_mux := MuxCase(0.S, mux_contents)
-
-  when (io.load || io.op) {
-    when (sub_mreg_ind === (num_local_mreg-1).U) {
+  // Sequencing logic if VLEN == DLEN
+  when (io.op_load) {
+    when (sub_mreg_ind === (regs_per_mrf_reg-1).U) {
       sub_mreg_ind := 0.U
     } otherwise {
       sub_mreg_ind := sub_mreg_ind + 1.U
     }
   }
 
+  // TODO: Padded inputs to large width of respective datatype (i.e. int8 to int32)
+  //       This needs to be dynamic and data type is programmable
+
   // TODO: Need to check for overflow and saturate to accumulator width
   prod := io.in0*io.in1(7, 0) // Save to intermediate to force overflow
-  sum  := prod + regout_mux
+  sum  := prod + mrf_out_demux
 
-  regin_mux := MuxCase(regout_mux, Array(io.reg_rst  -> 0.S, 
-                                          io.load   -> io.in1,
-                                          macc_en     -> sum,
-                                          ~macc_en    -> prod,
-                                          io.read_out_en -> io.read_in)) 
-  regout_mux := sub_mreg(sub_mreg_ind)
-  io.out := regout_mux // Output selected 
+  // Select correct sub-register from MRF register
+  (0 until params.n_mrf_regs).map(mreg => {
+    val mux_logic = (0 until regs_per_mrf_reg).map(j => (j.U === sub_mreg_ind) -> mregs(mreg)(j))
+    mrf_reg_demux(mreg) :=  MuxCase(0.S, mux_logic)
+  })
+
+  // Data going into MRF
+  mrf_in_mux := MuxCase(0.S, Array( io.reg_rst  -> 0.S, 
+                                    io.op_load  -> io.in1,
+                                    macc_en     -> sum,
+                                    ~macc_en    -> prod)) 
+  // Programmatically create array to construct decoder
+  val mux_logic = (0 until params.n_mrf_regs).map(j => (j.U === mrf_ind) -> mrf_reg_demux(j))
+  mrf_out_demux := MuxCase(0.S, mux_logic)
+
+  read_pp_mux  := Mux(io.read_out_en, io.read_in, mrf_out_demux)
+  cell_out_mux := Mux(io.read_out_en, io.read_in, read_pp)
+  read_pp := read_pp_mux
+  
+  // Iterate over Scala structure and make HW assignments
+  (0 until params.n_mrf_regs).map(mreg_ind => {
+    mregs(mreg_ind).zipWithIndex.foreach({ case (reg, ind) => {
+      when (ind.U === sub_mreg_ind && io.cell_en && io.mrf_idx === mreg_ind.U) {
+        reg := mrf_in_mux
+      }
+    }})
+  })
+
+  // // Programmatically create array to construct decoder
+  // val mux_contents = (0 until regs_per_mrf_reg).map(j => (j.U === sub_mreg_ind) -> sub_mreg(j))
+  // regout_mux := MuxCase(0.S, mux_contents)
+
+
+
+  // regout_mux := sub_mreg(sub_mreg_ind)
+  io.out := cell_out_mux // Output selected 
 }
 
 
 // Can load C using ports of OPU cell
-class OuterProductUnit(params: OPUParameters)(implicit p : Parameters)  extends CoreModule()(p) with HasVectorParams  {
+class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
   val io = IO(new Bundle{
     val in0    = Input(UInt(dLen.W))
     val in1    = Input(UInt(dLen.W))
@@ -200,8 +223,9 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters)  extends 
       cell.io.cell_en := io.en      // hardcoded
       cell.io.macc_en := io.acc     // hardcoded
       cell.io.cfg_en  := io.cfg_en  // hardcoded
-      cell.io.op      := io.load    // hardcoded
-      cell.io.load    := io.en      // hardcoded
+      cell.io.op_load := io.load    // hardcoded
+      // cell.io.load    := io.en      // hardcoded
+      cell.io.mrf_idx := logic_cnt(0)   // Just to initial for compilation
     }})
   }})
 
