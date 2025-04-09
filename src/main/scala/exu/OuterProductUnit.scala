@@ -120,7 +120,7 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   mrf_out_demux := MuxCase(0.S, mux_logic)
 
   read_pp_mux  := Mux(io.read_out_en, io.read_in, mrf_out_demux)
-  cell_out_mux := Mux(io.read_out_en, io.read_in, read_pp)
+  cell_out_mux := read_pp // For simplest pipelined readout always read from register // Mux(io.read_out_en, io.read_in, read_pp)
   read_pp := read_pp_mux
   
   // Iterate over Scala structure and make HW assignments
