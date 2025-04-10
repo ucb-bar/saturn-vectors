@@ -216,9 +216,9 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends C
     row.zipWithIndex.foreach({case (cell,i) => {
       cell.io.in0 := in0_a_wire(i)
       if (j % 2 == 1) { 
-        cell.io.in1 := Mux(io.load, in0_c_wire(i%8), in1_b_wire(i))
+        cell.io.in1 := Mux(io.load, in0_c_wire(i%numel_C), in1_b_wire(i))
       } else {
-        cell.io.in1 := Mux(io.load, in1_c_wire(i%8), in1_b_wire(i))
+        cell.io.in1 := Mux(io.load, in1_c_wire(i%numel_C), in1_b_wire(i))
       }
       cell.io.cell_en := io.en      // hardcoded
       cell.io.macc_en := io.acc     // hardcoded
