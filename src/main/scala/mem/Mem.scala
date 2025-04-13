@@ -331,7 +331,7 @@ class VectorMemUnit(sgSize: Option[BigInt] = None)(implicit p: Parameters) exten
   sss.io.op := siq(siq_sss_ptr).op
   scu.io.push <> sss.io.compactor
   scu.io.push_data := sss.io.compactor_data
-  sss.io.stdata <> io.vu.sdata
+  sss.io.stdata <> Queue(io.vu.sdata, if (vParams.bufferStdata) 1 else 0)
   siq_sss_fire := sss.io.done
 
   // Store address sequencing
