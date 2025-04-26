@@ -175,6 +175,7 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends C
     var hi = ((i+1)*params.A_width - 1)%dLen
     var lo = ((i)*params.A_width)%dLen
     in0_a_wire(i) := io.in0(hi, lo).asSInt
+    println(s"a_wire($i): [$hi, $lo] $dLen \n")
   }
   for (i <- (0 until numel_B)) {
     var hi = ((i+1)*params.B_width - 1)%dLen
@@ -214,17 +215,17 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends C
   // Connect Cells 
   cell_array.zipWithIndex.foreach({ case(row,j) => {
     row.zipWithIndex.foreach({case (cell,i) => {
-      cell.io.in0 := in0_a_wire(i)
-      if (j % 2 == 1) { 
-        cell.io.in1 := Mux(io.load, in0_c_wire(i%numel_C), in1_b_wire(i))
-      } else {
+      cell.io.in0 := in0_a_wire(j)
+      // if (j % 2 == 1) { 
+      //   cell.io.in1 := Mux(io.load, in0_c_wire(i%numel_C), in1_b_wire(i))
+      // } else {
         cell.io.in1 := Mux(io.load, in1_c_wire(i%numel_C), in1_b_wire(i))
-      }
+        println(s"Index in0_c_wire for cell_${j}_${i}: ${i%numel_C}")
+      // }
       cell.io.cell_en := io.en      // hardcoded
       cell.io.macc_en := io.acc     // hardcoded
       cell.io.cfg_en  := io.cfg_en  // hardcoded
       cell.io.op_load := io.load    // hardcoded
-      // cell.io.load    := io.en      // hardcoded
       cell.io.mrf_idx := logic_cnt(0)   // Just to initial for compilation
     }})
   }})
