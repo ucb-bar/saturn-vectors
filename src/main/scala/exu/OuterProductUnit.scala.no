@@ -38,29 +38,29 @@ case class OPUParameters (
  * during read out 
  */
 class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends CoreModule{
-  val io = IO(new Bundle{
-    val in0 = Input(SInt(params.A_width.W)) // One input for mult
-    val in1 = Input(SInt(params.C_width.W)) // One input for mult/value to load accummulator register
-    val out = Output(SInt(params.C_width.W))
-
-    // val op          = Input(Bool())   // Asserted with should be operating
-    val op_load     = Input(Bool())   // Asserted loads accumulator from in1; deasserted means the cell is in operating mode should never be asserted with op input
-    val read_in     = Input(SInt(params.C_width.W)) // Read out support
-
-    val mrf_idx     = Input(UInt(log2Ceil(params.n_mrf_regs).W))
-
-    val cell_en     = Input(Bool())   // Turn off cell; Controlled by mask and (?; for power saving features)
-    val macc_en     = Input(Bool())   // Asserted performs MACC, deasserted just multiplication
-    val cfg_en      = Input(Bool())   // Asserted loads config registers
-    val reg_rst     = Input(Bool())   // Asserted zeros MRF registers
-    val read_out_en = Input(Bool())   // Asserted indicates readout in progress (output readout regiseter and load from read_in)
-  })
-
   // Scala Constants 
   val dLen           = params.dLen
   val varch_ratio    = vLen/params.dLen
   val prod_width     = params.A_width + params.B_width
   val regs_per_mrf_reg = scala.math.pow(varch_ratio, 2).toInt
+
+  val io = IO(new Bundle{
+    // Data signals
+    val in0 = Input(SInt(params.A_width.W)) // One input for mult
+    val in1 = Input(SInt(params.C_width.W)) // One input for mult/value to load accummulator register
+    val out = Output(SInt(params.C_width.W))
+    val read_in = Input(SInt(params.C_width.W)) // Read out support
+
+    // Contol Signals
+    val mrf_idx = Input(UInt(log2Ceil(regs_per_mrf_reg*params.n_mrf_regs).W)) // Index for µarch register to write
+    val load    = Input(Bool())   // Asserted loads accumulator from in1; deasserted means the cell is in operating mode should never be asserted with op input
+    val row_en  = Input(Bool())   // Turn off cell; Controlled by mask and (?; for power saving features)
+    val readout = Input(Bool())   // Asserted indicates readout in progress (output readout regiseter and load from read_in)
+    val macc_en = Input(Bool())   // Asserted performs MACC, deasserted just multiplication
+    val cfg_en  = Input(Bool())   // Asserted loads config registers
+    val reg_rst = Input(Bool())   // Asserted zeros MRF registers
+  })
+
 
   // Signals
   val sum     = Wire(SInt(params.C_width.W))  // Make width dynamic
@@ -73,7 +73,7 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   val mrf_reg_demux = Wire(Vec(params.n_mrf_regs, SInt(params.C_width.W)))   // Mux per MRF reg
   val cell_out_mux  = Wire(SInt(params.C_width.W))
   // Matrix Register + Logic
-  val mrf_ind       = io.mrf_idx
+  val mrf_ind       = io.mrf_idx( io.mrf_idx.getWidth-1, regs_per_mrf_reg)
   val mregs         = Seq.fill(params.n_mrf_regs)(Reg(Vec(regs_per_mrf_reg, SInt(params.C_width.W))))
   val sub_mreg_ind  = RegInit(UInt(log2Ceil(regs_per_mrf_reg).W), 0.U)
   // Pipeline register for readout 
@@ -88,7 +88,7 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   // }
 
   // Sequencing logic if VLEN == DLEN
-  when (io.op_load) {
+  when (io.load) {
     when (sub_mreg_ind === (regs_per_mrf_reg-1).U) {
       sub_mreg_ind := 0.U
     } otherwise {
@@ -100,7 +100,7 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   //       This needs to be dynamic and data type is programmable
 
   // TODO: Need to check for overflow and saturate to accumulator width
-  prod := io.in0*io.in1(7, 0) // Save to intermediate to force overflow
+  prod := in0*io.in1(7, 0) // Save to intermediate to force overflow
   sum  := prod + mrf_out_demux
 
   // Select correct sub-register from MRF register
@@ -111,21 +111,21 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
 
   // Data going into MRF
   mrf_in_mux := MuxCase(0.S, Array( io.reg_rst  -> 0.S, 
-                                    io.op_load  -> io.in1,
+                                    io.load  -> io.in1,
                                     macc_en     -> sum,
                                     ~macc_en    -> prod)) 
   // Programmatically create array to construct decoder
   val mux_logic = (0 until params.n_mrf_regs).map(j => (j.U === mrf_ind) -> mrf_reg_demux(j))
   mrf_out_demux := MuxCase(0.S, mux_logic)
 
-  read_pp_mux  := Mux(io.read_out_en, io.read_in, mrf_out_demux)
-  cell_out_mux := read_pp // For simplest pipelined readout always read from register // Mux(io.read_out_en, io.read_in, read_pp)
+  read_pp_mux  := Mux(io.readout, io.read_in, mrf_out_demux)
+  cell_out_mux := read_pp // For simplest pipelined readout always read from register // Mux(io.readout, io.read_in, read_pp)
   read_pp := read_pp_mux
   
   // Iterate over Scala structure and make HW assignments
   (0 until params.n_mrf_regs).map(mreg_ind => {
     mregs(mreg_ind).zipWithIndex.foreach({ case (reg, ind) => {
-      when (ind.U === sub_mreg_ind && io.cell_en && io.mrf_idx === mreg_ind.U) {
+      when (ind.U === sub_mreg_ind && io.row_en && io.mrf_idx === mreg_ind.U) {
         reg := mrf_in_mux
       }
     }})
@@ -145,28 +145,31 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
 // Can load C using ports of OPU cell
 // class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
 class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends IterativeFunctionalUnit()(p)  {
-  val io = IO(new Bundle{
-    val in0    = Input(UInt(dLen.W))
-    val in1    = Input(UInt(dLen.W))
-    val out    = Output(SInt(dLen.W))
-    val rd_out = Input(Bool())
+  // val io = IO(new Bundle{
+  //   val in0    = Input(UInt(dLen.W))
+  //   val in1    = Input(UInt(dLen.W))
+  //   val out    = Output(SInt(dLen.W))
+  //   val rd_out = Input(Bool())
 
-    val load   = Input(Bool())
-    val row_en = Input(Bool())
-    val acc    = Input(Bool())
-    val cfg_en = Input(Bool())
-    val msel   = Input(UInt(2.W))
-  })
+  //   val load   = Input(Bool())
+  //   val row_en = Input(Bool())
+  //   val acc    = Input(Bool())
+  //   val cfg_en = Input(Bool())
+  //   val msel   = Input(UInt(2.W))
+  // })
 
-  // // Extract data from issued instruction
-  // val in0 = Wire(UInt(dLen.W))
-  // val in1 = Wire(UInt(dLen.W))
-  // val wmask = Wire(UInt(dLenB.W))
-  // when (io.iss.valid) {
-  //   in0   := io.iss.rvs1_data
-  //   in1   := io.iss.rvs2_data
-  //   wmask := io.iss.wmask
-  // }
+  // Control signals from sequencer
+  val ctrlio = IO(new OuterProductIO(params, dLen))
+
+  // Extract data from issued instruction
+  val in0 = Wire(UInt(dLen.W))
+  val in1 = Wire(UInt(dLen.W))
+  val wmask = Wire(UInt(dLenB.W))
+  when (io.iss.valid) {
+    in0   := io.iss.rvs1_data
+    in1   := io.iss.rvs2_data
+    wmask := io.iss.wmask
+  }
 
   io.stall := false.B
   io.acc  := false.B
@@ -190,36 +193,35 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   for (i <- (0 until numel_A)) {
     var hi = ((i+1)*params.A_width - 1)%dLen
     var lo = ((i)*params.A_width)%dLen
-    in0_a_wire(i) := io.in0(hi, lo).asSInt
+    in0_a_wire(i) := in0(hi, lo).asSInt
   }
   for (i <- (0 until numel_B)) {
     var hi = ((i+1)*params.B_width - 1)%dLen
     var lo = ((i)*params.B_width)%dLen
-    in1_b_wire(i) := io.in1(hi, lo).asSInt
+    in1_b_wire(i) := in1(hi, lo).asSInt
   }
   // Wire inputs a C value to cells
   for (i <- (0 until numel_C)) {
     var hi = ((i+1)*params.C_width - 1)%dLen
     var lo = ((i)*params.C_width)%dLen
-    in0_c_wire(i) := io.in0(hi, lo).asSInt
-    in1_c_wire(i) := io.in1(hi, lo).asSInt 
+    in0_c_wire(i) := in0(hi, lo).asSInt
+    in1_c_wire(i) := in1(hi, lo).asSInt 
   }
 
   // Connect Cells 
-  cell_array.zipWithIndex.foreach({ case(row,j) => {
-    row.zipWithIndex.foreach({ case (cell,i) => {
-      cell.io.in0 := in0_a_wire(i)
-      // if (j % 2 == 1) { 
-      //   cell.io.in1 := Mux(io.load, in0_c_wire(i%numel_C), in1_b_wire(i))
-      // } else {
-        cell.io.in1 := Mux(io.load, in1_c_wire(i%numel_C), in1_b_wire(i))
-        println(s"Index in0_c_wire for cell_${j}_${i}: ${i%numel_C}")
-      // }
-      cell.io.cell_en := io.en      // hardcoded
-      cell.io.macc_en := io.acc     // hardcoded
-      cell.io.cfg_en  := io.cfg_en  // hardcoded
-      cell.io.op_load := io.load    // hardcoded
-      cell.io.mrf_idx := logic_cnt(0)   // Just to initial for compilation
+  cell_array.zipWithIndex.foreach({ case(cell_row, row_idx) => {
+    cell_row.zipWithIndex.foreach({ case(cell, col_idx) => {
+      val load_grp = Int(col_idx/numel_C)
+      // Wire Controls
+      cell.io.row_en    := ctrlio.row_en(row_idx)   // Enable rows
+      cell.io.read_out  := ctrlio.read_en(row_idx)  // One hot; Indicates which row is being read out
+      cell.io.load      := ctrlio.load(load_grp)    // Indicates if cell is loading vlaue
+      cell.io.mrf_idx   := ctrlio.mrf_idx           // Just to initial for compilation
+      cell.io.macc_en   := ctrlio.macc_en           // Optional; hardcoded
+      cell.io.cfg_en    := ctrlio.cnfg_en           // Optional; hardcoded
+      // Wire inputs
+      cell.io.in0 := in0_a_wire(row_idx)
+      cell.io.in1 := Mux(ctrlio.load, in1_c_wire(col_idx%numel_C), in1_b_wire(col_idx))
     }})
   }})
 

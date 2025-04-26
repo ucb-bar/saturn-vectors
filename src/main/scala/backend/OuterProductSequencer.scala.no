@@ -26,11 +26,13 @@ class OuterProductIO(params : OPUParameters, dLen : Int) extends Bundle {
   val write_val  = Output(UInt(Bool()))     // Forward write valid to OPU from control logic
   val write mask = Output(UInt(dLen.W))     // Forward write mask to OPU from control logic
   // Array control
-  val opu_en   = Input(Bool())
+  // val opu_en   = Input(Bool())              // DEPRECATED; Indicate to perform MACC
   val read_en  = Input(Vec(nrows, Bool()))
   val row_en   = Input(Vec(nrows, Bool()))
   val load     = Input(Vec(ncell_grps, Bool()))
   val mrf      = Input(UInt(log2Ceil(nmrf).W))
+  val macc_en  = Input(Bool())
+  val cnfg_en  = Input(Bool())
 }
 
 
@@ -39,7 +41,7 @@ object State extends ChiselEnum { val IDLE, MVIN, MVOUT, OPROD = Value }
 
 // 
 class OuterProductUnitSequencerIO(params : OPUParameters, maxDepth: Int, nFUs: Int)(implicit p: Parameters) extends ExecuteSequencerIO(maxDepth, nFUs) {
-  val opu_ctrl = OuterProductIO(params, dLen)
+  val opu_ctrl = Flipped(OuterProductIO(params, dLen))
 }
 
 
