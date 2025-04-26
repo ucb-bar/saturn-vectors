@@ -266,6 +266,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrf.io.vps.rvm.req <> vps.io.rvm
   vps.io.acc_init_resp := vrf.io.vps.rvs2.resp
 
+  // Connection to VXS -> VRF and VXS <-> VXUS
   for (i <- 0 until flat_vxs.size) {
     val vxs = flat_vxs(i)
     val vxu = flat_vxus(i)
