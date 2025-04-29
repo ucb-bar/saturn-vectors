@@ -94,7 +94,11 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   // Programmatically create array to construct decoder
   val demux_logic = (0 until params.n_mrf_regs).map(mreg => {
                       (0 until regs_per_mrf_reg).map(ureg => {
-                        (Cat(mreg.U, ureg.U) === io.mrf_idx) -> mregs(mreg)(ureg)
+                        val w0 = log2Ceil(params.n_mrf_regs)
+                        val w1 = log2Ceil(regs_per_mrf_reg)
+                        print(s"w0 {$w0}, w1: ${w1}  ")
+                        println(s"MRF: ${mreg} UREG: ${ureg} Global: ${(mreg << w1) | ureg} ")
+                        (((mreg << w1) + ureg).U(3.W) === io.mrf_idx) -> mregs(mreg)(ureg)
                       })
                     })
   mrf_out_demux := MuxCase(0.S, demux_logic.flatten)
@@ -102,12 +106,14 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   // Data going into MRF
   mregs.zipWithIndex.map({ case (mrf, mrf_idx) => {
     mrf.zipWithIndex.map({ case(reg, reg_idx) => {
-      val mrf_glbl_idx = Cat(mrf_idx.U, reg_idx.U)
-      when(io.row_en && !io.readout && io.mrf_idx === mrf_glbl_idx) {
-        reg := MuxCase(0.S, Array( io.reg_rst  -> 0.S, 
-                                    io.load  -> io.in1,
-                                    io.macc_en     -> sum,
-                                    ~io.macc_en    -> prod)) 
+      val w0 = log2Ceil(params.n_mrf_regs)
+      val w1 = log2Ceil(regs_per_mrf_reg)
+      val mrf_glbl_idx = Cat(mrf_idx.U(w0.W), reg_idx.U(w1.W))
+      when(io.row_en && !io.readout && (io.mrf_idx === mrf_glbl_idx)) {
+        reg := MuxCase(reg, Array(  io.reg_rst  -> 0.S, 
+                                    io.load     -> io.in1,
+                                    io.macc_en  -> sum))//,
+                                    // ~io.macc_en    -> prod)) 
       }
     }})
   }})
@@ -144,7 +150,7 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   val in1 = WireInit(UInt(dLen.W), 0.U)
   val rmask = WireInit(UInt(dLenB.W), 0.U)
   val wmask = WireInit(UInt(dLenB.W), 0.U)
-  when (io.iss.valid) {
+  // when (io.iss.valid) {
     in0   := io.iss.op.rvs1_data
     in1   := io.iss.op.rvs2_data
     wmask := io.iss.op.wmask
@@ -155,7 +161,7 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
     // val rvs1_elem = UInt(64.W)
     // val rvs2_elem = UInt(64.W)
     // val rvd_elem  = UInt(64.W)
-  }
+  // }
 
 
 
@@ -163,6 +169,7 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   val numel_A    = dLen/params.A_width
   val numel_B    = dLen/params.B_width
   val numel_C    = dLen/params.C_width
+  val growth_factor = params.C_width/params.B_width
   val in0_a_wire = WireInit(VecInit(Seq.fill(numel_A)(0.S(params.A_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
   val in1_b_wire = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.B_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
   val in0_c_wire = WireInit(VecInit(Seq.fill(numel_C)(0.S(params.C_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
@@ -245,12 +252,26 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   val read_sub_vector = Wire(Vec(num_reads, UInt(dLen.W)))
   val last_row_outputs = cell_array(numel_A-1).map(cell => cell.io.out.asUInt).reduceLeft(_ ## _)
   for (i <- 0 until num_reads) { read_sub_vector(i) := last_row_outputs((i+1)*dLen-1, i*dLen) }
-  row_read_index := cntrl_io.mrf_idx  // Will truncate correctly, but should explicitly bit slice as mrf_idx is for full MRF, but folding MRF over array
+  println(s"growth_factor: ${growth_factor}")
+  val read_out_wire = (0 until growth_factor).map(i => {
+    val cells_per_read = numel_B/growth_factor
+    println(s"slice:(${(i+1)*cells_per_read-1}, ${i*cells_per_read})")
+    val last_row = cell_array.last
+    val sub_row = last_row.slice(i*cells_per_read, (i+1)*cells_per_read-1)
+    println(s"tmp0: ${cell_array.last}")
+    println(s"tmp1: ${sub_row}")
+    (cntrl_io.load.asUInt === i.U) -> sub_row.map(cell => cell.io.out.asUInt).reduceLeft(_ ## _)
+  })
+  // row_read_index := cntrl_io.mrf_idx  // Will truncate correctly, but should explicitly bit slice as mrf_idx is for full MRF, but folding MRF over array
+
+
 
   io.write.valid     := cntrl_io.write_val
   io.write.bits.eg   := cntrl_io.write_eg
   io.write.bits.mask := wmask
-  io.write.bits.data := read_sub_vector(row_read_index).asUInt
+  io.write.bits.data := MuxCase(0.U, read_out_wire)
+
+    // read_out_wire(cntrl_io.load)
 
   // ********************************************
 
