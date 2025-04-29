@@ -70,17 +70,11 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   // Signals
   val sum     = Wire(SInt(params.C_width.W))  // Make width dynamic
   val prod    = Wire(SInt(prod_width.W))      // Make width dynamic
-  // val macc_en = RegInit(Bool(), false.B)      // Latch configuration register
   // Muxes
-  // val read_pp_mux   = Wire(SInt(params.C_width.W))
-  val mrf_in_mux    = Wire(SInt(params.C_width.W))
+  // val mrf_in_mux    = Wire(SInt(params.C_width.W))
   val mrf_out_demux = Wire(SInt(params.C_width.W))
-  // val mrf_reg_demux = Wire(Vec(params.n_mrf_regs, SInt(params.C_width.W)))   // Mux per MRF reg
-  // val cell_out_mux  = Wire(SInt(params.C_width.W))
   // Matrix Register + Logic
   val mregs         = Seq.fill(params.n_mrf_regs)(Reg(Vec(regs_per_mrf_reg, SInt(params.C_width.W))))
-  // val mrf_ind       = io.mrf_idx(io.mrf_idx.getWidth-1, log2Ceil(regs_per_mrf_reg))
-  // val sub_mreg_ind  = RegInit(UInt(log2Ceil(regs_per_mrf_reg).W), 0.U)
   // Pipeline register for readout 
   val read_pp = Reg(SInt(params.C_width.W))
   // If buffering (Unecessary if using VRF as buffer; true functional unit)
@@ -95,11 +89,7 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   prod := io.in0*io.in1(params.B_width-1, 0) // Save to intermediate to force overflow
   sum  := prod + mrf_out_demux
 
-  // Data going into MRF
-  mrf_in_mux := MuxCase(0.S, Array( io.reg_rst  -> 0.S, 
-                                    io.load  -> io.in1,
-                                    io.macc_en     -> sum,
-                                    ~io.macc_en    -> prod)) 
+  // mrf_in_mux := 
 
   // Programmatically create array to construct decoder
   val demux_logic = (0 until params.n_mrf_regs).map(mreg => {
@@ -109,11 +99,15 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
                     })
   mrf_out_demux := MuxCase(0.S, demux_logic.flatten)
 
+  // Data going into MRF
   mregs.zipWithIndex.map({ case (mrf, mrf_idx) => {
     mrf.zipWithIndex.map({ case(reg, reg_idx) => {
       val mrf_glbl_idx = Cat(mrf_idx.U, reg_idx.U)
       when(io.row_en && !io.readout && io.mrf_idx === mrf_glbl_idx) {
-        reg := mrf_in_mux
+        reg := MuxCase(0.S, Array( io.reg_rst  -> 0.S, 
+                                    io.load  -> io.in1,
+                                    io.macc_en     -> sum,
+                                    ~io.macc_en    -> prod)) 
       }
     }})
   }})
