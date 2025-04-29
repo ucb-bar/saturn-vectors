@@ -8,14 +8,12 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import chisel3.util.experimental.decode._
 import saturn.common._
+import saturn.backend._
 import hardfloat._
 import scala.math._
 
 // Declare supported types (dictates multipler instantiated)
-object OPUTypes extends Enumeration {
-  val INT32, INT16, INT8 = Value
-  // val FP32, FP16, FP8, INT32, INT16, INT8 = Value
-}
+object OPUTypes extends Enumeration { val INT32, INT16, INT8 = Value }
 
 // Parameters for configured OPU
 case class OPUParameters (
@@ -23,15 +21,21 @@ case class OPUParameters (
   val B_width : Int = 8,
   val C_width : Int = 32, // Accumulator size
 
-  // val types : Seq[OPUTypes],
   val n_mrf_regs : Int = 1, 
+  val nrows : Int = 1,
 
   // To support floating point FMAs
   val vLen : Int,
   val dLen : Int,
   val roundingMode   : UInt,
   val detectTininess : Bool
+
+  // val types : Seq[OPUTypes],
+  // val cluster : Boolean = false,
+  // val cluster_xdim : Int = 4,
+  // val cluster_ydim : Int = 4,
 )
+
 
 /*
  * A single cell in the Outer Product Unit MACC array
@@ -39,42 +43,43 @@ case class OPUParameters (
  * during read out 
  */
 class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends CoreModule{
-  val io = IO(new Bundle{
-    val in0 = Input(SInt(params.A_width.W)) // One input for mult
-    val in1 = Input(SInt(params.C_width.W)) // One input for mult/value to load accummulator register
-    val out = Output(SInt(params.C_width.W))
-
-    // val op          = Input(Bool())   // Asserted with should be operating
-    val op_load     = Input(Bool())   // Asserted loads accumulator from in1; deasserted means the cell is in operating mode should never be asserted with op input
-    val read_in     = Input(SInt(params.C_width.W)) // Read out support
-
-    val mrf_idx     = Input(UInt(log2Ceil(params.n_mrf_regs).W))
-
-    val cell_en     = Input(Bool())   // Turn off cell; Controlled by mask and (?; for power saving features)
-    val macc_en     = Input(Bool())   // Asserted performs MACC, deasserted just multiplication
-    val cfg_en      = Input(Bool())   // Asserted loads config registers
-    val reg_rst     = Input(Bool())   // Asserted zeros MRF registers
-    val read_out_en = Input(Bool())   // Asserted indicates readout in progress (output readout regiseter and load from read_in)
-  })
-
   // Scala Constants 
   val dLen           = params.dLen
   val varch_ratio    = vLen/params.dLen
   val prod_width     = params.A_width + params.B_width
   val regs_per_mrf_reg = scala.math.pow(varch_ratio, 2).toInt
+  val ntotal_regs     = params.n_mrf_regs*regs_per_mrf_reg
+
+  val io = IO(new Bundle{
+    // Data signals
+    val in0 = Input(SInt(params.A_width.W)) // One input for mult
+    val in1 = Input(SInt(params.C_width.W)) // One input for mult/value to load accummulator register
+    val out = Output(SInt(params.C_width.W))
+    val read_in = Input(SInt(params.C_width.W)) // Read out support
+
+    // Contol Signals
+    val mrf_idx = Input(UInt(log2Ceil(regs_per_mrf_reg*params.n_mrf_regs).W)) // Index for µarch register to write
+    val load    = Input(Bool())   // Asserted loads accumulator from in1; deasserted means the cell is in operating mode should never be asserted with op input
+    val row_en  = Input(Bool())   // Turn off cell; Controlled by mask and (?; for power saving features)
+    val readout = Input(Bool())   // Asserted indicates readout in progress (output readout regiseter and load from read_in)
+    val macc_en = Input(Bool())   // Asserted performs MACC, deasserted just multiplication
+    val cfg_en  = Input(Bool())   // Asserted loads config registers
+    val reg_rst = Input(Bool())   // Asserted zeros MRF registers
+  })
+
 
   // Signals
   val sum     = Wire(SInt(params.C_width.W))  // Make width dynamic
   val prod    = Wire(SInt(prod_width.W))      // Make width dynamic
   val macc_en = RegInit(Bool(), false.B)      // Latch configuration register
   // Muxes
-  val read_pp_mux   = Wire(SInt(params.C_width.W))
+  // val read_pp_mux   = Wire(SInt(params.C_width.W))
   val mrf_in_mux    = Wire(SInt(params.C_width.W))
   val mrf_out_demux = Wire(SInt(params.C_width.W))
   val mrf_reg_demux = Wire(Vec(params.n_mrf_regs, SInt(params.C_width.W)))   // Mux per MRF reg
   val cell_out_mux  = Wire(SInt(params.C_width.W))
   // Matrix Register + Logic
-  val mrf_ind       = io.mrf_idx
+  val mrf_ind       = io.mrf_idx(io.mrf_idx.getWidth-1, log2Ceil(regs_per_mrf_reg))
   val mregs         = Seq.fill(params.n_mrf_regs)(Reg(Vec(regs_per_mrf_reg, SInt(params.C_width.W))))
   val sub_mreg_ind  = RegInit(UInt(log2Ceil(regs_per_mrf_reg).W), 0.U)
   // Pipeline register for readout 
@@ -88,49 +93,64 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   //   macc_en  := io.macc_en
   // }
 
-  // Sequencing logic if VLEN == DLEN
-  when (io.op_load) {
-    when (sub_mreg_ind === (regs_per_mrf_reg-1).U) {
-      sub_mreg_ind := 0.U
-    } otherwise {
-      sub_mreg_ind := sub_mreg_ind + 1.U
-    }
-  }
+  // // Sequencing logic if VLEN == DLEN
+  // when (io.load) {
+  //   when (sub_mreg_ind === (regs_per_mrf_reg-1).U) {
+  //     sub_mreg_ind := 0.U
+  //   } otherwise {
+  //     sub_mreg_ind := sub_mreg_ind + 1.U
+  //   }
+  // }
 
   // TODO: Padded inputs to large width of respective datatype (i.e. int8 to int32)
   //       This needs to be dynamic and data type is programmable
 
   // TODO: Need to check for overflow and saturate to accumulator width
-  prod := io.in0*io.in1(7, 0) // Save to intermediate to force overflow
+  prod := io.in0*io.in1(params.B_width-1, 0) // Save to intermediate to force overflow
   sum  := prod + mrf_out_demux
 
   // Select correct sub-register from MRF register
-  (0 until params.n_mrf_regs).map(mreg => {
-    val mux_logic = (0 until regs_per_mrf_reg).map(j => (j.U === sub_mreg_ind) -> mregs(mreg)(j))
-    mrf_reg_demux(mreg) :=  MuxCase(0.S, mux_logic)
-  })
+  // val mux_logic = (0 until ntotal_regs).map(j => (j.U === io.mrf_idx) -> mregs(mreg)(j))
+  val demux_logic = (0 until params.n_mrf_regs).map(mreg => {
+                      (0 until regs_per_mrf_reg).map(ureg => {
+                        (Cat(mreg.U, ureg.U) === io.mrf_idx) -> mregs(mreg)(ureg)
+                      })
+                    })
+
+  // mrf_reg_demux(mreg) :=  MuxCase(0.S, demux_logic)
+  // })
 
   // Data going into MRF
   mrf_in_mux := MuxCase(0.S, Array( io.reg_rst  -> 0.S, 
-                                    io.op_load  -> io.in1,
+                                    io.load  -> io.in1,
                                     macc_en     -> sum,
                                     ~macc_en    -> prod)) 
-  // Programmatically create array to construct decoder
-  val mux_logic = (0 until params.n_mrf_regs).map(j => (j.U === mrf_ind) -> mrf_reg_demux(j))
-  mrf_out_demux := MuxCase(0.S, mux_logic)
 
-  read_pp_mux  := Mux(io.read_out_en, io.read_in, mrf_out_demux)
-  cell_out_mux := read_pp // For simplest pipelined readout always read from register // Mux(io.read_out_en, io.read_in, read_pp)
-  read_pp := read_pp_mux
+  // Programmatically create array to construct decoder
+  // val mux_logic = (0 until params.n_mrf_regs).map(j => (j.U === io.mrf_idx) -> mrf_reg_demux(j))
+  mrf_out_demux := MuxCase(0.S, demux_logic.flatten)
+
+  // read_pp_mux  := 
+  read_pp := Mux(io.readout, io.read_in, mrf_out_demux)
+  // cell_out_mux := read_pp // For simplest pipelined readout always read from register // Mux(io.readout, io.read_in, read_pp)
   
   // Iterate over Scala structure and make HW assignments
-  (0 until params.n_mrf_regs).map(mreg_ind => {
-    mregs(mreg_ind).zipWithIndex.foreach({ case (reg, ind) => {
-      when (ind.U === sub_mreg_ind && io.cell_en && io.mrf_idx === mreg_ind.U) {
+  // (0 until params.n_mrf_regs).map(mreg_ind => {
+  //   mregs(mreg_ind).zipWithIndex.foreach({ case (reg, ind) => {
+  //     when (ind.U === sub_mreg_ind && io.row_en && !io.readout && io.mrf_idx === mreg_ind.U) {
+  //       reg := mrf_in_mux
+  //     }
+  //   }})
+  // })
+
+  mregs.zipWithIndex.map({ case (mrf, mrf_idx) => {
+    mrf.zipWithIndex.map({ case(reg, reg_idx) => {
+      val mrf_glbl_idx = Cat(mrf_idx.U, reg_idx.U)
+      when(io.row_en && !io.readout && io.mrf_idx === mrf_glbl_idx) {
         reg := mrf_in_mux
       }
     }})
-  })
+  }})
 
   // // Programmatically create array to construct decoder
   // val mux_contents = (0 until regs_per_mrf_reg).map(j => (j.U === sub_mreg_ind) -> sub_mreg(j))
@@ -139,24 +159,48 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
 
 
   // regout_mux := sub_mreg(sub_mreg_ind)
-  io.out := cell_out_mux // Output selected 
+  io.out := read_pp // Output selected 
 }
 
 
 // Can load C using ports of OPU cell
-class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
-  val io = IO(new Bundle{
-    val in0    = Input(UInt(dLen.W))
-    val in1    = Input(UInt(dLen.W))
-    val out    = Output(SInt(dLen.W))
-    val rd_out = Input(Bool())
+// class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
+class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends IterativeFunctionalUnit()(p)  {
+  // val io = IO(new Bundle{
+  //   val in0    = Input(UInt(dLen.W))
+  //   val in1    = Input(UInt(dLen.W))
+  //   val out    = Output(SInt(dLen.W))
+  //   val rd_out = Input(Bool())
 
-    val load   = Input(Bool())
-    val en     = Input(Bool())
-    val acc    = Input(Bool())
-    val cfg_en = Input(Bool())
-    val msel   = Input(UInt(2.W))
-  })
+  //   val load   = Input(Bool())
+  //   val row_en = Input(Bool())
+  //   val acc    = Input(Bool())
+  //   val cfg_en = Input(Bool())
+  //   val msel   = Input(UInt(2.W))
+  // })
+
+  // Control signals from sequencer
+  val cntrl_io = IO(new OuterProductIO(params, dLen, egsTotal, egsPerVReg))
+
+  // Extract data from issued instruction
+  val in0 = WireInit(UInt(dLen.W), 0.U)
+  val in1 = WireInit(UInt(dLen.W), 0.U)
+  val rmask = WireInit(UInt(dLenB.W), 0.U)
+  val wmask = WireInit(UInt(dLenB.W), 0.U)
+  when (io.iss.valid) {
+    in0   := io.iss.op.rvs1_data
+    in1   := io.iss.op.rvs2_data
+    wmask := io.iss.op.wmask
+    rmask := io.iss.op.rmask
+    // The reamaining inputs aren't used
+    // val rvd_data  = UInt(dLen.W)
+    // val rvm_data  = UInt(dLen.W)
+    // val rvs1_elem = UInt(64.W)
+    // val rvs2_elem = UInt(64.W)
+    // val rvd_elem  = UInt(64.W)
+  }
+
+
 
   // Segment inputs for easier manipulation
   val numel_A    = dLen/params.A_width
@@ -174,59 +218,37 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends C
   for (i <- (0 until numel_A)) {
     var hi = ((i+1)*params.A_width - 1)%dLen
     var lo = ((i)*params.A_width)%dLen
-    in0_a_wire(i) := io.in0(hi, lo).asSInt
-    println(s"a_wire($i): [$hi, $lo] $dLen \n")
+    in0_a_wire(i) := in0(hi, lo).asSInt
   }
   for (i <- (0 until numel_B)) {
     var hi = ((i+1)*params.B_width - 1)%dLen
     var lo = ((i)*params.B_width)%dLen
-    in1_b_wire(i) := io.in1(hi, lo).asSInt
+    in1_b_wire(i) := in1(hi, lo).asSInt
   }
-
   // Wire inputs a C value to cells
   for (i <- (0 until numel_C)) {
     var hi = ((i+1)*params.C_width - 1)%dLen
     var lo = ((i)*params.C_width)%dLen
-    in0_c_wire(i) := io.in0(hi, lo).asSInt
-    in1_c_wire(i) := io.in1(hi, lo).asSInt
+    in0_c_wire(i) := in0(hi, lo).asSInt
+    in1_c_wire(i) := in1(hi, lo).asSInt 
   }
-
-  // Logic to drive array (just a fake implementation)
-  val state = RegInit(UInt(1.W), 0.U)
-  val logic_cnt = RegInit(UInt((256/8).W), 0.U)
-  when(state === 0.U && io.en === true.B) {
-    state := 1.U
-  } otherwise {
-    when (logic_cnt === (16*8 - 1).U) {
-      state := 0.U
-      logic_cnt := 0.U
-    } otherwise {
-      logic_cnt := logic_cnt + 1.U
-    }
-  }
-
-  cell_array.zipWithIndex.foreach({ case(row,j) => {
-      row.zipWithIndex.foreach({case (cell,i) => {
-        cell.io.reg_rst := false.B // (logic_cnt(4) === 0.U)
-        cell.io.read_out_en := (logic_cnt(1,0) === 3.U)
-    }})
-  }})
 
   // Connect Cells 
-  cell_array.zipWithIndex.foreach({ case(row,j) => {
-    row.zipWithIndex.foreach({case (cell,i) => {
-      cell.io.in0 := in0_a_wire(j)
-      // if (j % 2 == 1) { 
-      //   cell.io.in1 := Mux(io.load, in0_c_wire(i%numel_C), in1_b_wire(i))
-      // } else {
-        cell.io.in1 := Mux(io.load, in1_c_wire(i%numel_C), in1_b_wire(i))
-        println(s"Index in0_c_wire for cell_${j}_${i}: ${i%numel_C}")
-      // }
-      cell.io.cell_en := io.en      // hardcoded
-      cell.io.macc_en := io.acc     // hardcoded
-      cell.io.cfg_en  := io.cfg_en  // hardcoded
-      cell.io.op_load := io.load    // hardcoded
-      cell.io.mrf_idx := logic_cnt(0)   // Just to initial for compilation
+  cell_array.zipWithIndex.foreach({ case(cell_row, row_idx) => {
+    cell_row.zipWithIndex.foreach({ case(cell, col_idx) => {
+      val load_grp = (col_idx/numel_C).toInt
+      // Wire Controls
+      cell.io.row_en    := cntrl_io.row_en(row_idx)   // Enable rows
+      cell.io.readout  := cntrl_io.read_en(row_idx)  // One hot; Indicates which row is being read out
+      cell.io.load      := cntrl_io.load(load_grp)    // Indicates if cell is loading vlaue
+      cell.io.mrf_idx   := cntrl_io.mrf_idx           // Just to initial for compilation
+      cell.io.macc_en   := cntrl_io.macc_en           // Optional; hardcoded
+      cell.io.cfg_en    := cntrl_io.cnfg_en           // Optional; hardcoded
+      cell.io.reg_rst   := cntrl_io.reset
+
+      // Wire inputs
+      cell.io.in0 := in0_a_wire(row_idx)
+      cell.io.in1 := Mux(cntrl_io.load(load_grp), in1_c_wire(col_idx%numel_C), in1_b_wire(col_idx))
     }})
   }})
 
@@ -238,65 +260,76 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends C
     }
   }
 
-  val num_reads = (numel_C*params.C_width/dLen)
+
+  // // Logic to drive array (just a fake implementation)
+  // val state = RegInit(UInt(1.W), 0.U)
+  // val logic_cnt = RegInit(UInt((256/8).W), 0.U)
+  // when(state === 0.U && io.en === true.B) {
+  //   state := 1.U
+  // } otherwise {
+  //   when (logic_cnt === (16*8 - 1).U) {
+  //     state := 0.U
+  //     logic_cnt := 0.U
+  //   } otherwise {
+  //     logic_cnt := logic_cnt + 1.U
+  //   }
+  // }
+  // cell_array.zipWithIndex.foreach({ case(row,j) => {
+  //     row.zipWithIndex.foreach({case (cell,i) => {
+  //       cell.io.reg_rst := false.B // (logic_cnt(4) === 0.U)
+  //       cell.io.read_out_en := (logic_cnt(1,0) === 3.U)
+  //   }})
+  // }})
+
+
+  // True Move Out LOGIC ************************
+  val ncols = dLen/params.B_width
+  val num_reads = ncols*params.C_width/dLen
   val read_sub_vector = Wire(Vec(num_reads, UInt(dLen.W)))
-  val last_row_outputs = cell_array(numel_A-1).map(cell => cell.io.out.asUInt).reduceRight(_ ## _)
-  for (i <- 0 until num_reads) {
-    read_sub_vector(i) := last_row_outputs((i+1)*dLen-1, i*dLen)
-  }
-  row_read_index := logic_cnt(1,0)
-  io.out := read_sub_vector(row_read_index).asSInt
+  val last_row_outputs = cell_array(numel_A-1).map(cell => cell.io.out.asUInt).reduceLeft(_ ## _)
+  for (i <- 0 until num_reads) { read_sub_vector(i) := last_row_outputs((i+1)*dLen-1, i*dLen) }
+  row_read_index := cntrl_io.mrf_idx  // Will truncate correctly, but should explicitly bit slice as mrf_idx is for full MRF, but folding MRF over array
+
+  io.write.valid     := cntrl_io.write_val
+  io.write.bits.eg   := cntrl_io.write_eg
+  io.write.bits.mask := wmask
+  io.write.bits.data := read_sub_vector(row_read_index).asUInt
+
+  // ********************************************
+
+  io.stall := false.B
+  io.acc  := false.B
+  last := false.B // Might need to change this
+  io.tail := false.B
+  io.busy := false.B  // Placeholder
+  io.hazard := DontCare  // In simple implementation hazard is solely performed by sequencer; limits performance 
+  io.hazard.valid := false.B  // In simple implementation hazard is solely performed by sequencer; limits performance 
+  io.scalar_write := DontCare
+  io.scalar_write.valid := false.B // Ensure never asserted
+  io.set_vxsat := false.B
+  io.set_fflags.valid := false.B
+  io.set_fflags.bits := DontCare
+
 }
 
-// class OuterProductCell_FP_PrelimSyn(params : OPEParameters)(implicit p: Parameters) extends CoreModule{
-//   val io = IO(new Bundle{
-//     val a  = Input(UInt(params.A_width.W))
-//     val b   = Input(UInt(params.B_width.W))
-//     val c   = Input(UInt(params.C_width.W))
-//     val out = Output(UInt(params.C_width.W))
 
-//     val en     = Input(Bool())
-//     val acc    = Input(Bool())
-//     val msel   = Input(UInt(2.W))
-//     val cfg_en = Input(Bool())
+
+
+// // Can load C using ports of OPU cell
+// // class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
+// class OuterCluster(params: OPUParameters)(implicit p : Parameters) extends IterativeFunctionalUnit()(p)  {
+//   val io = = IO(new Bundle{
+//     val in0      = Input(UInt((params.A_width*cluster_ydim).W))
+//     val in1      = Input(UInt((params.B_width*cluster_xdim).W))
+//     val out      = Output(SInt(dLen.W))
+
+//     val read_en  = Input(Vec(params.cluster_xdim, Bool()))
+//     val row_en   = Input(Vec(params.cluster_xdim, Bool()))
+//     val load     = Input(Bool())
+//     val mrf_idx  = Input(UInt(log2Ceil(nmrf*regs_per_mrf_reg).W))
+//     val macc_en  = Input(Bool())
+//     val cnfg_en  = Input(Bool())
+//     val reset    = Input(Bool())
 //   })
-
-//   // Multipliers
-//   val mult8  = Module(new MulAddRecFNPipe(2, 4, 3))
-//   val mult16 = Module(new MulAddRecFNPipe(2, 5, 10))
-//   val mult32 = Module(new MulAddRecFNPipe(2, 8, 23))
-
-//   val mults = List(mult8, mult16, mult32)
-//   val msel_reg = Reg(UInt(2.W))
-//   val acco_reg = Reg(Bool())
-//   val acc = RegInit(UInt(params.C_width.W), 0.U)
-
-//   // Load configure settings for op
-//   when (io.cfg_en === true.B) {
-//     msel_reg := io.msel
-//     acco_reg := io.acc
-//     acc      := io.c(mults(io.msel).io.c.getWidth-1, 0) // Truncate as necessary
-//   }
-
-//   // Connect inputs
-//   mults.foreach( m => {
-//     m.io.validin := True.B
-//     m.io.op := 0.U  // Mult-Add
-//     m.io.a := io.a(m.io.a.getWidth-1, 0) // Truncate as necessary
-//     m.io.b := io.b(m.io.b.getWidth-1, 0) // Truncate as necessary
-//     m.io.c := acc
-//     m.io.roundingMode   := params.roundingMode
-//     m.io.detectTininess := params.detectTininess
-//   })
-
-
-//   val mult_mux = MuxCase(mults(1).io.out,
-//                         Array((msel_reg === 0.U) -> mults(0).io.out,
-//                         (msel_reg === 1.U) -> mults(1).io.out,
-//                         (msel_reg === 2.U) -> mults(2).io.out))
-
-//   // acc := acc + mult_mux
-//   // io.out := Mux(acco_reg, acc + mult_mux, mult_mux)
-//   io.out := mult_mux
 
 // }
