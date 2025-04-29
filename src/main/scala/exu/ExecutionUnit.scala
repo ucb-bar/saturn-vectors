@@ -7,6 +7,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
+import saturn.backend._
 
 class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   override def desiredName = s"ExecutionUnit$desc"
@@ -39,30 +40,27 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
 
   // Outer Product Unit
   val add_ope = desc == "int"
-  val ope_write = Wire(new VectorWrite(dLen))
-  val cnt = RegInit(0.U(32.W))
+  // val ope_write = Wire(new VectorWrite(dLen))
+  // val cnt = RegInit(0.U(32.W))
 
-  ope_write := DontCare
+  // ope_write := DontCare
 
-  if (add_ope) {
-    val ope_params = OPUParameters(8, 8, 32, 2, vLen, dLen, 0.U, false.B)
-    val opu = Module(new OuterProductUnit(ope_params))
-    opu.io.en     := (cnt > (20*50).U) && (cnt % 101.U) === 0.U
-    opu.io.acc    := true.B
-    opu.io.msel   := 1.U
-    opu.io.cfg_en := cnt < (16*50).U
-    opu.io.in0    := io.iss.bits.rvs1_data
-    opu.io.in1    := io.iss.bits.rvs2_data 
+  // if (add_ope) {
+  //   val ope_params = OPUParameters(8, 8, 32, 2, dLen/8, vLen, dLen, 0.U, false.B)
+  //   val opu = Module(new OuterProductUnit(ope_params))
+  //   iter_fus :+ opu 
 
-    opu.io.load   := (cnt > (20*50).U) && (cnt % 100.U) === 0.U
-    opu.io.rd_out := (cnt > (20*50).U) && (cnt % 150.U) === 0.U
     
-    ope_write.data := opu.io.out.asUInt
-    ope_write.mask := 0.U
-    ope_write.eg   := 3.U
+  //   // val opu_seq = Module(new OuterProductSequencer(ope_params, Seq()))
 
-    cnt := cnt+1.U
-  }
+  //   // // Connect Sequencer to FU
+  //   // opu_seq.io.opu_cntrl <> opu.cntrl_io
+
+  //   // // Issue
+
+
+  //   // cnt := cnt+1.U
+  // }
 
   val sharedFPUnits = fus.collect { case fp: HasSharedFPUIO => fp }
   val hasSharedFPUnits = sharedFPUnits.size > 0
@@ -161,11 +159,11 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       val tail = Mux1H(write_pipe_sel, pipe_bits.map(_.tail))
       io.pipe_write.valid := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
       io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
-      if (add_ope) {
-        io.pipe_write.bits := Mux(cnt === 3.U, ope_write, Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))) // KA Added
-      } else {
+      // if (add_ope) {
+      //   io.pipe_write.bits := Mux(cnt === 3.U, ope_write, Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))) // KA Added
+      // } else {
         io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
-      }
+      // }
       io.acc_write.valid := acc && !tail
       io.acc_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
     }

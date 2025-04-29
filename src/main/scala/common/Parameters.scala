@@ -353,6 +353,9 @@ case class VectorParams(
   issStructure: VectorIssueStructure = VectorIssueStructure.Unified,
 
   tlBuffer: BufferParams = BufferParams.default,
+
+  // Add and OPU to desgin 
+  add_opu : Boolean = false,
 ) {
   def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
 
@@ -375,6 +378,8 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def mLen = vParams.mLen
   def mLenB = mLen / 8
   def mLenOffBits = log2Ceil(mLenB)
+
+  def add_opu = vParams.add_opu
 
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
   def sgmemTagBits = log2Ceil(vParams.vsgifqEntries)
