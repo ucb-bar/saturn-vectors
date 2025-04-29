@@ -213,6 +213,7 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
       // Wire inputs
       cell.io.in0 := in0_a_wire(row_idx)
       cell.io.in1 := Mux(cntrl_io.load(load_grp), in1_c_wire(col_idx%numel_C), in1_b_wire(col_idx))
+      dontTouch(cell.io)
     }})
   }})
 
@@ -223,6 +224,8 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
       cell_array(j)(i).io.read_in := cell_array(j-1)(i).io.out
     }
   }
+
+
 
 
   // // Logic to drive array (just a fake implementation)
@@ -249,18 +252,19 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   // True Move Out LOGIC ************************
   val ncols = dLen/params.B_width
   val num_reads = ncols*params.C_width/dLen
-  val read_sub_vector = Wire(Vec(num_reads, UInt(dLen.W)))
-  val last_row_outputs = cell_array(numel_A-1).map(cell => cell.io.out.asUInt).reduceLeft(_ ## _)
-  for (i <- 0 until num_reads) { read_sub_vector(i) := last_row_outputs((i+1)*dLen-1, i*dLen) }
-  println(s"growth_factor: ${growth_factor}")
+  // val read_sub_vector = Wire(Vec(num_reads, UInt(dLen.W)))
+  // val last_row_outputs = cell_array(numel_A-1).map(cell => cell.io.out.asUInt).reduceLeft(_ ## _)
+  // for (i <- 0 until num_reads) { read_sub_vector(i) := last_row_outputs((i+1)*dLen-1, i*dLen) }
+
+  // println(s"growth_factor: ${growth_factor}")
+  val last_row = cell_array.last
+  val cells_per_read = numel_B/growth_factor
   val read_out_wire = (0 until growth_factor).map(i => {
-    val cells_per_read = numel_B/growth_factor
-    println(s"slice:(${(i+1)*cells_per_read-1}, ${i*cells_per_read})")
-    val last_row = cell_array.last
-    val sub_row = last_row.slice(i*cells_per_read, (i+1)*cells_per_read-1)
+    val sub_row = last_row.slice(i*cells_per_read, (i+1)*cells_per_read)
+    // println(s"slice:(${(i+1)*cells_per_read-1}, ${i*cells_per_read})")
     println(s"tmp0: ${cell_array.last}")
     println(s"tmp1: ${sub_row}")
-    (cntrl_io.load.asUInt === i.U) -> sub_row.map(cell => cell.io.out.asUInt).reduceLeft(_ ## _)
+    (cntrl_io.load.asUInt === i.U) -> sub_row.map(cell => cell.io.out.asUInt).reduceRight((left, right) => right ## left)
   })
   // row_read_index := cntrl_io.mrf_idx  // Will truncate correctly, but should explicitly bit slice as mrf_idx is for full MRF, but folding MRF over array
 
