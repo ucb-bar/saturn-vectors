@@ -113,7 +113,9 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
   }})
 
   // Pipeline register
-  read_pp := Mux(io.readout, io.read_in, mrf_out_demux)
+  read_pp := MuxCase(read_pp, Array(
+                              (!io.row_en && io.readout) -> io.read_in, 
+                              (io.row_en  && io.readout) -> mrf_out_demux))
   io.out := read_pp // Output selected 
 }
 
@@ -194,7 +196,7 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
       val load_grp = (col_idx/numel_C).toInt
       // Wire Controls
       cell.io.row_en    := cntrl_io.row_en(row_idx)   // Enable rows
-      cell.io.readout  := cntrl_io.read_en(row_idx)  // One hot; Indicates which row is being read out
+      cell.io.readout   := cntrl_io.read_en(row_idx)  // One hot; Indicates which row is being read out
       cell.io.load      := cntrl_io.load(load_grp)    // Indicates if cell is loading vlaue
       cell.io.mrf_idx   := cntrl_io.mrf_idx           // Just to initial for compilation
       cell.io.macc_en   := cntrl_io.macc_en           // Optional; hardcoded
