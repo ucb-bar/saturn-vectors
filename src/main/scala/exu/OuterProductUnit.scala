@@ -28,12 +28,12 @@ case class OPUParameters (
   val vLen : Int,
   val dLen : Int,
   val roundingMode   : UInt,
-  val detectTininess : Bool
+  val detectTininess : Bool,
 
   // val types : Seq[OPUTypes],
-  // val cluster : Boolean = false,
-  // val cluster_xdim : Int = 4,
-  // val cluster_ydim : Int = 4,
+  val cluster : Boolean = false,
+  val cluster_xdim : Int = 4,
+  val cluster_ydim : Int = 4,
 )
 
 
@@ -129,19 +129,6 @@ class OuterProductCell(params : OPUParameters)(implicit p: Parameters) extends C
 // Can load C using ports of OPU cell
 // class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
 class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends IterativeFunctionalUnit()(p)  {
-  // val io = IO(new Bundle{
-  //   val in0    = Input(UInt(dLen.W))
-  //   val in1    = Input(UInt(dLen.W))
-  //   val out    = Output(SInt(dLen.W))
-  //   val rd_out = Input(Bool())
-
-  //   val load   = Input(Bool())
-  //   val row_en = Input(Bool())
-  //   val acc    = Input(Bool())
-  //   val cfg_en = Input(Bool())
-  //   val msel   = Input(UInt(2.W))
-  // })
-
   // Control signals from sequencer
   val cntrl_io = IO(new OuterProductIO(params, dLen, egsTotal, egsPerVReg))
 
@@ -150,77 +137,101 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   val in1 = WireInit(UInt(dLen.W), 0.U)
   val rmask = WireInit(UInt(dLenB.W), 0.U)
   val wmask = WireInit(UInt(dLenB.W), 0.U)
-  // when (io.iss.valid) {
-    in0   := io.iss.op.rvs1_data
-    in1   := io.iss.op.rvs2_data
-    wmask := io.iss.op.wmask
-    rmask := io.iss.op.rmask
-    // The reamaining inputs aren't used
-    // val rvd_data  = UInt(dLen.W)
-    // val rvm_data  = UInt(dLen.W)
-    // val rvs1_elem = UInt(64.W)
-    // val rvs2_elem = UInt(64.W)
-    // val rvd_elem  = UInt(64.W)
-  // }
-
-
-
   // Segment inputs for easier manipulation
-  val numel_A    = dLen/params.A_width
-  val numel_B    = dLen/params.B_width
-  val numel_C    = dLen/params.C_width
+  val numel_A = dLen/params.A_width
+  val numel_B = dLen/params.B_width
+  val numel_C = dLen/params.C_width
+  val xdim = numel_B/params.cluster_xdim
+  val ydim = numel_A/params.cluster_ydim
+  val cluster_in0_bits = params.cluster_ydim*params.A_width
+  val cluster_in1_bits = params.cluster_ydim*params.B_width
   val growth_factor = params.C_width/params.B_width
-  val in0_a_wire = WireInit(VecInit(Seq.fill(numel_A)(0.S(params.A_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
-  val in1_b_wire = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.B_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
+  val in0_a_wire = WireInit(VecInit(Seq.fill(ydim)(0.U(cluster_in0_bits.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
+  val in1_b_wire = WireInit(VecInit(Seq.fill(xdim)(0.U(cluster_in1_bits.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
   val in0_c_wire = WireInit(VecInit(Seq.fill(numel_C)(0.S(params.C_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
   val in1_c_wire = WireInit(VecInit(Seq.fill(numel_C)(0.S(params.C_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
 
+
+
+  // Segement input 1 vector into elements for reordering
+  val in1_ele_inorder = (0 until numel_B).map(i => {
+    val hi = (i+1)*params.B_width - 1
+    val lo = i*params.B_width
+    io.iss.op.rvs2_data(hi, lo)
+  })
+  val in1_shuffle = (0 until numel_B).map(ele => {
+    val new_idx = floor(ele*8/32) + (ele*8) % 32
+    in1_ele_inorder(new_idx.toInt)
+  })
+
+  // Reorder input columns for bette readout if VLEN != DLEN
+  val output_fold = xdim/growth_factor
+  // val in1_reorder = Wire(Vec(output_fold, UInt(params.B_width.W)))
+
+
+
+  in0   := io.iss.op.rvs1_data
+  // in1   := io.iss.op.rvs2_data
+  in1   := in1_shuffle.reduceRight((left, right) => right ## left)
+  wmask := io.iss.op.wmask
+  rmask := io.iss.op.rmask
+
+
+
+
   val row_read_index = RegInit(UInt(2.W), 0.U)
-  val cell_array     = Seq.fill(numel_A, numel_B){Module(new OuterProductCell(params))}
+  val cell_array = Seq.fill(ydim, xdim){Module(new OuterProductCluster(params))}
+  
+  // val num_sheets     = 4
+  // val sheets_color0 = Seq.fill(8, num_sheets){Module(new OuterProductCluster(params))}
+  // val sheets_color1 = Seq.fill(8, num_sheets){Module(new OuterProductCluster(params))}
 
   // Wire inputs as A/B row/cols to cells
-  for (i <- (0 until numel_A)) {
-    var hi = ((i+1)*params.A_width - 1)%dLen
-    var lo = ((i)*params.A_width)%dLen
-    in0_a_wire(i) := in0(hi, lo).asSInt
+  for (i <- (0 until ydim)) {
+    var hi = ((i+1)*cluster_in0_bits - 1)
+    var lo = ((i)*cluster_in0_bits)
+    in0_a_wire(i) := in0(hi, lo)
   }
-  for (i <- (0 until numel_B)) {
-    var hi = ((i+1)*params.B_width - 1)%dLen
-    var lo = ((i)*params.B_width)%dLen
-    in1_b_wire(i) := in1(hi, lo).asSInt
+  for (i <- (0 until xdim)) {
+    var hi = ((i+1)*cluster_in1_bits - 1)
+    var lo = ((i)*cluster_in1_bits)
+    in1_b_wire(i) := in1(hi, lo)
   }
   // Wire inputs a C value to cells
   for (i <- (0 until numel_C)) {
-    var hi = ((i+1)*params.C_width - 1)%dLen
-    var lo = ((i)*params.C_width)%dLen
+    var hi = ((i+1)*params.C_width - 1)
+    var lo = ((i)*params.C_width)
     in0_c_wire(i) := in0(hi, lo).asSInt
     in1_c_wire(i) := in1(hi, lo).asSInt 
   }
+
+  val cluster_row_en  = (0 until ydim).map(c => cntrl_io.row_en.slice(c*params.cluster_ydim, (c+1)*params.cluster_ydim))
+  val cluster_read_en = (0 until ydim).map(c => cntrl_io.read_en.slice(c*params.cluster_ydim, (c+1)*params.cluster_ydim))
 
   // Connect Cells 
   cell_array.zipWithIndex.foreach({ case(cell_row, row_idx) => {
     cell_row.zipWithIndex.foreach({ case(cell, col_idx) => {
       val load_grp = (col_idx/numel_C).toInt
       // Wire Controls
-      cell.io.row_en    := cntrl_io.row_en(row_idx)   // Enable rows
-      cell.io.readout   := cntrl_io.read_en(row_idx)  // One hot; Indicates which row is being read out
-      cell.io.load      := cntrl_io.load(load_grp)    // Indicates if cell is loading vlaue
-      cell.io.mrf_idx   := cntrl_io.mrf_idx           // Just to initial for compilation
-      cell.io.macc_en   := cntrl_io.macc_en           // Optional; hardcoded
-      cell.io.cfg_en    := cntrl_io.cnfg_en           // Optional; hardcoded
-      cell.io.reg_rst   := cntrl_io.reset
+      cell.io.row_en    := cluster_row_en(row_idx)   // Enable rows
+      cell.io.read_en   := cluster_read_en(row_idx)  // One hot; Indicates which row is being read out
+      cell.io.load      := cntrl_io.load             // Indicates if cell is loading vlaue
+      cell.io.mrf_idx   := cntrl_io.mrf_idx          // Just to initial for compilation
+      cell.io.macc_en   := cntrl_io.macc_en          // Optional; hardcoded
+      cell.io.cnfg_en   := cntrl_io.cnfg_en          // Optional; hardcoded
+      cell.io.reset     := cntrl_io.reset
 
       // Wire inputs
       cell.io.in0 := in0_a_wire(row_idx)
-      cell.io.in1 := Mux(cntrl_io.load(load_grp), in1_c_wire(col_idx%numel_C), in1_b_wire(col_idx))
+      cell.io.in1 := in1_b_wire(col_idx) //Mux(cntrl_io.load(load_grp), in1_c_wire(col_idx%numel_C), in1_b_wire(col_idx))
       dontTouch(cell.io)
     }})
   }})
 
   // Connect for systolic read out
   cell_array(0).foreach(cell => cell.io.read_in := 0.S)
-  for (j <- 1 until numel_A) {
-    for (i <- 0 until numel_B) {
+  for (j <- 1 until ydim) {
+    for (i <- 0 until xdim) {
       cell_array(j)(i).io.read_in := cell_array(j-1)(i).io.out
     }
   }
@@ -257,15 +268,15 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   // for (i <- 0 until num_reads) { read_sub_vector(i) := last_row_outputs((i+1)*dLen-1, i*dLen) }
 
   // println(s"growth_factor: ${growth_factor}")
-  val last_row = cell_array.last
-  val cells_per_read = numel_B/growth_factor
-  val read_out_wire = (0 until growth_factor).map(i => {
-    val sub_row = last_row.slice(i*cells_per_read, (i+1)*cells_per_read)
-    // println(s"slice:(${(i+1)*cells_per_read-1}, ${i*cells_per_read})")
-    println(s"tmp0: ${cell_array.last}")
-    println(s"tmp1: ${sub_row}")
-    (cntrl_io.load.asUInt === i.U) -> sub_row.map(cell => cell.io.out.asUInt).reduceRight((left, right) => right ## left)
-  })
+  // val last_row = cell_array.last
+  // val cells_per_read = numel_B/growth_factor
+  // val read_out_wire = (0 until growth_factor).map(i => {
+  //   val sub_row = last_row.slice(i*cells_per_read, (i+1)*cells_per_read)
+  //   // println(s"slice:(${(i+1)*cells_per_read-1}, ${i*cells_per_read})")
+  //   println(s"tmp0: ${cell_array.last}")
+  //   println(s"tmp1: ${sub_row}")
+  //   (cntrl_io.load.asUInt === i.U) -> sub_row.map(cell => cell.io.out.asUInt).reduceRight((left, right) => right ## left)
+  // })
   // row_read_index := cntrl_io.mrf_idx  // Will truncate correctly, but should explicitly bit slice as mrf_idx is for full MRF, but folding MRF over array
 
 
@@ -273,7 +284,8 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   io.write.valid     := cntrl_io.write_val
   io.write.bits.eg   := cntrl_io.write_eg
   io.write.bits.mask := wmask
-  io.write.bits.data := MuxCase(0.U, read_out_wire)
+  // io.write.bits.data := MuxCase(0.U, read_out_wire)
+  io.write.bits.data := cell_array.last.map(cell => cell.io.out.asUInt).reduceRight((left, right) => right ## left)
 
     // read_out_wire(cntrl_io.load)
 
@@ -291,27 +303,97 @@ class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends I
   io.set_vxsat := false.B
   io.set_fflags.valid := false.B
   io.set_fflags.bits := DontCare
-
+  
+  val YOU_SHALL_PASS = Wire(Bool())
+  YOU_SHALL_PASS := in0(0) & in1(1)
+  dontTouch(YOU_SHALL_PASS)
 }
 
 
 
 
-// // Can load C using ports of OPU cell
-// // class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
-// class OuterCluster(params: OPUParameters)(implicit p : Parameters) extends IterativeFunctionalUnit()(p)  {
-//   val io = = IO(new Bundle{
-//     val in0      = Input(UInt((params.A_width*cluster_ydim).W))
-//     val in1      = Input(UInt((params.B_width*cluster_xdim).W))
-//     val out      = Output(SInt(dLen.W))
+// Can load C using ports of OPU cell
+// class OuterProductUnit(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams  {
+class OuterProductCluster(params: OPUParameters)(implicit p : Parameters) extends CoreModule()(p) with HasVectorParams {
+  // Scala Constants 
+  // val dLen              = params.dLen
+  // val varch_ratio       = vLen/params.dLen
+  val nmrf              = params.n_mrf_regs
+  val prod_width        = params.A_width + params.B_width
+  val regs_per_mrf_reg  = scala.math.pow(egsPerVReg, 2).toInt
+  val ntotal_regs       = params.n_mrf_regs*regs_per_mrf_reg
 
-//     val read_en  = Input(Vec(params.cluster_xdim, Bool()))
-//     val row_en   = Input(Vec(params.cluster_xdim, Bool()))
-//     val load     = Input(Bool())
-//     val mrf_idx  = Input(UInt(log2Ceil(nmrf*regs_per_mrf_reg).W))
-//     val macc_en  = Input(Bool())
-//     val cnfg_en  = Input(Bool())
-//     val reset    = Input(Bool())
-//   })
+  val io = IO(new Bundle{
+    val in0      = Input(UInt((params.cluster_ydim*params.A_width).W))
+    val in1      = Input(UInt((params.cluster_ydim*params.B_width).W))
+    val out      = Output(SInt(params.C_width.W))
+    val read_in  = Input(SInt((params.cluster_xdim*params.C_width).W)) // Read out support
 
-// }
+
+    val mrf_idx  = Input(UInt(log2Ceil(nmrf*regs_per_mrf_reg).W))
+    val load     = Input(Vec(params.cluster_xdim, Bool()))
+    val row_en   = Input(Vec(params.cluster_ydim, Bool()))
+    val read_en  = Input(Vec(params.cluster_ydim, Bool()))
+    val macc_en  = Input(Bool())
+    val cnfg_en  = Input(Bool())
+    val reset    = Input(Bool())
+  })
+
+  // OPU cell cluster
+  val cluster = Seq.fill(params.cluster_xdim, params.cluster_ydim){Module(new OuterProductCell(params))}
+
+  // Segment inputs for easier manipulation
+  val numel_A = params.cluster_ydim
+  val numel_B = params.cluster_xdim
+  val numel_C = (params.B_width*params.cluster_xdim)/params.C_width
+  val growth_factor = params.C_width/params.B_width
+  val in0_a_wire = WireInit(VecInit(Seq.fill(numel_A)(0.S(params.A_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.A_width, UInt(params.A_width.W)))
+  val in1_b_wire = WireInit(VecInit(Seq.fill(numel_B)(0.S(params.B_width.W)))) // Reg(VecInit[UInt(params.A_width.W)](VLEN/params.B_width, UInt(params.B_width.W)))
+
+  for (i <- (0 until numel_A)) {
+    var hi = ((i+1)*params.A_width - 1)
+    var lo = ((i)*params.A_width)
+    in0_a_wire(i) := io.in0(hi, lo).asSInt
+  }
+  for (i <- (0 until numel_B)) {
+    var hi = ((i+1)*params.B_width - 1)
+    var lo = ((i)*params.B_width)
+    in1_b_wire(i) := io.in1(hi, lo).asSInt
+  }
+
+  // Connect control signals to cells
+  cluster.zipWithIndex.foreach({ case(cell_row, row_idx) => {
+    cell_row.zipWithIndex.foreach({ case(cell, col_idx) => {
+      // Wire Controls
+      cell.io.row_en    := io.row_en(row_idx)   // Enable rows
+      cell.io.readout   := io.read_en(row_idx)  // One hot; Indicates which row is being read out
+      cell.io.load      := io.load(col_idx)     // Indicates if cell is loading vlaue
+      cell.io.mrf_idx   := io.mrf_idx           // Just to initial for compilation
+      cell.io.macc_en   := io.macc_en           // Optional; hardcoded
+      cell.io.cfg_en    := io.cnfg_en           // Optional; hardcoded
+      cell.io.reg_rst   := io.reset
+
+      // Wire inputs
+      cell.io.in0 := io.in0(row_idx).asSInt
+      cell.io.in1 := Mux(io.load(col_idx), io.in1.asSInt, in1_b_wire(col_idx).asSInt)
+      dontTouch(cell.io)
+    }})
+  }})
+
+  // Connect for systolic read out
+  cluster(0).foreach(cell => cell.io.read_in := io.read_in)
+  for (j <- 1 until params.cluster_ydim) {
+    for (i <- 0 until params.cluster_xdim) {
+      cluster(j)(i).io.read_in := cluster(j-1)(i).io.out
+    }
+  }
+
+  // Select cluster output based upon row and read group
+  val mux_logic = cluster.zipWithIndex.map({ case(cell_row, row_idx) => {
+                    cell_row.zipWithIndex.map({ case(cell, col_idx) => {
+                      ((OHToUInt(io.read_en) === row_idx.U) && (OHToUInt(io.load) === col_idx.U)) -> cell.io.out
+                    }})
+                  }})
+  io.out := MuxCase(0.S, mux_logic.flatten)
+
+}
