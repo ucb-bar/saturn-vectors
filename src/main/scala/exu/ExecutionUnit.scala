@@ -7,7 +7,6 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import saturn.common._
-import saturn.backend._
 
 class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p: Parameters) extends CoreModule()(p) with HasVectorParams {
   override def desiredName = s"ExecutionUnit$desc"
@@ -37,30 +36,6 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
     val set_fflags = Output(Valid(UInt(5.W)))
     val busy = Output(Bool())
   })
-
-  // Outer Product Unit
-  val add_ope = desc == "int"
-  // val ope_write = Wire(new VectorWrite(dLen))
-  // val cnt = RegInit(0.U(32.W))
-
-  // ope_write := DontCare
-
-  // if (add_ope) {
-  //   val ope_params = OPUParameters(8, 8, 32, 2, dLen/8, vLen, dLen, 0.U, false.B)
-  //   val opu = Module(new OuterProductUnit(ope_params))
-  //   iter_fus :+ opu 
-
-    
-  //   // val opu_seq = Module(new OuterProductSequencer(ope_params, Seq()))
-
-  //   // // Connect Sequencer to FU
-  //   // opu_seq.io.opu_cntrl <> opu.cntrl_io
-
-  //   // // Issue
-
-
-  //   // cnt := cnt+1.U
-  // }
 
   val sharedFPUnits = fus.collect { case fp: HasSharedFPUIO => fp }
   val hasSharedFPUnits = sharedFPUnits.size > 0
@@ -159,11 +134,6 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       val tail = Mux1H(write_pipe_sel, pipe_bits.map(_.tail))
       io.pipe_write.valid := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
       io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
-      // if (add_ope) {
-      //   io.pipe_write.bits := Mux(cnt === 3.U, ope_write, Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))) // KA Added
-      // } else {
-        io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
-      // }
       io.acc_write.valid := acc && !tail
       io.acc_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
     }
@@ -205,6 +175,4 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       io.iter_hazards(i) := iter_fus(i)._1.io.hazard
     }
   }
-
-
 }

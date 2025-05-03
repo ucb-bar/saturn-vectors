@@ -49,46 +49,30 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vdq = Module(new DCEQueue(new VectorIssueInst, vParams.vdqEntries))
   vdq.io.enq <> io.dis
 
-  val xissParams = vParams.issStructure.generate(vParams)
-  val all_supported_insns = xissParams.map(_.insns).flatten
 
+  val xissParams = vParams.issStructure.generate(vParams)
   val vlissq = Module(new IssueQueue(vParams.vlissqEntries, 1))
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries, 1))
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 2)) // permute/reduction
-  val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size)).suggestName(s"vxissq_${q.name}"))
+  val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size + 1)).suggestName(s"vxissq_${q.name}")) // +1 hack for opu
 
   val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus, s.name)).suggestName(s"vxu${s.name}")))
   val flat_vxus = vxus.flatten
-  val maxPipeDepth = flat_vxus.map(_.maxPipeDepth).max
+  val vopu = Option.when(useOpu) { Module(new OuterProductUnit) }
+  val maxPipeDepth = (flat_vxus.map(_.maxPipeDepth) ++ vopu.map(_.yDim + 1)).max
 
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
-  val vps = Module(new SpecialSequencer(all_supported_insns))
   val vxs = xissParams.map(q => q.seqs.map(s =>
     Module(new ExecuteSequencer(s.insns, maxPipeDepth, s.fus.size)).suggestName(s"vxs${s.name}")
   ))
-  // val (vops, vopu) = { 
-  val vops_vopu_pkg = { 
-    if(add_opu) {
-      val opu_params = OPUParameters(8, 8, 32, 2, dLen/8, vLen, dLen, 0.U, false.B)
-      val opu     = Module(new OuterProductUnit(opu_params))
-      val opu_seq = Module(new OuterProductSequencer(opu_params, Seq()))
-      opu_seq.io.opu_cntrl <> opu.cntrl_io
-      opu.io.scalar_write.ready := false.B
-      opu_seq.io.vgu.slide_req.ready := false.B
-      opu_seq.io.vgu.slide_data := DontCare
-      opu_seq.io.vgu.gather_eidx.valid := false.B
-      opu_seq.io.vgu.gather_eidx.bits := DontCare
-      opu_seq.io.acc_valid := false.B
 
-      Some(opu_seq, opu)
-    } else {
-      None
-    }
-  }
+  val vos = Option.when(useOpu) { Module(new OuterProductSequencer) }
+  val all_supported_insns = xissParams.map(_.insns).flatten ++ vos.map(_.opu_insns).getOrElse(Nil)
+  val vps = Module(new SpecialSequencer(all_supported_insns))
 
-  val allSeqs = Seq(vls, vss, vps) ++ vxs.flatten
+  val allSeqs = Seq(vls, vss, vps) ++ vxs.flatten ++ vos
   val allIssQs = Seq(vlissq, vsissq, vpissq) ++ vxissqs
 
   val flat_vxs = vxs.flatten
@@ -112,28 +96,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
 
   // Add OPU Issue group
-  val opu_issGroup = vops_vopu_pkg match {
-    case Some((vops, vopu)) => {
-      flat_vxus.map(q => println(s"issue queue name: ${q.name}"))
-      flat_vxus.zipWithIndex.map({ case (q, idx) => {
-        println(s"${q.name} match[: ${q.name.replace("ExecutionUnit", "").startsWith("int")}")
-      }})
-      val tmp = flat_vxus.zipWithIndex.filter({case (q, idx) => q.name.replace("ExecutionUnit", "").startsWith("int")}).head
-      val issq_int = vxissqs(tmp._2)
-      Seq(IssueGroup(issq_int, Seq(vops)))
-    }
-    case _ => Nil
-  }
-
   val issGroups = Seq(
     IssueGroup(vlissq, Seq(vls)),
     IssueGroup(vsissq, Seq(vss)),
     IssueGroup(vpissq, Seq(vps)),
-  ) ++ (vxissqs.zip(vxs).map { case (q, seqs) =>
-    IssueGroup(q, seqs)
-  }) ++ opu_issGroup
-
-
+  ) ++ (vxissqs.zip(vxs).zipWithIndex.map { case ((q, seqs), i) =>
+    val s = if (i == 0 && useOpu) (seqs ++ vos) else seqs
+    IssueGroup(q, s)
+  })
 
   // ======================================
   // Set inputs to each issq/sequencer pair
@@ -195,6 +165,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxissq.io.enq.bits.scalar_to_vd0 := dis_ctrl.bool(ScalarToVD0)
     vxissq.io.enq.bits.reduction := dis_ctrl.bool(Reduction)
   }
+
 
   // ======================================
   // Connect VDQ to issue queues
@@ -294,61 +265,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // ======================================
   // Connect reads to VRF
 
-  val vrf_seq_cnt = if (add_opu) flat_vxs.size + 1 else flat_vxs.size
-  val vrf = Module(new RegisterAccess(vrf_seq_cnt, maxPipeDepth))
+  val vrf = Module(new RegisterAccess((flat_vxs ++ vos).size, maxPipeDepth))
   vrf.io.vls.rvm.req <> vls.io.rvm
   vrf.io.vss.rvd.req <> vss.io.rvd
   vrf.io.vss.rvm.req <> vss.io.rvm
   vrf.io.vps.rvs2.req <> vps.io.rvs2
   vrf.io.vps.rvm.req <> vps.io.rvm
   vps.io.acc_init_resp := vrf.io.vps.rvs2.resp
-
-
-  // Sepecial OPU connection 
-  vops_vopu_pkg match {
-    case Some((vops, vopu)) => {
-      val opu_idx = vrf_seq_cnt - 1
-      vrf.io.vxs(opu_idx).rvs1.req <> vops.io.rvs1
-      vrf.io.vxs(opu_idx).rvs2.req <> vops.io.rvs2
-      vrf.io.vxs(opu_idx).rvd.req  <> vops.io.rvd
-      vrf.io.vxs(opu_idx).rvm.req  <> vops.io.rvm
-
-      val vops_iss = vops.io.iss.bits
-      val vopu_iss = vopu.io.iss.op
-
-
-///////
-      val rvs1_data = vrf.io.vxs(opu_idx).rvs1.resp
-      val rvs2_data = vrf.io.vxs(opu_idx).rvs2.resp
-      val rvd_data = vrf.io.vxs(opu_idx).rvd.resp
-
-      vopu_iss.rvs1_data := rvs1_data
-      vopu_iss.rvs2_data := rvs2_data
-      vopu_iss.rvd_data := rvd_data
-      vopu_iss.rvs1_elem := DontCare
-      vopu_iss.rvs2_elem := DontCare
-      vopu_iss.rvd_elem := DontCare
-///////
-
-      val vm_off    = ((1 << dLenOffBits) - 1).U(log2Ceil(dLen).W)
-      val vm_eidx   = (vops_iss.eidx & ~(vm_off >> vops_iss.vd_eew))(log2Ceil(dLen)-1,0)
-      val vm_resp   = (vrf.io.vxs(opu_idx).rvm.resp >> vm_eidx)(dLenB-1,0)
-      val vm_mask   = Mux(vops_iss.use_wmask,
-        VecInit.tabulate(4)({ sew => FillInterleaved(1 << sew, vm_resp)(dLenB-1,0) })(vops_iss.vd_eew),
-        ~(0.U(dLenB.W))
-      )
-      
-      vopu_iss.wmask := vops_iss.eidx_mask & vm_mask
-      vopu_iss.rmask := Mux(vops_iss.vm, ~(0.U(dLenB.W)), vm_resp)
-      vopu_iss.rvm_data := Mux(vops_iss.vm, ~(0.U(dLen.W)), vrf.io.vxs(opu_idx).rvm.resp)
-
-      vops.io.iss.ready := !vopu.io.busy
-      vopu.io.iss.valid := vops.io.iss.valid
-      vopu.io.iss.op.viewAsSupertype(new ExecuteMicroOp(1)) := vops.io.iss.bits
-
-    }
-    case None => 
-  }
 
 
   // Connection to VXS -> VRF and VXS <-> VXUS
@@ -429,6 +352,23 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
   }
 
+  // outer product vrf reads
+  vopu.foreach { vopu =>
+
+    vrf.io.vxs(flat_vxs.size).rvs1.req <> vos.get.io.rvs1
+    vrf.io.vxs(flat_vxs.size).rvs2.req <> vos.get.io.rvs2
+    vrf.io.vxs(flat_vxs.size).rvm.req.valid := false.B
+    vrf.io.vxs(flat_vxs.size).rvm.req.bits := DontCare
+    vrf.io.vxs(flat_vxs.size).rvd.req.valid := false.B
+    vrf.io.vxs(flat_vxs.size).rvd.req.bits := DontCare
+    vos.get.io.iss.ready := true.B
+
+    vopu.io.op := vos.get.io.iss.bits
+    vopu.io.op.in_l := vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W))))
+    vopu.io.op.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W))))
+  }
+
+
   val frontend_rindex = Wire(new VectorReadIO)
   val frontend_rmask  = Wire(new VectorReadIO)
   vrf.io.frontend.rindex <> frontend_rindex
@@ -442,15 +382,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.iter_writes(i) <> flat_vxus(i).io.iter_write
   }
 
-   // Sepecial OPU connection 
-  vops_vopu_pkg match {
-    case Some((vops, vopu)) => {
-      val opu_idx = vrf_seq_cnt - 1
-      vrf.io.vxs(opu_idx).pipe_write_req <> vops.io.pipe_write_req
-      vrf.io.pipe_writes(opu_idx) <> DontCare
-      vrf.io.iter_writes(opu_idx) <> vopu.io.write
-    }
-    case None => 
+
+  // Sepecial OPU connection
+  vos.foreach { vos =>
+    vrf.io.vxs(flat_vxs.size).pipe_write_req <> vos.io.pipe_write_req
+    vrf.io.pipe_writes(flat_vxs.size).valid := vos.io.write.valid
+    vrf.io.pipe_writes(flat_vxs.size).bits.eg := vos.io.write.bits
+    vrf.io.pipe_writes(flat_vxs.size).bits.data := vopu.get.io.out.asUInt
+    vrf.io.pipe_writes(flat_vxs.size).bits.mask := ~(0.U(dLen.W))
+
+    vrf.io.iter_writes(flat_vxs.size).valid := false.B
+    vrf.io.iter_writes(flat_vxs.size).bits := DontCare
   }
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
@@ -606,6 +548,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vss.io.iss.fire && vss.io.iss.bits.tail, vss.io.iss.bits.vat)
   vxs.flatten.foreach(xs => clearVat(xs.io.iss.fire && xs.io.iss.bits.tail, xs.io.iss.bits.vat))
+  vos.foreach { vos =>
+    clearVat(vos.io.iss.fire && vos.io.tail, vos.io.vat)
+  }
 
   // Signalling to frontend
   val seq_inflight_wv0 = (allSeqs.map(_.io.seq_hazard).map { h =>

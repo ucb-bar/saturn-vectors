@@ -12,431 +12,220 @@ import saturn.insns._
 import scala.math._
 import saturn.exu._
 
+class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new OuterProductControl) with HasOPUParams {
+  val rvs1 = Decoupled(new VectorReadReq)
+  val rvs2 = Decoupled(new VectorReadReq)
 
-class OuterProductIO(params : OPUParameters, dLen : Int, egsTotal : Int, egsPerVReg : Int) extends Bundle {
-  val nmrf       = params.n_mrf_regs
-  val nrows      = dLen/params.A_width
-  val ncell_grps = params.C_width/min(params.A_width, params.B_width)
-  val regs_per_mrf_reg = scala.math.pow(egsPerVReg, 2).toInt
+  val pipe_write_req = new VectorPipeWriteReqIO(yDim)
 
-  // Write Control
-  val write_eg   = Input(UInt(log2Ceil(egsTotal).W)) // Forward which element to write to OPU from control logic
-  val write_val  = Input(Bool())           // Forward write valid to OPU from contr ol logic
-  val write_mask = Input(UInt(dLen.W))     // Forward write mask to OPU from control logic
-
-  // Array control
-  // val opu_en   = Input(Bool())              // DEPRECATED; Indicate to perform MACC
-  val read_en  = Input(Vec(nrows, Bool()))
-  val row_en   = Input(Vec(nrows, Bool()))
-  val load     = Input(Vec(ncell_grps, Bool()))
-  val mrf_idx  = Input(UInt(log2Ceil(nmrf*regs_per_mrf_reg).W))
-  val macc_en  = Input(Bool())
-  val cnfg_en  = Input(Bool())
-  val reset    = Input(Bool())
+  val tail = Output(Bool())
+  val write = Output(Valid(UInt(log2Ceil(egsTotal).W)))
 }
 
+class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProductControl]()(p) with HasOPUParams {
 
-// Create states for FSM
-object State extends ChiselEnum { val IDLE, MVIN, MVOUT0, MVOUT1, OPROD = Value }
+  val opu_insns = vParams.opuInsns
 
-// 
-class OuterProductUnitSequencerIO(params : OPUParameters, maxDepth: Int, nFUs: Int)(implicit p: Parameters) extends ExecuteSequencerIO(maxDepth, nFUs) {
-  val opu_cntrl = Flipped(new OuterProductIO(params, dLen, egsTotal, egsPerVReg))
-}
+  def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst, opu_insns, Nil).matched
 
+  // wsboard (write scoreboard) keeps track of inflight mvouts
+  val wsboard = RegInit(0.U(egsTotal.W))
+  val wsboard_write = WireInit(0.U(egsTotal.W))
+  val wsboard_clear = WireInit(0.U(egsTotal.W))
+  wsboard := (wsboard | wsboard_write) & ~wsboard_clear
 
-// This implementation assumes that the programmer sets LMUL to the correct value 
-// prior to move-ins and move-outs
+  val io = IO(new OuterProductSequencerIO)
 
-class OuterProductSequencer(params : OPUParameters, exu_insns: Seq[VectorInstruction])(implicit p: Parameters) extends Sequencer[ExecuteMicroOp]()(p) {
-  import State._
+  // registers for currently handled instruction
+  val valid = RegInit(false.B)
+  val inst = Reg(new BackendIssueInst)
+  val head = Reg(Bool())
 
-  // Hardcode these for now
-  val nFUs = 1
-  val maxPipeDepth = 1 
-  val min_dtype = 8
-  val CLUSTER_SIZE = 1 // How many cells per cluster
+  val wvd_mask = Reg(UInt(egsTotal.W))
+  val rvs1_mask = Reg(UInt(egsTotal.W))
+  val rvs2_mask = Reg(UInt(egsTotal.W))
 
-  // INSTRUCTION ENCODING TODO: Figure out a better way to do this
-  val MVIN_FUNCT6  = 0
-  val MVOUT_FUNCT6 = 1
-  val OPROD_FUNCT6 = 2
-  val RESET_FUNCT6 = 3
+  val mvin = Reg(Bool())
+  val mvin_bcast = Reg(Bool())
+  val mvout = Reg(Bool())
+  val macc = Reg(Bool())
 
-  // Maintain Execution Sequencer IO
-  val io = IO(new OuterProductUnitSequencerIO(params, maxPipeDepth, nFUs))
+  val scalar_row_idx = inst.rs1_data
+  val scalar_cluster_row_idx = (scalar_row_idx >> log2Ceil(clusterYdim))(log2Ceil(yDim)-1,0)
+  // row0 takes the longest
+  val scalar_row_latency = (yDim.U - scalar_cluster_row_idx)
 
-  // Ergonomic 
-  val varch_ratio     = egsPerVReg                  // Rename because legacy
-  val array_nrows     = dLen/params.A_width
-  val array_ncols     = dLen/params.B_width
-  val nloads_per_row  = params.C_width/params.B_width
-  val opu_dim         = dLen/min_dtype              // Dimension of PE array 
-  val min_inwidth     = Math.min(params.A_width, params.B_width)  
-  val growth_factor   = params.C_width/min_inwidth  // Ratio between accumulator and input (TODO: expression is probably wrong for rectangular arrays)
-  val mvin_vrf_reads  = varch_ratio*growth_factor   // Number of VRF writes to mvin row of OPU
+  // maccs use both col_idx and row_idx, mvins/mvouts use col_idx only
+  val col_idx = Reg(UInt(log2Ceil(wideningFactor * (vLen / dLen)).W))
+  val row_idx = Reg(UInt(log2Ceil(vLen / dLen).W))
 
-  // Signals
-  val mvin_enable  = WireInit(false.B)
-  val mvout_enable = WireInit(false.B)
-  val oprod_enable = WireInit(false.B)
-  // val row_load     = Wire(Vec(opu_dim, Bool())) // Enables row to be loaded
-  // val load         = Wire(Vec(growth_factor, Bool())) // One bit per group of cells written by one DLEM (total # of cells/# of cells written by DLEN)
-  // FSM
-  val ctrl_st      = RegInit(IDLE)
-  val egidx0       = Reg(UInt(log2Ceil(egsPerVReg).W))
-  val egidx1       = Reg(UInt(log2Ceil(egsPerVReg).W))
-  val regidx       = Reg(UInt(log2Ceil(egsPerVReg).W))   // Index for internal register in matrix register row
-  val op_egidx     = Reg(UInt((2*log2Ceil(egsPerVReg)).W))
-  val load_idx     = Reg(UInt(log2Ceil(growth_factor * egsPerVReg).W))   // Index for internal register in matrix register row
+  val renv1 = macc
+  val renv2 = macc || mvin || mvin_bcast
 
-  val load_cnt    = Reg(UInt(log2Ceil(growth_factor).W))
-  val mvout_cnt   = Reg(UInt(log2Ceil(dLen/CLUSTER_SIZE).W))  // TODO: this assume no clustering
-  val mvout_cnt_rows   = Reg(UInt(log2Ceil(egsPerVReg).W)) 
-  val mvout_cnt_dlen   = Reg(UInt(log2Ceil(nloads_per_row).W)) 
-  
-  // Registers for extracting registers (ergonomic)
-  val mvin_vreg   = Reg(UInt(5.W))
-  val mvin_mrow   = Reg(UInt(log2Ceil(dLen/params.A_width).W)) // Row within the MRF not the cell array
-  val mvin_mreg   = Reg(UInt(log2Ceil(params.n_mrf_regs).W))
-  val mvout_vreg  = Reg(UInt(5.W))
-  val mvout_mrow  = Reg(UInt(log2Ceil(dLen/params.A_width).W))
-  val mvout_mreg  = Reg(UInt(log2Ceil(params.n_mrf_regs).W)) // MRF number
-  val oprod_vreg0 = Reg(UInt(5.W))
-  val oprod_vreg1 = Reg(UInt(5.W))
-  val oprod_mreg  = Reg(UInt(log2Ceil(params.n_mrf_regs).W))
+  val next_col_idx = col_idx +& 1.U
+  val next_row_idx = row_idx +& 1.U
 
+  val col_idx_tail = next_col_idx === Mux(macc, (vLen / dLen).U, (wideningFactor * vLen / dLen).U)
+  val row_idx_tail = next_row_idx === (vLen / dLen).U
 
+  val macc_tail = col_idx_tail && row_idx_tail
 
-  // Default IO Settings
-  io.acc_ready := false.B // Signal not used
-  io.vgu <> DontCare
-  io.pipe_write_req <> DontCare
+  val tail = Mux(macc, macc_tail, col_idx_tail)
 
-  // From issue queue
-  io.vat          <> DontCare
-  io.head         <> DontCare 
-  // io.vat_head     <> DontCare 
-  // io.older_writes <> DontCare 
-  // io.older_reads  <> DontCare 
+  io.dis.ready := !valid || (tail && io.iss.fire) && !io.dis_stall
 
+  // Take a new instruction
+  when (io.dis.fire) {
+    val dis_inst = io.dis.bits
 
-  //********************************************************************
-  // io.iss        = Decoupled(issType)
-  // io.dis        = Flipped(Decoupled(new BackendIssueInst))
-  // io.dis_stall  = Input(Bool()) // used to disable OOO
-  // io.seq_hazard = Output(Valid(new SequencerHazard))
-  //********************************************************************
+    val dis_vd_arch_mask  = get_arch_mask(dis_inst.rd , 0.U)
+    val dis_vs1_arch_mask = get_arch_mask(dis_inst.rs1, dis_inst.emul)
+    val dis_vs2_arch_mask = get_arch_mask(dis_inst.rs2, dis_inst.emul)
 
-  io.opu_cntrl.row_en := (0.U(array_nrows.W)).asBools
-  io.opu_cntrl.read_en := (0.U(array_nrows.W)).asBools
-  io.opu_cntrl.load := (0.U(growth_factor.W)).asBools
+    valid := true.B
+    inst := io.dis.bits
+    wvd_mask      := Mux(dis_inst.wvd               , FillInterleaved(egsPerVReg, dis_vd_arch_mask), 0.U)
+    rvs1_mask     := Mux(dis_inst.renv1             , FillInterleaved(egsPerVReg, dis_vs1_arch_mask), 0.U)
+    rvs2_mask     := Mux(dis_inst.renv2             , FillInterleaved(egsPerVReg, dis_vs2_arch_mask), 0.U)
+    val funct6 = OPMFunct6(dis_inst.funct6)
+    mvin := funct6 === OPMFunct6.opmvin
+    mvout :=  funct6 === OPMFunct6.opmvout
+    macc :=  funct6 === OPMFunct6.opmacc
+    mvin_bcast :=  funct6 === OPMFunct6.opmvinbcast
+    col_idx := 0.U
+    row_idx := 0.U
+    head := true.B
+  } .elsewhen (io.iss.fire) {
+    valid := !tail
+    head := false.B
+  }
 
-  // Vector Reag
-  io.rvs1.valid := false.B
-  io.rvs2.valid := false.B
-  io.rvd.valid  := false.B
-  io.rvm.valid  := false.B
-  io.rvs1.bits  := DontCare
-  io.rvs2.bits  := DontCare
-  io.rvd.bits   := DontCare
-  io.rvm.bits   := DontCare
+  val wvd_eg = ((inst.rd << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0)
 
-  // Hazard
-  io.seq_hazard.valid := true.B   // This is probably wrong
-  io.seq_hazard.bits  := DontCare
+  // report hazards
+  io.vat := inst.vat
+  io.seq_hazard.valid := valid
+  io.seq_hazard.bits.rintent := hazardMultiply(rvs1_mask | rvs2_mask)
+  io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask) | wsboard
+  io.seq_hazard.bits.vat := inst.vat
 
-  // Control
-  io.opu_cntrl.write_val  := false.B
-  io.opu_cntrl.write_eg   := DontCare
-  io.opu_cntrl.write_mask := DontCare
-  io.opu_cntrl.mrf_idx    := 0.U
-  io.opu_cntrl.macc_en    := true.B
-  io.opu_cntrl.cnfg_en    := false.B
-  io.opu_cntrl.reset      := false.B
+  val vs1_read_oh = Mux(renv1   , UIntToOH(io.rvs1.bits.eg), 0.U)
+  val vs2_read_oh = Mux(renv2   , UIntToOH(io.rvs2.bits.eg), 0.U)
+  val vd_write_oh = Mux(mvout   , UIntToOH(wvd_eg), 0.U)
 
-  // Dispatch
+  val older_writes = io.older_writes | wsboard
 
-  io.seq_hazard.valid := false.B
-  io.vat := DontCare
+  val raw_hazard = ((vs1_read_oh | vs2_read_oh) & older_writes) =/= 0.U
+  val waw_hazard = (vd_write_oh & older_writes) =/= 0.U
+  val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
+  val data_hazard = raw_hazard || waw_hazard || war_hazard
 
-  // Issue 
-  io.iss.valid := false.B 
-  io.iss.bits <> DontCare   // Just to get the thing compiling
-  io.iss.bits.fu_sel := 0.U
-  io.iss.bits.eidx := 0.U
-  io.iss.bits.vl := 0.U // TODO: Set this to a correct value
-  io.iss.bits.rvs1_eew := 0.U //TODO: Do these need to be set 
-  io.iss.bits.rvs2_eew := 0.U //TODO: Do these need to be set
-  io.iss.bits.rvd_eew := 0.U
-  io.iss.bits.vd_eew := 0.U
-  io.iss.bits.sew := 0.U
-  io.iss.bits.scalar := DontCare
-  io.iss.bits.use_scalar_rvs1 := false.B
-  io.iss.bits.use_zero_rvs2 := false.B
-  io.iss.bits.use_slide_rvs2 := false.B
+  // element group we are reading
+  io.rvs1.bits.eg := ((inst.rs1 << log2Ceil(egsPerVReg)) +& row_idx)(log2Ceil(egsTotal)-1,0)
+  io.rvs2.bits.eg := ((inst.rs2 << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0)
+
+  io.rvs1.valid := valid && renv1
+  io.rvs2.valid := valid && renv2
+
+  val oldest = inst.vat === io.vat_head
+  io.rvs1.bits.oldest := oldest
+  io.rvs2.bits.oldest := oldest
+
+  // this avoids write-structural-conflicts from the OPU
+  val exu_scheduler = Module(new PipeScheduler(1, yDim+1))
+  exu_scheduler.io.reqs(0).request := valid && mvout
+  exu_scheduler.io.reqs(0).fire := io.iss.fire
+  exu_scheduler.io.reqs(0).depth := scalar_row_latency
+
+  // this avoids write-structural-hazards on bank ports with other FUs (maybe)
+  io.pipe_write_req.request := valid && mvout && exu_scheduler.io.reqs(0).available
+  io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits-1,0)))
+  io.pipe_write_req.pipe_depth := scalar_row_latency
+  io.pipe_write_req.oldest := oldest
+  io.pipe_write_req.fire := io.iss.fire
+
+  val iss_valid = (valid &&
+    !data_hazard &&
+    !(renv1 && !io.rvs1.ready) &&
+    !(renv2 && !io.rvs2.ready) &&
+    !(mvout && !io.pipe_write_req.available) &&
+    !(mvout && !exu_scheduler.io.reqs(0).available)
+  )
+
+  io.iss.valid := iss_valid
+  io.iss.bits.in_l := DontCare // set in Backend
+  io.iss.bits.in_t := DontCare
 
 
+  // set the control signals
+  val mrf_row_idx = Mux(macc,
+    row_idx,
+    scalar_row_idx >> log2Ceil(yDim * clusterYdim),
+  )(log2Ceil(vLen / dLen)-1,0)
+  val mrf_col_idx = col_idx(log2Ceil(vLen / dLen)-1,0)
 
-  // Main control FSM
-  //  - when valid instruction 
-  //  - decode intstruction and figure which operation
-  //  - trigger FSM, and wait until done
-  switch(ctrl_st) {
-    is(IDLE) {
-      when(io.dis.fire) {
-        // io.dis.ready := true.B
-        mvin_vreg   := io.dis.bits.rs1
-        mvin_mrow   := io.dis.bits.rs2
-        mvin_mreg   := io.dis.bits.rd
-        mvout_vreg  := io.dis.bits.rs1
-        mvout_mrow  := io.dis.bits.rs2
-        mvout_mreg  := io.dis.bits.rd
-        oprod_vreg0 := io.dis.bits.rs1
-        oprod_vreg1 := io.dis.bits.rs2
-        oprod_mreg  := io.dis.bits.rd
+  // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
+  io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
+    inst.rd,
+    mrf_row_idx,
+    mrf_col_idx
+  ), 0.U))
+  io.iss.bits.row_idx.foreach(_ := Mux(io.iss.fire, scalar_row_idx, 0.U))
+  io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx >> log2Ceil(vLen / dLen), 0.U))
+  io.iss.bits.macc.foreach(_ := io.iss.fire && macc)
+  io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast)
+  io.iss.bits.reset.foreach(_ := reset.asBool)
 
-        ctrl_st := MuxCase(IDLE, Array( 
-                          (io.dis.bits.funct6 === MVIN_FUNCT6.U)  -> MVIN,
-                          (io.dis.bits.funct6 === MVOUT_FUNCT6.U) -> MVOUT0,
-                          (io.dis.bits.funct6 === OPROD_FUNCT6.U) -> OPROD))
-      } .otherwise {
-        ctrl_st := IDLE 
-        // io.dis.ready := false.B
-      }
+  // for a non-bcast mvin, only the specific row of clusters gets mvin set
+  for (i <- 0 until yDim) {
+    io.iss.bits.mvin(i) := io.iss.fire && mvin && scalar_cluster_row_idx === i.U
+  }
 
-      // Reset counters
-      egidx0   := 0.U
-      egidx1   := 0.U
-      load_cnt := 0.U
-      load_idx := 0.U
-      mvout_cnt := 0.U
-      mvout_cnt_rows := 0.U
-      mvout_cnt_dlen := 0.U
+  // mvout_pipe tracks the inflight write destinations
+  val mvout_pipe = Reg(Vec(yDim, UInt(log2Ceil(egsTotal).W)))
+  val mvout_valids = RegInit(0.U(yDim.W))
 
-      // Stop VRF requests
-      io.rvs1.valid := false.B
-      io.rvs2.valid := false.B
-      io.rvd.valid  := false.B
-      io.rvm.valid  := false.B
+  mvout_valids := (mvout_valids << 1) | ((io.iss.fire && mvout) << scalar_cluster_row_idx)
 
-      // No need to prioritize funct6 takes single value
-      // mvin_enable  := io.dis.valid && (io.dis.bits.funct6 === MVIN_FUNCT6.U)
-      // mvout_enable := io.dis.valid && (io.dis.bits.funct6 === MVOUT_FUNCT6.U)
-      // oprod_enable := io.dis.valid && (io.dis.bits.funct6 === OPROD_FUNCT6.U)
-      io.opu_cntrl.reset := io.dis.valid && (io.dis.bits.funct6 === RESET_FUNCT6.U)
+  // if the row above us has a valid thing being mv'd out, we have to shift that in
+  io.iss.bits.shift.foreach(_ := false.B)
+  for (i <- 1 until yDim) {
+    mvout_pipe(i) := mvout_pipe(i-1)
+    io.iss.bits.shift(i) := mvout_valids(i-1)
+  }
+
+  for (i <- 0 until yDim) {
+    when (io.iss.fire && mvout && i.U === scalar_cluster_row_idx) {
+      mvout_pipe(i) := wvd_eg
     }
+  }
+  // When it leave the mvout pipe, then we do the write
+  io.write.valid := mvout_valids(yDim-1)
+  io.write.bits := mvout_pipe(yDim-1)
 
-    is(MVIN) {
+  // clear the wsboard when we do a write
+  wsboard_clear := (mvout_valids(yDim-1) << mvout_pipe(yDim-1))
 
-      load_idx := Mux(io.rvs1.fire, load_idx + 1.U, load_idx)
-      ctrl_st  := Mux(load_idx === (nloads_per_row-1).U, IDLE, MVIN)
-
-      io.opu_cntrl.row_en(mvin_mrow) := io.rvs1.fire
-      io.opu_cntrl.read_en           := WireInit(VecInit(Seq.fill(array_nrows)(false.B)))
-      io.opu_cntrl.mrf_idx           := Cat(mvin_mreg, mvin_mrow/array_nrows.U + load_idx)
-      io.opu_cntrl.load              := UIntToOH(load_idx(log2Ceil(nloads_per_row)-1, 0) + 1.U).asBools
-
-      io.rvs2.valid   := (load_idx < (growth_factor * egsPerVReg).U)
-      io.rvs2.bits.eg := getEgId(mvout_vreg, 0.U, 8.U, false.B) + load_idx
-      mvin_enable := true.B
-
-      // // NOTE: you are writing the entire vector 
-      // when (load_idx === (growth_factor * egsPerVReg).U) {
-      //   load_idx := 0.U
-      //   ctrl_st := IDLE
-      //   io.rvs1.valid := false.B
-      // } otherwise {
-      //   when(io.rvs1.fire) {
-      //     load_idx := load_idx + 1.U
-      //     // TODO: Pulse load signal for correct row + cell group
-      //     // val mvin_egidx = RegInit(UInt(log2Ceil(params.C_width/params.B_width).W), load_idx(log2Ceil(params.C_width/params.B_width)-1, 0))
-      //     io.opu_cntrl.load := UIntToOH(load_idx(log2Ceil(params.C_width/params.B_width)-1, 0)).asBools   // TODO: Modulo for quick development; remove in improved version
-      //   } otherwise {
-      //     io.opu_cntrl.load := UIntToOH(0.U(log2Ceil(params.C_width/params.B_width).W)).asBools
-      //   }
-
-      //   // io.row_load  := UIntToOH(mvin_mrow)
-      //   io.rvs2.bits.eg := load_idx
-      //   io.rvs2.valid := true.B
-      // }
-      // io.iss.valid :=  io.rvs1.fire
-
+  // update counters
+  when (io.iss.fire && !tail) {
+    when (!macc || row_idx_tail) {
+      rvs2_mask := rvs2_mask & ~UIntToOH(io.rvs2.bits.eg)
     }
+    rvs1_mask := rvs1_mask & ~UIntToOH(io.rvs1.bits.eg)
 
-    // // Orignal: Non-functional
-    // is(MVOUT0){
-    //   mvout_enable := true.B
-    //   when (mvout_cnt === (mvout_mrow + varch_ratio.U) - 1.U) {
-    //     ctrl_st := IDLE
-    //   } .otherwise {
-    //     mvout_cnt := mvout_cnt + 1.U
-    //   }
-
-    //   regidx := Mux(mvout_cnt < varch_ratio.U, Cat(mvout_mreg, mvout_mrow + mvout_cnt), regidx)   // SLOPPY BUT WHATEVER
-    //   io.opu_cntrl.row_en   := UIntToOH(mvout_mrow(log2Ceil(array_nrows)-1, 0)).asBools       // Indicate that row being read
-    //   io.opu_cntrl.read_en  := (-1).S(io.opu_cntrl.read_en.getWidth.W).asBools                    // Cells that they are reading
-    //   io.opu_cntrl.mrf_idx  := Cat(mvout_mreg, mvout_mrow + regidx)                               // Indicate the MRF register and row in that MRF
-    //   io.opu_cntrl.load     := WireInit(VecInit(Seq.fill(ncell_grps)(false.B))))
-
-    //   // TODO: Set Value for VectorPipeWriteReqIO
-    //   // TODO: Indicate write hazard. Assert write hazard for entire vector register (all element groups in vector register)
-      
-    //   // io.older_writes := FillInterleaved(varch_ratio, true.B) << (mvout_vreg * varch_ratio.U) // TODO: Should do multiplication by two with shift to avoid overflow
-
-    //   io.opu_cntrl.write_val  := (mvout_cnt >= mvout_mrow) // Rows zero-indexed 
-    //   io.opu_cntrl.write_eg   := getEgId(mvout_vreg, 0.U, 8.U, false.B)
-    //   io.opu_cntrl.write_mask := (-1).S(io.opu_cntrl.write_mask.getWidth.W).asUInt  // TODO: Base off of AVL
-    //   io.seq_hazard.valid     := true.B   // This is probably wrong
-      
-    //   val tmp = WireInit(VecInit(Seq.fill(egsTotal)(false.B)))
-    //   val base_eg = getEgId(mvout_vreg, 0.U, 8.U, false.B)
-    //   for (i <- 0 to egsPerVReg) {
-    //     tmp(base_eg + i.U) := true.B
-    //   }
-    //   io.seq_hazard.bits.wintent   := tmp.asUInt
-
-    // }
-
-    // This state just shifts first array tile data to bottom of array
-    is(MVOUT0) {
-
-      io.opu_cntrl.write_eg   := 0.U
-      io.opu_cntrl.write_val  := false.B
-      io.opu_cntrl.write_mask := 0.U
-
-      io.opu_cntrl.load     := WireInit(VecInit(Seq.fill(io.opu_cntrl.load.length)(false.B)))
-      val tmp = Reg(UInt(io.opu_cntrl.read_en.length.W))
-      tmp :=((1.U(array_nrows.W) << mvout_mrow) - 1.U)
-      io.opu_cntrl.read_en  := tmp.asBools        // Cells that they are reading
-      io.opu_cntrl.row_en   := Mux(mvout_cnt < egsPerVReg.U, 
-                                  WireInit(VecInit(UIntToOH(mvout_mrow(log2Ceil(array_nrows)-1, 0)).asBools)), // Only works for power of two, but f*ck it
-                                  WireInit(VecInit(Seq.fill(array_nrows)(false.B))))       // Indicate that row being read
-      io.opu_cntrl.mrf_idx  := Mux(mvout_cnt < egsPerVReg.U, 
-                                  Cat(mvout_mreg, mvout_mrow/array_nrows.U + mvout_cnt), 
-                                  0.U)                            // Indicate the MRF register and row in that MRF
-      
-      mvout_cnt := Mux(mvout_cnt === (mvout_mrow-2.U), 0.U, mvout_cnt + 1.U)
-      ctrl_st   := Mux(mvout_cnt === (mvout_mrow-2.U), MVOUT1, MVOUT0)
-      mvout_enable := true.B 
-
-      // io.opu_cntrl.mrf_idx  := Cat(mvout_mreg, mvout_mrow + regidx)                               // Indicate the MRF register and row in that MRF
-
-
-      
-      // // Move data through pipeline registers
-      // when (mvout_cnt === (mvout_mrow-1.U)) {
-      //   ctrl_st   := MVOUT1
-      //   mvout_cnt := 0.U
-      // } .otherwise {
-      //   mvout_cnt := mvout_cnt + 1.U
-      // }
-
-      // // TODO: Only activate row_en for row being read and those below
-      // when (mvout_cnt < varch_ratio.U) {
-      //   regidx := Cat(mvout_mreg, mvout_mrow + mvout_cnt)
-      //   io.opu_cntrl.read_en  := UIntToOH(mvout_mrow(log2Ceil(array_nrows)-1, 0)).asBools       // Indicate that row being read
-      // } .otherwise {
-      //   regidx := regidx
-      //   io.opu_cntrl.read_en := 0.U.asBools
-      // }
-
-
-      // io.opu_cntrl.mrf_idx  := regidx                            // Indicate the MRF register and row in that MRF
-      // io.opu_cntrl.row_en   := ((1.U << mvout_mrow) - 1.U).asBools        // Cells that they are reading
-      // // regidx := Mux(mvout_cnt < varch_ratio.U, Cat(mvout_mreg, mvout_mrow + mvout_cnt), regidx)   // SLOPPY BUT WHATEVER
-      // // io.opu_cntrl.read_en  := Mux(mvout_cnt < varch_ratio.U, UIntToOH(mvout_mrow(log2Ceil(array_nrows)-1, 0)).asBools       // Indicate that row being read
-
+    col_idx := next_col_idx
+    when (col_idx_tail) {
+      col_idx := 0.U
+      row_idx := next_row_idx
     }
-
-    is(MVOUT1) {
-
-      when (mvout_cnt_rows === (egsPerVReg-1).U) {
-        ctrl_st := IDLE
-        mvout_cnt_rows := 0.U
-        mvout_cnt_dlen := 0.U
-        io.opu_cntrl.read_en := WireInit(VecInit(Seq.fill(array_nrows)(false.B)))
-      } otherwise {
-        when (mvout_cnt_dlen === (nloads_per_row-1).U) {
-          mvout_cnt_rows := mvout_cnt_rows + 1.U
-          mvout_cnt_dlen := 0.U
-          io.opu_cntrl.read_en := WireInit(VecInit(Seq.fill(array_nrows)(true.B)))
-        } otherwise {
-          mvout_cnt_dlen := mvout_cnt_dlen + 1.U
-          io.opu_cntrl.read_en := WireInit(VecInit(Seq.fill(array_nrows)(false.B)))
-        }
-      }
-
-      mvin_enable := true.B 
-      io.opu_cntrl.load     := UIntToOH(mvout_cnt_dlen).asBools
-      io.opu_cntrl.row_en   := WireInit(VecInit(Seq.fill(array_nrows)(false.B)))
-      io.opu_cntrl.write_val  := (mvout_cnt >= mvout_mrow) // Rows zero-indexed 
-      io.opu_cntrl.write_eg   := getEgId(mvout_vreg, 0.U, 8.U, false.B)
-      io.opu_cntrl.write_mask := (-1).S(io.opu_cntrl.write_mask.getWidth.W).asUInt  // TODO: Base off of AVL
-    }
-
-    is(OPROD){
-
-
-      when (op_egidx === (2*egsPerVReg-1).U) {
-        ctrl_st := IDLE
-      }
-
-      when (io.rvs1.fire && io.rvs2.fire) {
-        op_egidx := op_egidx + 1.U
-        io.opu_cntrl.row_en := ((-1).S(array_nrows.W)).asBools
-      } .otherwise {
-        op_egidx := op_egidx
-        io.opu_cntrl.row_en := (0.U(array_nrows.W)).asBools
-      }
-
-
-
-
-      egidx0 := op_egidx(log2Ceil(egsPerVReg)-1, 0)
-      egidx1 := op_egidx(2*log2Ceil(egsPerVReg)-1, log2Ceil(egsPerVReg))
-
-      // Load element group from vector
-      io.rvs1.valid   := true.B
-      io.rvs2.valid   := true.B
-      io.rvs1.bits.eg := egidx0
-      io.rvs2.bits.eg := egidx1
-      io.iss.valid    := io.rvs1.fire && io.rvs2.fire
-      oprod_enable    := true.B
-
+    when (mvout) {
+      wsboard_write := UIntToOH(wvd_eg)
     }
   }
 
-  def accepts(inst: VectorIssueInst) : Bool = !inst.vmu 
-
-
-  io.opu_cntrl.macc_en := true.B
-  io.opu_cntrl.cnfg_en := false.B
-  io.iss.valid := false.B // Combination of row_en, load, and readout serve as valids
-  io.dis.ready := !(mvin_enable | mvout_enable | oprod_enable)
-  io.busy      := !(mvin_enable | mvout_enable | oprod_enable)
+  io.busy := valid
+  io.head := head
+  io.tail := tail
 }
 
 
-
-// // Move-Ins take priority
-// mvin_enable  := (io.dis.bits.funct6 == MVIN_FUNCT6)
-// mvout_enable := (io.dis.bits.funct6 == MVOUT_FUNCT6) && !mvin_enable
-// oprod_enable := (io.dis.bits.funct6 == OPROD_FUNCT6) && !mvin_enable && !mvout_enable
-
-// Move-In FSM (ReadIn)
-//    Assume Full MRF Load or Partial Load? 
-//     - Would need to support in instruction encoding 
-//    Access DLEN per cycle up until the number of rows/columns 
-// val opu_row_grp = Reg(UInt(log2Ceil(mvin_vrf_reads).W))
-
-// Extract the vector register
-// Extract the MRF & row #
-
-// Move-Out FSM (Readout)
-// OuterProduct FSM
-//    VRF Access
-//    - Cycle 1: Two A0 - B0
-//    - Cycle 2: Two A0 - B1
-//    - Cycle 3: Two A1 - B1
-//    - Cycle 4: Two A1 - B0

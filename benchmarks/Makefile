@@ -49,6 +49,7 @@ bmarks = \
 	vec-square-root-approx \
 	vec-transpose-load \
 	vec-transpose-store \
+	vec-optest
 
 cpp_bmarks = \
 	vec-tasks \

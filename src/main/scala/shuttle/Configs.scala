@@ -16,8 +16,7 @@ class WithShuttleVectorUnit(
   params: VectorParams = VectorParams(),
   cores: Option[Seq[Int]] = None,
   location: HierarchicalLocation = InSubsystem,
-  mLen: Option[Int] = None,
-  add_opu : Boolean = false
+  mLen: Option[Int] = None
 ) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: ShuttleTileAttachParams => {
@@ -26,7 +25,6 @@ class WithShuttleVectorUnit(
         dLen=dLen,
         mLen=mLen.getOrElse(dLen),
         useScalarFPFMA = false,
-        add_opu = add_opu,
       )
       if (buildVector) tp.copy(tileParams = tp.tileParams.copy(
         core = tp.tileParams.core.copy(

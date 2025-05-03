@@ -51,6 +51,11 @@ object VectorParams {
     vsiqEntries = 6
   )
 
+  def opuParams = genParams.copy(
+    vliqEntries = 6, // beef this up since OPU tends to be used with LMUL=1
+    useOpu = true
+  )
+
   // multiFMAParams:
   // Provides a second sequencer and set of functional units for FMA operations
   def multiFMAParams = genParams.copy(
@@ -354,10 +359,15 @@ case class VectorParams(
 
   tlBuffer: BufferParams = BufferParams.default,
 
-  // Add and OPU to desgin 
-  add_opu : Boolean = false,
+  // Add OPU to design
+  useOpu : Boolean = false,
 ) {
-  def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
+  def opuInsns = Seq(
+    saturn.insns.OPMACC.VV,
+    saturn.insns.OPMVIN.VX,
+    saturn.insns.OPMVINBCAST.VX,
+    saturn.insns.OPMVOUT.VX)
+  def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten ++ (if (useOpu) opuInsns else Nil)
 
   require(dLen >= 64, "dLen must be >= 64")
   require((dLen & (dLen - 1)) == 0, "dLen must be power of 2")
@@ -379,7 +389,9 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def mLenB = mLen / 8
   def mLenOffBits = log2Ceil(mLenB)
 
-  def add_opu = vParams.add_opu
+  def useOpu = vParams.useOpu
+
+  def opuParams = OPUParameters(8, 8, 32, 2)
 
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
   def sgmemTagBits = log2Ceil(vParams.vsgifqEntries)
@@ -388,7 +400,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def vrfBankBits = log2Ceil(vParams.vrfBanking)
   def lsiqIdBits = log2Ceil(vParams.vliqEntries.max(vParams.vsiqEntries))
   val debugIdSz = 16
-  def nRelease = vParams.issStructure.generate(vParams).map(_.seqs.size).reduce(_+_) + 2 // load/stores
+  def nRelease = vParams.issStructure.generate(vParams).map(_.seqs.size).reduce(_+_) + 2 + (if (useOpu) 1 else 0) // load/stores/opu
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {
     val base = vreg << log2Ceil(egsPerVReg)
