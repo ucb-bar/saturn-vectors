@@ -134,14 +134,14 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val in_t      = Input(Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W))))
 
   // same values broadcast horizontally
-  val mrf_idx    = Input(Vec(clusterYdim, UInt(cellRegIdxBits.W)))
-  val row_idx    = Input(Vec(clusterYdim, UInt(log2Ceil(clusterYdim).W)))
-  val col_idx    = Input(Vec(clusterYdim, UInt(log2Ceil(clusterXdim).W)))
-  val macc       = Input(Vec(clusterYdim, Bool()))
-  val mvin       = Input(Vec(clusterYdim, Bool()))
-  val reset      = Input(Vec(clusterYdim, Bool()))
-  val mvin_bcast = Input(Vec(clusterYdim, Bool()))
-  val shift      = Input(Vec(clusterYdim, Bool()))
+  val mrf_idx    = Input(Vec(yDim, UInt(cellRegIdxBits.W)))
+  val row_idx    = Input(Vec(yDim, UInt(log2Ceil(clusterYdim).W)))
+  val col_idx    = Input(Vec(yDim, UInt(log2Ceil(clusterXdim).W)))
+  val macc       = Input(Vec(yDim, Bool()))
+  val mvin       = Input(Vec(yDim, Bool()))
+  val reset      = Input(Vec(yDim, Bool()))
+  val mvin_bcast = Input(Vec(yDim, Bool()))
+  val shift      = Input(Vec(yDim, Bool()))
 }
 
 
