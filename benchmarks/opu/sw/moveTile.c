@@ -28,7 +28,7 @@ void i32_move_c(int* c_in, int* c_out, size_t rows, size_t N) {
     asm volatile("vle32.v v0, (%0)" : : "r"(&c_in[r*N]));
     VMV_RV(m0, r, v0); // move v0 into row r of m0
     VMV_VR(v4, r, m0); // move row r of m0 into v0
-    asm volatile("vse32.v v1, (%0)" : : "r"(&c_out[r*N]));
+    asm volatile("vse32.v v4, (%0)" : : "r"(&c_out[r*N]));
   }
 }
 
