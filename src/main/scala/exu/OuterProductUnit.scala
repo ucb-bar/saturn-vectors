@@ -130,6 +130,8 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
 }
 
 class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with HasOPUParams {
+  val clock_enable = Input(Bool())
+
   val in_l      = Input(Vec(yDim, Vec(clusterYdim, UInt(opuParams.aWidth.W))))
   val in_t      = Input(Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W))))
 
@@ -139,7 +141,6 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val col_idx    = Input(Vec(yDim, UInt(log2Ceil(clusterXdim).W)))
   val macc       = Input(Vec(yDim, Bool()))
   val mvin       = Input(Vec(yDim, Bool()))
-  val reset      = Input(Vec(yDim, Bool()))
   val mvin_bcast = Input(Vec(yDim, Bool()))
   val shift      = Input(Vec(yDim, Bool()))
 }
@@ -152,11 +153,14 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
     val YOU_SHALL_PASS = Output(Bool())
   })
 
+  // clock gating
+  val gated_clock = ClockGate(clock, io.op.clock_enable, "opu_clock_gate")
+
   // Force OuterProductUnit to have logic to be syn-mappable
-  io.YOU_SHALL_PASS := io.op.macc(0) & io.op.reset(0) | io.op.shift(0)
+  io.YOU_SHALL_PASS := io.op.macc(0) & io.op.macc(0) | io.op.shift(0)
   dontTouch(io.YOU_SHALL_PASS)
 
-  val clusters = Seq.fill(yDim, xDim)(Module(new OuterProductCluster))
+  val clusters = Seq.fill(yDim, xDim)(withClock(gated_clock) { Module(new OuterProductCluster) })
 
   for (j <- 0 until xDim) {
     for (i <- 0 until yDim) {
@@ -171,7 +175,6 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.mvin       := io.op.mvin(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
       cluster.io.shift      := io.op.shift(i)
-      cluster.reset         := io.op.reset(i)
     }
 
     clusters(0)(j).io.in_pipe := 0.U
