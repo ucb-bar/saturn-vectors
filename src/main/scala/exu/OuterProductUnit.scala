@@ -149,7 +149,12 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
   val io = IO(new Bundle {
     val op = Input(new OuterProductControl)
     val out = Output(Vec(xDim, UInt(opuParams.cWidth.W)))
+    val YOU_SHALL_PASS = Output(Bool())
   })
+
+  // Force OuterProductUnit to have logic to be syn-mappable
+  io.YOU_SHALL_PASS := io.op.macc(0) & io.op.reset(0) | io.op.shift(0)
+  dontTouch(io.YOU_SHALL_PASS)
 
   val clusters = Seq.fill(yDim, xDim)(Module(new OuterProductCluster))
 
