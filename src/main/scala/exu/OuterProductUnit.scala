@@ -130,19 +130,19 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
 }
 
 class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with HasOPUParams {
-  val clock_enable = Input(Bool())
+  val clock_enable = Bool()
 
-  val in_l      = Input(Vec(yDim, Vec(clusterYdim, UInt(opuParams.aWidth.W))))
-  val in_t      = Input(Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W))))
+  val in_l      = Vec(yDim, Vec(clusterYdim, UInt(opuParams.aWidth.W)))
+  val in_t      = Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W)))
 
   // same values broadcast horizontally
-  val mrf_idx    = Input(Vec(yDim, UInt(cellRegIdxBits.W)))
-  val row_idx    = Input(Vec(yDim, UInt(log2Ceil(clusterYdim).W)))
-  val col_idx    = Input(Vec(yDim, UInt(log2Ceil(clusterXdim).W)))
-  val macc       = Input(Vec(yDim, Bool()))
-  val mvin       = Input(Vec(yDim, Bool()))
-  val mvin_bcast = Input(Vec(yDim, Bool()))
-  val shift      = Input(Vec(yDim, Bool()))
+  val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W))
+  val row_idx    = Vec(yDim, UInt(log2Ceil(clusterYdim).W))
+  val col_idx    = Vec(yDim, UInt(log2Ceil(clusterXdim).W))
+  val macc       = Vec(yDim, Bool())
+  val mvin       = Vec(yDim, Bool())
+  val mvin_bcast = Vec(yDim, Bool())
+  val shift      = Vec(yDim, Bool())
 }
 
 

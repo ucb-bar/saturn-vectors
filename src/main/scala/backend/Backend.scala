@@ -364,24 +364,32 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.vxs(flat_vxs.size).rvd.req.bits := DontCare
     vos.get.io.iss.ready := true.B
 
-    vopu.io.op := vos.get.io.iss.bits
-    vopu.io.op.in_l := vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W))))
-    vopu.io.op.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W))))
+    val vopu_ctrl_reg = Reg(new OuterProductControl)
+    vopu_ctrl_reg := vos.get.io.iss.bits
+    when (vos.get.io.iss.valid) {
+      when (vos.get.io.iss.bits.mvin.head || vos.get.io.iss.bits.mvin_bcast.head) {
+        vopu_ctrl_reg.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+          Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W)))
+        )
+      }
 
-    when (vos.get.io.iss.bits.macc.head) {
-      val elems = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
-        Vec(vopu.xDim * vopu.clusterXdim, UInt(opuParams.bWidth.W))
-      )
-      for (i <- 0 until vopu.xDim) {
-        for (j <- 0 until vopu.clusterXdim) {
-          vopu.io.op.in_t(i)(j) := elems(i + j * vopu.xDim)
+      when (vos.get.io.iss.bits.macc.head) {
+        vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(
+          Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
+        )
+
+        val elems = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+          Vec(vopu.xDim * vopu.clusterXdim, UInt(opuParams.bWidth.W))
+        )
+        for (i <- 0 until vopu.xDim) {
+          for (j <- 0 until vopu.clusterXdim) {
+            vopu_ctrl_reg.in_t(i)(j) := elems(i + j * vopu.xDim)
+          }
         }
       }
     }
-    when (!vos.get.io.iss.valid) {
-      vopu.io.op.in_l.foreach(_.foreach(_ := 0.U))
-      vopu.io.op.in_t.foreach(_.foreach(_ := 0.U))
-    }
+
+    vopu.io.op := vopu_ctrl_reg
   }
 
 

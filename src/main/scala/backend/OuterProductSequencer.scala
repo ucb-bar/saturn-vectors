@@ -54,7 +54,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val scalar_row_idx = inst.rs1_data
   val scalar_cluster_row_idx = (scalar_row_idx >> log2Ceil(clusterYdim))(log2Ceil(yDim)-1,0)
   // row0 takes the longest
-  val scalar_row_latency = ((yDim-1).U - scalar_cluster_row_idx)
+  val scalar_row_latency = (yDim.U - scalar_cluster_row_idx)
 
   // maccs use both col_idx and row_idx, mvins/mvouts use col_idx only
   val col_idx = Reg(UInt(log2Ceil(wideningFactor * (vLen / dLen)).W))
@@ -132,7 +132,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.rvs2.bits.oldest := oldest
 
   // this avoids write-structural-conflicts from the OPU
-  val exu_scheduler = Module(new PipeScheduler(1, yDim))
+  val exu_scheduler = Module(new PipeScheduler(1, yDim+1))
   exu_scheduler.io.reqs(0).request := valid && mvout
   exu_scheduler.io.reqs(0).fire := io.iss.fire
   exu_scheduler.io.reqs(0).depth := scalar_row_latency
@@ -168,8 +168,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   )(log2Ceil(vLen / dLen)-1,0)
 
   // mvout_pipe tracks the inflight write destinations
-  val mvout_pipe = Reg(Vec(yDim, UInt(log2Ceil(egsTotal).W)))
-  val mvout_valids = RegInit(0.U(yDim.W))
+  val mvout_pipe = Reg(Vec(yDim+1, UInt(log2Ceil(egsTotal).W)))
+  val mvout_valids = RegInit(0.U((yDim+1).W))
 
   // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
   io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
@@ -194,7 +194,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   // if the row above us has a valid thing being mv'd out, we have to shift that in
   io.iss.bits.shift.foreach(_ := false.B)
   for (i <- 1 until yDim) {
-    mvout_pipe(i) := mvout_pipe(i-1)
+    when (mvout_valids(i-1)) { mvout_pipe(i) := mvout_pipe(i-1) }
     io.iss.bits.shift(i) := mvout_valids(i-1)
   }
 
@@ -203,12 +203,14 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
       mvout_pipe(i) := wvd_eg
     }
   }
+
+  when (mvout_valids(yDim-1)) { mvout_pipe(yDim) := mvout_pipe(yDim-1) }
   // When it leave the mvout pipe, then we do the write
-  io.write.valid := mvout_valids(yDim-1)
-  io.write.bits := mvout_pipe(yDim-1)
+  io.write.valid := mvout_valids(yDim)
+  io.write.bits := mvout_pipe(yDim)
 
   // clear the wsboard when we do a write
-  wsboard_clear := (mvout_valids(yDim-1) << mvout_pipe(yDim-1))
+  wsboard_clear := (mvout_valids(yDim) << mvout_pipe(yDim))
 
   // update counters
   when (io.iss.fire && !tail) {
