@@ -148,10 +148,10 @@ int i32_compare(int32_t* a, int32_t* b, size_t m, size_t n) {
     return 0;
   }
 
-// #define TCM_BASE 0x70000000
+#define TCM_BASE 0x70000000
 
 #define MIN 16
-#define MAX 128
+#define KMAX 128
 #define STEP 16
 #define VL 16
 #define DL 8
@@ -160,20 +160,18 @@ int main(void) {
   size_t m = VL;
   size_t n = VL;
 
-  // int8_t* B = (int8_t*)TCM_BASE;
-  // int8_t* At = (int8_t*)(TCM_BASE + n * MAX);
-  int8_t At[m*MAX];
-  int8_t B[MAX*n];
+  int8_t* B = (int8_t*)TCM_BASE;
+  int8_t* At = (int8_t*)(TCM_BASE + n * KMAX);
   int32_t C_init[m*n];
   int32_t C_bme[m*n];
   // scalar copy of A, B
   int32_t C_gold[m*n];
-  int8_t Ats[m*MAX];
-  int8_t Bs[MAX*n];
-  i8_init(At, m * MAX, 1);
-  i8_init(B, MAX * n, 2);
-  i8_init(Ats, m * MAX, 1);
-  i8_init(Bs, MAX * n, 2);
+  int8_t Ats[m*KMAX];
+  int8_t Bs[KMAX*n];
+  i8_init(At, m * KMAX, 1);
+  i8_init(B, KMAX * n, 2);
+  i8_init(Ats, m * KMAX, 1);
+  i8_init(Bs, KMAX * n, 2);
   i32_init(C_init, m * n);
   
   printf("i8 GEMM\n");
@@ -181,14 +179,14 @@ int main(void) {
   printf("warmup cache:\n");
   printf("dim,ops,cycles\n");
   int64_t cyclest1 = read_csr(mcycle);
-  i8_mm_bme_square(C_init, C_bme, At, B, m, n, MAX);
+  i8_mm_bme_square(C_init, C_bme, At, B, m, n, KMAX);
   asm volatile("fence");
   int64_t cyclest2 = read_csr(mcycle);
   int64_t cycles = cyclest2 - cyclest1;
-  int64_t ops = m * n * MAX;
-  // printf("%d,%ld,%ld\n", MAX, ops, cycles);
+  int64_t ops = m * n * KMAX;
+  // printf("%d,%ld,%ld\n", KMAX, ops, cycles);
   
-  for (size_t k = MIN; k <= MAX; k += STEP) {
+  for (size_t k = MIN; k <= KMAX; k += STEP) {
     // printf("Initializing M, N, K = %ld %ld %ld\n", m, n, k);
     
     i8_mm_scalar(C_init, C_gold, Ats, Bs, m, n, k);
