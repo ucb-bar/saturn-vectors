@@ -176,6 +176,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
   var flat_vxu_id: Int = 0
 
+  val vos_wsboard = vos.map(_.io.wsboard).getOrElse(0.U)
   for ((group, i) <- issGroups.zipWithIndex) {
     val otherIssGroups = issGroups.zipWithIndex.filter(_._2 != i).map(_._1)
     val otherIssqs = otherIssGroups.map(_.issq)
@@ -195,7 +196,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       val older_seq_wintents = otherSeqs.map { s =>
         Mux(vatOlder(s.io.seq_hazard.bits.vat, vat) && s.io.seq_hazard.valid, s.io.seq_hazard.bits.wintent, 0.U)
       }.reduce(_|_)
-      val older_wintents = older_issq_wintents | older_seq_wintents
+      val older_wintents = older_issq_wintents | older_seq_wintents | vos_wsboard
 
       val older_issq_rintents = FillInterleaved(egsPerVReg, otherIssqs.map { i =>
         i.io.hazards.map(h => Mux(vatOlder(h.bits.vat, vat) && h.valid, h.bits.rintent, 0.U))
@@ -366,6 +367,21 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vopu.io.op := vos.get.io.iss.bits
     vopu.io.op.in_l := vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W))))
     vopu.io.op.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W))))
+
+    when (vos.get.io.iss.bits.macc.head) {
+      val elems = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+        Vec(vopu.xDim * vopu.clusterXdim, UInt(opuParams.bWidth.W))
+      )
+      for (i <- 0 until vopu.xDim) {
+        for (j <- 0 until vopu.clusterXdim) {
+          vopu.io.op.in_t(i)(j) := elems(i + j * vopu.xDim)
+        }
+      }
+    }
+    when (!vos.get.io.iss.valid) {
+      vopu.io.op.in_l.foreach(_.foreach(_ := 0.U))
+      vopu.io.op.in_t.foreach(_.foreach(_ := 0.U))
+    }
   }
 
 

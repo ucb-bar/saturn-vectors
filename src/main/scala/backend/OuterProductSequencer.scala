@@ -20,6 +20,7 @@ class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new Ou
 
   val tail = Output(Bool())
   val write = Output(Valid(UInt(log2Ceil(egsTotal).W)))
+  val wsboard = Output(UInt(egsTotal.W))
 }
 
 class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProductControl]()(p) with HasOPUParams {
@@ -53,7 +54,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val scalar_row_idx = inst.rs1_data
   val scalar_cluster_row_idx = (scalar_row_idx >> log2Ceil(clusterYdim))(log2Ceil(yDim)-1,0)
   // row0 takes the longest
-  val scalar_row_latency = (yDim.U - scalar_cluster_row_idx)
+  val scalar_row_latency = ((yDim-1).U - scalar_cluster_row_idx)
 
   // maccs use both col_idx and row_idx, mvins/mvouts use col_idx only
   val col_idx = Reg(UInt(log2Ceil(wideningFactor * (vLen / dLen)).W))
@@ -106,17 +107,16 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.vat := inst.vat
   io.seq_hazard.valid := valid
   io.seq_hazard.bits.rintent := hazardMultiply(rvs1_mask | rvs2_mask)
-  io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask) | wsboard
+  io.seq_hazard.bits.wintent := hazardMultiply(wvd_mask)
   io.seq_hazard.bits.vat := inst.vat
+  io.wsboard := wsboard
 
   val vs1_read_oh = Mux(renv1   , UIntToOH(io.rvs1.bits.eg), 0.U)
   val vs2_read_oh = Mux(renv2   , UIntToOH(io.rvs2.bits.eg), 0.U)
   val vd_write_oh = Mux(mvout   , UIntToOH(wvd_eg), 0.U)
 
-  val older_writes = io.older_writes | wsboard
-
-  val raw_hazard = ((vs1_read_oh | vs2_read_oh) & older_writes) =/= 0.U
-  val waw_hazard = (vd_write_oh & older_writes) =/= 0.U
+  val raw_hazard = ((vs1_read_oh | vs2_read_oh) & io.older_writes) =/= 0.U
+  val waw_hazard = (vd_write_oh & io.older_writes) =/= 0.U
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
@@ -132,7 +132,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.rvs2.bits.oldest := oldest
 
   // this avoids write-structural-conflicts from the OPU
-  val exu_scheduler = Module(new PipeScheduler(1, yDim+1))
+  val exu_scheduler = Module(new PipeScheduler(1, yDim))
   exu_scheduler.io.reqs(0).request := valid && mvout
   exu_scheduler.io.reqs(0).fire := io.iss.fire
   exu_scheduler.io.reqs(0).depth := scalar_row_latency
@@ -162,7 +162,10 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     row_idx,
     scalar_row_idx >> log2Ceil(yDim * clusterYdim),
   )(log2Ceil(vLen / dLen)-1,0)
-  val mrf_col_idx = col_idx(log2Ceil(vLen / dLen)-1,0)
+  val mrf_col_idx = Mux(macc,
+    col_idx,
+    col_idx >> log2Ceil(opuParams.cWidth / opuParams.bWidth)
+  )(log2Ceil(vLen / dLen)-1,0)
 
   // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
   io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
@@ -171,7 +174,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     mrf_col_idx
   ), 0.U))
   io.iss.bits.row_idx.foreach(_ := Mux(io.iss.fire, scalar_row_idx, 0.U))
-  io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx >> log2Ceil(vLen / dLen), 0.U))
+  io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx, 0.U))
   io.iss.bits.macc.foreach(_ := io.iss.fire && macc)
   io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast)
   io.iss.bits.reset.foreach(_ := reset.asBool)
