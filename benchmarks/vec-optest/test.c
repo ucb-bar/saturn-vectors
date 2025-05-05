@@ -69,8 +69,8 @@ void i32_init(int32_t* d, size_t s) {
   for (size_t i = 0; i < s; i++) d[i] = i + 1;
 }
 
-void i8_init(int8_t* d, size_t s) {
-  for (size_t i = 0; i < s; i++) d[i] = i + 1;
+void i8_init(int8_t* d, size_t s, int8_t start) {
+  for (size_t i = 0; i < s; i++) d[i] = i + start;
 }
 
 int i32_compare(int32_t* a, int32_t* b, size_t s) {
@@ -181,8 +181,8 @@ int main(void) {
   /* asm volatile("vle32.v v0, (%0)" : : "r"(&C[vl])); */
   /* OPMVINBCAST(m1, v0); */
 
-  i8_init(A, MAX*MAX);
-  i8_init(B, MAX*MAX);
+  i8_init(A, MAX*MAX, 126);
+  i8_init(B, MAX*MAX, 2);
 
   // flush the DCache of A, B, to avoid coherence traffic with the L1D on the outer-product test
   for (size_t i = 0; i < MAX*MAX; ) {

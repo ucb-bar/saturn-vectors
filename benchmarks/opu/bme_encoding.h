@@ -1,0 +1,51 @@
+#ifndef _BME_ENCODING_H
+#define _BME_ENCODING_H
+
+#define VMV_RV_MASK   0xfc007c7f
+#define VMV_RV_MATCH  0x00006057
+
+#define VMV_VR_MASK   0xfd80707f
+#define VMV_VR_MATCH  0x04006057
+
+#define VMV_CV_MASK   0xfc007c7f
+#define VMV_CV_MATCH  0x08006057
+
+#define VMV_VC_MASK   0xfd80707f
+#define VMV_VC_MATCH  0x0c006057
+
+#define VMV_RR_MASK   0xfc0ffc7f
+#define VMV_RR_MATCH  0x4000a057
+
+#define VMV_CC_MASK   0xfc0ffc7f
+#define VMV_CC_MATCH  0x40012057
+
+#define VOPACC_VV_MASK   0xfc00707f
+#define VOPACC_VV_MATCH  0x44002057
+
+#define VOPACCU_VV_MASK   0xfc00707f
+#define VOPACCU_VV_MATCH  0x4c002057
+
+#define VWOPACC_VV_MASK  0xfc00707f
+#define VWOPACC_VV_MATCH 0x54002057
+
+#define VWOPACCU_VV_MASK  0xfc00707f
+#define VWOPACCU_VV_MATCH 0x5c002057
+
+#define VFOPACC_VV_MASK   0xfc00707f
+#define VFOPACC_VV_MATCH  0x44001057
+
+#define VFWOPACC_VV_MASK  0xfc00707f
+#define VFWOPACC_VV_MATCH 0x54001057
+
+#define VADD_MM_MASK   0xfd8c7c7f
+#define VADD_MM_MATCH  0xe4002057
+
+#define VADDU_MM_MASK  0xfd8c7c7f
+#define VADDU_MM_MATCH 0xf8002057
+
+#define VFADD_MM_MASK   0xfd8c7c7f
+#define VFADD_MM_MATCH  0xe4001057
+
+#define CSR_ML 0x10
+
+#endif
