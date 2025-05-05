@@ -16,7 +16,7 @@ class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new Ou
   val rvs1 = Decoupled(new VectorReadReq)
   val rvs2 = Decoupled(new VectorReadReq)
 
-  val pipe_write_req = new VectorPipeWriteReqIO(yDim)
+  val pipe_write_req = new VectorPipeWriteReqIO(yDim+1)
 
   val tail = Output(Bool())
   val write = Output(Valid(UInt(log2Ceil(egsTotal).W)))

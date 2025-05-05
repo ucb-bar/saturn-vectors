@@ -367,7 +367,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val vopu_ctrl_reg = Reg(new OuterProductControl)
     vopu_ctrl_reg := vos.get.io.iss.bits
     when (vos.get.io.iss.valid) {
-      when (vos.get.io.iss.bits.mvin.head || vos.get.io.iss.bits.mvin_bcast.head) {
+      when (vos.get.io.iss.bits.mvin.orR || vos.get.io.iss.bits.mvin_bcast.head) {
         vopu_ctrl_reg.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
           Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W)))
         )
