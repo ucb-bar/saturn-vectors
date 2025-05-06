@@ -52,7 +52,8 @@ object VectorParams {
   )
 
   def opuParams = genParams.copy(
-    vliqEntries = 6, // beef this up since OPU tends to be used with LMUL=1
+    vliqEntries = 8, // beef this up since OPU tends to be used with LMUL=1
+    vlissqEntries = 6,
     useOpu = true
   )
 
