@@ -173,7 +173,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
   io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
-    inst.rd,
+    Mux(mvout, inst.rs2, inst.rd),
     mrf_row_idx,
     mrf_col_idx
   ), 0.U))
