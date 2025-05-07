@@ -59,7 +59,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus, s.name)).suggestName(s"vxu${s.name}")))
   val flat_vxus = vxus.flatten
   val vopu = Option.when(useOpu) { Module(new OuterProductUnit) }
-  val maxPipeDepth = (flat_vxus.map(_.maxPipeDepth) ++ vopu.map(_.yDim + 1)).max
+  val maxPipeDepth = (flat_vxus.map(_.maxPipeDepth) ++ vopu.map(_.yDim + 2)).max
 
 
   val vls = Module(new LoadSequencer)
@@ -412,7 +412,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.vxs(flat_vxs.size).pipe_write_req <> vos.io.pipe_write_req
     vrf.io.pipe_writes(flat_vxs.size).valid := vos.io.write.valid
     vrf.io.pipe_writes(flat_vxs.size).bits.eg := vos.io.write.bits
-    vrf.io.pipe_writes(flat_vxs.size).bits.data := vopu.get.io.out.asUInt
+    vrf.io.pipe_writes(flat_vxs.size).bits.data := RegEnable(vopu.get.io.out.asUInt, vos.io.write_reg_enable)
     vrf.io.pipe_writes(flat_vxs.size).bits.mask := ~(0.U(dLen.W))
 
     vrf.io.iter_writes(flat_vxs.size).valid := false.B
