@@ -16,10 +16,11 @@ class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new Ou
   val rvs1 = Decoupled(new VectorReadReq)
   val rvs2 = Decoupled(new VectorReadReq)
 
-  val pipe_write_req = new VectorPipeWriteReqIO(yDim+1)
+  val pipe_write_req = new VectorPipeWriteReqIO(yDim+2)
 
   val tail = Output(Bool())
   val write = Output(Valid(UInt(log2Ceil(egsTotal).W)))
+  val write_reg_enable = Output(Bool())
   val wsboard = Output(UInt(egsTotal.W))
 }
 
@@ -54,7 +55,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val scalar_row_idx = inst.rs1_data
   val scalar_cluster_row_idx = (scalar_row_idx >> log2Ceil(clusterYdim))(log2Ceil(yDim)-1,0)
   // row0 takes the longest
-  val scalar_row_latency = (yDim.U - scalar_cluster_row_idx)
+  val scalar_row_latency = ((yDim+1).U - scalar_cluster_row_idx)
 
   // maccs use both col_idx and row_idx, mvins/mvouts use col_idx only
   val col_idx = Reg(UInt(log2Ceil(wideningFactor * (vLen / dLen)).W))
@@ -132,7 +133,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.rvs2.bits.oldest := oldest
 
   // this avoids write-structural-conflicts from the OPU
-  val exu_scheduler = Module(new PipeScheduler(1, yDim+1))
+  val exu_scheduler = Module(new PipeScheduler(1, yDim+2))
   exu_scheduler.io.reqs(0).request := valid && mvout
   exu_scheduler.io.reqs(0).fire := io.iss.fire
   exu_scheduler.io.reqs(0).depth := scalar_row_latency
@@ -168,8 +169,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   )(log2Ceil(vLen / dLen)-1,0)
 
   // mvout_pipe tracks the inflight write destinations
-  val mvout_pipe = Reg(Vec(yDim+1, UInt(log2Ceil(egsTotal).W)))
-  val mvout_valids = RegInit(0.U((yDim+1).W))
+  val mvout_pipe = Reg(Vec(yDim+2, UInt(log2Ceil(egsTotal).W)))
+  val mvout_valids = RegInit(0.U((yDim+2).W))
 
   // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
   io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
@@ -188,7 +189,6 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     io.iss.bits.mvin(i) := io.iss.fire && mvin && scalar_cluster_row_idx === i.U
   }
 
-
   mvout_valids := (mvout_valids << 1) | ((io.iss.fire && mvout) << scalar_cluster_row_idx)
 
   // if the row above us has a valid thing being mv'd out, we have to shift that in
@@ -205,12 +205,14 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   }
 
   when (mvout_valids(yDim-1)) { mvout_pipe(yDim) := mvout_pipe(yDim-1) }
+  when (mvout_valids(yDim)) { mvout_pipe(yDim+1) := mvout_pipe(yDim) }
   // When it leave the mvout pipe, then we do the write
-  io.write.valid := mvout_valids(yDim)
-  io.write.bits := mvout_pipe(yDim)
+  io.write.valid := mvout_valids(yDim+1)
+  io.write.bits := mvout_pipe(yDim+1)
+  io.write_reg_enable := mvout_valids(yDim)
 
   // clear the wsboard when we do a write
-  wsboard_clear := (mvout_valids(yDim) << mvout_pipe(yDim))
+  wsboard_clear := (mvout_valids(yDim+1) << mvout_pipe(yDim+1))
 
   // update counters
   when (io.iss.fire && !tail) {
