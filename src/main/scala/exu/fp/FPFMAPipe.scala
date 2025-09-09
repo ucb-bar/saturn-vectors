@@ -43,6 +43,7 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) exte
   val hb = io.b.asTypeOf(Vec(4, UInt(16.W))).map(f => FType.H.recode(f))
   val hc = io.c.asTypeOf(Vec(4, UInt(16.W))).map(f => FType.H.recode(f))
 
+
   def widen(in: UInt, inT: FType, outT: FType, active: Bool): UInt = {
     val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
     widen.io.in := Mux(active, in, 0.U)
@@ -55,62 +56,159 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) exte
   val sfma_valid = io.valid && io.out_eew === 2.U
   val hfma_valid = io.valid && io.out_eew === 1.U
 
-  val swa = Seq(widen(sa(0), FType.S, FType.D, io.out_eew === 3.U && io.a_eew === 2.U))
-  val swb = Seq(widen(sb(0), FType.S, FType.D, io.out_eew === 3.U && io.b_eew === 2.U))
-  val swc = Seq(widen(sc(0), FType.S, FType.D, io.out_eew === 3.U && io.c_eew === 2.U))
-  val hwa = Seq(
-    widen(ha(0), FType.H, FType.S, io.out_eew === 2.U && io.a_eew === 1.U),
-    widen(ha(2), FType.H, FType.S, io.out_eew === 2.U && io.a_eew === 1.U))
-  val hwb = Seq(
-    widen(hb(0), FType.H, FType.S, io.out_eew === 2.U && io.b_eew === 1.U),
-    widen(hb(2), FType.H, FType.S, io.out_eew === 2.U && io.b_eew === 1.U))
-  val hwc = Seq(
-    widen(hc(0), FType.H, FType.S, io.out_eew === 2.U && io.c_eew === 1.U),
-    widen(hc(2), FType.H, FType.S, io.out_eew === 2.U && io.c_eew === 1.U))
-
-  val da_in = da.zip(swa).map(t => Mux(io.out_eew =/= io.a_eew, t._2, t._1))
-  val db_in = db.zip(swb).map(t => Mux(io.out_eew =/= io.b_eew, t._2, t._1))
-  val dc_in = dc.zip(swc).map(t => Mux(io.out_eew =/= io.c_eew, t._2, t._1))
-
-  val sa_in = sa.zip(hwa).map(t => Mux(io.out_eew =/= io.a_eew, t._2, t._1))
-  val sb_in = sb.zip(hwb).map(t => Mux(io.out_eew =/= io.b_eew, t._2, t._1))
-  val sc_in = sc.zip(hwc).map(t => Mux(io.out_eew =/= io.c_eew, t._2, t._1))
-
-  val ha_in = ha
-  val hb_in = hb
-  val hc_in = hc
-
   val s1_op = RegEnable(io.op, io.valid)
   val s1_frm = RegEnable(io.frm, io.valid)
 
   io.out := DontCare
   io.exc := DontCare
 
-  (buildFP64.option((dfma_valid, FType.D, da_in, db_in, dc_in)) ++ Seq(
-    (sfma_valid, FType.S, sa_in, sb_in, sc_in),
-    (hfma_valid, FType.H, ha_in, hb_in, hc_in)
-  )).foreach { case (fma_valid, ftype, a, b, c) => {
-    val n = 64 / ftype.ieeeWidth
-    val s1_valid = RegNext(fma_valid, false.B)
-    val res = (0 until n).map { i =>
-      val fma = Module(new MulAddRecFNPipe(depth-2, ftype.exp, ftype.sig))
-      fma.io.validin      := s1_valid
-      fma.io.op           := Mux(s1_valid, s1_op, 0.U)
-      fma.io.roundingMode := Mux(s1_valid, s1_frm, 0.U)
-      fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
-      fma.io.a := RegEnable(a(i), fma_valid)
-      fma.io.b := RegEnable(Mux(io.addsub, 1.U << (ftype.ieeeWidth - 1), b(i)), fma_valid)
-      fma.io.c := RegEnable(Mux(io.mul, (a(i) ^ b(i)) & (1.U << ftype.ieeeWidth), c(i)), fma_valid)
+  val valid_signals = Map(
+    FType.D -> dfma_valid,
+    FType.S -> sfma_valid,
+    FType.H -> hfma_valid,
+  )
 
-      val out = Pipe(fma.io.validout, ftype.ieee(fma.io.out), depth-4).bits
-      val exc = Pipe(fma.io.validout, fma.io.exceptionFlags, depth-4).bits
-      (out, Seq.fill(ftype.ieeeWidth / 8)(exc))
+  val recoded_in = Map(
+    FType.D -> (da, db, dc),
+    FType.S -> (sa, sb, sc),
+    FType.H -> (ha, hb, hc),
+  )
+
+  val ftype_conditions = Map( // eew, ignore altfmt, altfmt (only eew currently unused)
+    FType.D -> (3.U, false.B, false.B),
+    FType.S -> (2.U, false.B, false.B),
+    FType.H -> (1.U, false.B, false.B),
+  )
+
+  val ftype_used_for = Map(
+    FType.D -> Seq(FType.D, FType.S, FType.H),
+    FType.S -> Seq(FType.S, FType.H),
+    FType.H -> Seq(FType.H),
+  )
+
+  val fma_types = Seq( // Larger ones need to be spaced out correctly to easily select the right indeces when widening
+    (if (buildFP64) FType.D else FType.S),
+    FType.H,
+    FType.S,
+    FType.H,
+  )
+
+  val ftype_exc_lanes = Map(
+    FType.D -> 8,
+    FType.S -> 4,
+    FType.H -> 2,
+  )
+
+  val out = Map(
+    FType.D -> Wire(Vec(1, UInt(64.W))),
+    FType.S -> Wire(Vec(2, UInt(32.W))),
+    FType.H -> Wire(Vec(4, UInt(16.W))),
+  )
+
+  val exc = Map(
+    FType.D -> Wire(Vec(8, UInt(5.W))),
+    FType.S -> Wire(Vec(8, UInt(5.W))),
+    FType.H -> Wire(Vec(8, UInt(5.W))),
+  )
+
+  out.foreach{ case (key, value) => value := DontCare }
+  exc.foreach{ case (key, value) => value := DontCare }
+
+  val out_select = ftype_conditions.map { case (key, cond) =>
+    key -> (out_eew_pipe.bits === cond._1)
+  }
+
+  fma_types.foldLeft(Map(
+    FType.D -> 0, FType.S -> 0, FType.H -> 0
+  )) { (counts, fma_type) => {
+    val usedFor = ftype_used_for(fma_type)
+    val fma_valid = usedFor.map(valid_signals(_)).foldLeft(0.U)(_|_).asBool
+    val s1_valid = RegNext(fma_valid, false.B)
+    val fma = Module(new MulAddRecFNPipe(depth-2, fma_type.exp, fma_type.sig))
+    fma.io.validin      := s1_valid
+    fma.io.op           := Mux(s1_valid, s1_op, 0.U)
+    fma.io.roundingMode := Mux(s1_valid, s1_frm, 0.U)
+    fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
+
+    val a = Wire(UInt(fma_type.recodedWidth.W))
+    val b = Wire(UInt(fma_type.recodedWidth.W))
+    val c = Wire(UInt(fma_type.recodedWidth.W))
+
+    a := DontCare
+    b := DontCare
+    c := DontCare
+
+    usedFor.foreach { data_type =>
+      val cond = ftype_conditions(data_type)
+      val index = counts(data_type)
+
+      val select_a = io.a_eew === cond._1
+      val in_a = recoded_in(data_type)._1(index)
+      val wide_a = if (data_type != fma_type) {
+        widen(in_a, data_type, fma_type, select_a)
+      } else {
+        in_a
+      }
+      when (select_a) {
+        a := wide_a
+      }
+
+      val select_b = io.b_eew === cond._1
+      val in_b = recoded_in(data_type)._2(index)
+      val wide_b = if (data_type != fma_type) {
+        widen(in_b, data_type, fma_type, select_b)
+      } else {
+        in_b
+      }
+      when (select_b) {
+        b := wide_b
+      }
+
+      val select_c = io.c_eew === cond._1
+      val in_c = recoded_in(data_type)._3(index)
+      val wide_c = if (data_type != fma_type) {
+        widen(in_c, data_type, fma_type, select_c)
+      } else {
+        in_c
+      }
+      when (select_c) {
+        c := wide_c
+      }
+
+      val select_out = out_select(data_type)
+      if (data_type != fma_type) {
+        val narrower = Module(new hardfloat.RoundAnyRawFNToRecFN(fma_type.exp, fma_type.sig + 2, data_type.exp, data_type.sig, 0))
+        narrower.io.in := fma.io.unroundedOut
+        narrower.io.roundingMode := frm_pipe.bits
+        narrower.io.detectTininess := hardfloat.consts.tininess_afterRounding
+        narrower.io.invalidExc := fma.io.unroundedInvalidExc
+        narrower.io.infiniteExc := false.B
+
+        when (select_out) {
+          out(data_type)(index) := Pipe(fma.io.validout, data_type.ieee(narrower.io.out), depth-4).bits
+          exc(data_type).slice(index, index + ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, narrower.io.exceptionFlags, depth-4).bits }
+        }
+      }
+      else {
+        when (select_out) {
+          out(data_type)(index) := Pipe(fma.io.validout, data_type.ieee(fma.io.out), depth-4).bits
+          exc(data_type).slice(index, index + ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, fma.io.exceptionFlags, depth-4).bits }
+        }
+      }
     }
-    when (out_eew_pipe.bits === log2Ceil(ftype.ieeeWidth >> 3).U) {
-      io.out := res.map(_._1).asUInt
-      io.exc := res.map(_._2).flatten
-    }
+
+    fma.io.a := RegEnable(a, fma_valid)
+    fma.io.b := RegEnable(Mux(io.addsub, 1.U << (fma_type.ieeeWidth - 1), b), fma_valid)
+    fma.io.c := RegEnable(Mux(io.mul, (a ^ b) & (1.U << fma_type.ieeeWidth), c), fma_valid)
+    counts.map { case (key, value) => (key, if (usedFor.contains(key)) value + 1 else value) }
   }}
+
+  out_select.foreach { case (ftype, sel) =>
+    when (sel) {
+      io.out := out(ftype).asUInt
+      io.exc := exc(ftype)
+    }
+  }
 }
 
 trait FMAFactory extends FunctionalUnitFactory {
