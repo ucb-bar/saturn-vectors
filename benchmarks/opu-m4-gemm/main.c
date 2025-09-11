@@ -24,13 +24,13 @@ void i8_mm_scalar(int32_t* c_in, int32_t* c_out, int8_t* at, int8_t* b, size_t M
 void i32_load_c(int* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
     asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
-    VMV_RV(m0, r, v0); // move v0 into row r of m0
+    VMV_RV(m3, r, v0); // move v0 into row r of m3
   }
 }
 
 void i32_store_c(int* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
-    VMV_VR(v0, r, m0); // move row r of m0 into v0
+    VMV_VR(v0, r, m3); // move row r of m3 into v0
     asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
   }
 }
@@ -41,16 +41,16 @@ void i8_loop_k_general(int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size
         asm volatile("vle8.v v0, (%0)" : : "r"(&at[k*M]));
         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(vl));
         asm volatile("vle8.v v4, (%0)" : : "r"(&b[k*N]));
-        VOPACC(m0, v4, v0);
-        // vopacc md=m0, vs2=v0, vs1=v8
+        VOPACC(m3, v4, v0);
+        // vopacc md=m3, vs2=v0, vs1=v8
     }
 }
 void i32_m2_load_c(int* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
     asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
-    VMV_RV(m0, r, v0); // move v0 into row r of m0
+    VMV_RV(m3, r, v0); // move v0 into row r of m3
     asm volatile("vle32.v v4, (%0)" : : "r"(&c[r*N + ml])); 
-    VMV_RV(m1, r, v4); // move v0 into row r of m0
+    VMV_RV(m1, r, v4); // move v0 into row r of m3
   }
 }
 
@@ -59,7 +59,7 @@ void i8_m2_loop_k(int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K
   for (k = 0; k+2 <= K; k+=2) {
     asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
     asm volatile("vle8.v v17, (%0)" : : "r"(&b[k*N]));
-    VOPACC(m0, v17, v16);
+    VOPACC(m3, v17, v16);
 
     asm volatile("vle8.v v18, (%0)" : : "r"(&b[k*N + ml]));
     VOPACC(m1, v18, v16);
@@ -67,7 +67,7 @@ void i8_m2_loop_k(int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K
     //unroll in k to avoid vrf raw hazards
     asm volatile("vle8.v v19, (%0)" : : "r"(&at[(k+1)*M]));
     asm volatile("vle8.v v20, (%0)" : : "r"(&b[(k+1)*N]));
-    VOPACC(m0, v20, v19);
+    VOPACC(m3, v20, v19);
 
     asm volatile("vle8.v v21, (%0)" : : "r"(&b[(k+1)*N + ml]));
     VOPACC(m1, v21, v19);
@@ -77,9 +77,9 @@ void i8_m2_loop_k(int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K
 
 void i32_m2_store_c(int* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
-    VMV_VR(v8, r, m0); // move row r of m0 into v0
+    VMV_VR(v8, r, m3); // move row r of m3 into v0
     asm volatile("vse32.v v8, (%0)" : : "r"(&c[r*N]));
-    VMV_VR(v12, r, m1); // move row r of m0 into v0
+    VMV_VR(v12, r, m1); // move row r of m3 into v0
     asm volatile("vse32.v v12, (%0)" : : "r"(&c[r*N + ml]));
   }
 }

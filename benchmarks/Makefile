@@ -51,6 +51,7 @@ bmarks = \
 	vec-transpose-store \
 	opu-sq-gemm \
 	opu-m2-gemm \
+	opu-m4-gemm \
 	vec-optest
 
 cpp_bmarks = \
