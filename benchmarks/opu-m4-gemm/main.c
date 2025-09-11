@@ -21,26 +21,28 @@ void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t
     }
   }
 
-void i32_load_c(int* c, size_t ml, size_t N) {
+void i32_set_c(int* c) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
   OPMVINBCAST(m0, v0); // move v0 into row r of m1
 }
 void i8_loop_k_general(int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size_t ml, size_t vl) {
     for (size_t k = 0; k < K; k++) {
         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(ml));
-        asm volatile("vle8.v v0, (%0)" : : "r"(&at[k*M]));
+        asm volatile("vle8.v v5, (%0)" : : "r"(&at[k*M]));
         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(vl));
         asm volatile("vle8.v v4, (%0)" : : "r"(&b[k*N]));
-        VOPACC(m0, v4, v0);
+        VOPACC(m0, v4, v5);
         // vopacc md=m3, vs2=v0, vs1=v8
     }
 }
-void i32_store_c(int* c, size_t ml, size_t N) {
+void i32_store_c(int* c, size_t ml, size_t vl, size_t N) {
+  asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(vl));
   for (size_t r = 0; r < ml; r++) {
-    VMV_VR(v0, r, m0); // move row r of m3 into v0
-    asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
+    VMV_VR(v8, r, m0); // move row r of m3 into v0
+    asm volatile("vse32.v v8, (%0)" : : "r"(&c[r*N]));
   }
 }
+
 void i32_m4_load_c(int* c, size_t ml, size_t N) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
   asm volatile("vle32.v v4, (%0)" : : "r"(c+ml));
@@ -50,10 +52,11 @@ void i32_m4_load_c(int* c, size_t ml, size_t N) {
   OPMVINBCAST(m3, v4);
 }
 void i8_m4_loop_k(int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K) {
+  asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(ml));
   size_t k;
   for (k = 0; k < K; k++) {
-      asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
-      asm volatile("vle8.v v17, (%0)" : : "r"(&b[k*N]));
+    asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
+    asm volatile("vle8.v v17, (%0)" : : "r"(&b[k*N]));
     VOPACC(m0, v17, v16);
     asm volatile("vle8.v v19, (%0)" : : "r"(&b[k*N + ml]));
     VOPACC(m1, v19, v16);
@@ -63,6 +66,7 @@ void i8_m4_loop_k(int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K
   }
 }
 void i32_m4_store_c(int* c, size_t ml, size_t N) {
+  asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(ml));
   for (size_t r = 0; r < ml; r++) {
     VMV_VR(v0, r, m0); // move row r of m0 into v0
     asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
@@ -75,7 +79,7 @@ void i32_m4_store_c(int* c, size_t ml, size_t N) {
   }
 }
 void i8_mm_bme_2x2(int32_t* c_in, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
-  size_t vlenb ;
+  size_t vlenb;
   asm volatile("vsetvli %0, zero, e8, m1, ta, ma" : "=r"(vlenb));
   size_t mlmax = vlenb;
 
@@ -87,36 +91,33 @@ void i8_mm_bme_2x2(int32_t* c_in, int32_t* c_out, int8_t* at, int8_t* b, size_t 
     while (j + 2*mlmax <= N) {
       asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(mlmax));
       i32_m4_load_c(&c_in[(i*N)+j], mlmax, N);
-      asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(mlmax));
       i8_m4_loop_k(&at[i], &b[j], mlmax, M, N, K);
-      asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(mlmax));
       i32_m4_store_c(&c_out[(i*N)+j], mlmax, N);
       j += 2*mlmax;
     }
 
     while (j < N) {
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
-      i32_load_c(&c_in[(i*N)+j], mlmax, N);
+      i32_set_c(&c_in[(i*N)+j]);
       i8_loop_k_general(&at[i], &b[j], M, N, K, mlmax, vl);
-      asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(vl));
-      i32_store_c(&c_out[(i*N)+j], mlmax, N);
+      i32_store_c(&c_out[(i*N)+j], mlmax, vl, N);
+      //unroll by 2 in M dimension
+      i32_set_c(&c_in[(i+mlmax)*N+j]);
+      i8_loop_k_general(&at[(i+mlmax)*N], &b[j], M, N, K, mlmax, vl);
+      i32_store_c(&c_out[(i+mlmax)*N+j], mlmax, vl, N);
       j += vl;
     }
     i += 2*mlmax;
   }
   
   while (i < M) {
-    size_t remaining = M - i;
-    size_t ml = remaining > mlmax ? mlmax : remaining;
+    size_t ml = (M - i) > mlmax ? mlmax : M - i;
 
     for (size_t j = 0; j < N;) {
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
-      i32_load_c(&c_in[(i*N)+j], ml, N);
-
+      i32_set_c(&c_in[(i*N)+j]);
       i8_loop_k_general(&at[i], &b[j], M, N, K, ml, vl);
-
-      asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(vl));
-      i32_store_c(&c_out[(i*N)+j], ml, N);
+      i32_store_c(&c_out[(i*N)+j], ml, vl, N);
       j += vl;
     }
     i += ml;
@@ -150,10 +151,10 @@ int i32_compare(int32_t* a, int32_t* b, size_t m, size_t n) {
 
 #define TCM_BASE 0x70000000
 
-#define MIN 32
-#define MAX 16
-#define STEP 32
-#define VL 32
+#define MIN 16
+#define MAX 32
+#define STEP 16
+#define VL 16
 
 int main(void) {
   size_t m = 2*VL;
@@ -163,7 +164,6 @@ int main(void) {
   int8_t* At = (int8_t*)(TCM_BASE + n * MAX);
   int32_t C_bias[n];
   int32_t C_bme[m*n];
-  // scalar copy of A, B to avoid D1 coherence delays
   int32_t C_gold[m*n];
   i8_init(At, m * MAX, 1);
   i8_init(B, MAX * n, 2);
