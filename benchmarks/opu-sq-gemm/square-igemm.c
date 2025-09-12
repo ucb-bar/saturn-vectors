@@ -150,11 +150,10 @@ int i32_compare(int32_t* a, int32_t* b, size_t m, size_t n) {
 
 #define TCM_BASE 0x70000000
 
-#define MIN 64
-#define MAX 256
-#define STEP 64
-#define VL 64
-// #define DL 32
+#define MIN 16
+#define MAX 32
+#define STEP 16
+#define VL 16
 
 int main(void) {
   size_t m = VL;
