@@ -70,30 +70,49 @@ void i32_init(int32_t* d, size_t s) {
 }
 
 void i8_init(int8_t* d, size_t s) {
-  for (size_t i = 0; i < s; i++) d[i] = i + 1;
+  for (size_t i = 0; i < s; i++) d[i] = 0;
 }
 
-int i32_compare(int32_t* a, int32_t* b, size_t s) {
-  for (size_t i = 0; i < s; i++) {
-    if (a[i] != b[i]) {
-      printf("Divergence %d != %d index %ld\n", a[i], b[i], i);
-      return 1;
+int i32_compare(int32_t* C_opu, int32_t* C_ref, size_t m, size_t n) {
+  for (size_t i = 0; i < m; i++) {
+    for (size_t j = 0; j < n; j++) {
+      size_t index = i * n + j;
+      if (C_opu[index] != C_ref[index]) {
+        printf("DIVERGENCE at index (%ld, %ld): 0x%x != 0x%x\n", i, j, C_opu[index], C_ref[index]);
+        printf("opu:\n");
+        for (size_t ii = 0; ii < m; ii++) {
+          for (size_t jj = 0; jj < n; jj++) {
+            printf("0x%x ", C_opu[ii*n + jj]);
+          }
+          printf("\n");
+        }
+        printf("reference:\n");
+        for (size_t ii = 0; ii < m; ii++) {
+          for (size_t jj = 0; jj < n; jj++) {
+            printf("0x%x ", C_ref[ii*n + jj]);
+          }
+          printf("\n");
+        }
+        return 1;
+      }
     }
   }
   return 0;
 }
 
-void mm_scalar(int8_t* A, int8_t* B, int32_t* C, size_t M, size_t N, size_t K) {
-  for (size_t m = 0; m < M; m++) {
-    for (size_t n = 0; n < N; n++) {
-      for (size_t k = 0; k < K; k++) {
-        C[m*N+n] += A[M*k+m] * B[N*k+n];
+void i8_mm_scalar(int8_t* at, int8_t* b, int32_t* C_bias, int32_t* C_out, size_t M, size_t N, size_t K) {
+    for (size_t i = 0; i < M; i++) {
+      for (size_t j = 0; j < N; j++) {
+        C_out[i*N+j] = C_bias[j];
+        for (size_t k = 0; k < K; k++) {
+          C_out[i*N+j] += at[k*M+i] * b[k*N+j];
+        }
       }
     }
   }
-}
 
-void mm_opu(int8_t* A, int8_t* B, int32_t* C, size_t M, size_t N, size_t K) {
+
+void mm_opu(int8_t* A, int8_t* B, int32_t* C_bias, int32_t* C, size_t M, size_t N, size_t K) {
   size_t maxvl;
   size_t vl;
   asm volatile("vsetvli %[vl], zero, e32, m4, ta, ma" : [vl]"=r"(maxvl));
@@ -107,9 +126,12 @@ void mm_opu(int8_t* A, int8_t* B, int32_t* C, size_t M, size_t N, size_t K) {
     while (j < N) {
       // Clear the m1 tile
       asm volatile("vsetvli %[vl], x0, e32, m4, ta, ma" : [vl]"=r"(vl));
-      asm volatile("vmv.v.i v0, 0x0");
-      OPMVINBCAST(m1, v0);
-
+      asm volatile("vle32.v v0, (%0)" : : "r"(&C_bias[j]));
+      // OPMVINBCAST(m1, v0);
+      for (size_t r = 0; r < rows; r++) {
+        OPMVIN(m0, v0, r); // move v0 into row r of m1
+      }
+      
       // Set rows/cols to remaining rows/cols using vsetvli
       size_t cols;
       asm volatile("vsetvli %[vl], %[avl], e8, m1, ta, ma" : [vl]"=r"(cols) : [avl]"r"(N-j));
@@ -137,75 +159,43 @@ void mm_opu(int8_t* A, int8_t* B, int32_t* C, size_t M, size_t N, size_t K) {
   }
 }
 
-#define VLEN 32
-#define MIN 1
-#define MAX 39
-#define STEP 12
-
 int main(void) {
-
-  int8_t A[MAX*MAX];
-  int8_t B[MAX*MAX];
-  int32_t C[MAX*MAX];
-  int32_t C_gold[MAX*MAX];
-
-
-  i32_init(C, MAX*MAX);
-  i32_init(C_gold, MAX*MAX);
-  /* memset(C, 0, sizeof(int32_t)*MAX*MAX); */
-  /* memset(C_gold, 0, sizeof(int32_t)*MAX*MAX); */
-
-  size_t vl;
   size_t maxvl;
   asm volatile("vsetvli %[vl], zero, e32, m4, ta, ma" : [vl]"=r"(maxvl));
-  asm volatile("vsetvli %[vl], %[avl], e32, m4, ta, ma" : [vl]"=r"(vl) : [avl]"r"(MAX));
-  printf("maxvl is %lu\n", maxvl);
-  /* for (size_t j = 0; j < 32; j++) { */
-  /*   asm volatile("vle32.v v0, (%0)" : : "r"(&C[vl*j])); */
-  /*   OPMVIN(m1, v0, j); */
-  /* } */
+  size_t dl = maxvl / 2;
+  printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
-  /* for (size_t j = 0; j < 32; j++) { */
-  /*   asm volatile("vle32.v v0, (%0)" : : "r"(&C[vl*j])); */
-  /*   OPMVIN(m1, v0, j); */
-  /* } */
+  const size_t M = maxvl;
+  const size_t N = maxvl;
+  const size_t K = 3;
+  int8_t A[M*K];
+  int8_t B[N*K];
+  int32_t C_opu[M*N];
+  int32_t C_ref[M*N];
+  int32_t C_bias[N];
+  i32_init(C_bias, N);
+  i8_init(A, M*K);
+  i8_init(B, N*K);
 
-  /* for (size_t j = 0; j < 32; j++) { */
-  /*   OPMVOUT(v0, m1, j); */
-  /*   //asm volatile("vse32.v v0, (%0)" : : "r"(&C_gold[vl*j])); */
-  /* } */
+  for (size_t m = dl-1; m < M; m+=dl) {
+    for (size_t n = dl-1; n < N; n+=dl) {
+      for (size_t k = 1; k < K; k++) {
+        printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
+        //Test outer product
+        mm_opu(A, B, C_bias, C_opu, m, n, k);
+        // mm_scalar(A, B, C_ref, m, n, k);
+        i8_mm_scalar(A, B, C_bias, C_ref, m, n, k);
 
-  /* asm volatile("vle32.v v0, (%0)" : : "r"(&C[0])); */
-  /* OPMVINBCAST(m1, v0); */
+        int r = 0;      
+          r = i32_compare(C_opu, C_ref, m, n);
+          if (r) {
+              printf("FAILURE; M, N, K = %ld %ld %ld\n", m, n, k);
+              exit(1);
+          }
 
-  /* asm volatile("vle32.v v0, (%0)" : : "r"(&C[vl])); */
-  /* OPMVINBCAST(m1, v0); */
-
-  i8_init(A, MAX*MAX);
-  i8_init(B, MAX*MAX);
-
-  // flush the DCache of A, B, to avoid coherence traffic with the L1D on the outer-product test
-  for (size_t i = 0; i < MAX*MAX; ) {
-    asm volatile("vsetvli %[vl], zero, e8, m1, ta, ma" : [vl]"=r"(maxvl));
-    asm volatile("vle8.v v0, (%0)" : : "r"(&A[i]));
-    asm volatile("vle8.v v0, (%0)" : : "r"(&B[i]));
-    i += maxvl;
-  }
-
-  //Test outer product
-  size_t M = 33;
-  size_t N = 33;
-  size_t K = 2;
-  mm_opu(A, B, C, M, N, K);
-  mm_scalar(A, B, C_gold, M, N, K);
-  for (size_t i = 0; i < M; i++) {
-    for (size_t j = 0; j < N; j++) {
-      if (C[i*N+j] != C_gold[i*N+j]) {
-        printf("err r != gold %d != %d at (%d, %d)\n", C[i*N+j], C_gold[i*N+j], i, j);
+        printf("SUCESS; M, N, K = %ld %ld %ld\n", m, n, k);
       }
     }
   }
-
-  printf("done\n");
   return 0;
   }
