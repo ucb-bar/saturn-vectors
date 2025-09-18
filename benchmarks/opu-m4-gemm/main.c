@@ -177,7 +177,7 @@ int main(void) {
 
   const size_t M = 4*maxvl;
   const size_t N = 4*maxvl;
-  const size_t K = 2;
+  const size_t K = 33;
   int8_t at[M*K];
   int8_t b[N*K];
   int32_t c_opu[M*N];
@@ -187,8 +187,8 @@ int main(void) {
   i8_init(at, M*K, 1);
   i8_init(b, N*K, -3);
 
-  for (size_t n = maxvl-1; n <= N; n+=maxvl) {
-    for (size_t m = maxvl-1; m <= M; m+=maxvl) {
+  for (size_t n = 2*maxvl+1; n <= N; n+=maxvl) {
+    for (size_t m = 2*maxvl+1; m <= M; m+=maxvl) {
       // for (size_t k = 2; k < K; k++) {
         size_t k = K;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
