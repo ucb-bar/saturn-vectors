@@ -15,13 +15,13 @@ void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t
       for (size_t j = 0; j < N; j++) {
         c_out[i*N+j] = c_bias[j];
         for (size_t k = 0; k < K; k++) {
-          c_out[i*N+j] += at[k*M+i] * b[k*N+j];
+          c_out[i*N+j] += ((int32_t) at[k*M+i]) * (int32_t) b[k*N+j];
         }
       }
     }
   }
 
-void i32_set_c(int* c) {
+void i32_set_c(int32_t* c) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
   OPMVINBCAST(m0, v0); // move v0 into row r of m1
 }
@@ -35,7 +35,7 @@ void i8_loop_k_general(int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size
         // vopacc md=m3, vs2=v0, vs1=v8
     }
 }
-void i32_store_c(int* c, size_t ml, size_t vl, size_t N) {
+void i32_store_c(int32_t* c, size_t ml, size_t vl, size_t N) {
   asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(vl));
   for (size_t r = 0; r < ml; r++) {
     VMV_VR(v8, r, m0); // move row r of m3 into v0
@@ -43,7 +43,7 @@ void i32_store_c(int* c, size_t ml, size_t vl, size_t N) {
   }
 }
 
-void i32_m4_load_c(int* c, size_t ml, size_t N) {
+void i32_m4_load_c(int32_t* c, size_t ml, size_t N) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
   asm volatile("vle32.v v4, (%0)" : : "r"(c+ml));
   OPMVINBCAST(m0, v0); //broadcast bias to each column of m0
@@ -65,7 +65,7 @@ void i8_m4_loop_k(int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K
     VOPACC(m3, v19, v18);
   }
 }
-void i32_m4_store_c(int* c, size_t ml, size_t N) {
+void i32_m4_store_c(int32_t* c, size_t ml, size_t N) {
   asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(ml));
   for (size_t r = 0; r < ml; r++) {
     VMV_VR(v0, r, m0); // move row r of m0 into v0
@@ -124,7 +124,7 @@ void i8_mm_bme_2x2(int32_t* c_in, int32_t* c_out, int8_t* at, int8_t* b, size_t 
   }
 }
 
-void i32_init(int* d, size_t s) {
+void i32_init(int32_t* d, size_t s) {
   for (size_t i = 0; i < s; i++) {
     d[i] = i + 1;
   }
