@@ -86,9 +86,8 @@ void i32_2x2_store_c(int32_t* c, size_t ml, size_t N) {
 }
 
 void i8_mm_bme_2x2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
-  size_t vlenb;
-  asm volatile("vsetvli %0, zero, e8, m1, ta, ma" : "=r"(vlenb));
-  size_t mlmax = vlenb;
+  size_t mlmax;
+  asm volatile("vsetvli %0, zero, e8, m1, ta, ma" : "=r"(mlmax));
 
   size_t vl;
   size_t i = 0;
@@ -96,6 +95,7 @@ void i8_mm_bme_2x2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_
     size_t j = 0;
 
     while (j + 2*mlmax <= N) {
+      asm volatile("vsetvli %0, zero, e32, m4, ta, ma" : "=r"(mlmax));
       i32_2x2_set_c(&c_bias[j], mlmax);
       i8_2x2_loop_k(&at[i], &b[j], mlmax, M, N, K);
       i32_2x2_store_c(&c_out[i*N+j], mlmax, N);
