@@ -207,6 +207,5 @@ int main(void) {
       // }
     }
   }
-  printf("SUCCESS testing mmBME\n");
   return 0;
 }
