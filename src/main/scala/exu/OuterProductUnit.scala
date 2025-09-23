@@ -28,7 +28,7 @@ trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
   def varchRatio = vLen / dLen
   def regsPerTileReg = varchRatio * varchRatio
   def regsPerCell = regsPerTileReg * opuParams.nMrfRegs
-  def cellRegIdxBits = log2Ceil(regsPerCell)
+  def cellRegIdxBits = log2Ceil(regsPerCell) 
   def prodWidth = opuParams.aWidth + opuParams.bWidth
 
   def wideningFactor = opuParams.cWidth / opuParams.aWidth
@@ -99,6 +99,7 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
     val shift = Input(Bool())
     val mvin  = Input(Bool())
     val mvin_bcast = Input(Bool())
+    val mvin_col = Input(Bool())
   })
 
   val cells = Seq.fill(clusterXdim, clusterYdim)(Module(new OuterProductCell))
@@ -112,11 +113,17 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
       cell.io.in_l  := io.in_l(i).asSInt
       cell.io.in_t  := io.in_t(j).asSInt
 
-      cell.io.macc := io.macc
-      cell.io.mvin := io.mvin && i.U === io.row_idx && j.U === io.col_idx
-      cell.io.mvin_bcast := io.mvin_bcast && j.U === io.col_idx
-      cell.io.mvin_data := io.in_t.asUInt.asSInt
+      when (io.mvin_col) { // write column
+        cell.io.mvin := io.mvin && j.U === io.row_idx && i.U === io.col_idx
+        cell.io.mvin_bcast := io.mvin_bcast && i.U === io.col_idx
+        cell.io.mvin_data := io.in_l.asUInt.asSInt
+      } .otherwise { // write row
+        cell.io.mvin := io.mvin && i.U === io.row_idx && j.U === io.col_idx
+        cell.io.mvin_bcast := io.mvin_bcast && j.U === io.col_idx
+        cell.io.mvin_data := io.in_t.asUInt.asSInt
+      }
       cell.io.mrf_idx := io.mrf_idx
+      cell.io.macc := io.macc
       cell_outs(i)(j) := cell.io.out.asUInt
     }
   }
@@ -136,7 +143,7 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val in_t      = Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W)))
 
   // same values broadcast horizontally
-  val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W))
+  val mrf_idx    = Vec(yDim, UInt((cellRegIdxBits+1).W)) // +1 for column write
   val row_idx    = Vec(yDim, UInt(log2Ceil(clusterYdim).W))
   val col_idx    = Vec(yDim, UInt(log2Ceil(clusterXdim).W))
   val macc       = Vec(yDim, Bool())
@@ -174,6 +181,7 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.macc       := io.op.macc(i)
       cluster.io.mvin       := io.op.mvin(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
+      cluster.io.mvin_col := io.op.mrf_idx(i)(cellRegIdxBits-1)
       cluster.io.shift      := io.op.shift(i)
     }
 
