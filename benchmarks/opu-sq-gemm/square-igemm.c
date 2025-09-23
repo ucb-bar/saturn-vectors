@@ -24,13 +24,13 @@ void i8_mm_scalar(int32_t* c_in, int32_t* c_out, int8_t* at, int8_t* b, size_t M
 void i32_load_c(int* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
     asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
-    VMV_RV(m1, r, v0); // move v0 into row r of m1
+    VMV_RV(m2, r, v0); // move v0 into row r of m2
   }
 }
 
 void i32_store_c(int* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
-    VMV_VR(v0, r, m1); // move row r of m1 into v0
+    VMV_VR(v0, r, m2); // move row r of m2 into v0
     asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
   }
 }
@@ -41,8 +41,8 @@ void i8_loop_k_general(int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size
         asm volatile("vle8.v v0, (%0)" : : "r"(&at[k*M]));
         asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(vl));
         asm volatile("vle8.v v8, (%0)" : : "r"(&b[k*N]));
-        VOPACC(m1, v8, v0);
-        // vopacc md=m1, vs2=v0, vs1=v8
+        VOPACC(m2, v8, v0);
+        // vopacc md=m2, vs2=v0, vs1=v8
     }
 }
   
@@ -51,26 +51,26 @@ void i8_loop_k_square(int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
   for (k = 0; k+4 <= K; k+=4) {
     asm volatile("vle8.v v4, (%0)" : : "r"(&at[k*M]));
     asm volatile("vle8.v v16, (%0)" : : "r"(&b[k*N]));
-    VOPACC(m1, v16, v4);
+    VOPACC(m2, v16, v4);
 
     asm volatile("vle8.v v5, (%0)" : : "r"(&at[(k+1)*M]));
     asm volatile("vle8.v v17, (%0)" : : "r"(&b[(k+1)*N]));
-    VOPACC(m1, v17, v5);
+    VOPACC(m2, v17, v5);
 
     asm volatile("vle8.v v6, (%0)" : : "r"(&at[(k+2)*M]));
     asm volatile("vle8.v v18, (%0)" : : "r"(&b[(k+2)*N]));
-    VOPACC(m1, v18, v6);
+    VOPACC(m2, v18, v6);
 
     asm volatile("vle8.v v7, (%0)" : : "r"(&at[(k+3)*M]));
     asm volatile("vle8.v v19, (%0)" : : "r"(&b[(k+3)*N]));
-    VOPACC(m1, v19, v7);
+    VOPACC(m2, v19, v7);
 }
 // TODO: handle odd K
 for (k; k < K; k++) {
   asm volatile("vle8.v v4, (%0)" : : "r"(&at[k*M]));
   asm volatile("vle8.v v16, (%0)" : : "r"(&b[k*N]));
-  VOPACC(m1, v16, v4);
-  // vopacc md=m1, vs2=v0, vs1=v8
+  VOPACC(m2, v16, v4);
+  // vopacc md=m2, vs2=v0, vs1=v8
 }
 }
 

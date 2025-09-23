@@ -181,7 +181,7 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.macc       := io.op.macc(i)
       cluster.io.mvin       := io.op.mvin(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
-      cluster.io.mvin_col := io.op.mrf_idx(i)(cellRegIdxBits-1)
+      cluster.io.mvin_col := io.op.mrf_idx(i)(cellRegIdxBits) // MSB indicates column write
       cluster.io.shift      := io.op.shift(i)
     }
 
