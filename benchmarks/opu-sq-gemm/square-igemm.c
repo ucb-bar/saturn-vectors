@@ -66,12 +66,12 @@ void i8_loop_k_square(int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
     VOPACC(m1, v19, v7);
 }
 // TODO: handle odd K
-// for (k; k < K; k++) {
-//   asm volatile("vle8.v v0, (%0)" : : "r"(&at[k*M]));
-//   asm volatile("vle8.v v8, (%0)" : : "r"(&b[k*N]));
-//   VOPACC(m1, v8, v0);
-//   // vopacc md=m1, vs2=v0, vs1=v8
-// }
+for (k; k < K; k++) {
+  asm volatile("vle8.v v4, (%0)" : : "r"(&at[k*M]));
+  asm volatile("vle8.v v16, (%0)" : : "r"(&b[k*N]));
+  VOPACC(m1, v16, v4);
+  // vopacc md=m1, vs2=v0, vs1=v8
+}
 }
 
 void i8_mm_bme_square(int32_t* c_in, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
@@ -135,72 +135,72 @@ void i8_init(int8_t* d, size_t s, int8_t start) {
     }
   }
   
-int i32_compare(int32_t* a, int32_t* b, size_t m, size_t n) {
-    for (size_t i = 0; i < m; i++) {
-      for (size_t j = 0; j < n; j++) {
-        size_t index = i * n + j;
-        if (a[index] != b[index]) {
-          printf("DIVERGENCE at index (%ld, %ld): 0x%x != 0x%x\n", i, j, a[index], b[index]);
-          return 1;
+int i32_compare(int32_t* c_opu, int32_t* c_ref, size_t m, size_t n) {
+  for (size_t i = 0; i < m; i++) {
+    for (size_t j = 0; j < n; j++) {
+      size_t index = i * n + j;
+      if (c_opu[index] != c_ref[index]) {
+        printf("DIVERGENCE at index (%ld, %ld): 0x%x != 0x%x\n", i, j, c_opu[index], c_ref[index]);
+        printf("opu:\n");
+        for (size_t ii = 0; ii < m; ii++) {
+          for (size_t jj = 0; jj < n; jj++) {
+            printf("0x%x ", c_opu[ii*n + jj]);
+          }
+          printf("\n");
         }
+        printf("reference:\n");
+        for (size_t ii = 0; ii < m; ii++) {
+          for (size_t jj = 0; jj < n; jj++) {
+            printf("0x%x ", c_ref[ii*n + jj]);
+          }
+          printf("\n");
+        }
+        return 1;
       }
     }
-    return 0;
   }
-
+  return 0;
+}
 #define TCM_BASE 0x70000000
 
-#define MIN 16
-#define MAX 32
-#define STEP 16
-#define VL 16
-
 int main(void) {
-  size_t m = VL;
-  size_t n = VL;
+  size_t maxvl;
+  asm volatile("vsetvli %[vl], zero, e32, m4, ta, ma" : [vl]"=r"(maxvl));
+  size_t dl = maxvl / 2;
+  printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
-  int8_t* B = (int8_t*)TCM_BASE;
-  int8_t* At = (int8_t*)(TCM_BASE + n * MAX);
-  int32_t C_init[m*n];
-  int32_t C_bme[m*n];
-  // scalar copy of A, B to avoid D1 coherence delays
-  int32_t C_gold[m*n];
-  int8_t Ats[m*MAX];
-  int8_t Bs[MAX*n];
-  i8_init(At, m * MAX, 1);
-  i8_init(B, MAX * n, 2);
-  i8_init(Ats, m * MAX, 1);
-  i8_init(Bs, MAX * n, 2);
-  i32_init(C_init, m * n);
+  const size_t M = 2*maxvl;
+  const size_t N = 2*maxvl;
+  const size_t K = 3;
   
-  printf("i8 GEMM\nvlen = %d;\nwarmup cache:\ndim,ops,cycles\n", VL*8);
-  int64_t cyclest1 = read_csr(mcycle);
-  i8_mm_bme_square(C_init, C_bme, At, B, m, n, MAX);
-  asm volatile("fence");
-  int64_t cyclest2 = read_csr(mcycle);
-  int64_t cycles = cyclest2 - cyclest1;
-  int64_t ops = m * n * MAX;
-  for (size_t k = MIN; k <= MAX; k += STEP) {
-    i8_mm_scalar(C_init, C_gold, Ats, Bs, m, n, k);
-    
-    cyclest1 = read_csr(mcycle);
-    i8_mm_bme_square(C_init, C_bme, At, B, m, n, k);
-    asm volatile("fence");
-    cyclest2 = read_csr(mcycle);
-  
-    // verify against reference
-    int r = 0;      
-    r = i32_compare(C_bme, C_gold, m, n);
-    if (r) {
-        printf("Failure in BME M, N, K = %ld %ld %ld\n", m, n, k);
-        exit(1);
+  int8_t* b = (int8_t*)TCM_BASE;
+  int8_t* at = (int8_t*)(TCM_BASE + N * K);
+  int32_t c_opu[M*N];
+  int32_t c_ref[M*N];
+  int32_t c_bias[M*N];
+  i32_init(c_bias, M*N);
+  i8_init(at, M*K, 1);
+  i8_init(b, N*K, -3);
+
+  for (size_t m = maxvl-1; m < M; m+=maxvl) {
+    for (size_t n = 2*maxvl-1; n < N; n+=maxvl) {
+      // for (size_t k = 2; k < K; k++) {
+        size_t k = K;
+        printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
+        i8_mm_scalar(c_bias, c_ref, at, b, m, n, k);
+        i8_mm_bme_square(c_bias, c_opu, at, b, m, n, k);
+        
+        // verify against reference
+        int r = 0;      
+          r = i32_compare(c_opu, c_ref, m, n);
+          if (r) {
+              printf("FAILURE; M, N, K = %ld %ld %ld\n", m, n, k);
+              exit(1);
+          }
+
+        printf("SUCESS; M, N, K = %ld %ld %ld\n", m, n, k);
+      // }
     }
-
-    // compute metrics and print to csv
-    cycles = cyclest2 - cyclest1;
-    ops = m * n * k;
-    printf("%ld,%ld,%ld\n", k, ops, cycles);
   }
-  printf("SUCCESS testing mmBME\n");
   return 0;
 }
