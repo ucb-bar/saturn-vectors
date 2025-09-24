@@ -143,12 +143,13 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val in_t      = Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W)))
 
   // same values broadcast horizontally
-  val mrf_idx    = Vec(yDim, UInt((cellRegIdxBits+1).W)) // +1 for column write
+  val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W)) 
   val row_idx    = Vec(yDim, UInt(log2Ceil(clusterYdim).W))
   val col_idx    = Vec(yDim, UInt(log2Ceil(clusterXdim).W))
   val macc       = Vec(yDim, Bool())
   val mvin       = Vec(yDim, Bool())
   val mvin_bcast = Vec(yDim, Bool())
+  val mvin_col   = Vec(yDim, Bool()) // column write
   val shift      = Vec(yDim, Bool())
 }
 
@@ -181,7 +182,7 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.macc       := io.op.macc(i)
       cluster.io.mvin       := io.op.mvin(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
-      cluster.io.mvin_col := io.op.mrf_idx(i)(cellRegIdxBits) // MSB indicates column write
+      cluster.io.mvin_col   := io.op.mvin_col(i)
       cluster.io.shift      := io.op.shift(i)
     }
 

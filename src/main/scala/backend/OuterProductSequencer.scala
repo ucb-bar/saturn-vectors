@@ -49,6 +49,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   val mvin = Reg(Bool())
   val mvin_bcast = Reg(Bool())
+  val mvin_col = Reg(Bool())
   val mvout = Reg(Bool())
   val macc = Reg(Bool())
 
@@ -94,6 +95,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     mvout :=  funct6 === OPMFunct6.opmvout
     macc :=  funct6 === OPMFunct6.opmacc
     mvin_bcast :=  funct6 === OPMFunct6.opmvinbcast
+    mvin_col := dis_inst.rd(log2Ceil(opuParams.nMrfRegs)) // MSB indicates column write
     col_idx := 0.U
     row_idx := 0.U
     head := true.B
@@ -182,6 +184,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx, 0.U))
   io.iss.bits.macc.foreach(_ := io.iss.fire && macc)
   io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast)
+  io.iss.bits.mvin_col.foreach(_ := io.iss.fire && mvin_col)
   io.iss.bits.clock_enable := valid || mvout_valids =/= 0.U
 
   // for a non-bcast mvin, only the specific row of clusters gets mvin set
