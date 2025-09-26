@@ -114,7 +114,7 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
       cell.io.in_t  := io.in_t(j).asSInt
 
       when (io.mvin_col) { // write column
-        cell.io.mvin := io.mvin && j.U === io.row_idx && i.U === io.col_idx
+        cell.io.mvin := j.U === io.row_idx && i.U === io.col_idx
         cell.io.mvin_bcast := io.mvin_bcast && i.U === io.col_idx
         cell.io.mvin_data := io.in_l.asUInt.asSInt
       } .otherwise { // write row
@@ -147,10 +147,12 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val row_idx    = Vec(yDim, UInt(log2Ceil(clusterYdim).W))
   val col_idx    = Vec(yDim, UInt(log2Ceil(clusterXdim).W))
   val macc       = Vec(yDim, Bool())
+  val shift      = Vec(yDim, Bool())
   val mvin       = Vec(yDim, Bool())
   val mvin_bcast = Vec(yDim, Bool())
-  val mvin_col   = Vec(yDim, Bool()) // column write
-  val shift      = Vec(yDim, Bool())
+  //mvin_col broadcasts vertically
+  val mvin_col   = Vec(xDim, Bool()) // column write
+
 }
 
 
@@ -180,10 +182,10 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.row_idx    := io.op.row_idx(i)
       cluster.io.col_idx    := io.op.col_idx(i)
       cluster.io.macc       := io.op.macc(i)
+      cluster.io.shift      := io.op.shift(i)
       cluster.io.mvin       := io.op.mvin(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
-      cluster.io.mvin_col   := io.op.mvin_col(i)
-      cluster.io.shift      := io.op.shift(i)
+      cluster.io.mvin_col   := io.op.mvin_col(j)
     }
 
     clusters(0)(j).io.in_pipe := 0.U

@@ -368,15 +368,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vopu_ctrl_reg := vos.get.io.iss.bits
     when (vos.get.io.iss.valid) {
       when (vos.get.io.iss.bits.mvin.orR || vos.get.io.iss.bits.mvin_bcast.head) {
-        when (vos.get.io.iss.bits.mvin_col.orR) {
-          vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
-            Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
-          )
-        } .otherwise {
-          vopu_ctrl_reg.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
-            Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W)))
-          )
-        }
+        vopu_ctrl_reg.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+          Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W)))
+        )
+      }
+      when (vos.get.io.iss.bits.mvin_col.orR) { //TODO add col_bcast
+        vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+          Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
+        )
       }
 
       when (vos.get.io.iss.bits.macc.head) {
