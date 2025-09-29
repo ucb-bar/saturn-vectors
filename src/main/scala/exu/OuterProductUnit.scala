@@ -79,7 +79,6 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
       regs(i) := Mux(io.macc, sum, io.mvin_data)
     }
   }
-
   io.out := regs(io.mrf_idx)
 }
 
@@ -152,7 +151,6 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val mvin_bcast = Vec(yDim, Bool())
   //mvin_col broadcasts vertically
   val mvin_col   = Vec(xDim, Bool()) // column write
-
 }
 
 
@@ -183,8 +181,8 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.col_idx    := io.op.col_idx(i)
       cluster.io.macc       := io.op.macc(i)
       cluster.io.shift      := io.op.shift(i)
-      cluster.io.mvin       := io.op.mvin(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
+      cluster.io.mvin       := io.op.mvin(i)
       cluster.io.mvin_col   := io.op.mvin_col(j)
     }
 

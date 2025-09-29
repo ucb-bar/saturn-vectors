@@ -159,7 +159,6 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.iss.bits.in_l := DontCare // set in Backend
   io.iss.bits.in_t := DontCare
 
-
   // set the control signals
   val mrf_row_idx = Mux(macc,
     row_idx,
@@ -177,8 +176,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
   io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
     Mux(mvout, inst.rs2, inst.rd),
-    mrf_row_idx,
-    mrf_col_idx
+    Mux(mvin_col, mrf_col_idx, mrf_row_idx),
+    Mux(mvin_col, mrf_row_idx, mrf_col_idx)
   ), 0.U))
   io.iss.bits.row_idx.foreach(_ := Mux(io.iss.fire, scalar_row_idx, 0.U))
   io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx, 0.U))
@@ -190,8 +189,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   for (i <- 0 until yDim) {
     io.iss.bits.mvin(i) := io.iss.fire && mvin && !mvin_col && scalar_cluster_row_idx === i.U
   }
-  for (i <- 0 until xDim) {
-    io.iss.bits.mvin_col(i) := io.iss.fire && mvin && mvin_col && scalar_cluster_row_idx === i.U
+  for (j <- 0 until xDim) {
+    io.iss.bits.mvin_col(j) := io.iss.fire && mvin && mvin_col && scalar_cluster_row_idx === j.U
   }
   mvout_valids := (mvout_valids << 1) | ((io.iss.fire && mvout) << scalar_cluster_row_idx)
 
