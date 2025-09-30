@@ -182,7 +182,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.iss.bits.row_idx.foreach(_ := Mux(io.iss.fire, scalar_row_idx, 0.U))
   io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx, 0.U))
   io.iss.bits.macc.foreach(_ := io.iss.fire && macc)
-  io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast)
+  io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast && !mvin_col)
+  io.iss.bits.mvin_bcast_col.foreach(_ := io.iss.fire && mvin_bcast && mvin_col)
   io.iss.bits.clock_enable := valid || mvout_valids =/= 0.U
 
   // for a non-bcast mvin, only the specific row of clusters gets mvin set
