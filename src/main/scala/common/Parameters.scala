@@ -334,7 +334,7 @@ case class VectorParams(
   useScalarFPFMA: Boolean = true,       // Use shared scalar FPU all non-FMA FP instructions
   useIterativeIMul: Boolean = false,
   useElementwiseFP64: Boolean = false,
-  useSegmentedFPFMA: Boolean = false,
+  useSegmentedFPFMA: Boolean = true,
   fmaPipeDepth: Int = 4,
   imaPipeDepth: Int = 4,
 
