@@ -49,9 +49,11 @@ bmarks = \
 	vec-square-root-approx \
 	vec-transpose-load \
 	vec-transpose-store \
+	opu-transpose \
 	opu-sq-gemm \
 	opu-m2-gemm \
 	opu-m4-gemm \
+	opu-perf-gemm \
 	vec-optest
 
 cpp_bmarks = \
