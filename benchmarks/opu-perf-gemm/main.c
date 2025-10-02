@@ -177,7 +177,7 @@ int main(void) {
     
     size_t n = 2*maxvl; 
     size_t m = 2*maxvl;
-    const size_t K = 64;
+    const size_t K = 512;
     unsigned long cyclest1, cyclest2;
     int8_t at[m*K];
     int8_t b[n*K];
