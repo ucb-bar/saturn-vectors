@@ -74,7 +74,7 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
   for (i <- 0 until regsPerCell) {
     val tile_match = (io.mrf_idx >> log2Ceil(regsPerTileReg)) === (i >> log2Ceil(regsPerTileReg)).U
     val subtile_match = io.mrf_idx(log2Ceil(regsPerTileReg)-1,0) === (i % regsPerTileReg).U
-    val bcast_match = (io.mrf_idx % varchRatio.U) === (i % varchRatio).U
+    val bcast_match = io.mrf_idx(log2Ceil(varchRatio)-1,0) === (i % varchRatio).U
     when (tile_match && (((io.mvin || io.macc) && subtile_match) || (io.mvin_bcast && bcast_match))) {
       regs(i) := Mux(io.macc, sum, io.mvin_data)
     }
