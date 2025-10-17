@@ -193,9 +193,12 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
   for (j <- 0 until xDim) {
     for (i <- 0 until yDim) {
       val cluster = clusters(i)(j)
-      cluster.io.in_l      := io.op.in_l(i)
+      // column broadcast signals
       cluster.io.in_t      := io.op.in_t(j)
-
+      cluster.io.mvin_bcast_col := io.op.mvin_bcast_col(j)
+      cluster.io.mvin_col   := io.op.mvin_col(j)
+      // row broadcast signals
+      cluster.io.in_l      := io.op.in_l(i)
       cluster.io.mrf_idx    := io.op.mrf_idx(i)
       cluster.io.row_idx    := io.op.row_idx(i)
       cluster.io.col_idx    := io.op.col_idx(i)
@@ -203,8 +206,6 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.shift      := io.op.shift(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
       cluster.io.mvin       := io.op.mvin(i)
-      cluster.io.mvin_bcast_col := io.op.mvin_bcast_col(j)
-      cluster.io.mvin_col   := io.op.mvin_col(j)
     }
 
     clusters(0)(j).io.in_pipe := 0.U
