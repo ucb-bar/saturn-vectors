@@ -49,100 +49,121 @@ void i8_1x2_prologue(int32_t* c, int8_t* at, int8_t* b, size_t ml, size_t M, siz
         VOPACC(m1, v13, v11);
     }
 }
-void i8_1x2_body(int32_t* c, int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K) {
+void i8_1x2_body(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t ml, size_t M, size_t N, size_t K) {
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(ml));
-    asm volatile("vle32.v v0, (%0)" : : "r"(&c[0]));
+    asm volatile("vle32.v v0, (%0)" : : "r"(&c_bias[0]));
     OPMVINBCAST(m2, v0); // move v0 into row r of m3
-    asm volatile("vle32.v v4, (%0)" : : "r"(&c[ml]));
+    asm volatile("vle32.v v4, (%0)" : : "r"(&c_bias[ml]));
     OPMVINBCAST(m3, v4); // move v0 into row r of m3
-    for (size_t r = 0; r + 2 <= ml; r += 2) {
-        //store c[i-1]
-        VMV_VR(v0, r, m0); // move row r of m3 into v0
-        asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
-        
-        //opacc c[i]
-        asm volatile("vle8.v v8, (%0)" : : "r"(&at[r*M]));
-        asm volatile("vle8.v v9, (%0)" : : "r"(&b[r*N]));
-        VOPACC(m2, v9, v8);
-        asm volatile("vle8.v v10, (%0)" : : "r"(&b[r*N + ml]));
-        VOPACC(m3, v10, v8);
+    int8_t* at23 = at + ml*M;
+    int8_t* b23 = b + ml*N;
+    size_t r = 0;
+    while (r + 2 <= ml) {
+      //store c[i-1]
+      VMV_VR(v0, r, m0); // move row r of m3 into v0
+      asm volatile("vse32.v v0, (%0)" : : "r"(&c_out[r*N]));
+      VMV_VR(v4, r, m1); 
+      asm volatile("vse32.v v4, (%0)" : : "r"(&c_out[r*N + ml]));
+    
+      //opacc c[i]
+      asm volatile("vle8.v v8, (%0)" : : "r"(&at23[r*M]));
+      asm volatile("vle8.v v9, (%0)" : : "r"(&b23[r*N]));
+      VOPACC(m2, v9, v8);
+      asm volatile("vle8.v v10, (%0)" : : "r"(&b23[r*N + ml]));
+      VOPACC(m3, v10, v8);
 
-        //store c[i-1]
-        VMV_VR(v4, r+1, m0); // move row r of m3 into v0
-        asm volatile("vse32.v v4, (%0)" : : "r"(&c[(r+1)*N]));
-        
-        //opacc c[i]
-        asm volatile("vle8.v v11, (%0)" : : "r"(&at[(r+1)*M]));
-        asm volatile("vle8.v v12, (%0)" : : "r"(&b[(r+1)*N]));
-        VOPACC(m2, v12, v11);
-        asm volatile("vle8.v v13, (%0)" : : "r"(&b[(r+1)*N + ml]));
-        VOPACC(m3, v13, v11);
+      //store c[i-1]
+      VMV_VR(v16, r+1, m0); // move row r of m3 into v0
+      asm volatile("vse32.v v16, (%0)" : : "r"(&c_out[(r+1)*N]));
+      VMV_VR(v20, r+1, m1);
+      asm volatile("vse32.v v20, (%0)" : : "r"(&c_out[(r+1)*N + ml]));
+
+      //opacc c[i]
+      asm volatile("vle8.v v11, (%0)" : : "r"(&at23[(r+1)*M]));
+      asm volatile("vle8.v v12, (%0)" : : "r"(&b23[(r+1)*N]));
+      VOPACC(m2, v12, v11);
+      asm volatile("vle8.v v13, (%0)" : : "r"(&b23[(r+1)*N + ml]));
+      VOPACC(m3, v13, v11);
+  
+      r += 2;
     }
     for (size_t k = ml; k+2 <= K; k+=2) {
-        asm volatile("vle8.v v8, (%0)" : : "r"(&at[k*M]));
-        asm volatile("vle8.v v9, (%0)" : : "r"(&b[k*N]));
+        asm volatile("vle8.v v8, (%0)" : : "r"(&at23[k*M]));
+        asm volatile("vle8.v v9, (%0)" : : "r"(&b23[k*N]));
         VOPACC(m2, v9, v8);
 
-        asm volatile("vle8.v v10, (%0)" : : "r"(&b[k*N + ml]));
+        asm volatile("vle8.v v10, (%0)" : : "r"(&b23[k*N + ml]));
         VOPACC(m3, v10, v8);
 
         //unroll in k to avoid vrf raw hazards
-        asm volatile("vle8.v v11, (%0)" : : "r"(&at[(k+1)*M]));
-        asm volatile("vle8.v v12, (%0)" : : "r"(&b[(k+1)*N]));
+        asm volatile("vle8.v v11, (%0)" : : "r"(&at23[(k+1)*M]));
+        asm volatile("vle8.v v12, (%0)" : : "r"(&b23[(k+1)*N]));
         VOPACC(m2, v12, v11);
 
-        asm volatile("vle8.v v13, (%0)" : : "r"(&b[(k+1)*N + ml]));
+        asm volatile("vle8.v v13, (%0)" : : "r"(&b23[(k+1)*N + ml]));
         VOPACC(m3, v13, v11);
     }
 
-    asm volatile("vle32.v v0, (%0)" : : "r"(&c[0]));
+    c_out += ml*N;
+    asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(ml));
+    asm volatile("vle32.v v0, (%0)" : : "r"(&c_bias[0]));
     OPMVINBCAST(m0, v0); // move v0 into row r of m3
-    asm volatile("vle32.v v4, (%0)" : : "r"(&c[ml]));
+    asm volatile("vle32.v v4, (%0)" : : "r"(&c_bias[ml]));
     OPMVINBCAST(m1, v4); // move v0 into row r of m3
-    for (size_t r = 0; r + 2 <= ml; r += 2) {
-        //store c[i-1]
-        VMV_VR(v0, r, m2); // move row r of m3 into v0
-        asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
-        
-        //opacc c[i]
-        asm volatile("vle8.v v8, (%0)" : : "r"(&at[r*M]));
-        asm volatile("vle8.v v9, (%0)" : : "r"(&b[r*N]));
-        VOPACC(m0, v9, v8);
-        asm volatile("vle8.v v10, (%0)" : : "r"(&b[r*N + ml]));
-        VOPACC(m1, v10, v8);
+    r = 0;
+    while (r + 2 <= ml) {
+      //store c[i-1]
+      VMV_VR(v0, r, m2); // move row r of m3 into v0
+      asm volatile("vse32.v v0, (%0)" : : "r"(&c_out[r*N]));
+      VMV_VR(v4, r, m3); 
+      asm volatile("vse32.v v4, (%0)" : : "r"(&c_out[r*N + ml]));
+    
+      //opacc c[i]
+      asm volatile("vle8.v v8, (%0)" : : "r"(&at[r*M]));
+      asm volatile("vle8.v v9, (%0)" : : "r"(&b[r*N]));
+      VOPACC(m0, v9, v8);
+      asm volatile("vle8.v v10, (%0)" : : "r"(&b[r*N + ml]));
+      VOPACC(m1, v10, v8);
 
-        //store c[i-1]
-        VMV_VR(v4, r+1, m3); // move row r of m3 into v0
-        asm volatile("vse32.v v4, (%0)" : : "r"(&c[(r+1)*N]));
-        
-        //opacc c[i]
-        asm volatile("vle8.v v11, (%0)" : : "r"(&at[(r+1)*M]));
-        asm volatile("vle8.v v12, (%0)" : : "r"(&b[(r+1)*N]));
-        VOPACC(m1, v12, v11);
-        asm volatile("vle8.v v13, (%0)" : : "r"(&b[(r+1)*N + ml]));
-        VOPACC(m0, v13, v11);
+      //store c[i-1]
+      VMV_VR(v16, r+1, m2); // move row r of m3 into v0
+      asm volatile("vse32.v v16, (%0)" : : "r"(&c_out[(r+1)*N]));
+      VMV_VR(v20, r+1, m3);
+      asm volatile("vse32.v v20, (%0)" : : "r"(&c_out[(r+1)*N + ml]));
+
+      //opacc c[i]
+      asm volatile("vle8.v v11, (%0)" : : "r"(&at[(r+1)*M]));
+      asm volatile("vle8.v v12, (%0)" : : "r"(&b[(r+1)*N]));
+      VOPACC(m0, v12, v11);
+      asm volatile("vle8.v v13, (%0)" : : "r"(&b[(r+1)*N + ml]));
+      VOPACC(m1, v13, v11);
+  
+      r += 2;
     }
     for (size_t k = ml; k+2 <= K; k+=2) {
         asm volatile("vle8.v v8, (%0)" : : "r"(&at[k*M]));
         asm volatile("vle8.v v9, (%0)" : : "r"(&b[k*N]));
         VOPACC(m0, v9, v8);
+
         asm volatile("vle8.v v10, (%0)" : : "r"(&b[k*N + ml]));
         VOPACC(m1, v10, v8);
+
         //unroll in k to avoid vrf raw hazards
         asm volatile("vle8.v v11, (%0)" : : "r"(&at[(k+1)*M]));
         asm volatile("vle8.v v12, (%0)" : : "r"(&b[(k+1)*N]));
         VOPACC(m0, v12, v11);
+
         asm volatile("vle8.v v13, (%0)" : : "r"(&b[(k+1)*N + ml]));
         VOPACC(m1, v13, v11);
     }
 }
-void i32_1x2_epilogue(int32_t* c, size_t ml, size_t N) {
+void i32_1x2_epilogue(int32_t* c_out, size_t ml, size_t N) {
     asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(ml));
     for (size_t r = 0; r < ml; r++) {
       VMV_VR(v0, r, m2); // move row r of m3 into v0
-      asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
+      asm volatile("vse32.v v0, (%0)" : : "r"(&c_out[r*N]));
       VMV_VR(v4, r, m3); // move row r of m3 into v0
-      asm volatile("vse32.v v4, (%0)" : : "r"(&c[r*N + ml]));
+      asm volatile("vse32.v v4, (%0)" : : "r"(&c_out[r*N + ml]));
     }
   }
   
@@ -156,7 +177,7 @@ void i8_mm_bme_1x2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_
     i8_1x2_prologue(&c_bias[j], &at[i], &b[j], mlmax, M, N, K);
     while (j + 2*mlmax <= N) {
       asm volatile("vsetvli %0, zero, e32, m4, ta, ma" : "=r"(mlmax));
-      i8_1x2_body(&c_bias[j], &at[i], &b[j], mlmax, M, N, K);
+      i8_1x2_body(&c_bias[j], &c_out[(i*N)+j], &at[i], &b[j], mlmax, M, N, K);
       j += 2*mlmax;
     }
     i32_1x2_epilogue(&c_out[(i*N)+j], mlmax, N);
