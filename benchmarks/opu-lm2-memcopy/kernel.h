@@ -1,0 +1,73 @@
+#include <stdio.h>
+#include <riscv-pk/encoding.h>
+#include <riscv_vector.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include "bme.h"
+
+
+void i32_load_c(int32_t* c, size_t ml, size_t N) {
+    for (size_t r = 0; r < ml; r++) {
+        asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
+        VMV_RV(m0, r, v0); // move v0 into row r of m1
+    }
+  }
+
+void i32_store_c(int32_t* c, size_t ml, size_t N) {
+    for (size_t r = 0; r < ml; r++) {
+      VMV_VR(v0, r, m0); // move row r of m0 into v0
+      asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
+    }
+  }
+    
+void i32_lm2_load_c(int32_t* c, size_t ml, size_t N) {
+  for (size_t r = 0; r < ml; r++) {
+    asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
+    VMV_RV(m0, r, v0); // move v0 into row r of m1
+    asm volatile("vle32.v v8, (%0)" : : "r"(&c[(r+ml)*N]));
+    VMV_RV(m2, r, v8); // move v0 into row r of m1
+  }
+}
+void i32_lm2_store_c(int32_t* c, size_t ml, size_t N) {
+        // asm volatile("vsetvli zero, %0, e32, m8, ta, ma" : : "r"(ml));
+  for (size_t r = 0; r < ml; r++) {
+    VMV_VR(v0, r, m0); // move row r of m0 into v0
+    asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
+    VMV_VR(v8, r, m2); 
+    asm volatile("vse32.v v8, (%0)" : : "r"(&c[(r+ml)*N]));
+  }
+}
+  
+void i32_mm_bme_1x2(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
+  size_t mlmax;
+  asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(mlmax));
+  size_t vl;
+  size_t i = 0;
+  while (i + mlmax <= M) {
+    asm volatile("vsetvli %0, zero, e32, m8, ta, ma" : "=r"(mlmax));
+    size_t j = 0;
+    while (j + mlmax <= N) {
+        i32_lm2_load_c(&c_in[(i*N)+j], mlmax, N);
+        i32_lm2_store_c(&c_out[(i*N)+j], mlmax, N);
+        j += mlmax;
+    }
+    while (j < N) {
+      asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
+      i32_lm2_load_c(&c_in[(i*N)+j], mlmax, N);
+      i32_lm2_load_c(&c_out[(i*N)+j], mlmax, N);
+      j += vl;
+    }
+    i += mlmax;
+  }
+  asm volatile("vsetvli %0, zero, e32, m4, ta, ma" : "=r"(mlmax));
+  while (i < M) {
+    size_t ml = (M - i) > mlmax ? mlmax : M - i;
+    for (size_t j = 0; j < N;) {
+      asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
+      i32_load_c(&c_in[(i*N)+j], ml, N);
+      i32_store_c(&c_out[(i*N)+j], ml, N);
+      j += vl;
+    }
+    i += ml;
+  }
+}
