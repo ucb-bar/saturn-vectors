@@ -40,13 +40,13 @@ void i32_load_c(int32_t* c, size_t ml) {
     size_t k;
     for (k = 0; k < K; k++) {
       asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
-      asm volatile("vle8.v v17, (%0)" : : "r"(&b[k*N]));
-      VOPACC(m0, v17, v16);
+      asm volatile("vle8.v v18, (%0)" : : "r"(&b[k*N]));
+      VOPACC(m0, v18, v16);
       asm volatile("vle8.v v19, (%0)" : : "r"(&b[k*N + ml]));
       VOPACC(m1, v19, v16);
-      asm volatile("vle8.v v18, (%0)" : : "r"(&at[k*M + ml]));
-      VOPACC(m2, v17, v18);
-      VOPACC(m3, v19, v18);
+      asm volatile("vle8.v v17, (%0)" : : "r"(&at[k*M + ml]));
+      VOPACC(m2, v18, v17);
+      VOPACC(m3, v19, v17);
     }
   }
   void i32_2x2_store_c(int32_t* c, size_t ml, size_t N) {

@@ -61,7 +61,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   // maccs use both col_idx and row_idx, mvins/mvouts use col_idx only
   val col_idx = Reg(UInt(log2Ceil(clusterXdim * maxLMUL * vLen / dLen).W))
-  val row_idx = Reg(UInt(log2Ceil(maxLMUL * vLen / dLen).W))
+  val row_idx = Reg(UInt(log2Ceil(vLen / dLen).W))
 
   val renv1 = macc
   val renv2 = macc || mvin || mvin_bcast
@@ -70,7 +70,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val next_row_idx = row_idx +& 1.U
 
   val col_idx_tail = next_col_idx === Mux(macc, (vLen / dLen).U, (clusterXdim * vLen / dLen).U) << (lmul - eew)
-  val row_idx_tail = next_row_idx === (vLen / dLen).U << (lmul - eew)
+  val row_idx_tail = next_row_idx === (vLen / dLen).U
 
   val macc_tail = col_idx_tail && row_idx_tail
 
@@ -92,7 +92,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     rvs1_mask     := Mux(dis_inst.renv1             , FillInterleaved(egsPerVReg, dis_vs1_arch_mask), 0.U)
     rvs2_mask     := Mux(dis_inst.renv2             , FillInterleaved(egsPerVReg, dis_vs2_arch_mask), 0.U)
     lmul        := dis_inst.vconfig.vtype.vlmul_mag
-    eew        := dis_inst.vconfig.vtype.vsew
+    eew        := dis_inst.emul
     val funct6 = OPMFunct6(dis_inst.funct6)
     mvin := funct6 === OPMFunct6.opmvin
     mvout :=  funct6 === OPMFunct6.opmvout
@@ -164,7 +164,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   // set the control signals
   val mrf_eg = Mux(mvout, inst.rs2 , inst.rd) +& Mux(macc,  
-    ((row_idx >> log2Ceil(vLen / dLen)) << log2Ceil(maxLMUL)) +& (col_idx >> log2Ceil(vLen / dLen)),
+    (col_idx >> log2Ceil(vLen / dLen)),
     (col_idx >> log2Ceil(clusterXdim * vLen / dLen))  
   )
   val mrf_row_idx = Mux(macc,

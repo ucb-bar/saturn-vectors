@@ -54,6 +54,7 @@ bmarks = \
 	opu-m2-gemm \
 	opu-lm2-gemm \
 	opu-lm2-memcopy \
+	opu-lm2-perf \
 	opu-m4-gemm \
 	opu-perf-gemm \
 	opu-dbuff-gemm \

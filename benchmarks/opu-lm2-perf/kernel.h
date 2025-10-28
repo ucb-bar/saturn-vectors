@@ -39,12 +39,10 @@ void i8_lm2_loop_k(int32_t* c, int8_t* at, int8_t* b, size_t M, size_t N, size_t
       asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
       asm volatile("vle8.v v18, (%0)" : : "r"(&b[k*N]));
       VOPACC(m0, v18, v16);
-      VOPACC(m2, v18, v17);
       k++;
       asm volatile("vle8.v v20, (%0)" : : "r"(&at[k*M]));
       asm volatile("vle8.v v22, (%0)" : : "r"(&b[k*N]));
       VOPACC(m0, v22, v20);
-      VOPACC(m2, v22, v21);
       k++;
   }
 }
