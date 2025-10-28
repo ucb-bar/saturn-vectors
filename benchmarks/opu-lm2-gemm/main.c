@@ -64,7 +64,7 @@ int main(void) {
 
   const size_t M = 2*maxvl;
   const size_t N = 2*maxvl;
-  const size_t K = 1;
+  const size_t K = 2;
   int8_t at[M*K];
   int8_t b[N*K];
   int32_t c_opu[M*N];
@@ -72,7 +72,7 @@ int main(void) {
   int32_t c_bias[N];
   i32_init(c_bias, N);
   i8_init(at, M*K, 1);
-  i8_init(b, N*K, 1);
+  i8_init(b, N*K, 2);
 
   for (size_t m = 2*maxvl; m <= M; m+=maxvl) {
     for (size_t n = 2*maxvl; n <= N; n+=maxvl) {
@@ -80,7 +80,7 @@ int main(void) {
         size_t k = K;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
         i8_mm_scalar(c_bias, c_ref, at, b, m, n, k);
-        i8_mm_bme_1x2(c_bias, c_opu, at, b, m, n, k);
+        i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, k);
         
         // verify against reference
         int r = 0;
