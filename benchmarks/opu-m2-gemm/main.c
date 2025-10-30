@@ -25,7 +25,8 @@ void i32_init(int32_t* d, size_t s) {
 
 void i8_init(int8_t* d, size_t s, int8_t start) {
     for (size_t i = 0; i < s; i++) {
-      d[i] = (i + start) % 127; // keep values small to avoid overflow
+      // d[i] = (i + start) % 127; // keep values small to avoid overflow
+      d[i] = 0;
     }
   }
 

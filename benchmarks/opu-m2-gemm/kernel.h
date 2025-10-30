@@ -79,7 +79,6 @@ void i8_mm_bme_1x2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_
   while (i + mlmax <= M) {
     size_t j = 0;
     while (j + 2*mlmax <= N) {
-      asm volatile("vsetvli zero, zero, e8, m2, ta, ma");
       i32_1x2_set_c(&c_bias[j], mlmax);
       i8_1x2_loop_k(&at[i], &b[j], mlmax, M, N, K);
       i32_1x2_store_c(&c_out[(i*N)+j], mlmax, N);

@@ -46,7 +46,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val wvd_mask = Reg(UInt(egsTotal.W))
   val rvs1_mask = Reg(UInt(egsTotal.W))
   val rvs2_mask = Reg(UInt(egsTotal.W))
-  val lmul = Reg(UInt(2.W))
+  val emul = Reg(UInt(2.W))
   val eew = Reg(UInt(2.W))
 
   val mvin = Reg(Bool())
@@ -69,7 +69,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val next_col_idx = col_idx +& 1.U
   val next_row_idx = row_idx +& 1.U
 
-  val col_idx_tail = next_col_idx === Mux(macc, (vLen / dLen).U, (clusterXdim * vLen / dLen).U) << (lmul - eew)
+  val col_idx_tail = next_col_idx === (Mux(macc, (vLen / dLen).U, (clusterXdim * vLen / dLen).U) << (emul - eew))
   val row_idx_tail = next_row_idx === (vLen / dLen).U
 
   val macc_tail = col_idx_tail && row_idx_tail
@@ -91,8 +91,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     wvd_mask      := Mux(dis_inst.wvd               , FillInterleaved(egsPerVReg, dis_vd_arch_mask), 0.U)
     rvs1_mask     := Mux(dis_inst.renv1             , FillInterleaved(egsPerVReg, dis_vs1_arch_mask), 0.U)
     rvs2_mask     := Mux(dis_inst.renv2             , FillInterleaved(egsPerVReg, dis_vs2_arch_mask), 0.U)
-    lmul        := dis_inst.vconfig.vtype.vlmul_mag
-    eew        := dis_inst.emul
+    emul        := dis_inst.emul
+    eew        := dis_inst.vconfig.vtype.vsew
     val funct6 = OPMFunct6(dis_inst.funct6)
     mvin := funct6 === OPMFunct6.opmvin
     mvout :=  funct6 === OPMFunct6.opmvout
