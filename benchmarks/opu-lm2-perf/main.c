@@ -18,8 +18,8 @@ void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t
 }
 void i32_init(int32_t* d, size_t s) {
   for (size_t i = 0; i < s; i++) {
-    // d[i] = i + 1;
-    d[i] = 0;
+    d[i] = i + 1;
+    // d[i] = 0;
   }
 }
 void i8_init(int8_t* d, size_t s, int8_t start) {
@@ -59,39 +59,44 @@ int i32_compare(int32_t* c_opu, int32_t* c_ref, size_t m, size_t n) {
 int main(void) {
   size_t maxvl;
   asm volatile("vsetvli %[vl], zero, e32, m4, ta, ma" : [vl]"=r"(maxvl));
-  size_t dl = maxvl / 2;
-  printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
+  printf("maxvl=%lu\n", maxvl);
+  printf("dim,ops,cycles\n");
+  
+  size_t n = 2*maxvl; 
+  size_t m = 2*maxvl;
+  const size_t K = 128;
+  unsigned long cyclest1, cyclest2;
+  int8_t at[m*K];
+  int8_t b[n*K];
+  int32_t c_opu[m*n];
+  int32_t c_bias[n];
+  i32_init(c_bias, n);
+  i8_init(at, m*K, 1);
+  i8_init(b, n*K, -3);
+  
+  // warm up cache
+  i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, K);  
+  for (size_t k = 32; k <= K; k+=32) {
+      cyclest1 = read_csr(mcycle);
+      i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, k);  
+      cyclest2 = read_csr(mcycle);
 
-  const size_t M = 2*maxvl;
-  const size_t N = 2*maxvl;
-  const size_t K = 8;
-  int8_t at[M*K];
-  int8_t b[N*K];
-  int32_t c_opu[M*N];
-  int32_t c_ref[M*N];
-  int32_t c_bias[N];
-  i32_init(c_bias, N);
-  i8_init(at, M*K, 1);
-  i8_init(b, N*K, -3);
-
-  for (size_t m = M; m <= M; m+=maxvl) {
-    for (size_t n = N; n <= N; n+=maxvl) {
-      // for (size_t k = 2; k < K; k++) {
-        size_t k = K;
-        printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
-        i8_mm_scalar(c_bias, c_ref, at, b, m, n, k);
-        i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, k);
-        
-        // verify against reference
-        int r = 0;
-        r = i32_compare(c_opu, c_ref, m, n);
-        if (r) {
-            printf("FAILURE; M, N, K = %ld %ld %ld\n", m, n, k);
-            exit(1);
-        }
-        printf("SUCCESS; M, N, K = %ld %ld %ld\n", m, n, k);
-      // }
-    }
+      // compute metrics and print to csv
+      size_t cycles = cyclest2 - cyclest1;
+      size_t ops = m * n * k;
+      printf("%ld,%ld,%ld\n", k, ops, cycles);
   }
+
+  printf("Verifying against reference...\n");
+  printf("M=%ld, N=%ld, K=%ld\n", m, n, K);
+  int32_t c_ref[m*n];
+  i8_mm_scalar(c_bias, c_ref, at, b, m, n, K);
+  int r = 0;      
+  r = i32_compare(c_opu, c_ref, m, n);
+  if (r) {
+      printf("FAILURE; M, N, K = %ld %ld %ld\n", m, n, K);
+      exit(1);
+  }
+  printf("SUCESS; M, N, K = %ld %ld %ld\n", m, n, K);
   return 0;
 }
