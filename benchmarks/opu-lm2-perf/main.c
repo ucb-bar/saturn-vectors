@@ -63,8 +63,8 @@ int main(void) {
   printf("dim,ops,cycles\n");
   
   size_t n = 2*maxvl; 
-  size_t m = 2*maxvl;
-  const size_t K = 128;
+  size_t m = maxvl;
+  const size_t K = 12;
   unsigned long cyclest1, cyclest2;
   int8_t at[m*K];
   int8_t b[n*K];
@@ -76,7 +76,7 @@ int main(void) {
   
   // warm up cache
   i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, K);  
-  for (size_t k = 32; k <= K; k+=32) {
+  for (size_t k = 12; k <= K; k+=16) {
       cyclest1 = read_csr(mcycle);
       i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, k);  
       cyclest2 = read_csr(mcycle);

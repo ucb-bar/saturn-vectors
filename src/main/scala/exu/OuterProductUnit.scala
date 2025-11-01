@@ -25,7 +25,7 @@ case class OPUParameters (
 )
 
 trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
-  def maxLMUL = floor(sqrt(opuParams.nMrfRegs)).toInt
+  def maxLMUL = 2 // TODO: make this dynamic
   def regsPerTileReg = (vLen/dLen) * (vLen/dLen)
   def regsPerCell = regsPerTileReg * opuParams.nMrfRegs
   def cellRegIdxBits = log2Ceil(regsPerCell)

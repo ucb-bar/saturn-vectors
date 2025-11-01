@@ -394,7 +394,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
 
   def useOpu = vParams.useOpu
 
-  def opuParams = OPUParameters(8, 8, 32, 4)
+  def opuParams = OPUParameters(8, 8, 32, 2)
 
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
   def sgmemTagBits = log2Ceil(vParams.vsgifqEntries)
