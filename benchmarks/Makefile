@@ -53,9 +53,7 @@ bmarks = \
 	opu-m2-gemm \
 	opu-lm2-gemm \
 	opu-lm2-memcopy \
-	opu-memcopy \
 	opu-lm2-perf \
-	opu-perf-gemm \
 	vec-optest
 
 cpp_bmarks = \
