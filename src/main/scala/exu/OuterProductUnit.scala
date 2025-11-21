@@ -21,7 +21,7 @@ case class OPUParameters (
   val bWidth : Int = 8,
   val cWidth : Int = 32, // Accumulator size
 
-  val nMrfRegs : Int = 4
+  val nMrfRegs : Int = 2
 )
 
 trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
