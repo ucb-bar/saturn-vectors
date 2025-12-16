@@ -46,6 +46,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val wvd_mask = Reg(UInt(egsTotal.W))
   val rvs1_mask = Reg(UInt(egsTotal.W))
   val rvs2_mask = Reg(UInt(egsTotal.W))
+  val emul = Reg(UInt(2.W))
+  val eew = Reg(UInt(2.W))
 
   val mvin = Reg(Bool())
   val mvin_bcast = Reg(Bool())
@@ -59,7 +61,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val scalar_row_latency = ((yDim+1).U - scalar_cluster_row_idx)
 
   // maccs use both col_idx and row_idx, mvins/mvouts use col_idx only
-  val col_idx = Reg(UInt(log2Ceil(wideningFactor * (vLen / dLen)).W))
+  val col_idx = Reg(UInt(log2Ceil(clusterXdim * maxLMUL * vLen / dLen).W))
   val row_idx = Reg(UInt(log2Ceil(vLen / dLen).W))
 
   val renv1 = macc
@@ -68,7 +70,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val next_col_idx = col_idx +& 1.U
   val next_row_idx = row_idx +& 1.U
 
-  val col_idx_tail = next_col_idx === Mux(macc, (vLen / dLen).U, (wideningFactor * vLen / dLen).U)
+  val col_idx_tail = next_col_idx === (Mux(macc, (vLen / dLen).U, (clusterXdim * vLen / dLen).U) << (emul - eew))
   val row_idx_tail = next_row_idx === (vLen / dLen).U
 
   val macc_tail = col_idx_tail && row_idx_tail
@@ -90,6 +92,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     wvd_mask      := Mux(dis_inst.wvd               , FillInterleaved(egsPerVReg, dis_vd_arch_mask), 0.U)
     rvs1_mask     := Mux(dis_inst.renv1             , FillInterleaved(egsPerVReg, dis_vs1_arch_mask), 0.U)
     rvs2_mask     := Mux(dis_inst.renv2             , FillInterleaved(egsPerVReg, dis_vs2_arch_mask), 0.U)
+    emul        := dis_inst.emul
+    eew        := dis_inst.vconfig.vtype.vsew
     val funct6 = OPMFunct6(dis_inst.funct6)
     mvin := funct6 === OPMFunct6.opmvin
     mvout :=  funct6 === OPMFunct6.opmvout
@@ -104,7 +108,18 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     head := false.B
   }
 
+  // element group we are writing
   val wvd_eg = ((inst.rd << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0)
+  // element group we are reading
+  io.rvs1.bits.eg := ((inst.rs1 << log2Ceil(egsPerVReg)) +& row_idx)(log2Ceil(egsTotal)-1,0)
+  io.rvs2.bits.eg := ((inst.rs2 << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0)
+
+  io.rvs1.valid := valid && renv1
+  io.rvs2.valid := valid && renv2
+
+  val oldest = inst.vat === io.vat_head
+  io.rvs1.bits.oldest := oldest
+  io.rvs2.bits.oldest := oldest
 
   // report hazards
   io.vat := inst.vat
@@ -122,17 +137,6 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val waw_hazard = (vd_write_oh & io.older_writes) =/= 0.U
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
-
-  // element group we are reading
-  io.rvs1.bits.eg := ((inst.rs1 << log2Ceil(egsPerVReg)) +& row_idx)(log2Ceil(egsTotal)-1,0)
-  io.rvs2.bits.eg := ((inst.rs2 << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0)
-
-  io.rvs1.valid := valid && renv1
-  io.rvs2.valid := valid && renv2
-
-  val oldest = inst.vat === io.vat_head
-  io.rvs1.bits.oldest := oldest
-  io.rvs2.bits.oldest := oldest
 
   // this avoids write-structural-conflicts from the OPU
   val exu_scheduler = Module(new PipeScheduler(1, yDim+2))
@@ -160,22 +164,25 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.iss.bits.in_t := DontCare
 
   // set the control signals
+  val mrf_eg = Mux(mvout, inst.rs2 , inst.rd) +& Mux(macc,  
+    (col_idx >> log2Ceil(vLen / dLen)),
+    (col_idx >> log2Ceil(clusterXdim * vLen / dLen))  
+  )
   val mrf_row_idx = Mux(macc,
     row_idx,
     scalar_row_idx >> log2Ceil(yDim * clusterYdim),
   )(log2Ceil(vLen / dLen)-1,0)
   val mrf_col_idx = Mux(macc,
     col_idx,
-    col_idx >> log2Ceil(opuParams.cWidth / opuParams.bWidth)
+    col_idx >> log2Ceil(clusterXdim)
   )(log2Ceil(vLen / dLen)-1,0)
-
   // mvout_pipe tracks the inflight write destinations
   val mvout_pipe = Reg(Vec(yDim+2, UInt(log2Ceil(egsTotal).W)))
   val mvout_valids = RegInit(0.U((yDim+2).W))
 
   // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
   io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
-    Mux(mvout, inst.rs2, inst.rd),
+    mrf_eg,
     Mux(mvin_col, mrf_col_idx, mrf_row_idx),
     Mux(mvin_col, mrf_row_idx, mrf_col_idx)
   ), 0.U))

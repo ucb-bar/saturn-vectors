@@ -53,8 +53,13 @@ bmarks = \
 	opu-bcast \
 	opu-sq-gemm \
 	opu-m2-gemm \
+	opu-lm2-gemm \
+	opu-lm2-memcopy \
+	opu-memcopy \
+	opu-lm2-perf \
 	opu-m4-gemm \
 	opu-perf-gemm \
+	opu-dbuff-gemm \
 	vec-optest
 
 cpp_bmarks = \

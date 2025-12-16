@@ -5,14 +5,14 @@
 #include <stdlib.h>
 #include "bme.h"
 
-void i32_transpose_scalar(int32_t* c_bias, int32_t* c_out, size_t N, size_t M) {
+void i32_set_c_scalar(int32_t* c_bias, int32_t* c_out, size_t N, size_t M) {
     for (size_t i = 0; i < M; i++) {
         for (size_t j = 0; j < N; j++) {
-            c_out[i*N+j] = c_bias[i];
+            c_out[i*N+j] = c_bias[j];
         }
     }
 }
-void i32_transpose_set_c(int32_t* c) {
+void i32_set_c(int32_t* c) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
   OPMVINBCAST(m3, v0); // move v0 into row r of m1
 }
@@ -22,7 +22,7 @@ void i32_store_c(int32_t* c_tile, size_t ml, size_t N) {
     asm volatile("vse32.v v0, (%0)" : : "r"(&c_tile[row*N]));
   }
 }
-void i32_transpose_opu(int32_t* c_bias, int32_t* c_out, size_t N, size_t M) {
+void i32_set_c_opu(int32_t* c_bias, int32_t* c_out, size_t N, size_t M) {
     size_t mlmax;
     asm volatile("vsetvli %0, zero, e8, m1, ta, ma" : "=r"(mlmax));
     size_t vl;
@@ -32,8 +32,8 @@ void i32_transpose_opu(int32_t* c_bias, int32_t* c_out, size_t N, size_t M) {
         for (size_t j = 0; j < N;) {
             asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
             printf("i=%ld, j=%ld, ml=%ld, vl=%ld\n", i, j, ml, vl);
-            i32_transpose_set_c(&c_bias[i]);
-            i32_store_c(&c_out[j*M+i], ml, N);
+            i32_set_c(&c_bias[j]);
+            i32_store_c(&c_out[i*N+j], ml, N);
             j += vl;
         }
         i += ml;
@@ -88,8 +88,8 @@ int main(void) {
   for (size_t m = maxvl; m < M; m+=dl) {
     for (size_t n = maxvl; n < N; n+=dl) {
         printf("Testing M=%ld, N=%ld\n", m, n);
-        i32_transpose_scalar(c_bias, c_ref, m, n);
-        i32_transpose_opu(c_bias, c_opu, m, n);
+        i32_set_c_scalar(c_bias, c_ref, m, n);
+        i32_set_c_opu(c_bias, c_opu, m, n);
         
         // verify against reference
         int r = 0;      

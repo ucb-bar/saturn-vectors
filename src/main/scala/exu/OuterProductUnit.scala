@@ -25,16 +25,14 @@ case class OPUParameters (
 )
 
 trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
-  def varchRatio = vLen / dLen
-  def regsPerTileReg = varchRatio * varchRatio
+  def maxLMUL = 2 // TODO: make this dynamic
+  def regsPerTileReg = (vLen/dLen) * (vLen/dLen)
   def regsPerCell = regsPerTileReg * opuParams.nMrfRegs
   def cellRegIdxBits = log2Ceil(regsPerCell) 
   def prodWidth = opuParams.aWidth + opuParams.bWidth
 
-  def wideningFactor = opuParams.cWidth / opuParams.aWidth
-
   def clusterXdim = opuParams.cWidth / opuParams.bWidth
-  def clusterYdim = clusterXdim
+  def clusterYdim = opuParams.cWidth / opuParams.aWidth
 
   def yDim = (dLen / opuParams.aWidth) / clusterYdim
   def xDim = (dLen / opuParams.bWidth) / clusterXdim
@@ -74,7 +72,7 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
   for (i <- 0 until regsPerCell) {
     val tile_match = (io.mrf_idx >> log2Ceil(regsPerTileReg)) === (i >> log2Ceil(regsPerTileReg)).U
     val subtile_match = io.mrf_idx(log2Ceil(regsPerTileReg)-1,0) === (i % regsPerTileReg).U
-    val bcast_match = io.mrf_idx(log2Ceil(varchRatio)-1,0) === (i % varchRatio).U
+    val bcast_match = io.mrf_idx(log2Ceil(vLen/dLen)-1,0) === (i % (vLen/dLen)).U
     when (tile_match && (((io.mvin || io.macc) && subtile_match) || (io.mvin_bcast && bcast_match))) {
       regs(i) := Mux(io.macc, sum, io.mvin_data)
     }
