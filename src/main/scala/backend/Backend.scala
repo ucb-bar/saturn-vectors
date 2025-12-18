@@ -374,16 +374,20 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       }
 
       when (vos.get.io.iss.bits.macc.head) {
-        vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(
-          Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
+        val elems_l = vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(
+          Vec(vopu.yDim * vopu.clusterYdim, UInt(opuParams.aWidth.W))
         )
-
-        val elems = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+        val elems_t = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
           Vec(vopu.xDim * vopu.clusterXdim, UInt(opuParams.bWidth.W))
         )
+        for (i <- 0 until vopu.yDim) {
+          for (j <- 0 until vopu.clusterYdim) {
+            vopu_ctrl_reg.in_l(i)(j) := elems_l(i + j * vopu.yDim)
+          }
+        }
         for (i <- 0 until vopu.xDim) {
           for (j <- 0 until vopu.clusterXdim) {
-            vopu_ctrl_reg.in_t(i)(j) := elems(i + j * vopu.xDim)
+            vopu_ctrl_reg.in_t(i)(j) := elems_t(i + j * vopu.xDim)
           }
         }
       }

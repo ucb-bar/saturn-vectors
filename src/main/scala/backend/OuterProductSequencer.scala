@@ -54,8 +54,13 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val mvout = Reg(Bool())
   val macc = Reg(Bool())
 
-  val scalar_row_idx = inst.rs1_data
-  val scalar_cluster_row_idx = (scalar_row_idx >> log2Ceil(clusterYdim))(log2Ceil(yDim)-1,0)
+  // val scalar_row_idx = Cat(
+  //   inst.rs1_data(log2Ceil(yDim * vLen/dLen)-1, 0), 
+  //   inst.rs1_data(log2Ceil(yDim * vLen/dLen * clusterYdim)-1, log2Ceil(yDim * vLen/dLen)))
+  val scalar_row_idx = Cat(
+    inst.rs1_data(log2Ceil(yDim)-1, 0), 
+    inst.rs1_data(log2Ceil(yDim * clusterYdim * vLen / dLen)-1, log2Ceil(yDim)))
+  val scalar_cluster_row_idx = (scalar_row_idx >> log2Ceil(clusterYdim * vLen / dLen))(log2Ceil(yDim)-1,0)
   // row0 takes the longest
   val scalar_row_latency = ((yDim+1).U - scalar_cluster_row_idx)
 
@@ -169,7 +174,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   )
   val mrf_row_idx = Mux(macc,
     row_idx,
-    scalar_row_idx >> log2Ceil(yDim * clusterYdim),
+    scalar_row_idx >> log2Ceil(clusterYdim),
   )(log2Ceil(vLen / dLen)-1,0)
   val mrf_col_idx = Mux(macc,
     col_idx,

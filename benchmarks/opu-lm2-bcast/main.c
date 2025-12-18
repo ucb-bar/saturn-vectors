@@ -6,33 +6,27 @@
 #include "bme.h"
 #include "kernel.h"
 
-void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
+void i32_set_c_scalar(int32_t* c_bias, int32_t* c_out, size_t N, size_t M) {
   for (size_t i = 0; i < M; i++) {
-    for (size_t j = 0; j < N; j++) {
-      c_out[i*N+j] = c_bias[j];
-      for (size_t k = 0; k < K; k++) {
-        c_out[i*N+j] += at[k*M+i] * b[k*N+j];
+      for (size_t j = 0; j < N; j++) {
+          c_out[i*N+j] = c_bias[j];
       }
-    }
   }
 }
 void i32_init(int32_t* d, size_t s) {
   for (size_t i = 0; i < s; i++) {
-    d[i] = i + 1;
-    // d[i] = 0;
+    d[i] = i + 0x10;
   }
 }
-void i8_init(int8_t* d, size_t s, int8_t start) {
-    for (size_t i = 0; i < s; i++) {
-      d[i] = (i + start) % 127; // keep values small to avoid overflow
-      // d[i] = 0;
-    }
-  }
+
 
 int i32_compare(int32_t* c_opu, int32_t* c_ref, size_t m, size_t n) {
   for (size_t i = 0; i < m; i++) {
     for (size_t j = 0; j < n; j++) {
       size_t index = i * n + j;
+      // printf("i=%ld, j=%ld, index=%ld\n", i, j, index);
+      // printf("c_ref[index]=%ld\n", c_ref[index]);
+      // printf("c_opu[index]=%ld\n", c_opu[index]);
       if (c_opu[index] != c_ref[index]) {
         printf("DIVERGENCE at index (%ld, %ld): 0x%x != 0x%x\n", i, j, c_opu[index], c_ref[index]);
         printf("opu:\n");
@@ -63,34 +57,26 @@ int main(void) {
   printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
   const size_t M = 2*maxvl;
-  const size_t N = 3*maxvl;
-  const size_t K = 3;
-  int8_t at[M*K];
-  int8_t b[N*K];
+  const size_t N = 2*maxvl;
   int32_t c_opu[M*N];
   int32_t c_ref[M*N];
   int32_t c_bias[N];
   i32_init(c_bias, N);
-  i8_init(at, M*K, 1);
-  i8_init(b, N*K, 2);
 
-  for (size_t m = maxvl-1; m <= M; m+=maxvl) {
-    for (size_t n = 2*maxvl-1; n <= N; n+=maxvl) {
-      // for (size_t k = 2; k < K; k++) {
-        size_t k = K;
-        printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
-        i8_mm_scalar(c_bias, c_ref, at, b, m, n, k);
-        i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, k);
+  for (size_t m = M; m <= M; m+=maxvl) {
+    for (size_t n = N; n <= N; n+=maxvl) {
+        printf("Testing M=%ld, N=%ld\n", m, n);
+        i32_set_c_scalar(c_bias, c_ref, m, n);
+        i32_set_c_opu(c_bias, c_opu, m, n);
         
         // verify against reference
         int r = 0;
         r = i32_compare(c_opu, c_ref, m, n);
         if (r) {
-            printf("FAILURE; M, N, K = %ld %ld %ld\n", m, n, k);
+            printf("FAILURE; M, N = %ld %ld\n", m, n);
             exit(1);
         }
-        printf("SUCCESS; M, N, K = %ld %ld %ld\n", m, n, k);
-      // }
+        printf("SUCCESS; M, N = %ld %ld\n", m, n);
     }
   }
   return 0;
