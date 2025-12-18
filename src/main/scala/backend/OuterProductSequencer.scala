@@ -51,6 +51,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   val mvin = Reg(Bool())
   val mvin_bcast = Reg(Bool())
+  val mvin_col = Reg(Bool())
   val mvout = Reg(Bool())
   val macc = Reg(Bool())
 
@@ -103,6 +104,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     mvout :=  funct6 === OPMFunct6.opmvout
     macc :=  funct6 === OPMFunct6.opmacc
     mvin_bcast :=  funct6 === OPMFunct6.opmvinbcast
+    mvin_col := dis_inst.rd(log2Ceil(opuParams.nMrfRegs)) // MSB indicates column write
     col_idx := 0.U
     row_idx := 0.U
     head := true.B
@@ -166,7 +168,6 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.iss.bits.in_l := DontCare // set in Backend
   io.iss.bits.in_t := DontCare
 
-
   // set the control signals
   val mrf_eg = Mux(mvout, inst.rs2 , inst.rd) +& Mux(macc,  
     (col_idx >> log2Ceil(vLen / dLen)),
@@ -187,20 +188,23 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   // high bit is the tile-sel, then the quadrant sel (mrf_row_idx, mrf_col_idx)
   io.iss.bits.mrf_idx.foreach(_ := Mux(io.iss.fire, Cat(
     mrf_eg,
-    mrf_row_idx,
-    mrf_col_idx
+    Mux(mvin_col, mrf_col_idx, mrf_row_idx),
+    Mux(mvin_col, mrf_row_idx, mrf_col_idx)
   ), 0.U))
   io.iss.bits.row_idx.foreach(_ := Mux(io.iss.fire, scalar_row_idx, 0.U))
   io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx, 0.U))
   io.iss.bits.macc.foreach(_ := io.iss.fire && macc)
-  io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast)
+  io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast && !mvin_col)
+  io.iss.bits.mvin_bcast_col.foreach(_ := io.iss.fire && mvin_bcast && mvin_col)
   io.iss.bits.clock_enable := valid || mvout_valids =/= 0.U
 
   // for a non-bcast mvin, only the specific row of clusters gets mvin set
   for (i <- 0 until yDim) {
-    io.iss.bits.mvin(i) := io.iss.fire && mvin && scalar_cluster_row_idx === i.U
+    io.iss.bits.mvin(i) := io.iss.fire && mvin && !mvin_col && scalar_cluster_row_idx === i.U
   }
-
+  for (j <- 0 until xDim) {
+    io.iss.bits.mvin_col(j) := io.iss.fire && mvin && mvin_col && scalar_cluster_row_idx === j.U
+  }
   mvout_valids := (mvout_valids << 1) | ((io.iss.fire && mvout) << scalar_cluster_row_idx)
 
   // if the row above us has a valid thing being mv'd out, we have to shift that in

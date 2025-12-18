@@ -28,7 +28,7 @@ trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
   def maxLMUL = 2 // TODO: make this dynamic
   def regsPerTileReg = (vLen/dLen) * (vLen/dLen)
   def regsPerCell = regsPerTileReg * opuParams.nMrfRegs
-  def cellRegIdxBits = log2Ceil(regsPerCell)
+  def cellRegIdxBits = log2Ceil(regsPerCell) 
   def prodWidth = opuParams.aWidth + opuParams.bWidth
 
   def clusterXdim = opuParams.cWidth / opuParams.bWidth
@@ -77,7 +77,6 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
       regs(i) := Mux(io.macc, sum, io.mvin_data)
     }
   }
-
   io.out := regs(io.mrf_idx)
 }
 
@@ -97,6 +96,8 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
     val shift = Input(Bool())
     val mvin  = Input(Bool())
     val mvin_bcast = Input(Bool())
+    val mvin_col = Input(Bool())
+    val mvin_bcast_col = Input(Bool())
   })
 
   val cells = Seq.fill(clusterXdim, clusterYdim)(Module(new OuterProductCell))
@@ -109,13 +110,37 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
 
       cell.io.in_l  := io.in_l(i).asSInt
       cell.io.in_t  := io.in_t(j).asSInt
-
-      cell.io.macc := io.macc
-      cell.io.mvin := io.mvin && i.U === io.row_idx && j.U === io.col_idx
-      cell.io.mvin_bcast := io.mvin_bcast && j.U === io.col_idx
-      cell.io.mvin_data := io.in_t.asUInt.asSInt
       cell.io.mrf_idx := io.mrf_idx
+      cell.io.macc := io.macc
       cell_outs(i)(j) := cell.io.out.asUInt
+
+      cell.io.mvin_bcast := Mux(io.mvin_bcast_col, 
+        i.U === io.col_idx, 
+        Mux(io.mvin_bcast, 
+          j.U === io.col_idx,
+          false.B
+        )
+      )
+      cell.io.mvin := Mux(io.mvin_col, 
+        j.U === io.row_idx && i.U === io.col_idx,
+        Mux(io.mvin, 
+          i.U === io.row_idx && j.U === io.col_idx,
+          false.B
+        )
+      )
+      cell.io.mvin_data := Mux(io.mvin_bcast_col, 
+        io.in_l.asUInt.asSInt,
+        Mux(io.mvin_bcast, 
+          io.in_t.asUInt.asSInt,
+          Mux(io.mvin, 
+            io.in_l.asUInt.asSInt,
+            Mux(io.mvin_col,
+              io.in_l.asUInt.asSInt,
+              0.S
+            )
+          )
+        )
+      )
     }
   }
 
@@ -134,13 +159,16 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val in_t      = Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W)))
 
   // same values broadcast horizontally
-  val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W))
+  val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W)) 
   val row_idx    = Vec(yDim, UInt(log2Ceil(clusterYdim).W))
   val col_idx    = Vec(yDim, UInt(log2Ceil(clusterXdim).W))
   val macc       = Vec(yDim, Bool())
+  val shift      = Vec(yDim, Bool())
   val mvin       = Vec(yDim, Bool())
   val mvin_bcast = Vec(yDim, Bool())
-  val shift      = Vec(yDim, Bool())
+  val mvin_bcast_col = Vec(xDim, Bool())
+  //mvin_col broadcasts vertically
+  val mvin_col   = Vec(xDim, Bool()) // column write
 }
 
 
@@ -163,16 +191,19 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
   for (j <- 0 until xDim) {
     for (i <- 0 until yDim) {
       val cluster = clusters(i)(j)
-      cluster.io.in_l      := io.op.in_l(i)
+      // column broadcast signals
       cluster.io.in_t      := io.op.in_t(j)
-
+      cluster.io.mvin_bcast_col := io.op.mvin_bcast_col(j)
+      cluster.io.mvin_col   := io.op.mvin_col(j)
+      // row broadcast signals
+      cluster.io.in_l      := io.op.in_l(i)
       cluster.io.mrf_idx    := io.op.mrf_idx(i)
       cluster.io.row_idx    := io.op.row_idx(i)
       cluster.io.col_idx    := io.op.col_idx(i)
       cluster.io.macc       := io.op.macc(i)
-      cluster.io.mvin       := io.op.mvin(i)
-      cluster.io.mvin_bcast := io.op.mvin_bcast(i)
       cluster.io.shift      := io.op.shift(i)
+      cluster.io.mvin_bcast := io.op.mvin_bcast(i)
+      cluster.io.mvin       := io.op.mvin(i)
     }
 
     clusters(0)(j).io.in_pipe := 0.U

@@ -50,6 +50,7 @@ bmarks = \
 	vec-transpose-load \
 	vec-transpose-store \
 	opu-transpose \
+	opu-bcast \
 	opu-sq-gemm \
 	opu-m2-gemm \
 	opu-lm2-gemm \
