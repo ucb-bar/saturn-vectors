@@ -52,6 +52,7 @@ bmarks = \
 	opu-transpose \
 	opu-bcast \
 	opu-sq-gemm \
+	opu-gemm \
 	opu-m2-gemm \
 	opu-lm2-gemm \
 	opu-lm2-memcopy \

@@ -131,7 +131,8 @@ void i32_init(int* d, size_t s) {
 
 void i8_init(int8_t* d, size_t s, int8_t start) {
     for (size_t i = 0; i < s; i++) {
-      d[i] = start + i;
+      d[i] = 0;
+      // d[i] = start + i;
     }
   }
   
@@ -171,7 +172,7 @@ int main(void) {
 
   const size_t M = 2*maxvl;
   const size_t N = 2*maxvl;
-  const size_t K = 3;
+  const size_t K = 1;
   
   int8_t* b = (int8_t*)TCM_BASE;
   int8_t* at = (int8_t*)(TCM_BASE + N * K);
@@ -182,8 +183,8 @@ int main(void) {
   i8_init(at, M*K, 1);
   i8_init(b, N*K, -3);
 
-  for (size_t m = maxvl-1; m < M; m+=maxvl) {
-    for (size_t n = 2*maxvl-1; n < N; n+=maxvl) {
+  for (size_t m = maxvl; m < M; m+=maxvl) {
+    for (size_t n = maxvl; n < N; n+=maxvl) {
       // for (size_t k = 2; k < K; k++) {
         size_t k = K;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
