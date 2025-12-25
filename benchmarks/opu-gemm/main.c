@@ -9,7 +9,7 @@
 void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
   for (size_t i = 0; i < M; i++) {
     for (size_t j = 0; j < N; j++) {
-      c_out[i*N+j] = c_bias[j];
+      c_out[i*N+j] = c_bias[i];
       for (size_t k = 0; k < K; k++) {
         c_out[i*N+j] += at[k*M+i] * b[k*N+j];
       }
@@ -69,8 +69,8 @@ int main(void) {
   int8_t b[N*K];
   int32_t c_opu[M*N];
   int32_t c_ref[M*N];
-  int32_t c_bias[N];
-  i32_init(c_bias, N);
+  int32_t c_bias[M];
+  i32_init(c_bias, M);
   i8_init(at, M*K, 1);
   i8_init(b, N*K, 2);
 

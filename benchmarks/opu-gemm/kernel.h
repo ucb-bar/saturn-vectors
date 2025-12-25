@@ -7,7 +7,8 @@
 
 void i8_loop_k_general(int32_t* c, int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size_t ml, size_t vl) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
-  OPMVINBCAST(m0, v0); // move v0 into row r of m1
+  // OPMVINBCAST(m0, v0); // move v0 into row r of m1
+  OPMVINBCAST(mc0, v0); // move v0 into column r of m1
   for (size_t k = 0; k < K; k++) {
       asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(ml));
       asm volatile("vle8.v v5, (%0)" : : "r"(&at[k*M]));
@@ -28,7 +29,8 @@ void i32_store_c(int32_t* c, size_t ml, size_t vl, size_t N) {
 void i8_sq_loop_k(int32_t* c, int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size_t ml) {
   asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(ml));
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
-  OPMVINBCAST(m0, v0); // move v0 into row r of m1
+  // OPMVINBCAST(m0, v0); // move v0 into row r of m1
+  OPMVINBCAST(mc0, v0); // move v0 into column r of m1
   // OPMVINBCAST(m2, v0); 
   size_t k = 0;
   while (k + 2 <= K) {
@@ -68,15 +70,15 @@ void i8_mm_bme_sq(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t
     size_t j = 0;
 
     while (j + mlmax <= N) {
-      i8_sq_loop_k(&c_bias[j], &at[i], &b[j], M, N, K, mlmax);
+      i8_sq_loop_k(&c_bias[i], &at[i], &b[j], M, N, K, mlmax);
       i32_sq_store_c(&c_out[(i*N)+j], mlmax, N);
       j += mlmax;
     }
     while (j < N) {
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
-      i8_loop_k_general(&c_bias[j], &at[i], &b[j], M, N, K, mlmax, vl);
+      i8_loop_k_general(&c_bias[i], &at[i], &b[j], M, N, K, mlmax, vl);
       i32_store_c(&c_out[(i*N)+j], mlmax, vl, N);
-      i8_loop_k_general(&c_bias[j], &at[i+mlmax], &b[j], M, N, K, mlmax, vl);
+      i8_loop_k_general(&c_bias[i], &at[i+mlmax], &b[j], M, N, K, mlmax, vl);
       i32_store_c(&c_out[(i+mlmax)*N+j], mlmax, vl, N);
       j += vl;
     }
@@ -86,7 +88,7 @@ void i8_mm_bme_sq(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t
     size_t ml = (M - i) > mlmax ? mlmax : M - i;
     for (size_t j = 0; j < N;) {
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
-      i8_loop_k_general(&c_bias[j], &at[i], &b[j], M, N, K, ml, vl);
+      i8_loop_k_general(&c_bias[i], &at[i], &b[j], M, N, K, ml, vl);
       i32_store_c(&c_out[(i*N)+j], ml, vl, N);
       j += vl;
     }

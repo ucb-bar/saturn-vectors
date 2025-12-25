@@ -58,6 +58,7 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
     val macc = Input(Bool())
     val mvin = Input(Bool())
     val mvin_bcast = Input(Bool())
+    val mvin_bcast_col = Input(Bool())
     val mvin_data = Input(SInt(opuParams.cWidth.W))
     val out = Output(SInt(opuParams.cWidth.W))
   })
@@ -70,10 +71,11 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
 
   // Data going into MRF
   for (i <- 0 until regsPerCell) {
-    val tile_match = (io.mrf_idx >> log2Ceil(regsPerTileReg)) === (i >> log2Ceil(regsPerTileReg)).U
-    val subtile_match = io.mrf_idx(log2Ceil(regsPerTileReg)-1,0) === (i % regsPerTileReg).U
-    val bcast_match = io.mrf_idx(log2Ceil(vLen/dLen)-1,0) === (i % (vLen/dLen)).U
-    when (tile_match && (((io.mvin || io.macc) && subtile_match) || (io.mvin_bcast && bcast_match))) {
+    val tile_match      = (io.mrf_idx >> log2Ceil(regsPerTileReg)) === (i >> log2Ceil(regsPerTileReg)).U
+    val bcast_col_match = (io.mrf_idx >> log2Ceil(vLen/dLen)) === (i >> log2Ceil(vLen/dLen)).U
+    val bcast_match     = io.mrf_idx(log2Ceil(vLen/dLen)-1,0) === (i % (vLen/dLen)).U
+    val subtile_match   = io.mrf_idx(log2Ceil(regsPerTileReg)-1,0) === (i % regsPerTileReg).U
+    when (tile_match && (((io.mvin || io.macc) && subtile_match) || (io.mvin_bcast && bcast_match) || (io.mvin_bcast_col && bcast_col_match))) {
       regs(i) := Mux(io.macc, sum, io.mvin_data)
     }
   }
@@ -112,15 +114,18 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
       cell.io.in_t  := io.in_t(j).asSInt
       cell.io.mrf_idx := io.mrf_idx
       cell.io.macc := io.macc
+      cell.io.mvin_bcast_col := io.mvin_bcast_col
       cell_outs(i)(j) := cell.io.out.asUInt
 
-      cell.io.mvin_bcast := Mux(io.mvin_bcast_col, 
-        i.U === io.col_idx, 
-        Mux(io.mvin_bcast, 
-          j.U === io.col_idx,
-          false.B
-        )
+      cell.io.mvin_bcast := Mux(io.mvin_bcast, 
+        j.U === io.col_idx,
+        false.B
       )
+      cell.io.mvin_bcast_col := Mux(io.mvin_bcast_col, 
+        i.U === io.col_idx, 
+        false.B
+      )
+      
       cell.io.mvin := Mux(io.mvin_col, 
         j.U === io.row_idx && i.U === io.col_idx,
         Mux(io.mvin, 
