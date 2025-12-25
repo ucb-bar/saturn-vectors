@@ -14,7 +14,7 @@ void i8_loop_k_general(int32_t* c, int8_t* at, int8_t* b, size_t M, size_t N, si
       asm volatile("vle8.v v5, (%0)" : : "r"(&at[k*M]));
       asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(vl));
       asm volatile("vle8.v v4, (%0)" : : "r"(&b[k*N]));
-      VOPACC(m0, v4, v5);
+      VOPACC(m0, v5, v4);
       // vopacc md=m0, vs2=v0, vs1=v8
   }
 }
@@ -36,19 +36,19 @@ void i8_sq_loop_k(int32_t* c, int8_t* at, int8_t* b, size_t M, size_t N, size_t 
   while (k + 2 <= K) {
       asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
       asm volatile("vle8.v v18, (%0)" : : "r"(&b[k*N]));
-      VOPACC(m0, v18, v16);
+      VOPACC(m0, v16, v18);
       // VOPACC(m2, v18, v17);
       k++;
       asm volatile("vle8.v v20, (%0)" : : "r"(&at[k*M]));
       asm volatile("vle8.v v22, (%0)" : : "r"(&b[k*N]));
-      VOPACC(m0, v22, v20);
+      VOPACC(m0, v20, v22);
       // VOPACC(m2, v22, v21);
       k++;
   }
   if (k < K) {    
     asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
     asm volatile("vle8.v v18, (%0)" : : "r"(&b[k*N]));
-    VOPACC(m0, v18, v16);
+    VOPACC(m0, v16, v18);
     // VOPACC(m2, v18, v17);
   }
 }
