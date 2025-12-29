@@ -68,25 +68,15 @@ int main(void) {
   size_t dl = maxvl / 2;
   printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
-  const size_t M = M_DIM;
-  const size_t N = N_DIM;
-  const size_t K = K_DIM;
-  int32_t c_opu[M*N];
-  // int8_t at[M*K];
-  // int8_t b[N*K];
-  // int32_t c_ref_transpose[N*M];
-  // int32_t c_bias[N];
-  // i32_init(c_bias, N);
-  // i8_init(at, M*K, 1);
-  // i8_init(b, N*K, -120);
+  int32_t c_opu[M_DIM*N_DIM];
 
-  for (size_t m = M; m <= M; m+=maxvl) {
-    for (size_t n = N; n <= N; n+=maxvl) {
+  for (size_t m = M_DIM; m <= M_DIM; m+=maxvl) {
+    for (size_t n = N_DIM; n <= N_DIM; n+=maxvl) {
       // for (size_t k = 2; k < K; k++) {
-        size_t k = K;
+        size_t k = K_DIM;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
-        // i8_mm_scalar(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
-        i8_mm_bme_lm2(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
+        i8_mm_scalar(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
+        // i8_mm_bme_lm2(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
         
         // verify against reference
         int r = 0;

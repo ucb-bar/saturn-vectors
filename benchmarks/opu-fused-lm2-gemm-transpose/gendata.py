@@ -3,10 +3,9 @@
 import numpy as np
 import argparse
 
-
 m_dim = 128
-k_dim = 3
 n_dim = 128
+k_dim = 3
 
 parser = argparse.ArgumentParser(description='A script to generate input data for an SGEMM kernel.')
 
@@ -29,12 +28,10 @@ else:
     if args.ndim:
         n_dim = args.ndim
 
-maxmant = 1 << 8
-
-a_matrix = np.zeros((m_dim, k_dim), dtype=np.int8) + 1
+a_matrix = np.arange(k_dim*m_dim).reshape(k_dim, m_dim).astype(np.int8)
 b_matrix = np.arange(k_dim*n_dim).reshape(k_dim, n_dim).astype(np.int8)
-c_bias = np.zeros(n_dim, dtype=np.int32)
-c_matrix = np.matmul(a_matrix.astype(np.int32), b_matrix.astype(np.int32)) + c_bias[None, :]
+c_bias = np.arange(n_dim).astype(np.int32)
+c_matrix = np.matmul(a_matrix.T.astype(np.int32), b_matrix.astype(np.int32)) + c_bias[None, :]
 c_matrix = c_matrix.T
 
 print(f'''#define M_DIM {m_dim}
