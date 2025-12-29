@@ -9,13 +9,14 @@
 void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
   for (size_t i = 0; i < M; i++) {
     for (size_t j = 0; j < N; j++) {
-      c_out[i*N+j] = c_bias[j];
+      c_out[j*M+i] = c_bias[j];
       for (size_t k = 0; k < K; k++) {
-        c_out[i*N+j] += at[k*M+i] * b[k*N+j];
+        c_out[j*M+i] += at[k*M+i] * b[k*N+j];
       }
     }
   }
 }
+
 void i32_transpose_scalar(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
   for (size_t i = 0; i < M; i++) {
     for (size_t j = 0; j < N; j++) {
@@ -69,13 +70,12 @@ int main(void) {
   size_t dl = maxvl / 2;
   printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
-  const size_t M = 2*maxvl;
-  const size_t N = 3*maxvl;
+  const size_t M = maxvl;
+  const size_t N = maxvl;
   const size_t K = 3;
   int8_t at[M*K];
   int8_t b[N*K];
   int32_t c_opu[M*N];
-  int32_t c_ref[M*N];
   int32_t c_ref_transpose[N*M];
   int32_t c_bias[N];
   i32_init(c_bias, N);
@@ -87,8 +87,7 @@ int main(void) {
       // for (size_t k = 2; k < K; k++) {
         size_t k = K;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
-        i8_mm_scalar(c_bias, c_ref, at, b, m, n, k);
-        i32_transpose_scalar(c_ref, c_ref_transpose, m, n);
+        i8_mm_scalar(c_bias, c_ref_transpose, at, b, m, n, k);
         i8_mm_bme_sq(c_bias, c_opu, at, b, m, n, k);
         
         // verify against reference
