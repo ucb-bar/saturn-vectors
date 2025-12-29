@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include "bme.h"
 #include "kernel.h"
-#include "util.h"
 #include "dataset.h"
 
 void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
@@ -75,8 +74,8 @@ int main(void) {
       // for (size_t k = 2; k < K; k++) {
         size_t k = K_DIM;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
-        i8_mm_scalar(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
-        // i8_mm_bme_lm2(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
+        // i8_mm_scalar(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
+        i8_mm_bme_lm2(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
         
         // verify against reference
         int r = 0;

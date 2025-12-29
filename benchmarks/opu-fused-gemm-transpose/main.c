@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include "bme.h"
 #include "kernel.h"
+#include "dataset.h"
 
 void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
   for (size_t i = 0; i < M; i++) {
@@ -66,33 +67,23 @@ int i32_compare(int32_t* c_opu, int32_t* c_ref, size_t m, size_t n) {
 
 int main(void) {
   size_t maxvl;
-  asm volatile("vsetvli %[vl], zero, e32, m4, ta, ma" : [vl]"=r"(maxvl));
+  asm volatile("vsetvli %[vl], zero, e8, m1, ta, ma" : [vl]"=r"(maxvl));
   size_t dl = maxvl / 2;
   printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
-  const size_t M = maxvl;
-  const size_t N = maxvl;
-  const size_t K = 3;
-  int8_t at[M*K];
-  int8_t b[N*K];
-  int32_t c_opu[M*N];
-  int32_t c_ref_transpose[N*M];
-  int32_t c_bias[N];
-  i32_init(c_bias, N);
-  i8_init(at, M*K, 1);
-  i8_init(b, N*K, 2);
+  int32_t c_opu[M_DIM*N_DIM];
 
-  for (size_t m = maxvl; m <= M; m+=maxvl) {
-    for (size_t n = maxvl; n <= N; n+=maxvl) {
+  for (size_t m = M_DIM; m <= M_DIM; m+=maxvl) {
+    for (size_t n = N_DIM; n <= N_DIM; n+=maxvl) {
       // for (size_t k = 2; k < K; k++) {
-        size_t k = K;
+        size_t k = K_DIM;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
-        i8_mm_scalar(c_bias, c_ref_transpose, at, b, m, n, k);
-        i8_mm_bme_sq(c_bias, c_opu, at, b, m, n, k);
+        // i8_mm_scalar(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
+        i8_mm_bme_sq(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
         
         // verify against reference
         int r = 0;
-        r = i32_compare(c_opu, c_ref_transpose, m, n);
+        r = i32_compare(c_opu, verify_data, m, n);
         if (r) {
             printf("FAILURE; M, N, K = %ld %ld %ld\n", m, n, k);
             exit(1);
