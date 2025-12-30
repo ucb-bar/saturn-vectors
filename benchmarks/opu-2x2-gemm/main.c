@@ -18,8 +18,8 @@ void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t
 }
 void i32_init(int32_t* d, size_t s) {
   for (size_t i = 0; i < s; i++) {
-    // d[i] = i + 1;
-    d[i] = 0;
+    d[i] = i + 1;
+    // d[i] = 0;
   }
 }
 void i8_init(int8_t* d, size_t s, int8_t start) {
@@ -62,25 +62,25 @@ int main(void) {
   size_t dl = maxvl / 2;
   printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
-  const size_t M = 2*maxvl;
+  const size_t M = 3*maxvl;
   const size_t N = 3*maxvl;
-  const size_t K = 1;
+  const size_t K = 3;
   int8_t at[M*K];
   int8_t b[N*K];
   int32_t c_opu[M*N];
   int32_t c_ref[M*N];
-  int32_t c_bias[M];
-  i32_init(c_bias, M);
+  int32_t c_bias[N];
+  i32_init(c_bias, N);
   i8_init(at, M*K, 1);
   i8_init(b, N*K, 2);
 
-  for (size_t m = maxvl; m <= M; m+=maxvl) {
-    for (size_t n = maxvl; n <= N; n+=maxvl) {
+  for (size_t m = 2*maxvl-1; m <= M; m+=maxvl) {
+    for (size_t n = 2*maxvl-1; n <= N; n+=maxvl) {
       // for (size_t k = 2; k < K; k++) {
         size_t k = K;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
         i8_mm_scalar(c_bias, c_ref, at, b, m, n, k);
-        i8_mm_bme_sq(c_bias, c_opu, at, b, m, n, k);
+        i8_mm_bme_lm2(c_bias, c_opu, at, b, m, n, k);
         
         // verify against reference
         int r = 0;

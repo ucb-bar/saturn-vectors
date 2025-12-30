@@ -50,12 +50,11 @@ bmarks = \
 	vec-transpose-load \
 	vec-transpose-store \
 	opu-transpose \
-	opu-bcast \
-	opu-sq-gemm \
 	opu-gemm \
+	opu-m2-gemm \
+	opu-2x2-gemm \
 	opu-fused-gemm-transpose \
 	opu-fused-lm2-gemm-transpose \
-	opu-m2-gemm \
 	opu-lm2-gemm \
 	opu-lm2-memcopy \
 	opu-lm2-bcast \
@@ -64,8 +63,7 @@ bmarks = \
 	opu-lm2-perf \
 	opu-m4-gemm \
 	opu-perf-gemm \
-	opu-dbuff-gemm \
-	vec-optest
+	opu-dbuff-gemm 
 
 cpp_bmarks = \
 	vec-tasks \
