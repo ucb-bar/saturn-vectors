@@ -64,8 +64,8 @@ int main(void) {
   int32_t c_in[M*N];
   i32_init(c_in, M*N);
 
-  for (size_t m = M; m <= M; m+=maxvl) {
-    for (size_t n = N; n <= N; n+=maxvl) {
+  for (size_t m = maxvl; m <= M; m+=maxvl) {
+    for (size_t n = maxvl; n <= N; n+=maxvl) {
         printf("Testing M=%ld, N=%ld\n", m, n);
         i32_mm_scalar(c_in, c_ref, m, n);
         i32_mm_bme_1x2(c_in, c_opu, m, n);

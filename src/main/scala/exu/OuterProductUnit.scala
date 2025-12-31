@@ -133,19 +133,12 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
           false.B
         )
       )
-      cell.io.mvin_data := Mux(io.mvin_bcast_col, 
-        io.in_l.asUInt.asSInt,
-        Mux(io.mvin_bcast, 
-          io.in_t.asUInt.asSInt,
-          Mux(io.mvin, 
-            io.in_l.asUInt.asSInt,
-            Mux(io.mvin_col,
-              io.in_l.asUInt.asSInt,
-              0.S
-            )
+      cell.io.mvin_data := 
+        Mux(io.mvin_col || io.mvin_bcast_col, io.in_l.asUInt.asSInt,
+          Mux(io.mvin || io.mvin_bcast, io.in_t.asUInt.asSInt,
+            DontCare
           )
         )
-      )
     }
   }
 
