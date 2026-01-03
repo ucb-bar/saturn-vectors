@@ -9,7 +9,7 @@
 void i32_load_c(int32_t* c, size_t ml, size_t N) {
     for (size_t r = 0; r < ml; r++) {
         asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
-        VMV_RV(m0, r, v0); // move v0 into row r of m1
+        VMV_RV(mc0, r, v0); // move v0 into row r of m1
     }
   }
 
@@ -46,10 +46,10 @@ void i32_mm_bme_1x2(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
     size_t ml = (M - i) > mlmax ? mlmax : M - i;
     size_t j = 0;
     while (j < N) {
-      asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(N - j));
-      printf("i=%ld, j=%ld, ml=%ld, vl=%ld\n", i, j, ml, vl);
+      asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
+      printf("i=%ld, j=%ld, ml=%ld, vl=%ld\n", i, j, ml, vl);                   
       i32_load_c(&c_in[(i*N)+j], ml, N);
-      i32_store_c(&c_out[(i*N)+j], ml, N);
+      i32_store_c(&c_out[j*M + i], ml, M);
       j += vl;
     }
     i += ml;
