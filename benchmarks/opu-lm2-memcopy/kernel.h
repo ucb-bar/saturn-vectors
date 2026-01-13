@@ -47,7 +47,6 @@ void i32_mm_bme_1x2(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
     size_t j = 0;
     while (j < N) {
       asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(N - j));
-      printf("i=%ld, j=%ld, ml=%ld, vl=%ld\n", i, j, ml, vl);
       i32_load_c(&c_in[(i*N)+j], ml, N);
       i32_store_c(&c_out[(i*N)+j], ml, N);
       j += vl;

@@ -7,20 +7,20 @@
 
 void i8_loop_k_general(int32_t* c, int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size_t ml, size_t vl) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
-  OPMVINBCAST(m0, v0); // move v0 into row r of m1
+  OPMVINBCAST(m1, v0); // move v0 into row r of m1
   for (size_t k = 0; k < K; k++) {
       asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(ml));
       asm volatile("vle8.v v5, (%0)" : : "r"(&at[k*M]));
       asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(vl));
       asm volatile("vle8.v v4, (%0)" : : "r"(&b[k*N]));
-      VOPACC(m0, v4, v5);
-      // vopacc md=m0, vs2=v0, vs1=v8
+      VOPACC(m1, v4, v5);
+      // vopacc md=m1, vs2=v0, vs1=v8
   }
 }
 void i32_store_c(int32_t* c, size_t ml, size_t vl, size_t N) {
   asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(vl));
   for (size_t r = 0; r < ml; r++) {
-    VMV_VR(v0, r, m0); // move row r of m0 into v0
+    VMV_VR(v0, r, m1); // move row r of m1 into v0
     asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
   }
 }
@@ -28,27 +28,27 @@ void i32_store_c(int32_t* c, size_t ml, size_t vl, size_t N) {
 void i8_sq_loop_k(int32_t* c, int8_t* at, int8_t* b, size_t M, size_t N, size_t K, size_t ml) {
   asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(ml));
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
-  OPMVINBCAST(m0, v0); // move v0 into column r of m1
+  OPMVINBCAST(m1, v0); // move v0 into column r of m1
   size_t k = 0;
   while (k + 2 <= K) {
       asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
       asm volatile("vle8.v v18, (%0)" : : "r"(&b[k*N]));
-      VOPACC(m0, v18, v16);
+      VOPACC(m1, v18, v16);
       k++;
       asm volatile("vle8.v v20, (%0)" : : "r"(&at[k*M]));
       asm volatile("vle8.v v22, (%0)" : : "r"(&b[k*N]));
-      VOPACC(m0, v22, v20);
+      VOPACC(m1, v22, v20);
       k++;
   }
   if (k < K) {    
     asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
     asm volatile("vle8.v v18, (%0)" : : "r"(&b[k*N]));
-    VOPACC(m0, v18, v16);
+    VOPACC(m1, v18, v16);
   }
 }
 void i32_sq_store_c(int32_t* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
-    VMV_VR(v0, r, m0); // move row r of m0 into v0
+    VMV_VR(v0, r, m1); // move row r of m1 into v0
     asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
   }
 }

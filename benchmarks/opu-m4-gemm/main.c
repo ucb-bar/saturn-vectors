@@ -24,8 +24,8 @@ void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t
 
 void i32_init(int32_t* d, size_t s) {
   for (size_t i = 0; i < s; i++) {
-    // d[i] = i + 1;
-    d[i] = 0;
+    d[i] = i + 1;
+    // d[i] = 0;
   }
 }
 
@@ -70,7 +70,7 @@ int main(void) {
 
   const size_t M = 2*maxvl;
   const size_t N = 2*maxvl;
-  const size_t K = 2;
+  const size_t K = 3;
   int8_t at[M*K];
   int8_t b[N*K];
   int32_t c_opu[M*N];

@@ -104,7 +104,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     mvout :=  funct6 === OPMFunct6.opmvout
     macc :=  funct6 === OPMFunct6.opmacc
     mvin_bcast :=  funct6 === OPMFunct6.opmvinbcast
-    mvin_col := dis_inst.rd(log2Ceil(opuParams.nMrfRegs)) // MSB indicates column write
+    mvin_col := dis_inst.rd(4) // MSB indicates column write
     col_idx := 0.U
     row_idx := 0.U
     head := true.B

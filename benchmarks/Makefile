@@ -49,21 +49,17 @@ bmarks = \
 	vec-square-root-approx \
 	vec-transpose-load \
 	vec-transpose-store \
-	opu-transpose \
 	opu-gemm \
 	opu-m2-gemm \
+	opu-m4-gemm \
 	opu-2x2-gemm \
+	opu-4x1-gemm \
 	opu-fused-gemm-transpose \
 	opu-fused-lm2-gemm-transpose \
 	opu-lm2-gemm \
 	opu-lm2-memcopy \
-	opu-lm2-bcast \
-	opu-memcopy \
-	opu-bcast \
-	opu-lm2-perf \
-	opu-m4-gemm \
-	opu-perf-gemm \
-	opu-dbuff-gemm 
+	opu-lm2-transpose \
+	opu-memcopy 
 
 cpp_bmarks = \
 	vec-tasks \

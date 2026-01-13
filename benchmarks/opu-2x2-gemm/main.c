@@ -74,8 +74,8 @@ int main(void) {
   i8_init(at, M*K, 1);
   i8_init(b, N*K, 2);
 
-  for (size_t m = 2*maxvl-1; m <= M; m+=maxvl) {
-    for (size_t n = 2*maxvl-1; n <= N; n+=maxvl) {
+  for (size_t m = 2*maxvl; m <= M; m+=maxvl) {
+    for (size_t n = 2*maxvl; n <= N; n+=maxvl) {
       // for (size_t k = 2; k < K; k++) {
         size_t k = K;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
