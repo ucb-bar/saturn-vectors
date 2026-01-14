@@ -9,13 +9,13 @@
 void i32_load_c(int32_t* c, size_t ml, size_t N) {
     for (size_t r = 0; r < ml; r++) {
         asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
-        VMV_RV(mc0, r, v0); // move v0 into row r of m1
+        VMV_RV(mc2, r, v0); // move v0 into row r of m1
     }
   }
 
 void i32_store_c(int32_t* c, size_t ml, size_t N) {
     for (size_t r = 0; r < ml; r++) {
-      VMV_VR(v0, r, m0); // move row r of m0 into v0
+      VMV_VR(v0, r, m2); // move row r of m0 into v0
       asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
     }
   }
@@ -24,8 +24,12 @@ void i32_lm2_load_c(int32_t* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
     asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
     VMV_RV(mc0, r, v0); // move v0 into row r of m1
+    asm volatile("vle32.v v4, (%0)" : : "r"(&c[r*N + ml]));
+    VMV_RV(mc2, r, v4); // move v0 into row r of m1
     asm volatile("vle32.v v8, (%0)" : : "r"(&c[(r+ml)*N]));
-    VMV_RV(mc2, r, v8); // move v0 into row r of m1
+    VMV_RV(mc1, r, v8); // move v0 into row r of m1
+    asm volatile("vle32.v v12, (%0)" : : "r"(&c[(r+ml)*N + ml]));
+    VMV_RV(mc3, r, v12); // move v0 into row r of m1
   }
 }
 void i32_lm2_store_c(int32_t* c, size_t ml, size_t N) {
@@ -33,8 +37,12 @@ void i32_lm2_store_c(int32_t* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
     VMV_VR(v0, r, m0); // move row r of m0 into v0
     asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*N]));
+    VMV_VR(v4, r, m1); 
+    asm volatile("vse32.v v4, (%0)" : : "r"(&c[r*N + ml]));
     VMV_VR(v8, r, m2); 
     asm volatile("vse32.v v8, (%0)" : : "r"(&c[(r+ml)*N]));
+    VMV_VR(v12, r, m3); 
+    asm volatile("vse32.v v12, (%0)" : : "r"(&c[(r+ml)*N + ml]));
   }
 }
   
@@ -48,10 +56,10 @@ void i32_mm_bme_1x2(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
     while (j < N) {
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
       // printf("i=%ld, j=%ld, ml=%ld, vl=%ld\n", i, j, ml, vl);                   
-      i32_load_c(&c_in[(i*N)+j], ml, N);
-      i32_store_c(&c_out[j*M + i], ml, M);
-      j += vl;
+      i32_lm2_load_c(&c_in[(i*N)+j], ml, N);
+      i32_lm2_store_c(&c_out[j*M + i], ml, M);
+      j += 2*vl;
     }
-    i += ml;
+    i += 2*ml;
   }
 }
