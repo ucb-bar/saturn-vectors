@@ -62,8 +62,8 @@ int main(void) {
   size_t dl = maxvl / 2;
   printf("maxvl=%lu; dl=%lu\n", maxvl, dl);
 
-  const size_t M = 2*maxvl;
-  const size_t N = 3*maxvl;
+  const size_t M = maxvl - 1;
+  const size_t N = maxvl - 1;
   const size_t K = 3;
   int8_t at[M*K];
   int8_t b[N*K];
@@ -74,8 +74,8 @@ int main(void) {
   i8_init(at, M*K, 1);
   i8_init(b, N*K, 2);
 
-  for (size_t m = maxvl+1; m <= M; m+=maxvl) {
-    for (size_t n = maxvl+1; n <= N; n+=maxvl) {
+  for (size_t m = maxvl/2 - 1; m <= M; m+=maxvl/2) {
+    for (size_t n = maxvl/2 - 1; n <= N; n+=maxvl/2) {
       // for (size_t k = 2; k < K; k++) {
         size_t k = K;
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);

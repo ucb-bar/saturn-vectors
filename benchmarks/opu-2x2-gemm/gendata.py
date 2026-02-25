@@ -29,11 +29,16 @@ else:
     if args.ndim:
         n_dim = args.ndim
 
+# Generate matrices: A is (K x M), B is (K x N)
+# at stores A^T in column-major format: at[k*M + i] = A[k, i]
+# b stores B in column-major format: b[k*N + j] = B[k, j]
 a_matrix = np.random.randint(-128, 127, k_dim*m_dim).reshape(k_dim, m_dim).astype(np.int8)
 b_matrix = np.random.randint(-128, 127, k_dim*n_dim).reshape(k_dim, n_dim).astype(np.int8)
 c_bias = np.random.randint(-128, 127, n_dim).astype(np.int32)
+
+# Compute C = A^T @ B + c_bias
+# A^T is (M x K), B is (K x N), so C is (M x N)
 c_matrix = np.matmul(a_matrix.T.astype(np.int32), b_matrix.astype(np.int32)) + c_bias[None, :]
-c_matrix = c_matrix.T
 
 print(f'''#define M_DIM {m_dim}
 #define K_DIM {k_dim}
@@ -42,12 +47,12 @@ print(f'''#define M_DIM {m_dim}
 ''')
 
 def print_array(name, data, data_size, data_type='int8_t', data_fmt='{}', fold=10):
-    print(f"{name} [{data_size}] = {{")
+    print(f"{data_type} {name}[{data_size}] = {{")
     for i in range(0, len(data), fold):
         print('  ', ', '.join(data_fmt.format(x) for x in data[i:i+fold]), ',', sep='')
     print('};')
 
-print_array('static int8_t a_matrix', a_matrix.flatten(), 'M_DIM*K_DIM')
-print_array('static int8_t b_matrix', b_matrix.flatten(), 'K_DIM*N_DIM')
-print_array('static int32_t c_bias', c_bias.flatten(), 'N_DIM', data_type='int32_t')
-print_array('static int32_t verify_data', c_matrix.flatten(), 'M_DIM*N_DIM', data_type='int32_t')
+print_array('at', a_matrix.flatten(), 'M_DIM*K_DIM')
+print_array('b', b_matrix.flatten(), 'K_DIM*N_DIM')
+print_array('c_bias', c_bias.flatten(), 'N_DIM', data_type='int32_t')
+print_array('verify_data', c_matrix.flatten(), 'M_DIM*N_DIM', data_type='int32_t')

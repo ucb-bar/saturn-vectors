@@ -58,7 +58,7 @@ void i32_lm2_store_c(int32_t* c, size_t ml, size_t N) {
   }
 }
 
-void i8_mm_bme_lm2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
+void i8_mm_bme_2x2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
   size_t mlmax;
   asm volatile("vsetvli %0, zero, e8, m1, ta, ma" : "=r"(mlmax));
   size_t vl;

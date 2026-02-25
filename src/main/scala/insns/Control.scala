@@ -99,3 +99,6 @@ object FPMGT             extends XDefaultInstructionField
 
 object FPSgnj            extends NDefaultInstructionField
 object FPSpecRM          extends XDefaultInstructionField { override val width = 3 }
+
+// Outer Product Unit control
+object OPFP8             extends NDefaultInstructionField

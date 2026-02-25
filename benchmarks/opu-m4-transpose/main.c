@@ -7,28 +7,10 @@
 #include "kernel.h"
 #include "dataset.h"
 
-void i32_mm_scalar(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
-  for (size_t i = 0; i < M; i++) {
-    for (size_t j = 0; j < N; j++) {
-      c_out[j*M+i] = c_in[i*N+j];
-    }
-  }
-}
-void i32_init(int32_t* d, size_t s) {
-  for (size_t i = 0; i < s; i++) {
-    d[i] = i + 1;
-    // d[i] = 0;
-  }
-}
-
-
 int i32_compare(int32_t* c_opu, int32_t* c_ref, size_t m, size_t n) {
   for (size_t i = 0; i < m; i++) {
     for (size_t j = 0; j < n; j++) {
       size_t index = i * n + j;
-      // printf("i=%ld, j=%ld, index=%ld\n", i, j, index);
-      // printf("c_ref[index]=%ld\n", c_ref[index]);
-      // printf("c_opu[index]=%ld\n", c_opu[index]);
       if (c_opu[index] != c_ref[index]) {
         printf("DIVERGENCE at index (%ld, %ld): 0x%x != 0x%x\n", i, j, c_opu[index], c_ref[index]);
         printf("opu:\n");
@@ -61,10 +43,8 @@ int main(void) {
 
   for (size_t m = M_DIM; m <= M_DIM; m+=maxvl) {
     for (size_t n = N_DIM; n <= N_DIM; n+=maxvl) {
-      // for (size_t k = 2; k < K; k++) {
         printf("Testing M=%ld, N=%ld\n", m, n);
-        // i8_mm_scalar(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
-        i32_mm_bme_1x2(c_in, c_opu, m, n);
+        i32_bme_m4_transpose(c_in, c_opu, m, n);
         
         // verify against reference
         int r = 0;
@@ -74,7 +54,6 @@ int main(void) {
             exit(1);
         }
         printf("SUCCESS; M, N = %ld %ld\n", m, n);
-      // }
     }
   }
   return 0;

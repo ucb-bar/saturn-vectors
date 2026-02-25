@@ -38,7 +38,7 @@ void i32_lm2_store_c(int32_t* c, size_t ml, size_t N) {
   }
 }
   
-void i32_mm_bme_1x2(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
+void i32_bme_lm2_memcopy(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
   size_t mlmax, vl;
   asm volatile("vsetvli %0, zero, e32, m4, ta, ma" : "=r"(mlmax));
   size_t i = 0;
@@ -47,8 +47,8 @@ void i32_mm_bme_1x2(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
     size_t j = 0;
     while (j < N) {
       asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(N - j));
-      i32_load_c(&c_in[(i*N)+j], ml, N);
-      i32_store_c(&c_out[(i*N)+j], ml, N);
+      i32_lm2_load_c(&c_in[(i*N)+j], ml, N);
+      i32_lm2_store_c(&c_out[(i*N)+j], ml, N);
       j += vl;
     }
     i += ml;

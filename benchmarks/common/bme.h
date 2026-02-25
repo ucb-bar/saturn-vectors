@@ -56,3 +56,8 @@
 // opmvv. f6=b101000, f7=b1010001
 #define VOPACC(md, vs2, vs1) \
   asm volatile(".insn r 0x57, 0x2, 0x51, " md ", " vs1 ", " vs2);
+
+// opfvv. f6=b100101, f7=b1001011
+#define OPFMACC(md, vs2, vs1) \
+  asm volatile(".insn r 0x57, 0x1, 0x4b, " md ", " vs1 ", " vs2);
+  

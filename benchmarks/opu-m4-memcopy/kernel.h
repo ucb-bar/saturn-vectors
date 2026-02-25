@@ -9,7 +9,7 @@
 void i32_load_c(int32_t* c, size_t ml, size_t N) {
     for (size_t r = 0; r < ml; r++) {
         asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
-        VMV_RV(mc2, r, v0); // move v0 into row r of m1
+        VMV_RV(m2, r, v0); // move v0 into row r of m1
     }
   }
 
@@ -23,13 +23,13 @@ void i32_store_c(int32_t* c, size_t ml, size_t N) {
 void i32_lm2_load_c(int32_t* c, size_t ml, size_t N) {
   for (size_t r = 0; r < ml; r++) {
     asm volatile("vle32.v v0, (%0)" : : "r"(&c[r*N]));
-    VMV_RV(mc0, r, v0); // move v0 into row r of m1
+    VMV_RV(m0, r, v0); // move v0 into row r of m1
     asm volatile("vle32.v v4, (%0)" : : "r"(&c[r*N + ml]));
-    VMV_RV(mc2, r, v4); // move v0 into row r of m1
+    VMV_RV(m1, r, v4); // move v0 into row r of m1
     asm volatile("vle32.v v8, (%0)" : : "r"(&c[(r+ml)*N]));
-    VMV_RV(mc1, r, v8); // move v0 into row r of m1
+    VMV_RV(m2, r, v8); // move v0 into row r of m1
     asm volatile("vle32.v v12, (%0)" : : "r"(&c[(r+ml)*N + ml]));
-    VMV_RV(mc3, r, v12); // move v0 into row r of m1
+    VMV_RV(m3, r, v12); // move v0 into row r of m1
   }
 }
 void i32_lm2_store_c(int32_t* c, size_t ml, size_t N) {
@@ -46,7 +46,7 @@ void i32_lm2_store_c(int32_t* c, size_t ml, size_t N) {
   }
 }
   
-void i32_bme_m4_transpose(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
+void i32_bme_memcopy(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
   size_t mlmax, vl;
   asm volatile("vsetvli %0, zero, e32, m4, ta, ma" : "=r"(mlmax));
   size_t i = 0;
@@ -55,9 +55,8 @@ void i32_bme_m4_transpose(int32_t* c_in, int32_t* c_out, size_t M, size_t N) {
     size_t j = 0;
     while (j < N) {
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
-      // printf("i=%ld, j=%ld, ml=%ld, vl=%ld\n", i, j, ml, vl);                   
       i32_lm2_load_c(&c_in[(i*N)+j], ml, N);
-      i32_lm2_store_c(&c_out[j*M + i], ml, M);
+      i32_lm2_store_c(&c_out[(i*N)+j], ml, N);
       j += 2*vl;
     }
     i += 2*ml;

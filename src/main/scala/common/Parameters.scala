@@ -58,6 +58,8 @@ object VectorParams {
     vliqEntries = 8, // beef this up since OPU tends to be used with LMUL=1
     vlissqEntries = 6,
     useOpu = true,
+    useMxFPFMA = true,
+    useMxConversion = true,
     useElementwiseFP64 = false
   )
 

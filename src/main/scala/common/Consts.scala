@@ -81,7 +81,8 @@ object OPFFunct6 extends ChiselEnum {
   val mfge, fdiv, frdiv = Value
   val _, _ = Value
   val fmul = Value
-  val _, _ = Value
+  val opfmacc = Value
+  val _ = Value
   val frsub = Value
   val fmadd, fnmadd, fmsub, fnmsub, fmacc, fnmacc, fmsac, fnmsac, fwadd, fwredusum, fwsub, fwredosum = Value
   val fwaddw, _, fwsubw, _, fwmul, _, _, _, fwmacc, fwnmacc, fwmsac, fwnmsac = Value

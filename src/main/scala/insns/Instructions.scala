@@ -237,3 +237,4 @@ object OPMACC      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opma
 object OPMVIN      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvin)     , ReadsVS1.N, ReadsVS2.Y, WritesVD.N) }
 object OPMVINBCAST extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvinbcast), ReadsVS1.N, ReadsVS2.Y, WritesVD.N) }
 object OPMVOUT     extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvout)    , ReadsVS1.N, ReadsVS2.N, WritesVD.Y) }
+object OPFMACC     extends OPFInstruction    { val props = Seq(F6(OPFFunct6.opfmacc)    , ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, OPFP8.Y) }

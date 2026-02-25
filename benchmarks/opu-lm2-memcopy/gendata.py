@@ -24,7 +24,6 @@ else:
         n_dim = args.ndim
 
 c_in = np.arange(m_dim*n_dim).reshape(m_dim, n_dim).astype(np.int32)
-c_matrix = c_in.T
 
 print(f'''#define M_DIM {m_dim}
 #define N_DIM {n_dim}
@@ -38,4 +37,3 @@ def print_array(name, data, data_size, data_type='int8_t', data_fmt='{}', fold=1
     print('};')
 
 print_array('static int32_t c_in', c_in.flatten(), 'M_DIM*N_DIM', data_type='int32_t')
-print_array('static int32_t verify_data', c_matrix.flatten(), 'N_DIM*M_DIM', data_type='int32_t')

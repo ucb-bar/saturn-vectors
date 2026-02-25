@@ -54,6 +54,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val mvin_col = Reg(Bool())
   val mvout = Reg(Bool())
   val macc = Reg(Bool())
+  val macc_fp8 = Reg(Bool())
 
   // val scalar_row_idx = Cat(
   //   inst.rs1_data(log2Ceil(yDim * vLen/dLen)-1, 0), 
@@ -100,9 +101,11 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     emul        := dis_inst.emul
     eew        := dis_inst.vconfig.vtype.vsew
     val funct6 = OPMFunct6(dis_inst.funct6)
+    val fp_funct6 = OPFFunct6(dis_inst.funct6)
+    macc_fp8 :=  fp_funct6 === OPFFunct6.opfmacc
+    macc :=  (funct6 === OPMFunct6.opmacc) || (fp_funct6 === OPFFunct6.opfmacc)
     mvin := funct6 === OPMFunct6.opmvin
     mvout :=  funct6 === OPMFunct6.opmvout
-    macc :=  funct6 === OPMFunct6.opmacc
     mvin_bcast :=  funct6 === OPMFunct6.opmvinbcast
     mvin_col := dis_inst.rd(4) // MSB indicates column write
     col_idx := 0.U
@@ -151,7 +154,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   // this avoids write-structural-hazards on bank ports with other FUs (maybe)
   io.pipe_write_req.request := valid && mvout && exu_scheduler.io.reqs(0).available
-  io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits-1,0)))
+  io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits,1)))
   io.pipe_write_req.pipe_depth := scalar_row_latency
   io.pipe_write_req.oldest := oldest
   io.pipe_write_req.fire := io.iss.fire
@@ -194,6 +197,9 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.iss.bits.row_idx.foreach(_ := Mux(io.iss.fire, scalar_row_idx, 0.U))
   io.iss.bits.col_idx.foreach(_ := Mux(io.iss.fire, col_idx, 0.U))
   io.iss.bits.macc.foreach(_ := io.iss.fire && macc)
+  io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast)
+  io.iss.bits.fp8.foreach(_ := io.iss.fire && macc_fp8)
+  io.iss.bits.altfmt.foreach(_ := inst.vconfig.vtype.altfmt)
   io.iss.bits.mvin_bcast.foreach(_ := io.iss.fire && mvin_bcast && !mvin_col)
   io.iss.bits.mvin_bcast_col.foreach(_ := io.iss.fire && mvin_bcast && mvin_col)
   io.iss.bits.clock_enable := valid || mvout_valids =/= 0.U

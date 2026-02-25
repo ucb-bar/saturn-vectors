@@ -13,7 +13,7 @@ import hardfloat._
 import scala.math._
 
 // Declare supported types (dictates multipler instantiated)
-object OPUTypes extends Enumeration { val INT32, INT16, INT8 = Value }
+object OPUTypes extends Enumeration { val INT32, INT16, INT8, E4M3, E5M2 = Value }
 
 // Parameters for configured OPU
 case class OPUParameters (
@@ -39,12 +39,6 @@ trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
 
 }
 
-
-/*
- * A single cell in the Outer Product Unit MACC array
- * Accumulation register alse serve as pipeline registers
- * during read out
- */
 class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasOPUParams {
 
   val io = IO(new Bundle{
@@ -54,20 +48,45 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
 
     // Contol Signals
     val mrf_idx = Input(UInt(cellRegIdxBits.W)) // Index for µarch register to write
-
+    val altfmt = Input(Bool()) // alternate format for outer product
+    val fp8 = Input(Bool()) // FP8 format for outer product
     val macc = Input(Bool())
     val mvin = Input(Bool())
     val mvin_bcast = Input(Bool())
     val mvin_bcast_col = Input(Bool())
-    val mvin_data = Input(SInt(opuParams.cWidth.W))
-    val out = Output(SInt(opuParams.cWidth.W))
+    val mvin_data = Input(UInt(opuParams.cWidth.W))
+    val out = Output(UInt(opuParams.cWidth.W))
   })
-  // Matrix Register + Logic
-  val regs = Reg(Vec(regsPerCell, SInt(opuParams.cWidth.W)))
 
-  // TODO: Need to check for overflow and saturate to accumulator width
+    def widen(in: UInt, inT: FType, outT: FType, active: Bool): UInt = {
+      val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
+      widen.io.in := Mux(active, in, 0.U)
+      widen.io.roundingMode := hardfloat.consts.round_near_even
+      widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
+      widen.io.out
+    }
+
+  // Matrix Register + Logic
+  val regs = Reg(Vec(regsPerCell, UInt(opuParams.cWidth.W)))
+
+  val f8macc = io.macc && io.fp8
+  val f8a = FType.E5M3.recode(fp8ToE5M3(io.in_l.asUInt, io.altfmt))
+  val f8b = FType.E5M3.recode(fp8ToE5M3(io.in_t.asUInt, io.altfmt))
+  val f8aw = widen(f8a, FType.E5M3, FType.S, f8macc)
+  val f8bw = widen(f8b, FType.E5M3, FType.S, f8macc)
+  val fma = Module(new MulAddRecFNPipe(0, FType.S.exp, FType.S.sig))
+  fma.io.validin := f8macc
+  fma.io.op := 0.U // FMA
+  fma.io.roundingMode := hardfloat.consts.round_near_even
+  fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
+  fma.io.a := f8aw
+  fma.io.b := f8bw
+  fma.io.c := FType.S.recode(regs(io.mrf_idx))
+  val sum_fp8 = Mux(fma.io.validout, FType.S.ieee(fma.io.out), 0.U)
+
   val prod = Mux(io.macc, io.in_l * io.in_t, 0.S)
-  val sum = prod + regs(io.mrf_idx)
+  val sum_int8 = prod + regs(io.mrf_idx).asSInt
+  val sum = Mux(io.fp8, sum_fp8.asUInt, sum_int8.asUInt)
 
   // Data going into MRF
   for (i <- 0 until regsPerCell) {
@@ -98,6 +117,8 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
     val shift = Input(Bool())
     val mvin  = Input(Bool())
     val mvin_bcast = Input(Bool())
+    val altfmt = Input(Bool()) // alternate format for outer product
+    val fp8 = Input(Bool()) // FP8 format for outer product
     val mvin_col = Input(Bool())
     val mvin_bcast_col = Input(Bool())
   })
@@ -113,6 +134,8 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
       cell.io.in_l  := io.in_l(i).asSInt
       cell.io.in_t  := io.in_t(j).asSInt
       cell.io.mrf_idx := io.mrf_idx
+      cell.io.altfmt := io.altfmt
+      cell.io.fp8 := io.fp8
       cell.io.macc := io.macc
       cell.io.mvin_bcast_col := io.mvin_bcast_col
       cell_outs(i)(j) := cell.io.out.asUInt
@@ -134,8 +157,8 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
         )
       )
       cell.io.mvin_data := 
-        Mux(io.mvin_col || io.mvin_bcast_col, io.in_l.asUInt.asSInt,
-          Mux(io.mvin || io.mvin_bcast, io.in_t.asUInt.asSInt,
+        Mux(io.mvin_col || io.mvin_bcast_col, io.in_l.asUInt,
+          Mux(io.mvin || io.mvin_bcast, io.in_t.asUInt,
             DontCare
           )
         )
@@ -164,6 +187,8 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val shift      = Vec(yDim, Bool())
   val mvin       = Vec(yDim, Bool())
   val mvin_bcast = Vec(yDim, Bool())
+  val altfmt     = Vec(yDim, Bool()) // alternate format for outer product
+  val fp8        = Vec(yDim, Bool()) // FP8 format for outer product
   val mvin_bcast_col = Vec(xDim, Bool())
   //mvin_col broadcasts vertically
   val mvin_col   = Vec(xDim, Bool()) // column write
@@ -200,6 +225,8 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       cluster.io.col_idx    := io.op.col_idx(i)
       cluster.io.macc       := io.op.macc(i)
       cluster.io.shift      := io.op.shift(i)
+      cluster.io.altfmt     := io.op.altfmt(i)
+      cluster.io.fp8        := io.op.fp8(i)
       cluster.io.mvin_bcast := io.op.mvin_bcast(i)
       cluster.io.mvin       := io.op.mvin(i)
     }
