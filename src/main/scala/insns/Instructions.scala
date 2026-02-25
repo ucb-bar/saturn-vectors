@@ -233,8 +233,8 @@ object ROR        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ror) 
 object WSLL       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.wsll)     , UsesShift.Y, ShiftsLeft.Y, ScalingShift.N, Wide2VD.Y, ZextImm5.Y) }
 
 // Outer product instructions
+object OPFMACC     extends OPFInstruction    { val props = Seq(F6(OPFFunct6.opfmacc)    , ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, OPFP8.Y) }
 object OPMACC      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmacc)     , ReadsVS1.Y, ReadsVS2.Y, WritesVD.N) }
 object OPMVIN      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvin)     , ReadsVS1.N, ReadsVS2.Y, WritesVD.N) }
 object OPMVINBCAST extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvinbcast), ReadsVS1.N, ReadsVS2.Y, WritesVD.N) }
 object OPMVOUT     extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvout)    , ReadsVS1.N, ReadsVS2.N, WritesVD.Y) }
-object OPFMACC     extends OPFInstruction    { val props = Seq(F6(OPFFunct6.opfmacc)    , ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, OPFP8.Y) }
