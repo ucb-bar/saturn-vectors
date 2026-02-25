@@ -377,6 +377,7 @@ case class VectorParams(
 ) {
   def opuInsns = Seq(
     saturn.insns.OPMACC.VV,
+    saturn.insns.OPFMACC.VV,
     saturn.insns.OPMVIN.VX,
     saturn.insns.OPMVINBCAST.VX,
     saturn.insns.OPMVOUT.VX)
