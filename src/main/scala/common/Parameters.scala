@@ -32,8 +32,6 @@ object VectorParams {
     useScalarFPFMA = false,
     useSegmentedFPFMA = true,
     vrfBanking = 4,
-    useMxFPFMA = true,
-    useMxConversion = true,
     issStructure = VectorIssueStructure.Shared
   )
 
@@ -52,6 +50,13 @@ object VectorParams {
     vlrobEntries = 16,
     vliqEntries = 4,
     vsiqEntries = 6
+  )
+
+  // mxParams:
+  // For a vector unit that can handle BF16 and OFP8
+  def mxParams = genParams.copy(
+    useMxFPFMA = true,
+    useMxConversion = true,
   )
 
   // multiFMAParams:
@@ -164,10 +169,11 @@ object VXFunctionalUnitGroups {
     FPConvFactory(useMxConversion)
   )
 
-  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean, useMxConversion: Boolean) = (
+  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean, useMxConversion: Boolean) = {
+    require(!(useScalarFPFMA && useMxFPFMA))
     (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth, elementwiseFP64, segmentedFPFMA, useMxFPFMA)) ++
     fpMisc(useMxConversion)
-  )
+  }
 }
 
 sealed trait VectorIssueStructure {

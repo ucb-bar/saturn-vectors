@@ -6,21 +6,21 @@ import freechips.rocketchip.tile._
 object rawUnroundedToFp8 {
 
 	def apply(unroundedType: FType, unroundedIn: hardfloat.RawFloat, unroundedInvalidExc: Bool, altfmt: Bool, roundingMode: Bits, saturate: Bool) = {
-		val e5m2Narrower = Module(new hardfloat.RoundAnyRawFNToRecFN(unroundedType.exp, unroundedType.sig + 2, FType.E5M2.exp, FType.E5M2.sig, 0))
+		val e5m2Narrower = Module(new hardfloat.RoundAnyRawFNToRecFN(unroundedType.exp, unroundedType.sig + 2, MXFType.E5M2.exp, MXFType.E5M2.sig, 0))
 		e5m2Narrower.io.in := unroundedIn
 		e5m2Narrower.io.roundingMode := roundingMode
 		e5m2Narrower.io.detectTininess := hardfloat.consts.tininess_afterRounding
 		e5m2Narrower.io.invalidExc := unroundedInvalidExc
 		e5m2Narrower.io.infiniteExc := false.B
 
-		val e5m3Narrower = Module(new hardfloat.RoundAnyRawFNToRecFN(unroundedType.exp, unroundedType.sig + 2, FType.E5M3.exp, FType.E5M3.sig, 0))
+		val e5m3Narrower = Module(new hardfloat.RoundAnyRawFNToRecFN(unroundedType.exp, unroundedType.sig + 2, MXFType.E5M3.exp, MXFType.E5M3.sig, 0))
 		e5m3Narrower.io.in := unroundedIn
 		e5m3Narrower.io.roundingMode := roundingMode
 		e5m3Narrower.io.detectTininess := hardfloat.consts.tininess_afterRounding
 		e5m3Narrower.io.invalidExc := unroundedInvalidExc
 		e5m3Narrower.io.infiniteExc := false.B
 
-		val e4m3Narrower = Module(new hardfloat.RoundAnyRawFNToRecFN(unroundedType.exp, unroundedType.sig + 2, FType.E4M3.exp, FType.E4M3.sig, 0))
+		val e4m3Narrower = Module(new hardfloat.RoundAnyRawFNToRecFN(unroundedType.exp, unroundedType.sig + 2, MXFType.E4M3.exp, MXFType.E4M3.sig, 0))
 		e4m3Narrower.io.in := unroundedIn
 		e4m3Narrower.io.roundingMode := roundingMode
 		e4m3Narrower.io.detectTininess := hardfloat.consts.tininess_afterRounding
@@ -32,9 +32,9 @@ object rawUnroundedToFp8 {
 		outBits := DontCare
 		exceptionFlags := DontCare
 		
-		val e5m2Ieee = FType.E5M2.ieee(e5m2Narrower.io.out)
-		val e5m3Ieee = FType.E5M3.ieee(e5m3Narrower.io.out)
-		val e4m3Ieee = FType.E4M3.ieee(e4m3Narrower.io.out)
+		val e5m2Ieee = MXFType.E5M2.ieee(e5m2Narrower.io.out)
+		val e5m3Ieee = MXFType.E5M3.ieee(e5m3Narrower.io.out)
+		val e4m3Ieee = MXFType.E4M3.ieee(e4m3Narrower.io.out)
 		dontTouch(e5m3Ieee)
 		dontTouch(e4m3Ieee)
 
