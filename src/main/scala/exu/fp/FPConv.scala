@@ -13,7 +13,7 @@ import hardfloat._
 case class FPConvFactory(mxConversion: Boolean) extends FunctionalUnitFactory {
   def insns = Seq(
     FCVT_SGL.restrictSEW(1,2,3),
-    if (mxConversion) FCVT_NRW.restrictSEW(0,1,2) else FCVT_NRW.restrictSEW(1,2),
+    if (mxConversion) FCVT_NRW_MX.restrictSEW(0,1,2) else FCVT_NRW.restrictSEW(1,2),
     FCVT_WID.restrictSEW(0,1,2)
   ).flatten.map(_.pipelined(3))
   def generate(implicit p: Parameters) = new FPConvPipe(mxConversion)(p)

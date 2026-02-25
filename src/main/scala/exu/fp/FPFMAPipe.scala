@@ -386,6 +386,7 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implici
 
 trait FMAFactory extends FunctionalUnitFactory {
   def depth: Int
+  def mxFPFMA: Boolean
   def base_insns = Seq(
     FADD.VV, FADD.VF, FSUB.VV, FSUB.VF, FRSUB.VF,
     FMUL.VV, FMUL.VF,
@@ -399,10 +400,10 @@ trait FMAFactory extends FunctionalUnitFactory {
     FWMACC.VV, FWMACC.VF, FWNMACC.VV, FWNMACC.VF,
     FWMSAC.VV, FWMSAC.VF, FWNMSAC.VV, FWNMSAC.VF,
     FREDOSUM.VV, FREDUSUM.VV, FWREDOSUM.VV, FWREDUSUM.VV
-  ).map(_.pipelined(depth)).map(_.restrictSEW(0,1,2,3)).flatten
+  ).map(_.pipelined(depth)).map(if (mxFPFMA) _.restrictSEW(0,1,2,3) else _.restrictSEW(1,2,3)).flatten
 }
 
-case class SIMDFPFMAFactory(depth: Int, elementWiseFP64: Boolean = false, segmentedFPFMA: Boolean = false, mxFPFMA: Boolean) extends FMAFactory {
+case class SIMDFPFMAFactory(depth: Int, mxFPFMA: Boolean, elementWiseFP64: Boolean = false, segmentedFPFMA: Boolean = false) extends FMAFactory {
   def insns = if (elementWiseFP64) {
     base_insns.map { insn =>
       if (insn.lookup(SEW).value == 3 || (insn.lookup(SEW).value == 2 && insn.lookup(Wide2VD).value == 1)) {

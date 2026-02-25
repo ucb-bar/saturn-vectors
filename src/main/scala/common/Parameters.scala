@@ -161,7 +161,7 @@ object VXFunctionalUnitGroups {
     SharedScalarFPFMAFactory(pipeDepth)
   )
   def fpFMA(pipeDepth: Int, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean) = Seq(
-    SIMDFPFMAFactory(pipeDepth, elementwiseFP64, segmentedFPFMA, useMxFPFMA)
+    SIMDFPFMAFactory(pipeDepth, useMxFPFMA, elementwiseFP64, segmentedFPFMA)
   )
   def fpMisc(useMxConversion: Boolean) = Seq(
     FPDivSqrtFactory,
@@ -371,12 +371,10 @@ case class VectorParams(
 ) {
   def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
 
-  def vExts = 
-    (if (useMxConversion) Seq("zvfofp8min", "zfbfmin", "zvfbfmin", "zvfbfa") else Seq()) ++
-    (if (useMxFPFMA) Seq() else Seq())
-    .foldLeft(Seq()) { (acc, e) =>
-      if (!acc.contains(e)) acc :+ e else acc
-    }
+  def vExts = (
+      (if (useMxConversion) Seq("zvfofp8min", "zfbfmin", "zvfbfmin", "zvfbfa") else Seq()) ++
+      (if (useMxFPFMA) Seq("zfbfmin", "zvfbfa") else Seq())
+    ).distinct
 
   require(dLen >= 64, "dLen must be >= 64")
   require((dLen & (dLen - 1)) == 0, "dLen must be power of 2")
