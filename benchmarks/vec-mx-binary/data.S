@@ -1,6 +1,6 @@
 .section .data,"aw",@progbits
 .global N
-.balign 8
+.balign 64
 N:
     .word 0x00000080
     .word 0x00000000

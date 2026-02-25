@@ -70,10 +70,10 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
   val regs = Reg(Vec(regsPerCell, UInt(opuParams.cWidth.W)))
 
   val f8macc = io.macc && io.fp8
-  val f8a = FType.E5M3.recode(fp8ToE5M3(io.in_l.asUInt, io.altfmt))
-  val f8b = FType.E5M3.recode(fp8ToE5M3(io.in_t.asUInt, io.altfmt))
-  val f8aw = widen(f8a, FType.E5M3, FType.S, f8macc)
-  val f8bw = widen(f8b, FType.E5M3, FType.S, f8macc)
+  val f8a = MXFType.E5M3.recode(fp8ToE5M3(io.in_l.asUInt, io.altfmt))
+  val f8b = MXFType.E5M3.recode(fp8ToE5M3(io.in_t.asUInt, io.altfmt))
+  val f8aw = widen(f8a, MXFType.E5M3, FType.S, f8macc)
+  val f8bw = widen(f8b, MXFType.E5M3, FType.S, f8macc)
   val fma = Module(new MulAddRecFNPipe(0, FType.S.exp, FType.S.sig))
   fma.io.validin := f8macc
   fma.io.op := 0.U // FMA
