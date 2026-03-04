@@ -74,7 +74,8 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
   val f8b = MXFType.E5M3.recode(fp8ToE5M3(io.in_t.asUInt, io.altfmt))
   val f8aw = widen(f8a, MXFType.E5M3, FType.S, f8macc)
   val f8bw = widen(f8b, MXFType.E5M3, FType.S, f8macc)
-  val fma = Module(new MulAddRecFNPipe(0, FType.S.exp, FType.S.sig))
+  val latency = 1
+  val fma = Module(new MulAddRecFNPipe(latency, FType.S.exp, FType.S.sig))
   fma.io.validin := f8macc
   fma.io.op := 0.U // FMA
   fma.io.roundingMode := hardfloat.consts.round_near_even
@@ -82,20 +83,43 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
   fma.io.a := f8aw
   fma.io.b := f8bw
   fma.io.c := FType.S.recode(regs(io.mrf_idx))
+  
+  // Pipeline control signals to match FMA latency
+  val mrf_idx_pipe = Pipe(f8macc, io.mrf_idx, latency).bits
+  val fp8_pipe = Pipe(f8macc, io.fp8, latency).bits
+  val macc_pipe = Pipe(f8macc, io.macc, latency).bits
+  
   val sum_fp8 = Mux(fma.io.validout, FType.S.ieee(fma.io.out), 0.U)
 
   val prod = Mux(io.macc, io.in_l * io.in_t, 0.S)
   val sum_int8 = prod + regs(io.mrf_idx).asSInt
-  val sum = Mux(io.fp8, sum_fp8.asUInt, sum_int8.asUInt)
 
   // Data going into MRF
+  // Separate integer and FP8 MACC paths
+  val int_macc = io.macc && !io.fp8
+  val fp8_macc_complete = fma.io.validout
+  
   for (i <- 0 until regsPerCell) {
-    val tile_match      = (io.mrf_idx >> log2Ceil(regsPerTileReg)) === (i >> log2Ceil(regsPerTileReg)).U
+    // Integer MACC: use current control signals
+    val tile_match_int      = (io.mrf_idx >> log2Ceil(regsPerTileReg)) === (i >> log2Ceil(regsPerTileReg)).U
+    val subtile_match_int   = io.mrf_idx(log2Ceil(regsPerTileReg)-1,0) === (i % regsPerTileReg).U
+    
+    // FP8 MACC: use pipelined control signals
+    val tile_match_fp8      = (mrf_idx_pipe >> log2Ceil(regsPerTileReg)) === (i >> log2Ceil(regsPerTileReg)).U
+    val subtile_match_fp8   = mrf_idx_pipe(log2Ceil(regsPerTileReg)-1,0) === (i % regsPerTileReg).U
+    
+    // MVIN paths: use current control signals
     val bcast_col_match = (io.mrf_idx >> log2Ceil(vLen/dLen)) === (i >> log2Ceil(vLen/dLen)).U
     val bcast_match     = io.mrf_idx(log2Ceil(vLen/dLen)-1,0) === (i % (vLen/dLen)).U
-    val subtile_match   = io.mrf_idx(log2Ceil(regsPerTileReg)-1,0) === (i % regsPerTileReg).U
-    when (tile_match && (((io.mvin || io.macc) && subtile_match) || (io.mvin_bcast && bcast_match) || (io.mvin_bcast_col && bcast_col_match))) {
-      regs(i) := Mux(io.macc, sum, io.mvin_data)
+    
+    when ((tile_match_int && int_macc && subtile_match_int) ||
+          (tile_match_fp8 && fp8_macc_complete && subtile_match_fp8) ||
+          (tile_match_int && io.mvin && subtile_match_int) ||
+          (tile_match_int && io.mvin_bcast && bcast_match) ||
+          (tile_match_int && io.mvin_bcast_col && bcast_col_match)) {
+      regs(i) := Mux(int_macc, sum_int8.asUInt,
+                 Mux(fp8_macc_complete, sum_fp8,
+                     io.mvin_data))
     }
   }
   io.out := regs(io.mrf_idx)

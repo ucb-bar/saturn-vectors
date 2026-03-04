@@ -23,3 +23,9 @@ class OPUV512D256ShuttleConfig extends Config(
   new shuttle.common.WithShuttleTileBeatBytes(32) ++
   new shuttle.common.WithNShuttleCores(1) ++
   new chipyard.config.AbstractConfig)
+
+class OPUV512D256RocketConfig extends Config(
+  new saturn.rocket.WithRocketVectorUnit(512, 256, VectorParams.opuParams) ++
+  new chipyard.config.WithSystemBusWidth(256) ++
+  new freechips.rocketchip.rocket.WithNHugeCores(1) ++
+  new chipyard.config.AbstractConfig)

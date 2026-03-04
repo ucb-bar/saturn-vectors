@@ -112,13 +112,13 @@ void mm_opu(uint8_t* A, uint8_t* B, uint32_t* C, size_t M, size_t N, size_t K, s
     TEST_DATA(uint8_t, e5m2_##ma##_##mb, uint32_t)
 
 #define DECLARE_ALL_B(ma) \
+    DECLARE_PAIR(ma, rand) \
     DECLARE_PAIR(ma, inf) \
     DECLARE_PAIR(ma, ninf) \
     DECLARE_PAIR(ma, nan) \
     DECLARE_PAIR(ma, nnan) \
     DECLARE_PAIR(ma, zero) \
-    DECLARE_PAIR(ma, nzero) \
-    DECLARE_PAIR(ma, rand)
+    DECLARE_PAIR(ma, nzero) 
 
 DECLARE_ALL_B(rand)
 
@@ -136,7 +136,7 @@ typedef struct {
 #define E5M2_ENTRY(ma, mb) { e5m2_##ma##_##mb##_at, e5m2_##ma##_##mb##_b, e5m2_##ma##_##mb##_out, e5m2_##ma##_##mb##_c },
 
 #define ENTRIES_ROW(ENTRY, ma) \
-    ENTRY(ma, inf) ENTRY(ma, ninf) ENTRY(ma, nan) ENTRY(ma, nnan) ENTRY(ma, zero) ENTRY(ma, nzero) ENTRY(ma, rand)
+    ENTRY(ma, rand) ENTRY(ma, inf) ENTRY(ma, ninf) ENTRY(ma, nan) ENTRY(ma, nnan) ENTRY(ma, zero) ENTRY(ma, nzero)
 
 #define ALL_ENTRIES(ENTRY) \
     ENTRIES_ROW(ENTRY, rand)
@@ -144,7 +144,7 @@ typedef struct {
 test_data_t e4m3_tests[] = { ALL_ENTRIES(E4M3_ENTRY) };
 test_data_t e5m2_tests[] = { ALL_ENTRIES(E5M2_ENTRY) };
 
-const char *mode_names[] = {"inf", "ninf", "nan", "nnan", "zero", "nzero", "rand"};
+const char *mode_names[] = {"rand", "inf", "ninf", "nan", "nnan", "zero", "nzero"};
 
 int main() {
 

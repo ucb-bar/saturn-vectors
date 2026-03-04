@@ -203,3 +203,13 @@ class MXV256D128ShuttleCosimConfig extends Config(
   new shuttle.common.WithShuttleTileBeatBytes(16) ++
   new shuttle.common.WithNShuttleCores(1) ++
   new chipyard.config.AbstractConfig)
+
+class MXV512D256ShuttleCosimConfig extends Config(
+  new chipyard.harness.WithCospike ++
+  new chipyard.config.WithTraceIO ++
+  new saturn.shuttle.WithShuttleVectorUnit(512, 256, VectorParams.mxParams) ++
+  new chipyard.config.WithSystemBusWidth(256) ++
+  new shuttle.common.WithShuttleDebugROB ++
+  new shuttle.common.WithShuttleTileBeatBytes(32) ++
+  new shuttle.common.WithNShuttleCores(1) ++
+  new chipyard.config.AbstractConfig)
