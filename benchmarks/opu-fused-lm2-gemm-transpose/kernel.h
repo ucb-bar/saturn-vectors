@@ -30,8 +30,12 @@ void i32_store_ct(int32_t* c, size_t ml, size_t vl, size_t M) {
   asm volatile("vle32.v v0, (%0)" : : "r"(c));
   // OPMVINBCAST(m0, v0); // row-wise broadcast of v0 into m0,m1
   // OPMVINBCAST(m2, v0); 
-  OPMVINBCAST(mc0, v0); // column-wise broadcast of v0 into m0,m2
-  OPMVINBCAST(mc1, v0); // column-wise broadcast of v0 into m1,m3
+  asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(ml));
+  OPMVINBCAST(mc0, v0); // column-wise broadcast of v0 into m0
+  OPMVINBCAST(mc1, v0); // column-wise broadcast of v0 into m1
+  OPMVINBCAST(mc2, v4); // column-wise broadcast of v0 into m2
+  OPMVINBCAST(mc3, v4); // column-wise broadcast of v0 into m3
+  asm volatile("vsetvli zero, %0, e8, m2, ta, ma" : : "r"(ml));
   size_t k = 0;
   while (k + 2 <= K) {
       asm volatile("vle8.v v16, (%0)" : : "r"(&at[k*M]));
@@ -53,11 +57,16 @@ void i32_store_ct(int32_t* c, size_t ml, size_t vl, size_t M) {
   }
 }
 void i32_lm2_store_ct(int32_t* c, size_t ml, size_t M) {
+  asm volatile("vsetvli zero, %0, e32, m4, ta, ma" : : "r"(ml));
   for (size_t r = 0; r < ml; r++) {
     VMV_VR(v0, r, m0); // move row r of m0 into v0
     asm volatile("vse32.v v0, (%0)" : : "r"(&c[r*M]));
-    // VMV_VR(v8, r, m2); 
-    // asm volatile("vse32.v v8, (%0)" : : "r"(&c[(r+ml)*N]));
+    VMV_VR(v4, r, m1); 
+    asm volatile("vse32.v v4, (%0)" : : "r"(&c[r*M + ml]));
+    VMV_VR(v8, r, m2); 
+    asm volatile("vse32.v v8, (%0)" : : "r"(&c[(r+ml)*M]));
+    VMV_VR(v12, r, m3); 
+    asm volatile("vse32.v v12, (%0)" : : "r"(&c[(r+ml)*M + ml]));
   }
 }
 
@@ -66,13 +75,13 @@ void i8_mm_bme_lm2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_
   asm volatile("vsetvli %0, zero, e8, m1, ta, ma" : "=r"(mlmax));
   size_t vl;
   size_t i = 0;
-  while (i + mlmax <= M) {
+  while (i + 2*mlmax <= M) {
     size_t j = 0;
 
-    while (j + mlmax <= N) {
-      i8_lm2_loop_k(&c_bias[j], &at[i], &b[j], M, N, K, mlmax);
+    while (j + 2*mlmax <= N) {
+      i8_lm2_loop_k(&c_bias[j], &at[i], &b[j], M, N, K, 2*mlmax);
       i32_lm2_store_ct(&c_out[j*M + i], mlmax, M);
-      j += mlmax;
+      j += 2*mlmax;
     }
     while (j < N) {
       asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(N - j));
@@ -82,7 +91,7 @@ void i8_mm_bme_lm2(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_
       i32_store_ct(&c_out[j*M + i+mlmax], mlmax, vl, M);
       j += vl;
     }
-    i += mlmax;
+    i += 2*mlmax;
   }
   while (i < M) {
     size_t ml = (M - i) > mlmax ? mlmax : M - i;

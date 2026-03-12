@@ -6,6 +6,7 @@
 #include "bme.h"
 #include "kernel.h"
 #include "dataset.h"
+#include "util.h"
 
 void i8_mm_scalar(int32_t* c_bias, int32_t* c_out, int8_t* at, int8_t* b, size_t M, size_t N, size_t K) {
   for (size_t i = 0; i < M; i++) {
@@ -62,6 +63,7 @@ int i32_compare(int32_t* c_opu, int32_t* c_ref, size_t m, size_t n) {
 }
 
 int main(void) {
+  unsigned long cycles1, cycles2;
   size_t maxvl;
   asm volatile("vsetvli %[vl], zero, e8, m2, ta, ma" : [vl]"=r"(maxvl));
   size_t dl = maxvl / 2;
@@ -76,6 +78,10 @@ int main(void) {
         printf("Testing M=%ld, N=%ld, K=%ld\n", m, n, k);
         // i8_mm_scalar(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
         i8_mm_bme_lm2(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
+        cycles1 = read_csr(mcycle);
+        i8_mm_bme_lm2(c_bias, c_opu, a_matrix, b_matrix, m, n, k);
+        cycles2 = read_csr(mcycle);
+        printf("cycles: %ld\n", cycles2 - cycles1);
         
         // verify against reference
         int r = 0;

@@ -6,7 +6,7 @@ import argparse
 vl = 64
 m_dim = 2*vl
 n_dim = 2*vl
-k_dim = 3
+k_dim = 32
 
 parser = argparse.ArgumentParser(description='A script to generate input data for an SGEMM kernel.')
 
