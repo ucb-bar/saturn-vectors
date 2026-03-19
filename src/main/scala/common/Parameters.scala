@@ -52,6 +52,13 @@ object VectorParams {
     vsiqEntries = 6
   )
 
+  // mxParams:
+  // For a vector unit that can handle BF16 and OFP8
+  def mxParams = genParams.copy(
+    useMxFPFMA = true,
+    useMxConversion = true,
+  )
+
   // multiFMAParams:
   // Provides a second sequencer and set of functional units for FMA operations
   def multiFMAParams = genParams.copy(
@@ -153,19 +160,20 @@ object VXFunctionalUnitGroups {
   def sharedFPFMA(pipeDepth: Int) = Seq(
     SharedScalarFPFMAFactory(pipeDepth)
   )
-  def fpFMA(pipeDepth: Int, elementwiseFP64: Boolean, segmentedFPFMA: Boolean) = Seq(
-    SIMDFPFMAFactory(pipeDepth, elementwiseFP64, segmentedFPFMA)
+  def fpFMA(pipeDepth: Int, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean) = Seq(
+    SIMDFPFMAFactory(pipeDepth, useMxFPFMA, elementwiseFP64, segmentedFPFMA)
   )
-  def fpMisc = Seq(
+  def fpMisc(useMxConversion: Boolean) = Seq(
     FPDivSqrtFactory,
     FPCmpFactory,
-    FPConvFactory
+    FPConvFactory(useMxConversion)
   )
 
-  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, elementwiseFP64: Boolean, segmentedFPFMA: Boolean) = (
-    (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth, elementwiseFP64, segmentedFPFMA)) ++
-    fpMisc
-  )
+  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean, useMxConversion: Boolean) = {
+    require(!(useScalarFPFMA && useMxFPFMA))
+    (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth, elementwiseFP64, segmentedFPFMA, useMxFPFMA)) ++
+    fpMisc(useMxConversion)
+  }
 }
 
 sealed trait VectorIssueStructure {
@@ -184,7 +192,7 @@ object VectorIssueStructure {
           VXSequencerParams("fp_int", (
             integerFUs(params.useIterativeIMul) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul)) ++
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA)
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion)
           ))
         )
       )
@@ -200,7 +208,7 @@ object VectorIssueStructure {
         seqs = Seq(
           VXSequencerParams("int", integerFUs(params.useIterativeIMul)),
           VXSequencerParams("fp",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           )
         )
@@ -223,7 +231,7 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("fp",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           )
         )
@@ -247,10 +255,10 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("fp0",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           ),
-          VXSequencerParams("fp1", fpFMA(params.fmaPipeDepth, params.useElementwiseFP64, params.useSegmentedFPFMA))
+          VXSequencerParams("fp1", fpFMA(params.fmaPipeDepth, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA))
         )
       )
       Seq(int_path, fp_path)
@@ -272,7 +280,7 @@ object VectorIssueStructure {
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA))
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion))
         )
       )
       Seq(int_path, fp_path)
@@ -294,7 +302,7 @@ object VectorIssueStructure {
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA))
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion))
         )
       )
       Seq(int_path, fp_path)
@@ -338,6 +346,10 @@ case class VectorParams(
   fmaPipeDepth: Int = 4,
   imaPipeDepth: Int = 4,
 
+  // Minifloat support
+  useMxFPFMA: Boolean = false,
+  useMxConversion: Boolean = false,
+
   // for comparisons only
   hazardingMultiplier: Int = 0,
   hwachaLimiter: Option[Int] = None,
@@ -358,6 +370,11 @@ case class VectorParams(
   tlBuffer: BufferParams = BufferParams.default,
 ) {
   def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
+
+  def vExts = (
+      (if (useMxConversion) Seq("zvfofp8min", "zfbfmin", "zvfbfmin", "zvfbfa") else Seq()) ++
+      (if (useMxFPFMA) Seq("zfbfmin", "zvfbfa") else Seq())
+    ).distinct
 
   require(dLen >= 64, "dLen must be >= 64")
   require((dLen & (dLen - 1)) == 0, "dLen must be power of 2")
