@@ -3,6 +3,14 @@ package chipyard
 import org.chipsalliance.cde.config.{Config}
 import saturn.common.{VectorParams}
 
+class OPUV128D64DualShuttleConfig extends Config(
+  new saturn.shuttle.WithShuttleVectorUnit(128, 64, VectorParams.opuParams) ++
+  new chipyard.config.WithSystemBusWidth(64) ++
+  new shuttle.common.WithTCM(size=128L << 10) ++
+  new shuttle.common.WithShuttleTileBeatBytes(8) ++
+  new shuttle.common.WithNShuttleCores(2) ++
+  new chipyard.config.AbstractConfig)
+
 class OPUV128D64ShuttleConfig extends Config(
   new saturn.shuttle.WithShuttleVectorUnit(128, 64, VectorParams.opuParams) ++
   new chipyard.config.WithSystemBusWidth(64) ++

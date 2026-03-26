@@ -83,7 +83,7 @@ RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump -C -D -S --disassemble-all --disassemble
 MX_EXTENSIONS = zfbfmin_zvfbfmin_zvfbfwma_zvfbfa_zvfofp8min
 RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh_zvfh_$(MX_EXTENSIONS) -p4 -m0x70020000:0x20000,0x80000000:0x10000000
 
-incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks))
+incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks)) -I$(src_dir)/../../../tests
 objs  :=
 
 COMMON_SRCS = $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S) $(wildcard $(src_dir)/common/ara/*.c)

@@ -74,7 +74,7 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
   val f8b = MXFType.E5M3.recode(fp8ToE5M3(io.in_t.asUInt, io.altfmt))
   val f8aw = widen(f8a, MXFType.E5M3, FType.S, f8macc)
   val f8bw = widen(f8b, MXFType.E5M3, FType.S, f8macc)
-  val latency = 1
+  val latency = 2
   val fma = Module(new MulAddRecFNPipe(latency, FType.S.exp, FType.S.sig))
   fma.io.validin := f8macc
   fma.io.op := 0.U // FMA
