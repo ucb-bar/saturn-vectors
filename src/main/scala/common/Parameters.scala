@@ -70,6 +70,7 @@ object VectorParams {
   def opuMxParams = mxParams.copy(
     vliqEntries = 8,
     vlissqEntries = 6,
+    useMxOPU = true,
     useOpu = true
   )
 
@@ -363,6 +364,7 @@ case class VectorParams(
   // Minifloat support
   useMxFPFMA: Boolean = false,
   useMxConversion: Boolean = false,
+  useMxOPU: Boolean = false,
 
   // for comparisons only
   hazardingMultiplier: Int = 0,
@@ -422,6 +424,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def mLenOffBits = log2Ceil(mLenB)
 
   def useOpu = vParams.useOpu
+  def useMxOPU = vParams.useMxOPU
 
   def opuParams = OPUParameters()
 
