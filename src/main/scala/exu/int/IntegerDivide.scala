@@ -131,5 +131,5 @@ class IterativeIntegerDivider(supportsMul: Boolean)(implicit p: Parameters) exte
   last := io.write.fire
 
   io.acc := false.B
-  io.tail := false.B
+  io.tail := op.tail
 }

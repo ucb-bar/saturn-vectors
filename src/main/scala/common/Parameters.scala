@@ -342,6 +342,7 @@ case class VectorParams(
   hazardingMultiplier: Int = 0,
   hwachaLimiter: Option[Int] = None,
   enableChaining: Boolean = true,
+  pipelinedVatClear: Boolean = false,
   latencyInject: Boolean = false,
   enableDAE: Boolean = true,
   enableOOO: Boolean = true,

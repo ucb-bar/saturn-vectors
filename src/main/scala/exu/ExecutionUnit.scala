@@ -25,6 +25,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
     val iter_write = Decoupled(new VectorWrite(dLen))
     val pipe_write = Output(Valid(new VectorWrite(dLen)))
     val acc_write = Output(Valid(new VectorWrite(dLen)))
+    val completed = Output(Valid(UInt(vParams.vatSz.W)))
     val scalar_write = Decoupled(new ScalarWrite)
 
     val pipe_hazards = Output(Vec(maxPipeDepth, Valid(new PipeHazard(maxPipeDepth))))
@@ -86,6 +87,8 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
   io.iter_write.bits := DontCare
   io.acc_write.valid := false.B
   io.acc_write.bits := DontCare
+  io.completed.valid := false.B
+  io.completed.bits := DontCare
   io.busy := false.B
   io.set_vxsat := fus.map(_.io.set_vxsat).orR
   io.set_fflags.valid := fus.map(_.io.set_fflags.valid).orR
@@ -132,10 +135,13 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       assert(PopCount(write_fu_sel) <= 1.U)
       val acc = Mux1H(write_pipe_sel, pipe_bits.map(_.acc))
       val tail = Mux1H(write_pipe_sel, pipe_bits.map(_.tail))
+      val vat = Mux1H(write_pipe_sel, pipe_bits.map(_.vat))
       io.pipe_write.valid := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.valid)) && (!acc || tail)
       io.pipe_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
       io.acc_write.valid := acc && !tail
       io.acc_write.bits := Mux1H(write_fu_sel, pipe_fus.map(_._1.io.write.bits))
+      io.completed.valid := tail
+      io.completed.bits := vat
     }
 
     when (pipe_valids.orR) { io.busy := true.B }
@@ -160,6 +166,7 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
 
     val acc = Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.acc))
     val tail = Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.tail))
+    val vat = Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.hazard.bits.vat))
     io.iter_write.valid     := iter_write_arb.io.out.valid && (!acc || tail) && !pipe_write
     io.iter_write.bits.eg   := iter_write_arb.io.out.bits.eg
     io.iter_write.bits.mask := iter_write_arb.io.out.bits.mask
@@ -169,6 +176,8 @@ class ExecutionUnit(genFUs: Seq[FunctionalUnitFactory], desc: String)(implicit p
       io.acc_write.bits.eg   := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.write.bits.eg))
       io.acc_write.bits.data := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.write.bits.data))
       io.acc_write.bits.mask := Mux1H(iter_write_arb.io.in.map(_.fire), iter_fus.map(_._1.io.write.bits.mask))
+      io.completed.valid := iter_write_arb.io.out.fire && tail
+      io.completed.bits := vat
     }
     when (iter_fus.map(_._1.io.busy).orR) { io.busy := true.B }
     for (i <- 0 until iter_fus.size) {
