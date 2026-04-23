@@ -10,6 +10,20 @@ class OPUV128D64MxShuttleConfig extends Config(
   new shuttle.common.WithNShuttleCores(1) ++
   new chipyard.config.AbstractConfig)
 
+class OPUV256D128MxShuttleConfig extends Config(
+  new saturn.shuttle.WithShuttleVectorUnit(256, 128, VectorParams.opuMxParams) ++
+  new chipyard.config.WithSystemBusWidth(128) ++
+  new shuttle.common.WithShuttleTileBeatBytes(16) ++
+  new shuttle.common.WithNShuttleCores(1) ++
+  new chipyard.config.AbstractConfig)
+  
+class OPUV512D256MxShuttleConfig extends Config(
+  new saturn.shuttle.WithShuttleVectorUnit(512, 256, VectorParams.opuMxParams) ++
+  new chipyard.config.WithSystemBusWidth(256) ++
+  new shuttle.common.WithShuttleTileBeatBytes(32) ++
+  new shuttle.common.WithNShuttleCores(1) ++
+  new chipyard.config.AbstractConfig) 
+
 class OPUV128D64ShuttleConfig extends Config(
   new saturn.shuttle.WithShuttleVectorUnit(128, 64, VectorParams.opuParams) ++
   new chipyard.config.WithSystemBusWidth(64) ++
