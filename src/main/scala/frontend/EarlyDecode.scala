@@ -9,6 +9,7 @@ import saturn.insns.{VectorInstruction, VectorDecoder}
 
 class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: Parameters) extends RocketVectorDecoder()(p) with HasVectorConsts {
 
+  io.vector := false.B // @@@@ drive RocketVectorDecoder.io.vector (a898bdc-era interface)
   io.legal := false.B
   io.fp := false.B
   io.read_rs1 := false.B
@@ -33,7 +34,13 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
 
   val v_load = opcode === opcLoad
   val v_store = opcode === opcStore
-  val v_arith = opcode === opcVector && funct3 =/= 7.U && new VectorDecoder(funct3, funct6, rs1, rs2, supported_ex_insns, Nil).matched
+  val v_arith_maybe = opcode === opcVector && funct3 =/= 7.U // @@@@ is-vector-instruction (independent of decode match)
+  val v_arith = v_arith_maybe && new VectorDecoder(funct3, funct6, rs1, rs2, supported_ex_insns, Nil).matched
+  // @@@@ vector load/store share LOAD-FP/STORE-FP opcode with scalar fld/fsd.
+  //   Distinguish by width: vector EEW widths are {0,5,6,7}; scalar FP widths are {1,2,3,4}.
+  //   Without this filter, a scalar fld/fsd is misrouted to the vector unit and the core hangs.
+  val mem_is_vec = !width.isOneOf(1.U, 2.U, 3.U, 4.U)
+  io.vector := (v_load && mem_is_vec) || (v_store && mem_is_vec) || v_arith_maybe // @@@@
 
   when (v_load || v_store) {
     io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U)

@@ -8,6 +8,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.diplomacy.{BufferParams}
 import saturn.exu._
+import saturn.insns.{VFPID64B, VFPID32B} // @@@@ Custom
 
 object VectorParams {
 
@@ -314,7 +315,7 @@ case class VectorParams(
 
   tlBuffer: BufferParams = BufferParams.default,
 ) {
-  def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten
+  def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten ++ VFPID64B.restrictSEW(3) ++ VFPID32B.restrictSEW(2) // @@@@ Custom
 }
 
 case object VectorParamsKey extends Field[VectorParams]
@@ -332,10 +333,10 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def vrfBankBits = log2Ceil(vParams.vrfBanking)
   def lsiqIdBits = log2Ceil(vParams.vliqEntries.max(vParams.vsiqEntries))
   val debugIdSz = 16
-  val nRelease = vParams.issStructure match {
-    case VectorIssueStructure.Unified => 3
-    case VectorIssueStructure.Shared | VectorIssueStructure.Split => 4
-    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => 5
+  val nRelease = vParams.issStructure match { // @@@@ Custom: +1 for custom sequencer release port
+    case VectorIssueStructure.Unified => 4
+    case VectorIssueStructure.Shared | VectorIssueStructure.Split => 5
+    case VectorIssueStructure.MultiFMA | VectorIssueStructure.MultiMAC => 6
   }
 
   def getEgId(vreg: UInt, eidx: UInt, eew: UInt, bitwise: Bool): UInt = {

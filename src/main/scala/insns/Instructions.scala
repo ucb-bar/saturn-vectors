@@ -153,6 +153,11 @@ object MSIF      extends VectorInstruction { val props = Seq(F6(OPMFunct6.munary
 object IOTA      extends VectorInstruction { val props = Seq(F6(OPMFunct6.munary0)  , F3(VectorConsts.OPMVV), RS1(16.U(5.W)), ReadsVS2AsMask.Y) }
 object ID        extends VectorInstruction { val props = Seq(F6(OPMFunct6.munary0)  , F3(VectorConsts.OPMVV), RS1(17.U(5.W)), ReadsVS2AsMask.Y, ReadsVS2.N) }
 
+/*@@@@Custom*/
+object VFPID64B  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredosum) , F3(VectorConsts.OPFVF), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W))) }
+object VFPID32B  extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fredusum) , F3(VectorConsts.OPFVF), FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W))) }
+/*Custom*/
+
 object FADD      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fadd)     , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(0.U(2.W))) }
 object FSUB      extends OPFInstruction    { val props = Seq(F6(OPFFunct6.fsub)     , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(1.U(2.W))) }
 object FRSUB     extends OPFInstruction    { val props = Seq(F6(OPFFunct6.frsub)    , FPAdd.Y, FPMul.N, FPSwapVdV2.N, FPFMACmd(2.U(2.W))) }

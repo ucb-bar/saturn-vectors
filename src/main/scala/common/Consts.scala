@@ -117,6 +117,9 @@ trait HasVectorConsts {
   def OPMVX = "b110".U(3.W)
   def OPCFG = "b111".U(3.W)
 
+  def F6_PID64B = "b000011".U(6.W) // @@@@ Custom: funct6 for pid flag
+  def F6_PID32B = "b000001".U(6.W) // @@@@ Custom: funct6 for pid flag
+
   def X = BitPat("b?")
   def N = BitPat("b0")
   def Y = BitPat("b1")

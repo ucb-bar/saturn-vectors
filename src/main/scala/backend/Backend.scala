@@ -55,6 +55,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vsissq = Module(new IssueQueue(vParams.vsissqEntries, 1))
   val vpissq = Module(new IssueQueue(vParams.vpissqEntries, 1))
   val vxissqs = xissParams.map(q => Module(new IssueQueue(q.depth, q.seqs.size)).suggestName(s"vxissq_${q.name}"))
+  val vcissq = Module(new IssueQueue(2, 1)) // @@@@ Custom issue queue
 
   val vls = Module(new LoadSequencer)
   val vss = Module(new StoreSequencer)
@@ -62,11 +63,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   val vxs = xissParams.map(q => q.seqs.map(s =>
     Module(new ExecuteSequencer(s.insns)).suggestName(s"vxs${s.name}")
   ))
+  val vcs = Module(new CustomSequencer(Seq(VFPID64B, VFPID32B), 7)).suggestName("vcs") // @@@@ Custom sequencer
 
-  val allSeqs = Seq(vls, vss, vps) ++ vxs.flatten
-  val allIssQs = Seq(vlissq, vsissq, vpissq) ++ vxissqs
+  val allSeqs = Seq(vls, vss, vps) ++ vxs.flatten ++ Seq(vcs) // @@@@ + custom
+  val allIssQs = Seq(vlissq, vsissq, vpissq) ++ vxissqs ++ Seq(vcissq) // @@@@ + custom
 
   val vxus = xissParams.map(_.seqs.map(s => Module(new ExecutionUnit(s.fus)).suggestName(s"vxu${s.name}")))
+  val vcu = Module(new CustomExecutionUnit).suggestName("vcu") // @@@@ Custom execution unit
 
 
   io.fp_req.valid := false.B
@@ -92,7 +95,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     IssueGroup(vpissq, Seq(vps))
   ) ++ (vxissqs.zip(vxs).map { case (q, seqs) =>
     IssueGroup(q, seqs)
-  })
+  }) ++ Seq(IssueGroup(vcissq, Seq(vcs))) // @@@@ + custom group
 
   vlissq.io.enq.bits.reduction := false.B
   vlissq.io.enq.bits.wide_vd := false.B
@@ -108,6 +111,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vlissq.io.enq.bits.wvd   := true.B
   vlissq.io.enq.bits.scalar_to_vd0 := false.B
   vlissq.io.enq.bits.rs1_is_rs2 := false.B
+  vlissq.io.enq.bits.pid_flag := false.B // @@@@
 
   vsissq.io.enq.bits.reduction := false.B
   vsissq.io.enq.bits.wide_vd := false.B
@@ -123,6 +127,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vsissq.io.enq.bits.wvd   := false.B
   vsissq.io.enq.bits.scalar_to_vd0 := false.B
   vsissq.io.enq.bits.rs1_is_rs2 := false.B
+  vsissq.io.enq.bits.pid_flag := false.B // @@@@
 
   vpissq.io.enq.bits.reduction := false.B
   vpissq.io.enq.bits.wide_vd := false.B
@@ -138,6 +143,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vpissq.io.enq.bits.wvd   := false.B
   vpissq.io.enq.bits.scalar_to_vd0 := false.B
   vpissq.io.enq.bits.rs1_is_rs2 := !vdq.io.deq.bits.vmu && (vdq.io.deq.bits.opif6 === OPIFunct6.rgather || (vdq.io.deq.bits.funct3 === OPIVV && vdq.io.deq.bits.opif6 === OPIFunct6.rgatherei16))
+  vpissq.io.enq.bits.pid_flag := false.B // @@@@
 
   val xdis_ctrl = new VectorDecoder(vdq.io.deq.bits.funct3, vdq.io.deq.bits.funct6, vdq.io.deq.bits.rs1, vdq.io.deq.bits.rs2, all_supported_insns,
     Seq(Reduction, Wide2VD, Wide2VS2, WritesAsMask, ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
@@ -157,7 +163,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxissq.io.enq.bits.scalar_to_vd0 := xdis_ctrl.bool(ScalarToVD0)
     vxissq.io.enq.bits.reduction := xdis_ctrl.bool(Reduction)
     vxissq.io.enq.bits.rs1_is_rs2 := false.B
+    vxissq.io.enq.bits.pid_flag := false.B // @@@@
   }
+
+  // @@@@ Custom issue queue enq fields (no shared default loop in 1.13.0, so set all)
+  vcissq.io.enq.bits.reduction := false.B
+  vcissq.io.enq.bits.wide_vd := false.B
+  vcissq.io.enq.bits.wide_vs2 := false.B
+  vcissq.io.enq.bits.writes_mask := false.B
+  vcissq.io.enq.bits.reads_vs1_mask := false.B
+  vcissq.io.enq.bits.reads_vs2_mask := false.B
+  vcissq.io.enq.bits.nf_log2 := 0.U
+  vcissq.io.enq.bits.renv1 := false.B
+  vcissq.io.enq.bits.renv2 := true.B  // @@@@ always read vs2
+  vcissq.io.enq.bits.renvd := false.B
+  vcissq.io.enq.bits.renvm := false.B
+  vcissq.io.enq.bits.wvd := true.B    // @@@@ always write vd
+  vcissq.io.enq.bits.scalar_to_vd0 := false.B
+  vcissq.io.enq.bits.rs1_is_rs2 := false.B
+  vcissq.io.enq.bits.pid_flag := vdq.io.deq.bits.opcustom // @@@@ pid flag on
 
   val issq_stall = Wire(Vec(issGroups.size, Bool()))
   vdq.io.deq.ready := !issq_stall.orR
@@ -198,9 +222,18 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       }.reduce(_|_)
       val older_rintents = older_issq_rintents | older_seq_rintents
 
-      val older_pipe_writes = vxus.flatten.map(_.io.pipe_hazards.toSeq).flatten.map { h =>
+      val older_pipe_writes_vxu = vxus.flatten.map(_.io.pipe_hazards.toSeq).flatten.map { h =>
         Mux(h.valid, h.bits.eg_oh, 0.U)
       }.reduce(_|_)
+      // @@@@ slot 0 = issue-cycle hazard. 이것만이 콤비 루프를 만든다:
+      //   older_pipe_writes -> vcs.older_writes -> vcs.iss.valid -> vcu.iss.valid -> vcu.pipe_hazards(0) -> older_pipe_writes
+      //   slot 0은 발사 사이클에 vcs.seq_hazard(wintent, 같은 사이클)와 중복이므로 여기서 제외하면 루프가 끊긴다.
+      //   나머지 slot 1..7은 전부 registered 큐 스테이지라 iss로의 콤비 경로가 없다 → RegNext 지연 불필요.
+      //   (이전 RegNext는 모든 슬롯을 1사이클 늦춰, tail-iss 직후 seq_hazard가 꺼진 1사이클 동안 사각지대를 만들었음.)
+      val vcu_pipe_mask_now = vcu.io.pipe_hazards.toSeq.drop(1).map { h =>
+        Mux(h.valid, h.bits.eg_oh, 0.U)
+      }.foldLeft(0.U(egsTotal.W))(_|_)
+      val older_pipe_writes = older_pipe_writes_vxu | vcu_pipe_mask_now
 
       val older_iter_writes = vxus.flatten.map(_.io.iter_hazards.toSeq).flatten.map { h =>
         Mux(h.valid, h.bits.eg_oh, 0.U)
@@ -281,9 +314,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   // Mask ports are
   // vxs0-mask, vxs1-mask, vls-mask, vss-mask, vps-mask, frontend-mask
   val vrf = Module(new RegisterFile(
-    reads = Seq(2 + flat_vxs.size, flat_vxs.size, 1 + flat_vxs.size),
+    reads = Seq(2 + flat_vxs.size, flat_vxs.size + 1, 1 + flat_vxs.size), // @@@@ +1 rvs2 read for custom
     maskReads = Seq(4 + flat_vxs.size),
-    pipeWrites = flat_vxus.size,
+    pipeWrites = flat_vxus.size + 1, // @@@@ +1 write for custom
     llWrites = flat_vxus.size + 2 // vxus + load + reset
   ))
 
@@ -310,6 +343,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrf.io.pipe_writes.zip(vxus.flatten).foreach { case (w,vxu) =>
     w := vxu.io.pipe_write
   }
+  vrf.io.pipe_writes(flat_vxus.size) := vcu.io.pipe_write // @@@@ custom write port
 
   vrf.io.ll_writes(0) <> load_write
   vrf.io.ll_writes(1).valid     := resetting
@@ -330,6 +364,11 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrf.io.read(0)(flat_vxs.length) <> vps.io.rvs2
   vps.io.rvs1.req.ready := true.B
 
+  // @@@@ Custom unit: VRF rvs2 read (read group 1 extra port) + execution-unit wiring
+  vrf.io.read(1)(flat_vxs.size) <> vcs.io.rvs2
+  vcu.io.iss <> vcs.io.iss
+  vcu.io.rvs2_data := vcs.io.rvs2.resp // combinational read resp aligns with iss (same as ExecuteSequencer)
+
   val index_access_eg = getEgId(io.index_access.vrs, io.index_access.eidx, io.index_access.eew, false.B)
   val index_access_eg_oh = UIntToOH(index_access_eg)
   val index_access_hazard = (allSeqs.map(_.io.seq_hazard).map { h =>
@@ -339,6 +378,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   } ++ vxus.flatten.map(_.io.pipe_hazards).flatten.map { h =>
     h.valid && h.bits.eg === index_access_eg
   } ++ vxus.flatten.map(_.io.iter_hazards).flatten.map { h =>
+    h.valid && h.bits.eg === index_access_eg
+  } ++ vcu.io.pipe_hazards.toSeq.map { h => // @@@@ + custom
     h.valid && h.bits.eg === index_access_eg
   }).orR || vdq.io.peek.map(i => i.valid && !(i.bits.vmu && i.bits.store)).orR
   // TODO: this conservatively assumes a index data hazard against anything in the vdq
@@ -418,6 +459,7 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   clearVat(vls.io.iss.fire && vls.io.iss.bits.tail, vls.io.iss.bits.vat)
   clearVat(vss.io.iss.fire && vss.io.iss.bits.tail, vss.io.iss.bits.vat)
   vxs.flatten.foreach(xs => clearVat(xs.io.iss.fire && xs.io.iss.bits.tail, xs.io.iss.bits.vat))
+  clearVat(vcs.io.iss.fire && vcs.io.iss.bits.tail, vcs.io.iss.bits.vat) // @@@@ custom
 
   // Signalling to frontend
   val seq_inflight_wv0 = (allSeqs.map(_.io.seq_hazard).map { h =>
@@ -428,13 +470,15 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     h.valid && (h.bits.eg < egsPerVReg.U)
   } ++ vxus.flatten.map(_.io.iter_hazards).flatten.map { h =>
     h.valid && (h.bits.eg < egsPerVReg.U)
+  } ++ vcu.io.pipe_hazards.toSeq.map { h => // @@@@ + custom
+    h.valid && (h.bits.eg < egsPerVReg.U)
   }).orR
   val vdq_inflight_wv0 = vdq.io.peek.map { h =>
     h.valid && h.bits.may_write_v0
   }.orR
 
   vm_busy := seq_inflight_wv0 || vdq_inflight_wv0
-  io.busy := vdq.io.deq.valid || allSeqs.map(_.io.busy).orR || vxus.flatten.map(_.io.busy).asUInt.orR || resetting
+  io.busy := vdq.io.deq.valid || allSeqs.map(_.io.busy).orR || vxus.flatten.map(_.io.busy).asUInt.orR || vcu.io.busy || resetting // @@@@ + custom
   io.set_vxsat := vxus.flatten.map(_.io.set_vxsat).asUInt.orR
   io.set_fflags.valid := vxus.flatten.map(_.io.set_fflags.valid).asUInt.orR
   io.set_fflags.bits  := vxus.flatten.map( xu => Mux(xu.io.set_fflags.valid, xu.io.set_fflags.bits, 0.U)).reduce(_|_)

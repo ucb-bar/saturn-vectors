@@ -49,8 +49,18 @@ trait VectorInstruction {
     }
   }
   def elementWise: VectorInstruction = new ElementwiseVectorInstruction(props)
+  // @@@@ Custom: ported from newer saturn to support restrictSEW on custom insns
+  def append(add_props: InstructionProperty*) = new AppendedVectorInstruction(props, add_props)
+  def restrictSEW(legalSEWs: Int*) = legalSEWs.map { sew => append(SEW(sew.U(2.W))) }
 }
 
 class ElementwiseVectorInstruction(_props: Seq[InstructionProperty]) extends VectorInstruction {
   val props = _props :+ Elementwise.Y
+}
+
+// @@@@ Custom: ported from newer saturn
+class AppendedVectorInstruction(
+  base_props: Seq[InstructionProperty],
+  add_props: Seq[InstructionProperty]) extends VectorInstruction {
+  val props = base_props ++ add_props
 }

@@ -83,6 +83,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def opmf6 = Mux(isOpm, OPMFunct6(funct6), OPMFunct6.illegal)
   def opif6 = Mux(isOpi, OPIFunct6(funct6), OPIFunct6.illegal)
   def opff6 = Mux(isOpf, OPFFunct6(funct6), OPFFunct6.illegal)
+  def opcustom = Mux(funct6 === F6_PID64B || funct6 === F6_PID32B, true.B, false.B) // @@@@ Custom: pid flag
 }
 
 class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
@@ -101,6 +102,7 @@ class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
   val renvd = Bool()
   val renvm = Bool()
   val wvd = Bool()
+  val pid_flag = Bool() // @@@@ Custom: route to custom issue queue
 }
 
 class IssueQueueInst(nSeqs: Int)(implicit p: Parameters) extends BackendIssueInst()(p) {
