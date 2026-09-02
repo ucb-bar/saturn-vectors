@@ -9,7 +9,7 @@ import freechips.rocketchip.tile._
 import saturn.common._
 import saturn.insns._
 
-case class SharedScalarFPFMAFactory(depth: Int) extends FMAFactory {
+case class SharedScalarFPFMAFactory(depth: Int, mxFPFMA: Boolean = false) extends FMAFactory {
   def insns = base_insns.map(_.elementWise)
   def generate(implicit p: Parameters) = new SharedScalarElementwiseFPFMA(depth)
 }

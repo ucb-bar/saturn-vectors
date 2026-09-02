@@ -314,6 +314,8 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxs.io.iss.ready := vxu.io.iss.ready
     vxu.io.iss.bits.viewAsSupertype(new ExecuteMicroOp(vxu.nFUs)) := vxs.io.iss.bits
 
+    vxu_iss.altfmt := vxs_iss.altfmt
+
     when (vxs_iss.acc) {
       val acc_data = vps.io.acc_data.bits
       when (vxs_iss.acc_fold) {
