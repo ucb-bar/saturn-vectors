@@ -23,8 +23,8 @@ class ElementwiseMultiplyPipe(depth: Int)(implicit p: Parameters) extends Pipeli
   val in_eew = io.pipe(0).bits.rvs1_eew
   val eidx = io.pipe(0).bits.eidx
 
-  val in_vs1 = Mux(ctrl.bool(MULSign1), sextElem(io.pipe(0).bits.rvs1_elem, in_eew), io.pipe(0).bits.rvs1_elem)
-  val in_vs2 = Mux(ctrl.bool(MULSign2), sextElem(io.pipe(0).bits.rvs2_elem, in_eew), io.pipe(0).bits.rvs2_elem)
+  val in_vs1 = Mux(ctrl.bool(MULSign1), sextElem(io.pipe(0).bits.rvs1_elem, in_eew), zextElem(io.pipe(0).bits.rvs1_elem, in_eew))
+  val in_vs2 = Mux(ctrl.bool(MULSign2), sextElem(io.pipe(0).bits.rvs2_elem, in_eew), zextElem(io.pipe(0).bits.rvs2_elem, in_eew))
   val in_vd  = io.pipe(0).bits.rvd_elem
 
   val prod = in_vs1.asSInt * Mux(ctrl.bool(MULSwapVdV2), in_vd, in_vs2).asSInt
