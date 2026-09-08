@@ -73,21 +73,26 @@ object assembleOFPE4M3 {
 		val sigE4M3 = ieeeE4M3(2, 0)
 		val expE5M3 = ieeeE5M3(7, 3)
 		val sigE5M3 = ieeeE5M3(2, 0)
-		val special = expE5M3(4, 3) === "b11".U(2.W) // Values that overflow to infinity or NaN for OFP8 E4M3
-		val overflow = expE5M3 === "b10111".U(5.W) // Values that overflow to infinity for IEEE E4M3 but not OFP8 E4M3
-		val possibleInf = expE5M3(4, 3) === "b11".U(2.W) || sigE5M3 === "b111".U(3.W) // True inf check for values in the IEEE E4M3 inf range
-		val outValue = Mux(special || overflow, // Possible NaN or Inf
-			Mux(special && sigE5M3 =/= "b000".U(3.W), // NaN
-				"h7F".U(8.W),
-				Mux(possibleInf, // Inf
-					Mux(saturate, // Saturate Inf
-						sign ## "b1111110".U(7.W),
-						"h7F".U(8.W)
-					),
-					sign ## "b1111".U(4.W) ## sigE5M3
+		// E5M3 is the same precision as E4M3 with a wider exponent, so it carries the
+		// correctly-rounded result for the whole of OFP8 E4M3's range, including the top
+		// binade that IEEE E4M3 has already collapsed to Inf/NaN.
+		val isNaN = expE5M3 === "b11111".U(5.W) && sigE5M3 =/= "b000".U(3.W) // a real NaN, not a large finite
+		val topBinade = expE5M3 === "b10111".U(5.W) // unbiased exp 8: OFP8 E4M3's top binade, [256, 512)
+		val aboveTop = expE5M3(4, 3) === "b11".U(2.W) // unbiased exp >= 9, or Inf: past E4M3's range entirely
+		// 1.111 x 2^8 = 480 is the NaN code point in OFP8 E4M3, so it overflows too.
+		val overflows = aboveTop || (topBinade && sigE5M3 === "b111".U(3.W))
+		val outValue = Mux(isNaN,
+			"h7F".U(8.W),
+			Mux(overflows,
+				Mux(saturate, // clamp to maxFinite = 448; otherwise NaN, as E4M3 has no Inf
+					sign ## "b1111110".U(7.W),
+					"h7F".U(8.W)
+				),
+				Mux(topBinade, // representable, but only the E5M3 rounder got it right
+					sign ## "b1111".U(4.W) ## sigE5M3,
+					ieeeE4M3
 				)
-			),
-			ieeeE4M3
+			)
 		)
 		outValue
 	}
