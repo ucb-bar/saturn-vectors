@@ -223,7 +223,7 @@ class FPConvBlock(mxConversion: Boolean)(implicit p: Parameters) extends CoreMod
   val s2d_out = s2d.map(f => RegEnable(FType.D.ieee(f.io.out), s1_valid))
 
   val bf162e5m2_out = bf162e5m2.map(f => RegEnable(saturateE5M2(MXFType.E5M2.ieee(f.io.out), s1_sat), s1_valid))
-  val bf162e4m3_out = bf162e5m3.zip(bf162e4m3).map(f => RegEnable(assembleOFPE4M3(MXFType.E5M3.ieee(f._1.io.out), MXFType.E4M3.ieee(f._2.io.out), s1_sat), s1_valid))
+  val bf162e4m3_out = bf162e5m3.zip(bf162e4m3).map(f => RegEnable(assembleOFPE4M3(MXFType.E5M3.ieee(f._1.io.out), MXFType.E4M3.ieee(f._2.io.out), s1_sat, Mux(s1_rto, "b110".U, s1_frm), f._1.io.exceptionFlags(2)), s1_valid))
   val s2bf16_out = s2bf16.map(f => RegEnable(MXFType.BF16.ieee(f.io.out), s1_valid))
   val s2h_out = s2h.map(f => RegEnable(FType.H.ieee(f.io.out), s1_valid))
   val d2s_out = d2s.map(f => RegEnable(FType.S.ieee(f.io.out), s1_valid))
