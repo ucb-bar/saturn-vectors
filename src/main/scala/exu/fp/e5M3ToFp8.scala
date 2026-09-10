@@ -81,12 +81,7 @@ object assembleOFPE4M3 {
 		val aboveTop = expE5M3(4, 3) === "b11".U(2.W) // unbiased exp >= 9, or Inf: past E4M3's range entirely
 		// 1.111 x 2^8 = 480 is the NaN code point in OFP8 E4M3, so it overflows too.
 		val overflows = aboveTop || (topBinade && sigE5M3 === "b111".U(3.W))
-		// IEEE 754-2019 sec 7.4: overflow does not always deliver the out-of-range
-		// result. Under round-toward-zero, and under a directed rounding that points
-		// back toward zero for this sign, it delivers maxFinite instead. This is the
-		// same predicate RoundAnyRawFNToRecFN uses (its `roundMagUp` term), which is
-		// why the E5M2 path gets it right: saturateE5M2 passes the rounder's
-		// own output through, whereas here the assembler decides for itself.
+		
 		val roundMagUp = (roundingMode === hardfloat.consts.round_min && sign) ||
 			(roundingMode === hardfloat.consts.round_max && !sign)
 		val overflowToSpecial = roundingMode === hardfloat.consts.round_near_even ||
