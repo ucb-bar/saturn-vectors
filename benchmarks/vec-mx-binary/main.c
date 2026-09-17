@@ -27,10 +27,14 @@ size_t vl;
 	ovle - RVV instruction for loading the output type
 	ilmul- LMUL of input (1 if isew == esew, 2 if isew == 2 * esew)
 	olmul- LMUL of output (1 if osew == esew, 2 if osew == 2 * esew)
-	op   - operation, using v0 as the input and v24 as the output
+	op   - operation, using v0 and v4 as the inputs and v24 as the output
+	rm   - RISC-V rounding mode written to frm: 0 RNE, 1 RTZ, 2 RDN, 3 RUP, 4 RMM.
+	       RVV floating-point instructions take their rounding mode from fcsr.frm,
+	       there is no per-instruction rm field, so it must be set here.
 */
-#define TEST(name, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+#define TEST(name, rm, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
 	printf("Testing " #name "\n"); \
+	asm volatile("csrwi frm, " #rm); \
 	avl = N; \
 	vl = 0; \
 	name ## _a_ = name ## _a; /* input pointer */ \
@@ -66,13 +70,30 @@ size_t vl;
 		avl -= vl; \
 	}
 
+/* Every operation is tested once per rounding mode.  The operands are the same
+   in all five arrays, so a mismatch isolates the rounding mode rather than the
+   operands. */
+#define TEST_DATA_FRM(type, name, otype) \
+	TEST_DATA(type, name ## _rne, otype) \
+	TEST_DATA(type, name ## _rtz, otype) \
+	TEST_DATA(type, name ## _rdn, otype) \
+	TEST_DATA(type, name ## _rup, otype) \
+	TEST_DATA(type, name ## _rmm, otype)
+
+#define TEST_FRM(name, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rne, 0, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rtz, 1, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rdn, 2, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rup, 3, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rmm, 4, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op)
+
 #define TEST_DATA_BINARY_FMA(size, name, wsize) \
-	TEST_DATA(size, name ## _mul, size) \
-	TEST_DATA(size, name ## _add, size) \
-	TEST_DATA(size, name ## _sub, size) \
-	TEST_DATA(size, name ## _wmul, wsize) \
-	TEST_DATA(size, name ## _wadd, wsize) \
-	TEST_DATA(size, name ## _wsub, wsize)
+	TEST_DATA_FRM(size, name ## _mul, size) \
+	TEST_DATA_FRM(size, name ## _add, size) \
+	TEST_DATA_FRM(size, name ## _sub, size) \
+	TEST_DATA_FRM(size, name ## _wmul, wsize) \
+	TEST_DATA_FRM(size, name ## _wadd, wsize) \
+	TEST_DATA_FRM(size, name ## _wsub, wsize)
 
 TEST_DATA_BINARY_FMA(uint16_t, fp16, uint32_t)
 TEST_DATA_BINARY_FMA(uint16_t, bf16, uint32_t)
@@ -80,12 +101,12 @@ TEST_DATA_BINARY_FMA(uint8_t, e4m3, uint16_t)
 TEST_DATA_BINARY_FMA(uint8_t, e5m2, uint16_t)
 
 #define TEST_BINARY_FMA(name, sew, wsew, ealt, vle, wvle, ops_name) \
-	TEST(name ## _mul, sew, sew, sew, ealt, vle, vle, LMUL_M1, LMUL_M1, asm volatile("vfmul.vv v24, v0, v4")) \
-	TEST(name ## _add, sew, sew, sew, ealt, vle, vle, LMUL_M1, LMUL_M1, asm volatile("vfadd.vv v24, v0, v4")) \
-	TEST(name ## _sub, sew, sew, sew, ealt, vle, vle, LMUL_M1, LMUL_M1, asm volatile("vfsub.vv v24, v0, v4")) \
-	TEST(name ## _wmul, sew, wsew, sew, ealt, vle, wvle, LMUL_M1, LMUL_M2, asm volatile("vfwmul.vv v24, v0, v4")) \
-	TEST(name ## _wadd, sew, wsew, sew, ealt, vle, wvle, LMUL_M1, LMUL_M2, asm volatile("vfwadd.vv v24, v0, v4")) \
-	TEST(name ## _wsub, sew, wsew, sew, ealt, vle, wvle, LMUL_M1, LMUL_M2, asm volatile("vfwsub.vv v24, v0, v4"))
+	TEST_FRM(name ## _mul, sew, sew, sew, ealt, vle, vle, LMUL_M1, LMUL_M1, asm volatile("vfmul.vv v24, v0, v4")) \
+	TEST_FRM(name ## _add, sew, sew, sew, ealt, vle, vle, LMUL_M1, LMUL_M1, asm volatile("vfadd.vv v24, v0, v4")) \
+	TEST_FRM(name ## _sub, sew, sew, sew, ealt, vle, vle, LMUL_M1, LMUL_M1, asm volatile("vfsub.vv v24, v0, v4")) \
+	TEST_FRM(name ## _wmul, sew, wsew, sew, ealt, vle, wvle, LMUL_M1, LMUL_M2, asm volatile("vfwmul.vv v24, v0, v4")) \
+	TEST_FRM(name ## _wadd, sew, wsew, sew, ealt, vle, wvle, LMUL_M1, LMUL_M2, asm volatile("vfwadd.vv v24, v0, v4")) \
+	TEST_FRM(name ## _wsub, sew, wsew, sew, ealt, vle, wvle, LMUL_M1, LMUL_M2, asm volatile("vfwsub.vv v24, v0, v4"))
 
 int main() {
 	
