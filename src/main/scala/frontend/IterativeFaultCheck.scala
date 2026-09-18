@@ -105,10 +105,17 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
 
   val replay_kill = WireInit(false.B)
 
-  def nextPage(addr: UInt) = ((addr + (1 << pgIdxBits).U) >> pgIdxBits) << pgIdxBits
+  // Permission is uniform only within one PMP granule, so a single probe may stand in for
+  // several contiguous segment fields only while they share a granule. We therefore CHECK
+  // the segment one granule at a time, but still ISSUE to the mem backend in the original
+  // page-granular pieces: the store data/addr pipelines are balanced per issued SIQ entry,
+  // so the issue stream must not change. faultGranBits equals pgIdxBits (a no-op) when the
+  // PMP granularity is >= a page.
+  val faultGranBits = pgIdxBits min log2Ceil(pmpGranularity)
 
   val valid  = RegInit(false.B)
-  val seg_hi = Reg(Bool())
+  val seg_off = Reg(UInt(4.W))
+  val seg_part_start = Reg(UInt(4.W))
   val inst   = Reg(new VectorIssueInst)
   val eidx   = Reg(UInt(log2Ceil(maxVLMax).W))
   val addr   = Reg(UInt(vaddrBitsExtended.W))
@@ -124,7 +131,8 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   when (io.in.valid) {
     assert(!valid)
     valid := true.B
-    seg_hi := false.B
+    seg_off := 0.U
+    seg_part_start := 0.U
     inst := io.in.bits
     eidx := 0.U
     addr := io.in.bits.rs1_data
@@ -142,9 +150,17 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   val index = Mux(indexed, im_access.io.access.index & eewBitMask(inst.mem_idx_size), 0.U)
   val base = Mux(indexed, inst.rs1_data, addr)
   val indexaddr = base + index
-  val tlb_addr = Mux(seg_hi, nextPage(indexaddr), indexaddr)
-  val seg_nf_consumed = ((1 << pgIdxBits).U - Mux(seg_hi, indexaddr, tlb_addr)(pgIdxBits-1,0)) >> inst.mem_elem_size
-  val seg_single_page = seg_nf_consumed >= (inst.seg_nf +& 1.U)
+  val tlb_addr = indexaddr + (seg_off << inst.mem_elem_size)
+  // contiguous fields from seg_off that share tlb_addr's PMP granule (at least one)
+  val seg_gran_fields = ((1 << faultGranBits).U - tlb_addr(faultGranBits-1,0)) >> inst.mem_elem_size
+  val seg_fields_left = (inst.seg_nf +& 1.U) - seg_off
+  val seg_chunk = Wire(UInt(4.W))
+  seg_chunk := Mux(seg_gran_fields === 0.U, 1.U,
+    Mux(seg_gran_fields < seg_fields_left, seg_gran_fields, seg_fields_left))
+  val seg_chunk_last = (seg_off +& seg_chunk) >= (inst.seg_nf +& 1.U)
+  // Only issue at a page boundary or segment end; earlier granule chunks are check-only.
+  val seg_next_addr = indexaddr + ((seg_off +& seg_chunk) << inst.mem_elem_size)
+  val seg_part_last = seg_chunk_last || ((seg_next_addr >> pgIdxBits) =/= (tlb_addr >> pgIdxBits))
   val masked = !im_access.io.access.mask && !inst.vm
   val tlb_valid = eidx < inst.vconfig.vl && eidx >= inst.vstart && !masked
   val ff = inst.umop === lumopFF && inst.mop === mopUnit
@@ -167,12 +183,14 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
 
   val replay_fire = valid && eidx < inst.vconfig.vl && tlb_backoff === 0.U && index_ready && mask_ready
   when (replay_fire) {
-    when (seg_hi || seg_single_page || inst.seg_nf === 0.U) {
+    when (seg_chunk_last || inst.seg_nf === 0.U) {
       eidx := eidx + 1.U
       addr := addr + stride
-      seg_hi := false.B
+      seg_off := 0.U
+      seg_part_start := 0.U
     } .otherwise {
-      seg_hi := true.B
+      seg_off := seg_off + seg_chunk
+      when (seg_part_last) { seg_part_start := seg_off + seg_chunk }
     }
   }
 
@@ -180,12 +198,14 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   val s1_valid       = RegNext(replay_fire && !replay_kill, false.B)
   val s1_eidx        = RegEnable(eidx, valid)
   val s1_masked      = RegEnable(masked, valid)
-  val s1_seg_hi      = RegEnable(seg_hi, valid)
+  val s1_seg_off     = RegEnable(seg_off, valid)
   val s1_base        = RegEnable(base, valid)
   val s1_tlb_valid   = RegEnable(tlb_valid, valid)
   val s1_tlb_addr    = RegEnable(tlb_addr, valid)
-  val s1_seg_nf_consumed = RegEnable(seg_nf_consumed, valid)
-  val s1_seg_single_page = RegEnable(seg_single_page, valid)
+  val s1_seg_chunk       = RegEnable(seg_chunk, valid)
+  val s1_seg_chunk_last  = RegEnable(seg_chunk_last, valid)
+  val s1_seg_part_start  = RegEnable(seg_part_start, valid)
+  val s1_seg_part_last   = RegEnable(seg_part_last, valid)
 
   when (io.tlb_resp.miss && s1_valid && tlb_backoff === 0.U) { tlb_backoff := 3.U }
 
@@ -214,9 +234,11 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   val s2_tlb_addr = RegEnable(s1_tlb_addr, s1_valid)
   val s2_xcpt = RegEnable(xcpt, s1_valid)
   val s2_masked = RegEnable(s1_masked, s1_valid)
-  val s2_seg_single_page = RegEnable(s1_seg_single_page, s1_valid)
-  val s2_seg_hi = RegEnable(s1_seg_hi, s1_valid)
-  val s2_seg_nf_consumed = RegEnable(s1_seg_nf_consumed, s1_valid)
+  val s2_seg_off = RegEnable(s1_seg_off, s1_valid)
+  val s2_seg_chunk = RegEnable(s1_seg_chunk, s1_valid)
+  val s2_seg_chunk_last = RegEnable(s1_seg_chunk_last, s1_valid)
+  val s2_seg_part_start = RegEnable(s1_seg_part_start, s1_valid)
+  val s2_seg_part_last = RegEnable(s1_seg_part_last, s1_valid)
   val s2_cause = RegEnable(cause, s1_valid)
 
 
@@ -242,25 +264,24 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   im_access.io.flush := false.B
 
   when (s2_valid) {
-    io.issue.valid := !s2_tlb_resp.miss && !s2_xcpt && s2_eidx >= inst.vstart && !s2_masked
-    when (inst.seg_nf =/= 0.U && !s2_seg_single_page) {
-      when (!s2_seg_hi) {
-        io.issue.bits.segend := s2_seg_nf_consumed - 1.U
-      } .otherwise {
-        io.issue.bits.segstart := s2_seg_nf_consumed
-      }
+    val s2_issuing = s2_seg_part_last || inst.seg_nf === 0.U
+    io.issue.valid := !s2_tlb_resp.miss && !s2_xcpt && s2_eidx >= inst.vstart && !s2_masked && s2_issuing
+    when (inst.seg_nf =/= 0.U) {
+      io.issue.bits.segstart := s2_seg_part_start
+      io.issue.bits.segend   := (s2_seg_off + s2_seg_chunk) - 1.U
     }
 
-    when (s2_seg_hi || s2_seg_single_page || inst.seg_nf === 0.U) {
+    when (s2_seg_chunk_last || inst.seg_nf === 0.U) {
       im_access.io.pop.valid := true.B
     }
 
-    when (s2_tlb_resp.miss || !io.issue.ready) {
+    when (s2_tlb_resp.miss || (!io.issue.ready && s2_issuing)) {
       tlb_backoff := 3.U
       replay_kill := true.B
       eidx := s2_eidx
       addr := s2_base
-      seg_hi := s2_seg_hi
+      seg_off := s2_seg_off
+      seg_part_start := s2_seg_part_start
       s1_kill := true.B
       im_access.io.pop.valid := false.B
     } .elsewhen (s2_xcpt) {
@@ -273,7 +294,7 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
       io.vconfig.valid := ff_nofault
       s1_kill := true.B
       im_access.io.flush := true.B
-    } .elsewhen ((s2_eidx +& 1.U) === inst.vconfig.vl && (s2_seg_hi || s2_seg_single_page || inst.seg_nf === 0.U)) {
+    } .elsewhen ((s2_eidx +& 1.U) === inst.vconfig.vl && (s2_seg_chunk_last || inst.seg_nf === 0.U)) {
       valid := false.B
       replay_kill := true.B
       io.retire := true.B
