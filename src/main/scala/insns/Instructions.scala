@@ -232,9 +232,23 @@ object RORI       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol) 
 object ROR        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ror)      , UsesShift.Y, ShiftsLeft.N, ScalingShift.N) }
 object WSLL       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.wsll)     , UsesShift.Y, ShiftsLeft.Y, ScalingShift.N, Wide2VD.Y, ZextImm5.Y) }
 
-// Outer product instructions
-object OPFMACC     extends OPFInstruction    { val props = Seq(F6(OPFFunct6.opfmacc)    , ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, OPFP8.Y) }
-object OPMACC      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmacc)     , ReadsVS1.Y, ReadsVS2.Y, WritesVD.N) }
-object OPMVIN      extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvin)     , ReadsVS1.N, ReadsVS2.Y, WritesVD.N) }
-object OPMVINBCAST extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvinbcast), ReadsVS1.N, ReadsVS2.Y, WritesVD.N) }
-object OPMVOUT     extends OPMInstruction    { val props = Seq(F6(OPMFunct6.opmvout)    , ReadsVS1.N, ReadsVS2.N, WritesVD.Y) }
+// Outer-product unit: Xsfmm v0.6.6 encodings (RISC-V VME subset)
+// sf.mm.<a>.<b> mtd, vs2, vs1 : C[tm,tn] += A[tk,tm]^T * B[tk,tn], A = vs2 (rows), B = vs1 (columns)
+//   The <b> operand type lives in instruction bit 7 (rd[0]) and the tile in rd[4:3];
+//   neither is part of the decode key.
+object SF_MM_INT   extends VectorInstruction { val props = Seq(OPVE.Y, F6(BitPat("b11110?")), F3(VectorConsts.OPIVV), SEW(0.U(2.W)),
+  ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, VMBitReadsVM.N, OPUMatmul.Y, OPUKind(OPUKinds.MM_INT.U)) }
+object SF_MM_FP8   extends VectorInstruction { val props = Seq(OPVE.Y, F6(BitPat("b11111?")), F3(VectorConsts.OPFVV), SEW(0.U(2.W)),
+  ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, VMBitReadsVM.N, OPUMatmul.Y, OPUKind(OPUKinds.MM_FP8.U)) }
+// sf.vtmv.v.t vd, rs1(TSS): tile row/column -> vector register group
+object SF_VTMV_V_T extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVX), RS2(31.U(5.W)), SEW(2.U(2.W)),
+  ReadsVS1.N, ReadsVS2.N, WritesVD.Y, VMBitReadsVM.N, OPUKind(OPUKinds.MV_V_T.U)) }
+// sf.vtmv.t.v rs1(TSS), vs2: vector register group -> tile row/column
+object SF_VTMV_T_V extends VectorInstruction { val props = Seq(F6(OPMFunct6.compress), F3(VectorConsts.OPMVX), SEW(2.U(2.W)),
+  ReadsVS1.N, ReadsVS2.Y, WritesVD.N, VMBitReadsVM.N, OPUKind(OPUKinds.MV_T_V.U)) }
+// sf.vtzero.t mtd
+object SF_VTZERO_T extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVX), RS2(30.U(5.W)), RS1(0.U(5.W)),
+  ReadsVS1.N, ReadsVS2.N, WritesVD.N, VMBitReadsVM.N, OPUKind(OPUKinds.ZERO.U)) }
+// sf.vtdiscard
+object SF_VTDISCARD extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVX), RS2(28.U(5.W)), RS1(0.U(5.W)),
+  ReadsVS1.N, ReadsVS2.N, WritesVD.N, VMBitReadsVM.N, OPUKind(OPUKinds.DISCARD.U)) }

@@ -40,7 +40,9 @@ class WithShuttleVectorUnit(
               decoder
             }),
             issueVConfig = false,
-            vExts = Seq("zvbb") ++ params.vExts
+            vExts = Seq("zvbb") ++ params.vExts ++ (if (params.useOpu) Seq(s"xsfmm${params.opuTE(vLen)}t") else Nil),
+            matrixTE = params.opuTE(vLen),
+            matrixTypes = params.opuMatrixTypes
           )),
         )
       )) else tp

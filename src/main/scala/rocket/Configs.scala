@@ -37,7 +37,9 @@ class WithRocketVectorUnit(
             }),
             useDCache = true,
             issueVConfig = false,
-            vExts = Seq("zvbb") ++ params.vExts
+            vExts = Seq("zvbb") ++ params.vExts ++ (if (params.useOpu) Seq(s"xsfmm${params.opuTE(vLen)}t") else Nil),
+            matrixTE = params.opuTE(vLen),
+            matrixTypes = params.opuMatrixTypes
           )),
           fpu = (if (params.useScalarFPFMA) { tp.tileParams.core.fpu.map(_.copy(
             sfmaLatency = params.fmaPipeDepth - 1,

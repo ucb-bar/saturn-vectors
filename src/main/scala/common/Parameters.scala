@@ -388,20 +388,25 @@ case class VectorParams(
   // Add OPU to design
   useOpu : Boolean = false,
 ) {
+  // Xsfmm v0.6.6 subset implemented by the outer-product unit (RISC-V VME stand-in)
   def opuInsns = Seq(
-    saturn.insns.OPMACC.VV,
-    saturn.insns.OPFMACC.VV,
-    saturn.insns.OPMVIN.VX,
-    saturn.insns.OPMVINBCAST.VX,
-    saturn.insns.OPMVOUT.VX)
+    saturn.insns.SF_MM_INT,
+    saturn.insns.SF_MM_FP8,
+    saturn.insns.SF_VTMV_V_T,
+    saturn.insns.SF_VTMV_T_V,
+    saturn.insns.SF_VTZERO_T,
+    saturn.insns.SF_VTDISCARD)
+  // Matrix configurations accepted by vsetvl when vtwiden != 0: (SEW, TWIDEN)
+  def opuMatrixTypes: Seq[(Int, Int)] = if (useOpu) Seq((8, 4), (32, 1)) else Nil
+  // Tile edge for TEW=32 tiles: one tile row of 8-bit operands fills a vector register
+  def opuTE(vLen: Int): Int = if (useOpu) vLen / 8 else 0
   def supported_ex_insns = issStructure.generate(this).map(_.insns).flatten ++ (if (useOpu) opuInsns else Nil)
 
-  def vExts = 
-    (if (useMxConversion) Seq("zvfofp8min", "zfbfmin", "zvfbfmin", "zvfbfa") else Seq()) ++
-    (if (useMxFPFMA) Seq() else Seq())
-    .foldLeft(Seq()) { (acc, e) =>
-      if (!acc.contains(e)) acc :+ e else acc
-    }
+  def vExts: Seq[String] = (
+    (if (useMxConversion) Seq("zvfofp8min", "zfbfmin", "zvfbfmin", "zvfbfa") else Seq[String]()) ++
+    (if (useOpu) Seq("xsfmmbase", "xsfmm32a8i") else Seq[String]()) ++
+    (if (useOpu && useMxOPU) Seq("xsfmm32a8f") else Seq[String]())
+  ).distinct
 
   require(dLen >= 64, "dLen must be >= 64")
   require((dLen & (dLen - 1)) == 0, "dLen must be power of 2")
@@ -427,6 +432,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
   def useMxOPU = vParams.useMxOPU
 
   def opuParams = OPUParameters()
+  def opuTE = vParams.opuTE(vLen)
 
   def dmemTagBits = log2Ceil(vParams.vlifqEntries.max(vParams.vsifqEntries))
   def sgmemTagBits = log2Ceil(vParams.vsgifqEntries)

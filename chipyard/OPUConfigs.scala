@@ -58,3 +58,11 @@ class OPUV128D64DualShuttleConfig extends Config(
   new shuttle.common.WithShuttleTileBeatBytes(8) ++
   new shuttle.common.WithNShuttleCores(2) ++
   new chipyard.config.AbstractConfig)
+
+// ------------------------------------------------------------------------
+// RISC-V VME subset (Xsfmm v0.6.6 encodings) performance targets:
+// half-width datapaths with the int8 + OCP FP8 outer-product unit.
+// Tile edge TE = VLEN/8 (Xsfmm16t / Xsfmm32t / Xsfmm64t).
+class VMEV128D64ShuttleConfig extends OPUV128D64MxShuttleConfig
+class VMEV256D128ShuttleConfig extends OPUV256D128MxShuttleConfig
+class VMEV512D256ShuttleConfig extends OPUV512D256MxShuttleConfig

@@ -100,5 +100,19 @@ object FPMGT             extends XDefaultInstructionField
 object FPSgnj            extends NDefaultInstructionField
 object FPSpecRM          extends XDefaultInstructionField { override val width = 3 }
 
-// Outer Product Unit control
-object OPFP8             extends NDefaultInstructionField
+// Outer Product Unit control (Xsfmm/VME subset)
+object OPVE              extends NDefaultInstructionField // encoded in the OP-VE major opcode (1110111)
+object OPUMatmul         extends NDefaultInstructionField // sf.mm.*: reads tk operand rows from vs1/vs2
+object OPUKind           extends InstructionField {
+  val default: BitPat = BitPat(0.U(3.W))
+  val width: Int = 3
+}
+object OPUKinds {
+  val NONE    = 0
+  val MM_INT  = 1 // sf.mm.{u,s}.{u,s}
+  val MM_FP8  = 2 // sf.mm.{e4m3,e5m2}.{e4m3,e5m2}
+  val MV_V_T  = 3 // sf.vtmv.v.t
+  val MV_T_V  = 4 // sf.vtmv.t.v
+  val ZERO    = 5 // sf.vtzero.t
+  val DISCARD = 6 // sf.vtdiscard
+}

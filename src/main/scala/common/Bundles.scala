@@ -69,6 +69,7 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def seg_nf = Mux(wr, 0.U, nf)
   def wr_nf = Mux(wr, nf, 0.U)
   def vmu = opcode.isOneOf(opcLoad, opcStore)
+  override def opve = opcode === opcVectorE
   def rs1 = bits(19,15)
   def rs2 = bits(24,20)
   def rd  = bits(11,7)
@@ -101,6 +102,7 @@ class BackendIssueInst(implicit p: Parameters) extends VectorIssueInst()(p) {
   val reads_vs2_mask = Bool() // vs2 read as mask
   val rs1_is_rs2 = Bool()
   val nf_log2 = UInt(2.W)
+  val mm_operands = Bool()    // Xsfmm sf.mm: vs1/vs2 hold tk rows spread over an aligned 8-register group
 
   val renv1 = Bool()
   val renv2 = Bool()

@@ -50,13 +50,13 @@ object OPMFunct6 extends ChiselEnum {
   val compress, mandnot, mand, mor, mxor, mornot, mnand, mnor, mxnor = Value
 
   val divu, div, remu, rem, mulhu, mul, mulhsu, mulh = Value
-  val opmacc = Value
+  val _ = Value
   val madd = Value
-  val opmvin = Value
+  val _ = Value
   val nmsub = Value
-  val opmvinbcast = Value
+  val _ = Value
   val macc = Value
-  val opmvout = Value
+  val _ = Value
   val nmsac = Value
 
   val waddu, wadd, wsubu, wsub, wadduw, waddw, wsubuw, wsubw, wmulu = Value
@@ -81,8 +81,7 @@ object OPFFunct6 extends ChiselEnum {
   val mfge, fdiv, frdiv = Value
   val _, _ = Value
   val fmul = Value
-  val opfmacc = Value
-  val _ = Value
+  val _, _ = Value
   val frsub = Value
   val fmadd, fnmadd, fmsub, fnmsub, fmacc, fnmacc, fmsac, fnmsac, fwadd, fwredusum, fwsub, fwredosum = Value
   val fwaddw, _, fwsubw, _, fwmul, _, _, _, fwmacc, fwnmacc, fwmsac, fwnmsac = Value
@@ -108,6 +107,7 @@ trait HasVectorConsts {
   def opcLoad   = "b0000111".U
   def opcStore  = "b0100111".U
   def opcVector = "b1010111".U
+  def opcVectorE = "b1110111".U // OP-VE: Xsfmm sf.mm.*
 
   def OPIVV = "b000".U(3.W)
   def OPFVV = "b001".U(3.W)

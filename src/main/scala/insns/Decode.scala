@@ -16,6 +16,8 @@ trait HasVectorDecoderSignals {
   def rs1: UInt
   def rs2: UInt
   def sew: UInt
+  // Set for instructions in the OP-VE major opcode (Xsfmm sf.mm.*)
+  def opve: Bool = false.B
 }
 
 class VectorDecodedControl(insns: Seq[VectorInstruction], fields: Seq[InstructionField]) extends Bundle {
@@ -34,10 +36,10 @@ class VectorDecodedControl(insns: Seq[VectorInstruction], fields: Seq[Instructio
   }
 
   def decode(bundle: HasVectorDecoderSignals): VectorDecodedControl = decode(
-    bundle.rs1, bundle.rs2, bundle.funct3, bundle.funct6, bundle.sew)
+    bundle.rs1, bundle.rs2, bundle.funct3, bundle.funct6, bundle.sew, bundle.opve)
 
-  def decode(rs1: UInt, rs2: UInt, funct3: UInt, funct6: UInt, sew: UInt): VectorDecodedControl = {
-    val decoder = new VectorDecoder(rs1, rs2, funct3, funct6, sew, insns, fields)
+  def decode(rs1: UInt, rs2: UInt, funct3: UInt, funct6: UInt, sew: UInt, opve: Bool = false.B): VectorDecodedControl = {
+    val decoder = new VectorDecoder(rs1, rs2, funct3, funct6, sew, insns, fields, opve)
 
     matched := decoder.matched
     fields.zipWithIndex.foreach { case (f, i) =>
@@ -50,15 +52,17 @@ class VectorDecodedControl(insns: Seq[VectorInstruction], fields: Seq[Instructio
 class VectorDecoder(
   rs1: UInt, rs2: UInt, funct3: UInt, funct6: UInt, sew: UInt,
   insns: Seq[VectorInstruction],
-  fields: Seq[InstructionField]) {
+  fields: Seq[InstructionField],
+  opve: Bool = false.B) {
 
   def this(bundle: HasVectorDecoderSignals, insns: Seq[VectorInstruction], fields: Seq[InstructionField]) = {
     this(bundle.rs1, bundle.rs2, bundle.funct3, bundle.funct6, bundle.sew,
-      insns, fields)
+      insns, fields, bundle.opve)
   }
 
-  val index = Cat(rs1(4,0), rs2(4,0), funct3(2,0), funct6(5,0), sew(1,0))
-  val lookups = insns.map { i => i.lookup(RS1) ## i.lookup(RS2) ## i.lookup(F3) ## i.lookup(F6) ## i.lookup(SEW) }
+  // The major-opcode bit keeps OP-VE (Xsfmm sf.mm.*) encodings from aliasing OP-V ones
+  val index = Cat(opve, rs1(4,0), rs2(4,0), funct3(2,0), funct6(5,0), sew(1,0))
+  val lookups = insns.map { i => i.lookup(OPVE) ## i.lookup(RS1) ## i.lookup(RS2) ## i.lookup(F3) ## i.lookup(F6) ## i.lookup(SEW) }
   val duplicates = lookups.diff(lookups.distinct).distinct
   val table = insns.map { i => fields.map(f => i.lookup(f)) :+ BitPat(true.B) }
 

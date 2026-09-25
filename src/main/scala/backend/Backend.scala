@@ -124,12 +124,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     issq.io.enq.bits.wvd   := false.B
     issq.io.enq.bits.scalar_to_vd0 := false.B
     issq.io.enq.bits.rs1_is_rs2 := false.B
+    issq.io.enq.bits.mm_operands := false.B
   }
 
   val dis_ctrl = Wire(new VectorDecodedControl(all_supported_insns, Seq(
     Reduction, Wide2VD, Wide2VS2, WritesAsMask,
     ReadsVS1AsMask, ReadsVS2AsMask, ReadsVS1, ReadsVS2, ReadsVD,
-    VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0
+    VMBitReadsVM, AlwaysReadsVM, WritesVD, WritesScalar, ScalarToVD0, OPUMatmul
   ))).decode(vdq.io.deq.bits)
 
   // Load sequencer
@@ -161,7 +162,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vxissq.io.enq.bits.renv2 := dis_ctrl.bool(ReadsVS2)
     vxissq.io.enq.bits.renvd := dis_ctrl.bool(ReadsVD)
     vxissq.io.enq.bits.renvm := (!vdq.io.deq.bits.vm && dis_ctrl.bool(VMBitReadsVM)) || dis_ctrl.bool(AlwaysReadsVM)
-    vxissq.io.enq.bits.wvd := !dis_ctrl.bool(WritesScalar)
+    // OPU instructions whose rd names a tile (sf.mm, sf.vtzero, ...) do not write vd
+    vxissq.io.enq.bits.wvd := !dis_ctrl.bool(WritesScalar) && dis_ctrl.bool(WritesVD)
+    vxissq.io.enq.bits.mm_operands := dis_ctrl.bool(OPUMatmul)
     vxissq.io.enq.bits.scalar_to_vd0 := dis_ctrl.bool(ScalarToVD0)
     vxissq.io.enq.bits.reduction := dis_ctrl.bool(Reduction)
   }
@@ -369,22 +372,25 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     val vopu_ctrl_reg = Reg(new OuterProductControl)
     vopu_ctrl_reg := vos.get.io.iss.bits
     when (vos.get.io.iss.valid) {
-      when (vos.get.io.iss.bits.mvin.orR || vos.get.io.iss.bits.mvin_bcast.head) {
+      // sf.vtmv.t.v: source vector group is vs2; one 32-bit element per cluster column (row)
+      // or cluster row (column)
+      when (vos.get.io.iss.bits.mvin.orR) {
         vopu_ctrl_reg.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
           Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W)))
         )
       }
-      when (vos.get.io.iss.bits.mvin_col.orR || vos.get.io.iss.bits.mvin_bcast_col.head) {
+      when (vos.get.io.iss.bits.mvin_col.orR) {
         vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
           Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
         )
       }
 
+      // sf.mm: A = vs2 feeds the rows, B = vs1 feeds the columns
       when (vos.get.io.iss.bits.macc.head) {
-        val elems_l = vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(
+        val elems_l = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
           Vec(vopu.yDim * vopu.clusterYdim, UInt(opuParams.aWidth.W))
         )
-        val elems_t = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+        val elems_t = vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(
           Vec(vopu.xDim * vopu.clusterXdim, UInt(opuParams.bWidth.W))
         )
         for (i <- 0 until vopu.yDim) {
@@ -423,8 +429,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.vxs(flat_vxs.size).pipe_write_req <> vos.io.pipe_write_req
     vrf.io.pipe_writes(flat_vxs.size).valid := vos.io.write.valid
     vrf.io.pipe_writes(flat_vxs.size).bits.eg := vos.io.write.bits
-    vrf.io.pipe_writes(flat_vxs.size).bits.data := RegEnable(vopu.get.io.out.asUInt, vos.io.write_reg_enable)
-    vrf.io.pipe_writes(flat_vxs.size).bits.mask := ~(0.U(dLen.W))
+    vrf.io.pipe_writes(flat_vxs.size).bits.data := RegEnable(
+      Mux(vos.io.write_col, vopu.get.io.out_col.asUInt, vopu.get.io.out.asUInt), vos.io.write_reg_enable)
+    vrf.io.pipe_writes(flat_vxs.size).bits.mask := vos.io.write_mask
 
     vrf.io.iter_writes(flat_vxs.size).valid := false.B
     vrf.io.iter_writes(flat_vxs.size).bits := DontCare
