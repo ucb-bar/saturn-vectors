@@ -53,16 +53,12 @@ bmarks = \
 	vec-mx-binary \
 	vec-mx-unary \
 	vec-mx-matmul \
-	opu-fp8-gemm \
-	opu-gemm \
-	opu-m4-gemm \
-	opu-m4-memcopy \
-	opu-m4-transpose \
-	opu-2x2-gemm \
-	opu-fused-gemm-transpose \
-	opu-fused-lm2-gemm-transpose \
-	opu-lm2-gemm \
-	opu-lm2-memcopy 
+	vme-directed \
+	vme-i8-gemm \
+	vme-fp8-gemm
+
+# The opu-* benchmarks use the retired BME encodings (bme.h) and no longer
+# decode now that the OPU implements the Xsfmm/VME subset (vme.h).
 
 cpp_bmarks = \
 	vec-tasks \
