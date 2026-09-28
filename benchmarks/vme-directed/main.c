@@ -297,9 +297,30 @@ static void test_mm_fp8(size_t te) {
   }
 }
 
+static void diag_moves(size_t te) {
+  for (size_t i = 0; i < te; i++)
+    for (size_t j = 0; j < te; j++)
+      c_ref[i][j] = (int32_t)((i << 16) | j);
+  printf("diag: load_tile_rows(0)\n");
+  load_tile_rows(0, te);
+  printf("diag: store_tile_rows(0) [mvout tile0 row]\n");
+  store_tile_rows(0, te);
+  compare_tile("diag row0", te, te);
+  printf("diag: store_tile_cols(0) [mvout tile0 col]\n");
+  store_tile_cols(0, te);
+  compare_tile("diag col0", te, te);
+  printf("diag: load_tile_rows(1)\n");
+  load_tile_rows(1, te);
+  printf("diag: store_tile_cols(1) [mvout tile1 col]\n");
+  store_tile_cols(1, te);
+  compare_tile("diag col1", te, te);
+  printf("diag: done\n");
+}
+
 int main(void) {
   size_t te = test_config();
   if (te > MAX_TE) { printf("TE too large\n"); exit(1); }
+  diag_moves(te);
   test_mm_int8(te);
   test_moves(te);
   test_vtzero(te);

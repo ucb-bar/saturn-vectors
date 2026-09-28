@@ -61,6 +61,12 @@ void __attribute__((noreturn)) tohost_exit(uintptr_t code)
 
 uintptr_t __attribute__((weak)) handle_trap(uintptr_t cause, uintptr_t epc, uintptr_t regs[32])
 {
+  unsigned long vstart, vl, vtype;
+  asm volatile("csrr %0, vstart" : "=r"(vstart));
+  asm volatile("csrr %0, vl" : "=r"(vl));
+  asm volatile("csrr %0, vtype" : "=r"(vtype));
+  printf("unhandled trap: cause=0x%lx epc=0x%lx vstart=0x%lx vl=0x%lx vtype=0x%lx\n",
+         (unsigned long)cause, (unsigned long)epc, vstart, vl, vtype);
   tohost_exit(1337);
 }
 
