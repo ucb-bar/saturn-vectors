@@ -44,8 +44,8 @@ static void load_operands(size_t te) {
 
 // Read tile t (rows 0..te-1) into c_mem using row moves (e32, w1).
 static void store_tile_rows(size_t t, size_t te) {
-  vme_vsettnt_e32w1(te);
   for (size_t r = 0; r < te; r++) {
+    vme_vsettnt_e32w1(te);
     VME_VTMV_V_T(24, vme_tss(t, VME_TSS_ROW, r));
     asm volatile("vse32.v v24, (%0)" : : "r"(c_mem[r]) : "memory");
   }
@@ -53,8 +53,8 @@ static void store_tile_rows(size_t t, size_t te) {
 
 // Read tile t into c_mem using column moves (transposing back into row-major).
 static void store_tile_cols(size_t t, size_t te) {
-  vme_vsettnt_e32w1(te);
   for (size_t c = 0; c < te; c++) {
+    vme_vsettnt_e32w1(te);
     VME_VTMV_V_T(24, vme_tss(t, VME_TSS_COL, c));
     asm volatile("vse32.v v24, (%0)" : : "r"(row_buf) : "memory");
     for (size_t r = 0; r < te; r++) c_mem[r][c] = row_buf[r];
@@ -178,9 +178,9 @@ static void test_moves(size_t te) {
     compare_tile("row-in / column-out", te, te);
   }
   // column-in / row-out
-  vme_vsettnt_e32w1(te);
   for (size_t c = 0; c < te; c++) {
     for (size_t r = 0; r < te; r++) row_buf[r] = c_ref[r][c];
+    vme_vsettnt_e32w1(te);
     asm volatile("vle32.v v24, (%0)" : : "r"(row_buf) : "memory");
     VME_VTMV_T_V(vme_tss(2, VME_TSS_COL, c), 24);
   }
@@ -272,7 +272,7 @@ static void test_mm_fp8(size_t te) {
       for (size_t j = 0; j < tn; j++) {
         volatile float acc = cf_ref[i][j];
         for (size_t k = 0; k < tk; k++)
-          acc = acc + fp8_to_float((uint8_t)a_mem[k][i], fmt_a[v]) * fp8_to_float((uint8_t)b_mem[k][j], fmt_b[v]);
+          acc = acc + fp8_to_float((uint8_t)a_mem[k][i], !fmt_a[v]) * fp8_to_float((uint8_t)b_mem[k][j], !fmt_b[v]);
         cf_ref[i][j] = acc;
       }
     store_tile_rows(0, te);
