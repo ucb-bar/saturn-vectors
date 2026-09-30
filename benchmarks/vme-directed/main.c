@@ -22,6 +22,7 @@ static uint32_t lcg(void) { lcg_state = lcg_state * 1664525u + 1013904223u; retu
 
 static size_t read_vtype(void) { size_t v; asm volatile("csrr %0, vtype" : "=r"(v)); return v; }
 static size_t read_vl(void) { size_t v; asm volatile("csrr %0, vl" : "=r"(v)); return v; }
+static uint64_t read_cycle(void) { uint64_t v; asm volatile("rdcycle %0" : "=r"(v)); return v; }
 
 // A rows (k = 0..3) go to v8, v10, v12, v14; B rows to v16, v18, v20, v22.
 static int8_t a_mem[4][MAX_TE] __attribute__((aligned(64)));
@@ -251,8 +252,9 @@ static void test_tile_mem(size_t te) {
   vme_vsettnt_e32w1(te);
   printf("tile_mem: row round-trip loop\n"); // TEMP DIAG
   for (size_t r = 0; r < te; r++) {
-    printf("  r=%lu vtse32\n", r); // TEMP DIAG
+    printf("  r=%lu vtse32 cycle=%llu\n", r, (unsigned long long)read_cycle()); // TEMP DIAG
     VME_VTSE32(mem_buf, vme_tss(1, VME_TSS_ROW, r));
+    printf("  r=%lu vtse32 retired cycle=%llu\n", r, (unsigned long long)read_cycle()); // TEMP DIAG
     printf("  r=%lu vtle32\n", r); // TEMP DIAG
     VME_VTLE32(mem_buf, vme_tss(2, VME_TSS_ROW, r));
     printf("  r=%lu done\n", r); // TEMP DIAG
