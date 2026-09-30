@@ -369,6 +369,17 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.vxs(flat_vxs.size).rvd.req.bits := DontCare
     vos.get.io.iss.ready := true.B
 
+    // sf.vtle32: destination is OPU tile state, addressed by the TSS LoadSequencer
+    // latched at dispatch (see LoadSequencer.scala). Fires in lockstep with the
+    // io.vmu.lresp handshake wired below, exactly like a normal load's VRF write.
+    val tile_ld_fire = io.vmu.lresp.fire && vls.io.iss.bits.tile_ld
+    val tile_ld_col_idx = vls.io.iss.bits.eidx >> log2Ceil(dLen/32)
+    val tile_ld_addr = OuterProductAddr(
+      vls.io.iss.bits.tile, vls.io.iss.bits.tile_col, vls.io.iss.bits.tss_idx, tile_ld_col_idx,
+      vopu.yDim, vopu.xDim, vopu.clusterYdim, vopu.clusterXdim, vopu.subTileEdge, vLen/dLen)
+    val tile_ld_data = Fill(dLen / mLen, io.vmu.lresp.bits.data)
+    val tile_ld_mv_en = VecInit.tabulate(vopu.xDim)(k => vls.io.iss.bits.eidx_wmask(4*k))
+
     val vopu_ctrl_reg = Reg(new OuterProductControl)
     vopu_ctrl_reg := vos.get.io.iss.bits
     when (vos.get.io.iss.valid) {
@@ -406,8 +417,54 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       }
     }
 
+    // sf.vtle32's array write. Mutually exclusive with the block above: OuterProductSequencer
+    // and LoadSequencer's tile loads interlock against each other (see vos.io.tile_ld_busy /
+    // vls.io.opu_busy below), so at most one of these two `when`s is ever true in a cycle.
+    when (tile_ld_fire) {
+      vopu_ctrl_reg.clock_enable := true.B
+      vopu_ctrl_reg.mrf_idx.foreach(_ := tile_ld_addr.mrfIdx)
+      vopu_ctrl_reg.row_idx.foreach(_ := tile_ld_addr.rowIdxCell)
+      vopu_ctrl_reg.col_idx.foreach(_ := tile_ld_addr.colIdxCell)
+      vopu_ctrl_reg.mv_en := tile_ld_mv_en
+      for (i <- 0 until vopu.yDim) {
+        vopu_ctrl_reg.mvin(i) := !vls.io.iss.bits.tile_col && tile_ld_addr.rowMoveCluster === i.U
+      }
+      for (j <- 0 until vopu.xDim) {
+        vopu_ctrl_reg.mvin_col(j) := vls.io.iss.bits.tile_col && tile_ld_addr.colMoveCluster === j.U
+      }
+      when (!vls.io.iss.bits.tile_col) {
+        vopu_ctrl_reg.in_t := tile_ld_data.asTypeOf(Vec(vopu.xDim, Vec(vopu.clusterXdim, UInt(opuParams.bWidth.W))))
+      } .otherwise {
+        vopu_ctrl_reg.in_l := tile_ld_data.asTypeOf(Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W))))
+      }
+    }
+
     vopu.io.op := vopu_ctrl_reg
   }
+
+  // sf.vtle32 (LoadSequencer) and every other OPU tile op (OuterProductSequencer) are
+  // otherwise-unrelated sequencers that both touch tile state; interlock them so a new
+  // dispatch on one side can't race an in-flight op on the other (see LoadSequencer.scala
+  // / OuterProductSequencer.scala for the corresponding io.dis.ready gating). This
+  // direction is safe to key off array_busy (any OuterProductSequencer activity, not
+  // just sf.vtle32-conflicting work): tile_ld_busy below freezes OuterProductSequencer's
+  // own dispatch for as long as a sf.vtle32 is resident in LoadSequencer, so array_busy
+  // is guaranteed to drain rather than being kept perpetually busy by new work.
+  vls.io.opu_busy := vos.map(_.io.array_busy).getOrElse(false.B)
+  vos.foreach(_.io.tile_ld_busy := vls.io.tile_ld_busy)
+  // sf.vtse32 and ordinary vector stores both ultimately feed io.vmu.sdata's single
+  // ordered stream (wired below); interlock them so the two producers never interleave.
+  // Unlike the tile_ld_busy direction above, StoreSequencer's own dispatch is NOT frozen
+  // while OuterProductSequencer is busy in general (ordinary sf.mm/sf.vtzero.t/sf.vtmv.*
+  // traffic must keep overlapping with unrelated stores), so gating vss on the broad
+  // array_busy would let a steady stream of non-store OPU work starve StoreSequencer
+  // forever -- a livelock, not just a stall. tile_st_pending is the narrow, type-specific
+  // alternative: true only while an actual sf.vtse32 is resident or its readout is still
+  // in the array's pipe (io.tile_st_active) or queued but not yet drained to
+  // io.vmu.sdata (tile_st_q below), so unrelated OPU activity never blocks vss.
+  val tile_st_pending = WireDefault(false.B)
+  vos.foreach(_.io.vss_busy := vss.io.busy)
+  vss.io.tile_st_busy := tile_st_pending
 
 
   val frontend_rindex = Wire(new VectorReadIO)
@@ -424,26 +481,79 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   }
 
 
+  // sf.vtse32's drained readout, arbitrated onto io.vmu.sdata below alongside ordinary
+  // vector stores (the two are interlocked -- see tile_st_pending above -- so at most
+  // one is ever valid at a time; this is a Mux, not a real arbiter).
+  val tile_st_sdata = Wire(Decoupled(new VectorStoreData))
+  tile_st_sdata.valid := false.B
+  tile_st_sdata.bits := DontCare
+
   // Sepecial OPU connection
   vos.foreach { vos =>
     vrf.io.vxs(flat_vxs.size).pipe_write_req <> vos.io.pipe_write_req
-    vrf.io.pipe_writes(flat_vxs.size).valid := vos.io.write.valid
+    vrf.io.pipe_writes(flat_vxs.size).valid := vos.io.write.valid && !vos.io.write_mem
     vrf.io.pipe_writes(flat_vxs.size).bits.eg := vos.io.write.bits
-    vrf.io.pipe_writes(flat_vxs.size).bits.data := RegEnable(
+    val vos_write_data = RegEnable(
       Mux(vos.io.write_col, vopu.get.io.out_col.asUInt, vopu.get.io.out.asUInt), vos.io.write_reg_enable)
+    vrf.io.pipe_writes(flat_vxs.size).bits.data := vos_write_data
     vrf.io.pipe_writes(flat_vxs.size).bits.mask := vos.io.write_mask
 
     vrf.io.iter_writes(flat_vxs.size).valid := false.B
     vrf.io.iter_writes(flat_vxs.size).bits := DontCare
+
+    // sf.vtse32: the same readout, routed to io.vmu.sdata instead of the VRF. The
+    // mvout pipe schedules writes open-loop (no backpressure -- see PipeScheduler in
+    // OuterProductSequencer), so buffer drained entries here and drain them into
+    // io.vmu.sdata (which can backpressure) at its own pace.
+    val tile_st_q = Module(new Queue(new Bundle {
+      val data = UInt(dLen.W)
+      val mask = UInt(dLenB.W)
+      val debug_id = UInt(debugIdSz.W)
+    }, (opuTE * opuParams.cWidth) / dLen))
+    tile_st_q.io.enq.valid := vos.io.write.valid && vos.io.write_mem
+    tile_st_q.io.enq.bits.data := vos_write_data
+    tile_st_q.io.enq.bits.mask := vos.io.write_mask
+    tile_st_q.io.enq.bits.debug_id := vos.io.write_debug_id
+    assert(tile_st_q.io.enq.ready || !tile_st_q.io.enq.valid, "sf.vtse32 readout overran its store queue")
+    tile_st_pending := vos.io.tile_st_active || tile_st_q.io.deq.valid
+
+    if (mLen < dLen) {
+      val select = RegInit(0.U(log2Ceil(dLen/mLen).W))
+      val data_slices = tile_st_q.io.deq.bits.data.asTypeOf(Vec(dLen/mLen, UInt(mLen.W)))
+      val mask_slices = tile_st_q.io.deq.bits.mask.asTypeOf(Vec(dLen/mLen, UInt(mLenB.W)))
+      tile_st_sdata.valid := tile_st_q.io.deq.valid
+      tile_st_sdata.bits.stdata := data_slices(select)
+      tile_st_sdata.bits.stmask := mask_slices(select)
+      tile_st_sdata.bits.debug_id := tile_st_q.io.deq.bits.debug_id
+      tile_st_q.io.deq.ready := false.B
+      when (tile_st_sdata.fire) {
+        when (select === (dLen/mLen - 1).U) {
+          select := 0.U
+          tile_st_q.io.deq.ready := true.B
+        } .otherwise {
+          select := select + 1.U
+        }
+      }
+    } else {
+      tile_st_sdata.valid := tile_st_q.io.deq.valid
+      tile_st_sdata.bits.stdata := tile_st_q.io.deq.bits.data
+      tile_st_sdata.bits.stmask := tile_st_q.io.deq.bits.mask
+      tile_st_sdata.bits.debug_id := tile_st_q.io.deq.bits.debug_id
+      tile_st_q.io.deq.ready := tile_st_sdata.ready
+    }
   }
 
   val load_write = Wire(Decoupled(new VectorWrite(dLen)))
   vrf.io.load_write <> load_write
 
 
-  io.vmu.lresp.ready := vls.io.iss.valid && load_write.ready
-  vls.io.iss.ready := io.vmu.lresp.valid && load_write.ready
-  load_write.valid := vls.io.iss.valid && io.vmu.lresp.valid
+  // sf.vtle32's response is routed to the OPU array above instead of the VRF; it
+  // still shares the io.vmu.lresp handshake with ordinary loads (LoadSequencer only
+  // ever holds one instruction at a time), just not load_write's backpressure.
+  val lresp_ready = Mux(vls.io.iss.bits.tile_ld, true.B, load_write.ready)
+  io.vmu.lresp.ready := vls.io.iss.valid && lresp_ready
+  vls.io.iss.ready := io.vmu.lresp.valid && lresp_ready
+  load_write.valid := vls.io.iss.valid && io.vmu.lresp.valid && !vls.io.iss.bits.tile_ld
   load_write.bits.eg   := vls.io.iss.bits.wvd_eg
   load_write.bits.data := Fill(dLen / mLen, io.vmu.lresp.bits.data)
   val load_wmask = Mux(vls.io.iss.bits.use_rmask,
@@ -513,20 +623,24 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vmu_index_q.io.push.valid := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renv2 && vps.io.iss.ready
   vmu_mask_q.io.push.valid  := vps.io.iss.valid && vps.io.iss.bits.vmu && vps.io.iss.bits.renvm && vps.io.iss.ready
 
-  io.vmu.sdata.valid   := vss.io.iss.valid
+  // sf.vtse32 (tile_st_sdata, wired up above) and ordinary vector stores are
+  // interlocked (tile_st_pending) so at most one is ever valid here.
+  io.vmu.sdata.valid   := vss.io.iss.valid || tile_st_sdata.valid
   vss.io.iss.ready     := io.vmu.sdata.ready
+  tile_st_sdata.ready  := io.vmu.sdata.ready
   val iss_stdata = if (mLen < dLen) {
     val select = (vss.io.iss.bits.eidx << vss.io.iss.bits.elem_size)(dLenOffBits-1,mLenOffBits)
     vrf.io.vss.rvd.resp.asTypeOf(Vec(dLen/mLen, UInt(mLen.W)))(select)
   } else {
     vrf.io.vss.rvd.resp
   }
-  io.vmu.sdata.bits.stdata    := iss_stdata
-  io.vmu.sdata.bits.stmask    := vss.io.iss.bits.eidx_mask & Mux(vss.io.iss.bits.use_stmask,
+  val vss_stmask = vss.io.iss.bits.eidx_mask & Mux(vss.io.iss.bits.use_stmask,
     get_vm_mask(vrf.io.vss.rvm.resp, vss.io.iss.bits.eidx, vss.io.iss.bits.elem_size, mLen),
     ~(0.U(mLenB.W))
   )
-  io.vmu.sdata.bits.debug_id := vss.io.iss.bits.debug_id
+  io.vmu.sdata.bits.stdata    := Mux(tile_st_sdata.valid, tile_st_sdata.bits.stdata, iss_stdata)
+  io.vmu.sdata.bits.stmask    := Mux(tile_st_sdata.valid, tile_st_sdata.bits.stmask, vss_stmask)
+  io.vmu.sdata.bits.debug_id  := Mux(tile_st_sdata.valid, tile_st_sdata.bits.debug_id, vss.io.iss.bits.debug_id)
 
 
   io.vmu.mask_pop   <> vmu_mask_q.io.pop

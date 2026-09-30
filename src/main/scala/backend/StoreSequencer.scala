@@ -8,10 +8,17 @@ import saturn.common._
 class StoreSequencerIO(implicit p: Parameters) extends SequencerIO(new StoreDataMicroOp) {
   val rvd  = Decoupled(new VectorReadReq)
   val rvm  = Decoupled(new VectorReadReq)
+
+  // sf.vtse32 (OuterProductSequencer) shares io.vmu.sdata's single ordered stream with
+  // this sequencer; block dispatch here while one may still be draining, so the two
+  // producers never need to interleave.
+  val tile_st_busy = Input(Bool())
 }
 
 class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]()(p) {
-  def accepts(inst: VectorIssueInst) = inst.vmu && inst.opcode(5)
+  // sf.vtse32 is claimed by OuterProductSequencer (its store data comes from the OPU
+  // array's readout pipe, not the VRF read port this sequencer assumes)
+  def accepts(inst: VectorIssueInst) = inst.vmu && inst.opcode(5) && !inst.tile_st
 
   val io = IO(new StoreSequencerIO)
 
@@ -28,7 +35,7 @@ class StoreSequencer(implicit p: Parameters) extends Sequencer[StoreDataMicroOp]
   val next_eidx = get_next_eidx(inst.vconfig.vl, eidx, inst.mem_elem_size, sub_mlen, false.B, false.B, mLen)
   val tail      = next_eidx === inst.vconfig.vl && sidx === inst.seg_nf
 
-  io.dis.ready := !valid || (tail && io.iss.fire) && !io.dis_stall
+  io.dis.ready := (!valid || (tail && io.iss.fire) && !io.dis_stall) && !io.tile_st_busy
 
   when (io.dis.fire) {
     val iss_inst = io.dis.bits

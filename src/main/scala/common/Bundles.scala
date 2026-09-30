@@ -60,12 +60,20 @@ class VectorIssueInst(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   def opcode = bits(6,0)
   def store = opcode(5)
   def mem_idx_size = bits(13,12)
-  def mem_elem_size = Mux(mop(0), vconfig.vtype.vsew, bits(13,12))
+  def mew = bits(28)
+  // sf.vtle32/sf.vtse32 (Load/Store Tile Subset to Memory): mew=1 is otherwise always
+  // illegal, so it's claimed as a dedicated encoding space where rs2 holds a Tile
+  // Subset Specifier rather than a lumop/sumop sub-opcode or a stride register.
+  def tile_ld = opcode === opcLoad && mew === 1.U
+  def tile_st = opcode === opcStore && mew === 1.U
+  def tile_mem = tile_ld || tile_st
+  def mem_elem_size = Mux(tile_mem, bits(31,29)(1,0), Mux(mop(0), vconfig.vtype.vsew, bits(13,12)))
   def vm = bits(25)
   def orig_mop = bits(27,26)
   def umop = bits(24,20)
-  def nf = bits(31,29)
-  def wr = orig_mop === mopUnit && umop === lumopWhole
+  // bits(31,29) is the EEW selector (eee) for tile_mem, not a segment count
+  def nf = Mux(tile_mem, 0.U, bits(31,29))
+  def wr = !tile_mem && orig_mop === mopUnit && umop === lumopWhole
   def seg_nf = Mux(wr, 0.U, nf)
   def wr_nf = Mux(wr, nf, 0.U)
   def vmu = opcode.isOneOf(opcLoad, opcStore)
@@ -267,6 +275,12 @@ class LoadRespMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVe
   val tail = Bool()
   val debug_id = UInt(debugIdSz.W)
   val vat = UInt(vParams.vatSz.W)
+
+  // sf.vtle32: destination is OPU tile state, not the VRF, addressed by a latched TSS
+  val tile_ld = Bool()
+  val tile = UInt(2.W)
+  val tile_col = Bool()
+  val tss_idx = UInt((log2Ceil(opuTE max 1) max 1).W)
 }
 
 class SpecialMicroOp(implicit p: Parameters) extends CoreBundle()(p) with HasVectorParams {

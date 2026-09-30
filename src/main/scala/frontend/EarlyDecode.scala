@@ -35,6 +35,12 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
 
   val v_load = opcode === opcLoad && !width.isOneOf(1.U, 2.U, 3.U, 4.U)
   val v_store = opcode === opcStore && !width.isOneOf(1.U, 2.U, 3.U, 4.U)
+  // sf.vtle{eee}/sf.vtse{eee} (Load/Store Tile Subset to Memory): claims the mew=1
+  // sub-space, which is otherwise always illegal below. rs2 holds a Tile Subset
+  // Specifier rather than a lumop/sumop sub-opcode or stride register; only eee=32b
+  // (matching the (e32,w1) tile config sf.vtmv.* already requires) is implemented.
+  val tile_mem = mew === 1.U && mop === 0.U && vm === 1.U && width === 7.U && io.inst(11,7) === 0.U
+  val tile_eee = nf
   val opve = opcode === opcVectorE
   val v_arith_maybe = (opcode === opcVector && funct3 =/= 7.U) || opve
   val v_decode = new VectorDecoder(rs1, rs2, funct3, funct6, io.vconfig.vtype.vsew, supported_ex_insns, Seq(OPUKind), opve)
@@ -58,16 +64,22 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
   io.vector := v_load || v_store || v_arith_maybe
 
   when (v_load || v_store) {
-    val unit = mop === 0.U
-    val whole = unit && ((v_load && lumop === lumopWhole) || (v_store && sumop === sumopWhole))
-    io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U) && (!io.vconfig.vtype.vill || whole)
-    when (unit) {
-      when (v_load && !lumop.isOneOf(lumopUnit, lumopWhole, lumopMask, lumopFF)) { io.legal := false.B }
-      when (v_store && !sumop.isOneOf(sumopUnit, sumopWhole, sumopMask)) { io.legal := false.B }
+    when (tile_mem) {
+      io.legal := tile_eee === 2.U && vtwiden === 1.U && io.vconfig.vtype.vsew === 2.U && !io.vconfig.vtype.vill
+      io.read_rs1 := true.B
+      io.read_rs2 := true.B
+    } .otherwise {
+      val unit = mop === 0.U
+      val whole = unit && ((v_load && lumop === lumopWhole) || (v_store && sumop === sumopWhole))
+      io.legal := mew === 0.U && width.isOneOf(0.U, 5.U, 6.U, 7.U) && (!io.vconfig.vtype.vill || whole)
+      when (unit) {
+        when (v_load && !lumop.isOneOf(lumopUnit, lumopWhole, lumopMask, lumopFF)) { io.legal := false.B }
+        when (v_store && !sumop.isOneOf(sumopUnit, sumopWhole, sumopMask)) { io.legal := false.B }
+      }
+      when (mew === 1.U) { io.legal := false.B }
+      io.read_rs1 := true.B
+      io.read_rs2 := mop === mopStrided
     }
-    when (mew === 1.U) { io.legal := false.B }
-    io.read_rs1 := true.B
-    io.read_rs2 := mop === mopStrided
   } .elsewhen (v_arith) {
     io.legal := !io.vconfig.vtype.vill && opu_legal
     io.read_rs1 := funct3.isOneOf(OPIVX, OPMVX)

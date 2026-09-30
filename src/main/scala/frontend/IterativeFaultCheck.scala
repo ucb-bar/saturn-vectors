@@ -147,7 +147,8 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   val seg_single_page = seg_nf_consumed >= (inst.seg_nf +& 1.U)
   val masked = !im_access.io.access.mask && !inst.vm
   val tlb_valid = eidx < inst.vconfig.vl && eidx >= inst.vstart && !masked
-  val ff = inst.umop === lumopFF && inst.mop === mopUnit
+  // tile_mem's umop/rs2 field holds a TSS, not a lumop sub-opcode
+  val ff = !inst.tile_mem && inst.umop === lumopFF && inst.mop === mopUnit
 
   io.busy := valid
   io.inst := inst

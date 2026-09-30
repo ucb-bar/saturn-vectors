@@ -89,7 +89,9 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
   s0_inst.mop      := s0_inst.orig_mop
   s0_inst.fission_vl.valid := false.B // set in s2
   s0_inst.fission_vl.bits := DontCare
-  when (s0_inst.vmu && s0_inst.mop === mopUnit) {
+  // sf.vtle32/sf.vtse32 carry a TSS in the rs2/umop field, not a lumop/sumop
+  // sub-opcode, so it must not be interpreted as lumopWhole/lumopMask here.
+  when (s0_inst.vmu && s0_inst.mop === mopUnit && !s0_inst.tile_mem) {
     val mask_vl = (io.s0.in.bits.vconfig.vl >> 3) + Mux(io.s0.in.bits.vconfig.vl(2,0) === 0.U, 0.U, 1.U)
     val whole_vl = (vLen.U >> (s0_inst.mem_elem_size +& 3.U)) << MuxLookup(s0_inst.nf, 0.U)(Seq(
       0.U -> 0.U,
@@ -114,7 +116,7 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
   val s0_bound = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vconfig.vl) << s0_inst.mem_elem_size) - 1.U
   val s0_single_page = (s0_base >> pgIdxBits) === (s0_bound >> pgIdxBits)
   val s0_replay_next_page = s0_inst.vmu && s0_unit && s0_inst.nf === 0.U && !s0_single_page
-  val s0_iterative = (!s0_single_page || !s0_unit || s0_inst.umop === lumopFF) && !s0_replay_next_page
+  val s0_iterative = (!s0_single_page || !s0_unit || (!s0_inst.tile_mem && s0_inst.umop === lumopFF)) && !s0_replay_next_page
   val s0_fast_sg = s0_iterative && io.s0.in.bits.phys && s0_inst.mop === mopUnordered && s0_inst.seg_nf === 0.U && sgSize.map { size =>
     s0_base >= io.sg_base && s0_base < (io.sg_base + size.U)
   }.getOrElse(false.B)

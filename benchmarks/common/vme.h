@@ -16,6 +16,8 @@
 //   sf.vtmv.t.v rs1, vs2         010111 1 vs2   rs1 110 00000 1010111
 //   sf.vtzero.t mtd              010000 1 11110 00000 110 tttt0 1010111
 //   sf.vtdiscard                 010000 1 11100 00000 110 00000 1010111
+//   sf.vtle32 rs2(TSS), (rs1)    eee=010 1 00 1 rs2 rs1 111 00000 0000111
+//   sf.vtse32 rs2(TSS), (rs1)    eee=010 1 00 1 rs2 rs1 111 00000 0100111
 //
 // Tile subset specifier (TSS): [30:27] tile specifier (0..15), [26:24] pattern
 // (0 row, 1 column), [23:0] row/column index.
@@ -109,5 +111,10 @@ static inline size_t vme_vsettk(size_t atk) {
 #define VME_VTMV_V_T(vd, tss) asm volatile(".insn r 0x57, 6, 0x21, " VME_V(vd) ", %0, x31" : : "r"(tss))
 // sf.vtmv.t.v rs1(TSS), vs2: vector group -> tile row/column
 #define VME_VTMV_T_V(tss, vs2) asm volatile(".insn r 0x57, 6, 0x2f, x0, %0, " VME_V(vs2) : : "r"(tss))
+
+// sf.vtle32 rs2(TSS), (rs1=addr): load a tile row/column from memory (e32, w1)
+#define VME_VTLE32(addr, tss) asm volatile(".insn r 0x07, 7, 0x29, x0, %0, %1" : : "r"(addr), "r"(tss) : "memory")
+// sf.vtse32 rs2(TSS), (rs1=addr): store a tile row/column to memory (e32, w1)
+#define VME_VTSE32(addr, tss) asm volatile(".insn r 0x27, 7, 0x29, x0, %0, %1" : : "r"(addr), "r"(tss) : "memory")
 
 #endif // VME_H

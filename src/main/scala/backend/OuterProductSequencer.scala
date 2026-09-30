@@ -23,7 +23,30 @@ class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new Ou
   val write_mask = Output(UInt(dLen.W))
   val write_reg_enable = Output(Bool())
   val write_col = Output(Bool()) // the readout captured at write_reg_enable came from the column pipe
+  val write_mem = Output(Bool()) // this readout is sf.vtse32 (goes to io.vmu.sdata, not the VRF)
+  val write_debug_id = Output(UInt(debugIdSz.W))
   val wsboard = Output(UInt(egsTotal.W))
+
+  // sf.vtle32 (LoadSequencer, see Backend.scala) also writes OPU tile state; block all
+  // dispatch here while one is in flight there, to avoid racing an in-flight sf.mm/
+  // sf.vtzero.t/sf.vtmv.*/sf.vtse32 against it.
+  val tile_ld_busy = Input(Bool())
+  // True whenever the array must stay clocked (a resident instruction, a readout still
+  // draining, or FP8 hazard history). Consumed by LoadSequencer to delay a resident
+  // sf.vtle32's progress while this is busy with *anything* -- safe only because
+  // tile_ld_busy above freezes this sequencer's own dispatch for the entire time, so
+  // this is guaranteed to drain rather than being kept perpetually busy by new work.
+  val array_busy = Output(Bool())
+  // True specifically while a sf.vtse32 is resident or its readout is still draining
+  // through the pipe (unlike array_busy, NOT set by unrelated sf.mm/sf.vtzero.t/
+  // sf.vtmv.* activity). Consumed by StoreSequencer: unlike array_busy, gating on this
+  // doesn't risk livelock, since ordinary OPU work (which never touches io.vmu.sdata)
+  // keeps flowing through this sequencer while a store is blocked on it.
+  val tile_st_active = Output(Bool())
+  // sf.vtse32 shares io.vmu.sdata's single ordered stream with ordinary vector stores;
+  // block a new sf.vtse32 dispatch while StoreSequencer is still draining one, so the
+  // two producers never need to interleave.
+  val vss_busy = Input(Bool())
 }
 
 /** Sequences the Xsfmm v0.6.6 subset (RISC-V VME stand-in) onto the outer-product array.
@@ -35,13 +58,17 @@ class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new Ou
   *  sf.vtzero.t mtd                                                    (any matrix vtype)
   *  sf.vtmv.t.v rs1=TSS, vs2  /  sf.vtmv.v.t vd, rs1=TSS               (vtype e32, w1)
   *     TSS[30:29] = tile, TSS[24] = pattern (0 row, 1 column), TSS[23:0] = index.
+  *  sf.vtse32 rs2=TSS, (rs1=addr)                                      (vtype e32, w1)
+  *     Drains a tile row/column like sf.vtmv.v.t, but to io.vmu.sdata instead of the
+  *     VRF; TSS layout as above. (sf.vtle32 is handled by LoadSequencer/Backend, since
+  *     the array-side bottleneck there is memory latency, not array readout latency.)
   *  sf.vtdiscard                                                       (no-op)
   */
 class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProductControl]()(p) with HasOPUParams {
 
   val opu_insns = vParams.opuInsns
 
-  def accepts(inst: VectorIssueInst) = !inst.vmu && new VectorDecoder(inst, opu_insns, Nil).matched
+  def accepts(inst: VectorIssueInst) = (!inst.vmu && new VectorDecoder(inst, opu_insns, Nil).matched) || inst.tile_st
 
   def idxW(n: Int) = log2Ceil(n) max 1
   // low log2(R) bits of a sub-tile index (empty when VLEN == DLEN)
@@ -76,6 +103,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val zero    = Reg(Bool())
   val mvin    = Reg(Bool())
   val mvout   = Reg(Bool())
+  val mvout_mem = Reg(Bool())   // mvout destination is io.vmu.sdata (sf.vtse32), not the VRF
   val nop     = Reg(Bool())   // sf.vtdiscard, or zero-sized operation
   val col     = Reg(Bool())   // move uses the column pattern
   val tile    = Reg(UInt(log2Ceil(opuParams.nMrfRegs).W))
@@ -97,7 +125,12 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val k_tail   = k_idx === k_last
   val tail = nop || Mux(mm, col_tail && row_tail && k_tail, Mux(zero, col_tail && row_tail, col_tail))
 
-  io.dis.ready := !valid || (tail && io.iss.fire) && !io.dis_stall
+  // Only the resident-instruction-derived interlock (tile_ld_busy) belongs here: this
+  // backend picks which sequencer accepts an instruction based on io.dis.ready itself
+  // (see chosen_seq/ready_seqs in Backend.scala), so anything io.dis.ready computes from
+  // io.dis.bits/io.dis.valid closes a combinational cycle. The vss_busy/sf.vtse32 check
+  // is instead applied to iss_valid below, once mvout_mem is a clean registered value.
+  io.dis.ready := (!valid || (tail && io.iss.fire) && !io.dis_stall) && !io.tile_ld_busy
 
   // Registers holding operand rows of an sf.mm (tk rows, 8/KMAX = 2 registers apart)
   def mmRowsMask(base: UInt, rows: UInt): UInt = {
@@ -110,7 +143,10 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     val dis_inst = io.dis.bits
     val dis_ctrl = new VectorDecoder(dis_inst, opu_insns, Seq(OPUKind))
     val kind = dis_ctrl.uint(OPUKind)
-    val tss = dis_inst.rs1_data
+    val d_tile_st = dis_inst.tile_st
+    // sf.vtse32's TSS lives in rs2 (rs1 is the memory address); every other OPU
+    // instruction that reads a TSS (sf.vtmv.*) has it in rs1.
+    val tss = Mux(d_tile_st, dis_inst.rs2_data, dis_inst.rs1_data)
     val tm = dis_inst.vconfig.vtype.tm
     val tn = dis_inst.vconfig.vl
     val tk = dis_inst.vconfig.vtype.tk
@@ -118,7 +154,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     val d_mm    = kind === OPUKinds.MM_INT.U || kind === OPUKinds.MM_FP8.U
     val d_zero  = kind === OPUKinds.ZERO.U
     val d_mvin  = kind === OPUKinds.MV_T_V.U
-    val d_mvout = kind === OPUKinds.MV_V_T.U
+    val d_mvout_vrf = kind === OPUKinds.MV_V_T.U
+    val d_mvout = d_mvout_vrf || d_tile_st
     val d_move  = d_mvin || d_mvout
     val d_empty = Mux(d_mm, tm === 0.U || tn === 0.U || tk === 0.U,
                   Mux(d_zero, tm === 0.U || tn === 0.U,
@@ -131,9 +168,10 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     zero := d_zero
     mvin := d_mvin
     mvout := d_mvout
+    mvout_mem := d_tile_st
     nop := d_empty
     col := d_move && tss(24)
-    // sf.mm / sf.vtzero name the tile in rd[4:3]; moves take it from TSS[30:29]
+    // sf.mm / sf.vtzero name the tile in rd[4:3]; moves (incl. sf.vtse32) take it from TSS[30:29]
     tile := Mux(d_move, tss(30, 29), dis_inst.rd(4, 3))
     tss_idx := tss(tssIdxBits-1, 0)
     // sf.mm.<a>.<b>: a = funct6[0] describes vs2 (A), b = inst[7] = rd[0] describes vs1 (B)
@@ -151,7 +189,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
     val vd_arch_mask  = get_arch_mask(dis_inst.rd , dis_inst.emul)
     val vs2_arch_mask = get_arch_mask(dis_inst.rs2, dis_inst.emul)
-    wvd_mask  := Mux(d_mvout && !d_empty, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
+    // sf.vtse32 has no VRF destination register (rd/vd is fixed to 0 in its encoding)
+    wvd_mask  := Mux(d_mvout_vrf && !d_empty, FillInterleaved(egsPerVReg, vd_arch_mask), 0.U)
     rvs1_mask := Mux(d_mm && !d_empty, mmRowsMask(dis_inst.rs1, tk), 0.U)
     rvs2_mask := Mux(d_empty, 0.U, Mux(d_mm, mmRowsMask(dis_inst.rs2, tk),
                  Mux(d_mvin, FillInterleaved(egsPerVReg, vs2_arch_mask), 0.U)))
@@ -209,11 +248,15 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     fp8_hist_valid =/= 0.U)
 
   // ----------------------------------------------------------------------
+  // TSS-addressed row/column indexing (shared with the sf.vtle32 write path in
+  // Backend.scala) — see exu/OuterProductAddr.scala.
+  val addr = OuterProductAddr(tile, col, tss_idx, col_idx, yDim, xDim, clusterYdim, clusterXdim, S, R)
+
   // Move readout. Items travel down the vertical pipe (rows) or across the
   // horizontal pipe (columns); both take (yDim + 1 - position) cycles.
-  val row_move_cluster = tss_idx(log2Ceil(yDim)-1, 0)            // tile row -> cluster row
-  val col_move_cluster = tss_idx(log2Ceil(xDim)-1, 0)            // tile col -> cluster column
-  val move_cluster = Mux(col, col_move_cluster, row_move_cluster)
+  val row_move_cluster = addr.rowMoveCluster            // tile row -> cluster row
+  val col_move_cluster = addr.colMoveCluster            // tile col -> cluster column
+  val move_cluster = addr.moveCluster
   val move_latency = ((yDim+1).U - move_cluster)
 
   // this avoids write-structural-conflicts from the OPU
@@ -223,7 +266,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   exu_scheduler.io.reqs(0).depth := move_latency
 
   // this avoids write-structural-hazards on bank ports with other FUs (maybe)
-  io.pipe_write_req.request := valid && do_mvout && exu_scheduler.io.reqs(0).available
+  // sf.vtse32 doesn't write the VRF at all, so it never needs (or should wait on) a bank slot
+  io.pipe_write_req.request := valid && do_mvout && !mvout_mem && exu_scheduler.io.reqs(0).available
   io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits,1)))
   io.pipe_write_req.pipe_depth := move_latency
   io.pipe_write_req.oldest := oldest
@@ -234,8 +278,12 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     !fp8_conflict &&
     !(renv1 && !io.rvs1.ready) &&
     !(renv2 && !io.rvs2.ready) &&
-    !(do_mvout && !io.pipe_write_req.available) &&
-    !(do_mvout && !exu_scheduler.io.reqs(0).available)
+    !(do_mvout && !mvout_mem && !io.pipe_write_req.available) &&
+    !(do_mvout && !exu_scheduler.io.reqs(0).available) &&
+    // sf.vtse32 (mvout_mem, a clean registered value once resident): don't let this
+    // instruction's readout start producing io.vmu.sdata data while StoreSequencer may
+    // still be draining -- see io.dis.ready's comment for why this isn't checked there.
+    !(mvout_mem && io.vss_busy)
   )
 
   io.iss.valid := iss_valid
@@ -252,22 +300,13 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   // Row moves: tile row r = sub_r*S + i*yDim + I; iteration col_idx picks
   // cell column (col_idx % clusterXdim) and column sub-tile (col_idx / clusterXdim).
   // Column moves are the transpose.
-  val scalar_cell = (tss_idx >> log2Ceil(yDim))(log2Ceil(clusterYdim)-1, 0)
-  val scalar_sub  = (tss_idx >> log2Ceil(S))
-  val iter_cell   = col_idx(log2Ceil(clusterXdim)-1, 0)
-  val iter_sub    = (col_idx >> log2Ceil(clusterXdim))
-
-  val move_row_sub = Mux(col, subBits(iter_sub), subBits(scalar_sub))
-  val move_col_sub = Mux(col, subBits(scalar_sub), subBits(iter_sub))
-  val mrf_idx = Mux(mm || zero,
-    Cat(tile, subBits(row_idx), subBits(col_idx)),
-    Cat(tile, move_row_sub, move_col_sub))
+  val mrf_idx = Mux(mm || zero, Cat(tile, subBits(row_idx), subBits(col_idx)), addr.mrfIdx)
 
   io.iss.bits.mrf_idx.foreach(_ := Mux(fire, mrf_idx, 0.U))
   // Row move: (cell row, cell col) = (scalar, iteration). Column move: row_idx
   // carries the scalar cell column and col_idx the iteration cell row.
-  io.iss.bits.row_idx.foreach(_ := Mux(fire, scalar_cell, 0.U))
-  io.iss.bits.col_idx.foreach(_ := Mux(fire, iter_cell, 0.U))
+  io.iss.bits.row_idx.foreach(_ := Mux(fire, addr.rowIdxCell, 0.U))
+  io.iss.bits.col_idx.foreach(_ := Mux(fire, addr.colIdxCell, 0.U))
   io.iss.bits.macc.foreach(_ := do_mm)
   io.iss.bits.zero.foreach(_ := do_zero)
 
@@ -311,6 +350,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val mvout_pipe = Reg(Vec(yDim+2, UInt(log2Ceil(egsTotal).W)))
   val mvout_col_pipe = Reg(Vec(yDim+2, Bool()))
   val mvout_mask_pipe = Reg(Vec(yDim+2, UInt(xDim.W)))
+  val mvout_mem_pipe = Reg(Vec(yDim+2, Bool()))
+  val mvout_debug_id_pipe = Reg(Vec(yDim+2, UInt(debugIdSz.W)))
   val mvout_valids = RegInit(0.U((yDim+2).W))
   mvout_valids := (mvout_valids << 1) | ((fire && do_mvout) << move_cluster)
 
@@ -321,6 +362,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
       mvout_pipe(i) := mvout_pipe(i-1)
       mvout_col_pipe(i) := mvout_col_pipe(i-1)
       mvout_mask_pipe(i) := mvout_mask_pipe(i-1)
+      mvout_mem_pipe(i) := mvout_mem_pipe(i-1)
+      mvout_debug_id_pipe(i) := mvout_debug_id_pipe(i-1)
     }
     io.iss.bits.shift(i) := mvout_valids(i-1) && !mvout_col_pipe(i-1)
     io.iss.bits.shift_h(i) := mvout_valids(i-1) && mvout_col_pipe(i-1)
@@ -331,6 +374,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
       mvout_pipe(i) := wvd_eg
       mvout_col_pipe(i) := col
       mvout_mask_pipe(i) := io.iss.bits.mv_en.asUInt
+      mvout_mem_pipe(i) := mvout_mem
+      mvout_debug_id_pipe(i) := inst.debug_id
     }
   }
 
@@ -339,6 +384,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
       mvout_pipe(i) := mvout_pipe(i-1)
       mvout_col_pipe(i) := mvout_col_pipe(i-1)
       mvout_mask_pipe(i) := mvout_mask_pipe(i-1)
+      mvout_mem_pipe(i) := mvout_mem_pipe(i-1)
+      mvout_debug_id_pipe(i) := mvout_debug_id_pipe(i-1)
     }
   }
   // When it leave the mvout pipe, then we do the write
@@ -347,6 +394,8 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.write_mask := FillInterleaved(opuParams.cWidth, mvout_mask_pipe(yDim+1))
   io.write_reg_enable := mvout_valids(yDim)
   io.write_col := mvout_col_pipe(yDim)
+  io.write_mem := mvout_mem_pipe(yDim+1)
+  io.write_debug_id := mvout_debug_id_pipe(yDim+1)
 
   // clear the wsboard when we do a write
   wsboard_clear := (mvout_valids(yDim+1) << mvout_pipe(yDim+1))
@@ -358,6 +407,12 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   // keep the array clocked while readouts or FP8 accumulations are in flight
   io.iss.bits.clock_enable := valid || mvout_valids =/= 0.U || fp8_hist_valid =/= 0.U
+  io.array_busy := valid || mvout_valids =/= 0.U || fp8_hist_valid =/= 0.U
+  // True while a tile store is resident (not yet fully issued) or its readout is still
+  // in the pipe -- unlike array_busy, ordinary mm/zero/vtmv traffic never sets this,
+  // even when interleaved with sf.vtse32 across dispatches (each pipe slot is tagged
+  // with its own mvout_mem_pipe bit, so a later non-store drain doesn't clear it early).
+  io.tile_st_active := (valid && mvout_mem) || (mvout_valids & mvout_mem_pipe.asUInt).orR
 
   // update counters and release operands (not on the tail, where a new
   // instruction may be dispatched in the same cycle)
