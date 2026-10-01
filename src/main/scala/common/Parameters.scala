@@ -61,6 +61,31 @@ object VectorParams {
     useMxConversion = true,
   )
 
+  // p3109Params:
+  // Same as mxParams, with IEEE P3109 binary8p4/binary8p3 in place of OCP FP8
+  def p3109Params = mxParams.copy(
+    p3109 = Some(P3109Formats())
+  )
+
+  // p3109FiniteParams:
+  // Same as p3109Params, both formats in the finite domain (no infinities)
+  def p3109FiniteParams = p3109Params.copy(
+    p3109 = Some(P3109Formats(p4 = P3109Domain.Finite, p3 = P3109Domain.Finite))
+  )
+
+  // p3109BlockParams:
+  // Same as p3109Params, with block scale factors in the conversion unit.
+  // Every lane gets scale 2^0 until the ISA can deliver one.
+  def p3109BlockParams = p3109Params.copy(
+    p3109 = Some(P3109Formats(block = true))
+  )
+
+  // p3109BlockFiniteParams:
+  // Same as p3109BlockParams, both formats in the finite domain
+  def p3109BlockFiniteParams = p3109Params.copy(
+    p3109 = Some(P3109Formats(p4 = P3109Domain.Finite, p3 = P3109Domain.Finite, block = true))
+  )
+
   def opuParams = genParams.copy(
     vliqEntries = 8, // beef this up since OPU tends to be used with LMUL=1
     vlissqEntries = 6,
@@ -175,20 +200,20 @@ object VXFunctionalUnitGroups {
   def sharedFPFMA(pipeDepth: Int) = Seq(
     SharedScalarFPFMAFactory(pipeDepth)
   )
-  def fpFMA(pipeDepth: Int, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean) = Seq(
-    SIMDFPFMAFactory(pipeDepth, elementwiseFP64, segmentedFPFMA, useMxFPFMA)
+  def fpFMA(pipeDepth: Int, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean, p3109: Option[P3109Formats]) = Seq(
+    SIMDFPFMAFactory(pipeDepth, elementwiseFP64, segmentedFPFMA, useMxFPFMA, p3109)
   )
-  def fpMisc(useMxConversion: Boolean) = Seq(
+  def fpMisc(useMxConversion: Boolean, p3109: Option[P3109Formats]) = Seq(
     FPDivSqrtFactory,
     FPCmpFactory,
-    FPConvFactory(useMxConversion)
+    FPConvFactory(useMxConversion, p3109)
   )
 
-  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean, useMxConversion: Boolean, vectorFP: Boolean = true) = {
+  def allFPFUs(fmaPipeDepth: Int, useScalarFPFMA: Boolean, elementwiseFP64: Boolean, segmentedFPFMA: Boolean, useMxFPFMA: Boolean, useMxConversion: Boolean, p3109: Option[P3109Formats], vectorFP: Boolean = true) = {
     require(!(useScalarFPFMA && useMxFPFMA))
     if (!vectorFP) Seq() else (
-      (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth, elementwiseFP64, segmentedFPFMA, useMxFPFMA)) ++
-      fpMisc(useMxConversion)
+      (if (useScalarFPFMA) sharedFPFMA(fmaPipeDepth) else fpFMA(fmaPipeDepth, elementwiseFP64, segmentedFPFMA, useMxFPFMA, p3109)) ++
+      fpMisc(useMxConversion, p3109)
     )
   }
 }
@@ -209,7 +234,7 @@ object VectorIssueStructure {
           VXSequencerParams("fp_int", (
             integerFUs(params.useIterativeIMul) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul)) ++
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.useVectorFP)
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.p3109, params.useVectorFP)
           ))
         )
       )
@@ -225,7 +250,7 @@ object VectorIssueStructure {
         seqs = Seq(
           VXSequencerParams("int", integerFUs(params.useIterativeIMul)),
           VXSequencerParams("fp",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.useVectorFP) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.p3109, params.useVectorFP) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           )
         )
@@ -248,7 +273,7 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("fp",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.useVectorFP) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.p3109, params.useVectorFP) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           )
         )
@@ -274,10 +299,10 @@ object VectorIssueStructure {
         depth = params.vxissqEntries,
         seqs = Seq(
           VXSequencerParams("fp0",
-            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.useVectorFP) ++
+            allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.p3109, params.useVectorFP) ++
             (if (params.useIterativeIMul) Nil else integerMAC(params.imaPipeDepth, params.useSegmentedIMul))
           ),
-          VXSequencerParams("fp1", fpFMA(params.fmaPipeDepth, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA))
+          VXSequencerParams("fp1", fpFMA(params.fmaPipeDepth, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.p3109))
         )
       )
       Seq(int_path, fp_path)
@@ -299,7 +324,7 @@ object VectorIssueStructure {
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.useVectorFP))
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.p3109, params.useVectorFP))
         )
       )
       // Unlike Unified/Shared/Split, integerMAC does not share this sequencer, so without the FP
@@ -323,7 +348,7 @@ object VectorIssueStructure {
         name = "fp",
         depth = params.vxissqEntries,
         seqs = Seq(
-          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.useVectorFP))
+          VXSequencerParams("fp", allFPFUs(params.fmaPipeDepth, params.useScalarFPFMA, params.useElementwiseFP64, params.useSegmentedFPFMA, params.useMxFPFMA, params.useMxConversion, params.p3109, params.useVectorFP))
         )
       )
       // Unlike Unified/Shared/Split, integerMAC does not share this sequencer, so without the FP
@@ -331,6 +356,24 @@ object VectorIssueStructure {
       Seq(int_path) ++ (if (params.useVectorFP) Seq(fp_path) else Nil)
     }
   }
+}
+
+// IEEE P3109 8-bit formats (Interim Report v4.0.3): binary8p4 (altfmt = 0) and
+// binary8p3 (altfmt = 1). Extended domain: 0x7F/0xFF are +-Inf. Finite: they
+// are the largest finite values, and a result that would overflow to Inf is NaN.
+sealed trait P3109Domain
+object P3109Domain {
+  case object Extended extends P3109Domain
+  case object Finite extends P3109Domain
+}
+
+case class P3109Formats(
+  p4: P3109Domain = P3109Domain.Extended,
+  p3: P3109Domain = P3109Domain.Extended,
+  block: Boolean = false // Block scale factors in FPConv
+) {
+  def p4Finite = p4 == P3109Domain.Finite
+  def p3Finite = p3 == P3109Domain.Finite
 }
 
 case class VectorParams(
@@ -373,6 +416,7 @@ case class VectorParams(
   // Minifloat support
   useMxFPFMA: Boolean = false,
   useMxConversion: Boolean = false,
+  p3109: Option[P3109Formats] = None, // IEEE P3109 in place of OCP FP8 (FPConv and FMA)
   useMxOPU: Boolean = false,
 
   // for comparisons only
@@ -413,6 +457,7 @@ case class VectorParams(
     }
   }
 
+  // A P3109 build uses the zvfofp8min encodings for its own 8-bit formats
   def vExts = 
     (if (useMxConversion) Seq("zvfofp8min", "zfbfmin", "zvfbfmin", "zvfbfa") else Seq()) ++
     (if (useMxFPFMA) Seq() else Seq())
@@ -424,6 +469,8 @@ case class VectorParams(
   require((dLen & (dLen - 1)) == 0, "dLen must be power of 2")
   require(mLen >= 64 && mLen <= 512, "mLen must be >= 64 and <= 512")
   require((mLen & (mLen - 1)) == 0, "mLen must be power of 2")
+  require(p3109.isEmpty || useMxConversion, "P3109 needs useMxConversion")
+  require(!(useMxOPU && p3109.isDefined), "the MX outer product unit reads OCP FP8 only")
 }
 
 case object VectorParamsKey extends Field[VectorParams]
