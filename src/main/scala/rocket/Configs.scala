@@ -27,8 +27,9 @@ class WithRocketVectorUnit(
               case VectorParamsKey => params.copy(dLen=dLen, mLen=mLen.getOrElse(dLen))
             })),
             vLen = vLen,
-            vfLen = 64,
-            vfh = true,
+            // ISA string only; follow the hardware rather than claiming vector FP unconditionally.
+            vfLen = if (params.useVectorFP) 64 else 0,
+            vfh = params.useVectorFP,
             eLen = 64,
             vMemDataBits = if (useL1DCache) dLen else 0,
             decoder = ((p: Parameters) => {
