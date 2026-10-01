@@ -42,7 +42,7 @@ object rawUnroundedToFp8 {
 			outBits := saturateE5M2(e5m2Ieee, saturate)
 			exceptionFlags := e5m2Narrower.io.exceptionFlags
 		} .otherwise { // E4M3
-			outBits := assembleOFPE4M3(e5m3Ieee, e4m3Ieee, saturate, roundingMode, e5m3Narrower.io.exceptionFlags(2))
+			outBits := assembleOFPE4M3(e5m3Ieee, e4m3Ieee, saturate, roundingMode)
 			exceptionFlags := 0.U(5.W)
 		}
 
@@ -67,7 +67,7 @@ object saturateE5M2 {
 
 object assembleOFPE4M3 {
 	
-	def apply(ieeeE5M3: UInt, ieeeE4M3: UInt, saturate: Bool, roundingMode: Bits, e5m3Overflow: Bool) = {
+	def apply(ieeeE5M3: UInt, ieeeE4M3: UInt, saturate: Bool, roundingMode: Bits) = {
 		val sign = ieeeE4M3(7)
 		val expE4M3 = ieeeE4M3(6, 3)
 		val sigE4M3 = ieeeE4M3(2, 0)
@@ -81,18 +81,15 @@ object assembleOFPE4M3 {
 		val aboveTop = expE5M3(4, 3) === "b11".U(2.W) // unbiased exp >= 9, or Inf: past E4M3's range entirely
 		// 1.111 x 2^8 = 480 is the NaN code point in OFP8 E4M3, so it overflows too.
 		val overflows = aboveTop || (topBinade && sigE5M3 === "b111".U(3.W))
-		
 		val roundMagUp = (roundingMode === hardfloat.consts.round_min && sign) ||
 			(roundingMode === hardfloat.consts.round_max && !sign)
 		val overflowToSpecial = roundingMode === hardfloat.consts.round_near_even ||
 			roundingMode === hardfloat.consts.round_near_maxMag || roundMagUp
-		// That clause governs an out-of-range *finite* result. An operand that was
-		// already infinite converts to infinity -- here NaN, E4M3 having none --
-		// whatever the rounding mode. The E5M3 result is infinite in both cases, and
-		// only the rounder's overflow flag separates them: hardfloat computes it as
-		// `commonCase && common_overflow`, and commonCase excludes infinite operands.
-		val e5m3IsInf = expE5M3 === "b11111".U(5.W) && sigE5M3 === "b000".U(3.W)
-		val infiniteOperand = e5m3IsInf && !e5m3Overflow
+		// Unless saturating, an infinite operand converts to NaN, E4M3 having no
+		// infinity, whatever the rounding mode. In the modes that clamp, the E5M3
+		// rounder has already pegged a finite overflow to its own maxFinite, so an
+		// infinite E5M3 result here can only come from an infinite operand.
+		val infiniteOperand = expE5M3 === "b11111".U(5.W) && sigE5M3 === "b000".U(3.W)
 		val clampByRounding = !infiniteOperand && !overflowToSpecial
 		val outValue = Mux(isNaN,
 			"h7F".U(8.W),
