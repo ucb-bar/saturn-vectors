@@ -6,6 +6,7 @@
 #   ./run_fp8_test.sh vec-mx-unary              # conversions
 #   ./run_fp8_test.sh vec-mx-binary             # FMA add / sub / mul
 #   ./run_fp8_test.sh vec-mx-binary --gen-only  # stop before the (long) simulation
+#   ./run_fp8_test.sh vec-mx-unary p3109        # P3109 build (also p3109-finite)
 #
 # Each benchmark directory also has a run_baseline.sh that calls this script with
 # its own name.
@@ -18,8 +19,9 @@
 #
 # Environment overrides:
 #   GFLOAT_PYTHON  interpreter that has gfloat installed (needs >= 3.10)
-#   CONFIG         Chipyard config whose simulator binary to run
-#                  (default: MXV256D128ShuttleConfig)
+#   CONFIG         Chipyard config whose simulator binary to run (default:
+#                  MXV256D128ShuttleConfig, or P3109V256D128ShuttleConfig /
+#                  P3109FiniteV256D128ShuttleConfig for p3109 / p3109-finite)
 #   N              elements per array (default: the generator's, as checked in)
 #
 # Note: do NOT add `set -u`. Chipyard's env.sh sources the conda hook, which
@@ -27,7 +29,7 @@
 set -eo pipefail
 
 usage() {
-	echo "usage: $0 <vec-mx-unary|vec-mx-binary> [--gen-only]" >&2
+	echo "usage: $0 <vec-mx-unary|vec-mx-binary> [ocp|p3109|p3109-finite] [--gen-only]" >&2
 	exit 2
 }
 
@@ -39,9 +41,11 @@ case "$BENCH" in
 	*) usage ;;
 esac
 
+STD=ocp
 GEN_ONLY=0
 for arg in "$@"; do
 	case "$arg" in
+		ocp|p3109|p3109-finite) STD=$arg ;;
 		--gen-only) GEN_ONLY=1 ;;
 		*) usage ;;
 	esac
@@ -51,7 +55,12 @@ bmarks=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 here=$bmarks/$BENCH
 cydir=$(cd "$bmarks/../../.." && pwd)
 
-CONFIG=${CONFIG:-MXV256D128ShuttleConfig}
+case "$STD" in
+	ocp)          default_config=MXV256D128ShuttleConfig ;;
+	p3109)        default_config=P3109V256D128ShuttleConfig ;;
+	p3109-finite) default_config=P3109FiniteV256D128ShuttleConfig ;;
+esac
+CONFIG=${CONFIG:-$default_config}
 GFLOAT_PYTHON=${GFLOAT_PYTHON:-$HOME/venvs/gfloat/bin/python}
 sim=$cydir/sims/verilator/simulator-chipyard.harness-$CONFIG
 results=$here/results
@@ -74,17 +83,19 @@ fi
 exec > >(tee "$log") 2>&1
 trap 'ln -sfn "$(basename "$log")" "$results/latest.log"' EXIT
 
-echo "# $BENCH / $CONFIG / N=${N:-default} / $(date -Is)"
+echo "# $BENCH / $STD / $CONFIG / N=${N:-default} / $(date -Is)"
 echo "# saturn $(git -C "$cydir/generators/saturn" describe --always --dirty 2>/dev/null)"
 echo
 
 echo "### 1/4  validate the reference model against the Spike golden file ($validator)"
+[ "$STD" = ocp ] || echo "(OCP formats; the P3109 references are checked in models/)"
 "$GFLOAT_PYTHON" "$here/gen_data/$validator"
 
 echo
-echo "### 2/4  generate data.S  (N=${N:-default})"
-"$GFLOAT_PYTHON" "$here/gen_data/gen_data.py" ${N:+-n "$N"} -o "$here/data.S"
+echo "### 2/4  generate data.S  (--std $STD, N=${N:-default})"
+"$GFLOAT_PYTHON" "$here/gen_data/gen_data.py" --std "$STD" ${N:+-n "$N"} -o "$here/data.S"
 head -1 "$here/data.S"
+[ "$STD" = ocp ] || echo "note: the checked-in data.S now holds $STD vectors; rerun with ocp or git checkout it"
 
 echo
 echo "### 3/4  cross-build the benchmark"

@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gfloat import RoundMode  # noqa: E402
 from fma_ref import binary  # noqa: E402
 from gfloat_ref import read_data_s, unpack_words  # noqa: E402
-from gen_data import FORMATS, OPS  # noqa: E402  the arrays the generator writes
+from gen_data import OPS, formats  # noqa: E402  the arrays the generator writes
 
 
 
@@ -32,7 +32,7 @@ def main():
     n = arrays["N"][0]
     print(f"fma_ref vs Spike, {os.path.relpath(path)}, {n} elements per array\n")
     checked = failures = 0
-    for fname, (fi, esz, wfi, wesz) in FORMATS.items():
+    for fname, (fi, esz, wfi, wesz) in formats("ocp").items():
         for op in OPS:
             name = f"{fname}_{op}"
             if name + "_out" not in arrays:
@@ -49,7 +49,7 @@ def main():
             failures += bool(bad)
             status = "ok" if not bad else f"MISMATCH at {bad[:5]}"
             print(f"  {name:12} {n - len(bad):3}/{n}  {status}")
-    expected = len(FORMATS) * len(OPS)
+    expected = len(formats("ocp")) * len(OPS)
     if checked < expected:
         sys.exit(f"\nFAILED: only {checked}/{expected} arrays present")
     if failures:

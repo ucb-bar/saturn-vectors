@@ -1,121 +1,134 @@
 # Reference models for the FP8 benchmarks
 
-`vec-mx-unary` (conversions) and `vec-mx-binary` (FMA add / sub / mul) took
-their expected values from **Spike**, via `gen_data.c` + `gen_data.sh`. Both now
-generate their vectors from a reference model in Python instead:
+## Scope
 
-| Benchmark | Model | Validator |
+Two benchmarks test Saturn's 8-bit floating point end to end, running a
+program on the simulated chip and comparing its results with expected values:
+
+| Benchmark | Tests |
+|---|---|
+| `vec-mx-unary` | Conversions to and from 8-bit formats (BF16 ↔ FP8), every rounding mode, with and without saturation |
+| `vec-mx-binary` | Multiply, add and subtract on FP8, FP16 and BF16, every rounding mode |
+
+The expected values in each benchmark's `data.S` are computed by the Python
+reference models in this directory. Each array covers a few hundred inputs
+chosen at the edges (overflow threshold, top binade, subnormal boundary, exact
+ties), with the same inputs repeated for every rounding mode.
+
+The same benchmarks run on two kinds of build:
+
+| Standard | 8-bit formats (altfmt = 0 / 1) | Simulator config |
 |---|---|---|
-| `vec-mx-unary` | [gfloat](https://github.com/graphcore-research/gfloat) | `gen_data/validate_gfloat.py` |
-| `vec-mx-binary` | `fma_ref.py` (exact arithmetic, gfloat for the rounding) | `gen_data/validate_fma_ref.py` |
+| `ocp` (default) | OCP E4M3 / E5M2 | `MXV256D128ShuttleConfig` |
+| `p3109` | IEEE P3109 binary8p4 / binary8p3 | `P3109V256D128ShuttleConfig` |
+| `p3109-finite` | the same, finite domain (no infinities) | `P3109FiniteV256D128ShuttleConfig` |
 
-Two things this buys:
+The checked-in `data.S` files are for `ocp`. Exhaustive P3109 checks, outside
+the full chip, are in `generators/saturn/models/`.
 
-* **Every rounding mode.** The Spike flow drove one mode, so directed rounding
-  was never checked. Each array is now emitted five times, once per `frm`, with
-  identical operands, so a mismatch isolates the mode.
-* **Inputs chosen for the edges** — the overflow threshold, the top binade, the
-  subnormal boundary, exact ties, values that round to zero — instead of
-  uniform random values in a narrow range.
+## Files
 
-The original Spike output is preserved in each benchmark as
-`data.S.spike-golden`, because it cannot be regenerated once the vectors change.
-The validators check the models against it.
+In this directory:
 
-## Setup
+| File | Contents |
+|---|---|
+| `gfloat_ref.py` | Conversions, via the [gfloat](https://github.com/graphcore-research/gfloat) library |
+| `fma_ref.py` | Arithmetic computed exactly, then rounded once (gfloat has no arithmetic) |
+| `requirements.txt` | Python packages for the models |
 
-gfloat declares `requires_python >= 3.8.1` but uses `match` statements and
-**actually needs 3.10+**; it imports and then fails with a `SyntaxError` in
-`round.py`. The default conda env is older, so use a separate venv:
+In each benchmark directory (`vec-mx-unary/`, `vec-mx-binary/`):
+
+| File | Contents |
+|---|---|
+| `main.c` | The benchmark |
+| `data.S` | Inputs and expected outputs, generated |
+| `gen_data/gen_data.py` | Writes `data.S` |
+| `gen_data/validate_*.py` | Checks the model against the original Spike output |
+| `data.S.spike-golden` | That Spike output, kept because it can no longer be regenerated |
+| `run_baseline.sh` | Shortcut for `../run_fp8_test.sh <this benchmark>` |
+
+And `benchmarks/run_fp8_test.sh` runs one benchmark end to end.
+
+## How to run
+
+All commands below are run from the Chipyard root.
+
+### 1. Set up (once)
+
+gfloat needs Python 3.10 or newer (it declares 3.8.1 but uses `match`), in its
+own environment:
 
 ```bash
 python3.12 -m venv ~/venvs/gfloat
 ~/venvs/gfloat/bin/pip install -r generators/saturn/benchmarks/common-data-gen/requirements.txt
 ```
 
-## Trusting the models
+The scripts look for it at `~/venvs/gfloat/bin/python`. To use another
+interpreter, set `GFLOAT_PYTHON` to it.
 
-Both validators run in a second, need no RISC-V toolchain and no simulator, so
-they work as plain CI checks:
-
-```bash
-cd generators/saturn/benchmarks
-~/venvs/gfloat/bin/python vec-mx-unary/gen_data/validate_gfloat.py
-~/venvs/gfloat/bin/python vec-mx-binary/gen_data/validate_fma_ref.py
-```
-
-```
-  e4m3_narrow            128/128  ok
-  ...
-  PASS: gfloat agrees with Spike on every OCP FP8 conversion.
-
-  PASS: fma_ref agrees with Spike on all 24 arrays.
-```
-
-One thing the conversion validator established empirically: the RVV `.sat`
-instruction variant clamps **infinities** as well as finite out-of-range
-values, which is gfloat's `sat=True`. The plain variant is `sat=False`.
-
-### Why the FMA needs its own model
-
-gfloat rounds a value into a format; it has no arithmetic. Spike could only
-produce 8-bit arithmetic by computing in BF16 and narrowing, which **rounds
-twice**. The hardware rounds once: `MulAddRecFNPipeUnrounded` hands out an
-unrounded result and the 8-bit rounding happens after it.
-
-The two differ. Over all 65,536 E4M3 operand pairs, double rounding gives a
-different answer from correct rounding for **312 add pairs** under
-round-to-nearest-even and 316 under round-to-nearest-max-magnitude. (E5M2 and
-the directed modes are unaffected.)
-
-So `fma_ref.py` computes `a * b` or `a ± b` exactly with `fractions.Fraction`,
-then rounds once via gfloat. Since `round_float` will not accept a `Fraction`,
-it is handed a float placed at the same position relative to the destination's
-neighbouring grid points — exact, below the midpoint, on it, or above it — which
-rounds identically.
-
-## Regenerating the vectors
+Build the simulator for the standard you want to test, from the table above:
 
 ```bash
-cd generators/saturn/benchmarks
-~/venvs/gfloat/bin/python vec-mx-unary/gen_data/gen_data.py  -n 256 -o vec-mx-unary/data.S
-~/venvs/gfloat/bin/python vec-mx-binary/gen_data/gen_data.py -n 128 -o vec-mx-binary/data.S
+source env.sh
+make -C sims/verilator CONFIG=MXV256D128ShuttleConfig
 ```
 
-Those are the counts the checked-in files use. `gen_data.py --summary` on the
-binary benchmark prints which input categories each array covers.
-
-## Running a benchmark end to end
-
-`run_fp8_test.sh` validates the model, regenerates the vectors, cross-compiles
-and runs the simulator:
+### 2. Run a benchmark
 
 ```bash
-cd generators/saturn/benchmarks
-./run_fp8_test.sh vec-mx-unary
-./run_fp8_test.sh vec-mx-binary --gen-only   # stop before the simulation
+generators/saturn/benchmarks/run_fp8_test.sh vec-mx-unary                 # ocp
+generators/saturn/benchmarks/run_fp8_test.sh vec-mx-binary p3109          # P3109
+generators/saturn/benchmarks/run_fp8_test.sh vec-mx-unary p3109-finite    # P3109, finite domain
 ```
 
-It needs a simulator built for a config with `useMxConversion` /`useMxFPFMA`:
+Each run validates the model, generates `data.S` for the chosen standard,
+compiles the benchmark and runs it on the simulator: about 20 minutes for
+`vec-mx-unary`, 45 for `vec-mx-binary`. Add `--gen-only` to stop before the
+simulation.
+
+Pass: the run ends with `All tests passed`; a failure prints `Test failed`
+with the failing element and exits non-zero. Logs are in
+`<benchmark>/results/`, with `latest.log` pointing at the most recent.
+
+A `p3109` or `p3109-finite` run leaves its vectors in the checked-in `data.S`.
+Restore it afterwards with
+`git checkout generators/saturn/benchmarks/vec-mx-unary/data.S` (or
+`vec-mx-binary`), or by running the benchmark again with `ocp`.
+
+### 3. Check the models only (seconds, no simulator)
 
 ```bash
-make -C $CHIPYARD/sims/verilator CONFIG=MXV256D128ShuttleConfig
+~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-unary/gen_data/validate_gfloat.py
+~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-binary/gen_data/validate_fma_ref.py
 ```
 
-Runs are logged under `<benchmark>/results/`, with `latest.log` pointing at the
-most recent. Expect roughly 18 minutes for `vec-mx-unary` and 45 for
-`vec-mx-binary` on Verilator.
+Pass: each ends with a `PASS:` line. These compare against the OCP Spike data,
+the only golden data there is; the P3109 references are checked in
+`generators/saturn/models/`.
 
-No toolchain extension support is needed: `common/rvv_mx.h` emits the FP8
-instructions as raw `.insn` encodings, so plain `-march=rv64gcv_zfh_zvfh` works.
+### 4. Regenerate the checked-in vectors
 
-## Scope
+```bash
+~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-unary/gen_data/gen_data.py -n 256 -o generators/saturn/benchmarks/vec-mx-unary/data.S
+~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-binary/gen_data/gen_data.py -n 128 -o generators/saturn/benchmarks/vec-mx-binary/data.S
+```
 
-This is the integration tier: a few hundred vectors per operation, exercising
-the full path from `vsetvli` through the vector register file to the functional
-unit. It is not exhaustive and should not be the only tier — an exhaustive sweep
-belongs in a chiseltest unit test driving `FPConvBlock` directly, where all
-65,536 BF16 patterns take gfloat about 0.1 s to produce and every rounding and
-saturation mode is reachable without going through `vtype`. That needs
-chiseltest added to the `saturn` project in `build.sbt`, which it does not
-currently have.
+The generators are deterministic, so this reproduces the checked-in files
+exactly. `--std p3109` generates for a P3109 build; `--summary` on
+`vec-mx-binary` lists the input categories of each array.
+
+## Background
+
+- **Why not Spike.** Spike has no P3109 support, drove only one rounding mode,
+  and computed 8-bit arithmetic through BF16, rounding twice where the
+  hardware rounds once. Over all E4M3 operand pairs, that double rounding
+  gives a different add result for 312 pairs under round-to-nearest-even and
+  316 under round-to-nearest-max-magnitude.
+- **How `fma_ref.py` rounds once.** It computes the exact result with
+  `fractions.Fraction`, then hands gfloat a float that sits in the same place
+  relative to the destination's neighbouring values (on one, below the
+  midpoint, on it, or above it), which rounds identically.
+- **`.sat`.** Cross-checking with Spike showed that the RVV `.sat` conversions
+  clamp infinities as well as finite overflows, which is gfloat's `sat=True`.
+- **No toolchain support needed.** `common/rvv_mx.h` emits the FP8
+  instructions as raw `.insn` encodings, so `-march=rv64gcv_zfh_zvfh` works.

@@ -21,7 +21,8 @@ result of an operation can need more than a float's 53 bits.  So:
 
 Special cases follow IEEE 754: NaN in gives NaN out; +Inf + -Inf, Inf - Inf and
 0 x Inf give NaN; otherwise an infinity wins.  An exact zero sum of
-opposite-signed operands is +0, or -0 when rounding toward negative.
+opposite-signed operands is +0, or -0 when rounding toward negative (P3109,
+which has no -0, encodes both as zero).
 
 Validated against the Spike-generated vec-mx-binary golden data by
 vec-mx-binary/gen_data/validate_fma_ref.py.

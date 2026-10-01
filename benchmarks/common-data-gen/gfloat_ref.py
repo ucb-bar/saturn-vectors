@@ -32,7 +32,8 @@ import random
 import re
 
 from gfloat import RoundMode, decode_float, encode_float, round_float
-from gfloat.formats import format_info_bfloat16, format_info_ocp_e4m3, format_info_ocp_e5m2
+from gfloat.formats import format_info_bfloat16, format_info_ocp_e4m3, format_info_ocp_e5m2, format_info_p3109
+from gfloat.types import Domain, Signedness
 
 BF16 = format_info_bfloat16
 
@@ -51,6 +52,19 @@ FRM = {
 FP8 = {
     "altfmt0": format_info_ocp_e4m3,
     "altfmt1": format_info_ocp_e5m2,
+}
+
+def p3109_format(precision, finite):
+    """Signed 8-bit P3109 binary8p<precision>, finite or extended domain."""
+    return format_info_p3109(8, precision, Signedness.Signed,
+                             Domain.Finite if finite else Domain.Extended)
+
+
+# The same, for each 8-bit standard a build can use (VectorParams.p3109)
+FP8_STANDARDS = {
+    "ocp": FP8,
+    "p3109": {"altfmt0": p3109_format(4, False), "altfmt1": p3109_format(3, False)},
+    "p3109-finite": {"altfmt0": p3109_format(4, True), "altfmt1": p3109_format(3, True)},
 }
 
 # Canonical NaN each format is expected to produce.  A format usually has many
