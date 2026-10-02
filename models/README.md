@@ -36,28 +36,34 @@ Model of the design:
 | `p3109_rounder.py` | Bit-accurate Python model of `P3109Rounder.scala` |
 | `fma_raw.py` | The unrounded result an FMA core hands the rounder |
 
-Checks (each one prints a `TOTAL ...` line and exits non-zero on any mismatch):
+Checks (each one exits non-zero on any mismatch):
 
 | File | Checks |
 |---|---|
 | `validate_rounder.py` | Model codes against gfloat, every BF16 input |
 | `validate_rto.py` | Model round-to-odd against `rto_ref.py` |
-| `validate_flags.py` | Model flags against `flags_ref.py` |
+| `validate_flags.py` | Model overflow, underflow and inexact flags against `flags_ref.py` |
 | `validate_rounder_fma.py` | Model on FMA results of every core type |
 | `run_rounder_check.sh` | `P3109Rounder` RTL against the references |
 | `run_conv_check.sh` | `FPConvBlock` RTL against the references |
 | `p3109_test.c` | `p3109.h` against the standard's definitions |
 
-Used by the two `run_*.sh` scripts, not run directly: `dump_expected.py`,
-`dump_fma_expected.py` and `conv_vectors.py` write the expected results;
-`tb_p3109_rounder.cpp`, `tb_p3109_fma_round.cpp` and `tb_conv.cpp` are the
-Verilator testbenches; `collect_hier.py` finds a module's files in the
-generated Verilog. The rounder wrappers they test are in
+Used by the `run_*.sh` scripts, not run directly:
+
+| File | Used by | Contents |
+|---|---|---|
+| `dump_expected.py`, `dump_fma_expected.py` | `run_rounder_check.sh` | Expected results for the rounder |
+| `tb_p3109_rounder.cpp`, `tb_p3109_fma_round.cpp` | `run_rounder_check.sh` | Verilator testbenches for the rounder |
+| `conv_vectors.py` | `run_conv_check.sh` | Expected results for `FPConvBlock` |
+| `tb_conv.cpp` | `run_conv_check.sh` | Verilator testbench for `FPConvBlock` |
+| `collect_hier.py` | both | Lists a module's files in the generated Verilog |
+
+The rounder wrappers that `run_rounder_check.sh` tests are in
 `src/test/scala/P3109TestWrappers.scala`.
 
 ## How to run
 
-All commands below are run from the Chipyard root.
+Run all commands from the Chipyard root directory.
 
 ### 1. Set up (once)
 
@@ -83,8 +89,8 @@ cc -O2 -Wall -o /tmp/p3109_test p3109_test.c && /tmp/p3109_test
 cd -
 ```
 
-Pass: each validator ends with a `TOTAL` line showing 0 mismatches, and
-`p3109_test` ends with `all formats exhaustively verified`.
+Pass: each validator ends with `TOTAL MISMATCHES: 0`, and `p3109_test` ends
+with `all formats exhaustively verified`.
 
 ### 3. Check the rounder RTL (about 5 minutes)
 
@@ -99,7 +105,7 @@ one for each of the five FMA core types, in each domain. Full logs are in
 
 ### 4. Check the conversion unit RTL (about 10 minutes per config)
 
-Generate the config's Verilog first, then check it. For the block config:
+For each config, generate its Verilog, then check it. For the block config:
 
 ```bash
 source env.sh
@@ -107,7 +113,7 @@ make -C sims/verilator verilog CONFIG=P3109BlockV256D128ShuttleConfig
 generators/saturn/models/run_conv_check.sh P3109BlockV256D128ShuttleConfig /tmp/p3109-conv
 ```
 
-Do the same for `P3109V256D128ShuttleConfig`, `P3109FiniteV256D128ShuttleConfig`
+Do the same steps for `P3109V256D128ShuttleConfig`, `P3109FiniteV256D128ShuttleConfig`
 and `P3109BlockFiniteV256D128ShuttleConfig`. A block config writes about
 600 MB of vectors to the work directory.
 

@@ -48,13 +48,13 @@ def cases(fi):
         xs = [exact(fi, c) for c in range(256)]
         for a in range(256):
             for b in range(256):
-                r = OPS[op](xs[a], xs[b], RNE_FRM)
+                r = OPS[op](xs[a], xs[b], RNE_RND)
                 yield RNE_FRM, r, project(fi, r, RNE_RND, False)
     for op in ("mul", "add", "sub"):
         pairs, _ = binary_inputs(op, fi, fi, 512, seed=1)
         for a, b in pairs:
             for frm, rnd in FRM.values():
-                r = OPS[op](exact(fi, a), exact(fi, b), frm)
+                r = OPS[op](exact(fi, a), exact(fi, b), rnd)
                 yield frm, r, project(fi, r, rnd, False)
 
 

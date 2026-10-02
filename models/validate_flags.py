@@ -2,7 +2,9 @@
 
   1. conversions: every BF16 pattern x six rounding modes (the five frm modes
      and round-to-odd) x {binary8p4, binary8p3} x {extended, finite} x
-     {SatNone, SatFinite}, with a signalling-NaN input raising invalid;
+     {SatNone, SatFinite}. Overflow, underflow and inexact are checked; invalid
+     is an input to the rounder, given to both sides, so it is not (the RTL
+     check, run_rounder_check.sh, tests the wrapper's signalling-NaN test);
   2. the FMA's rounder: every 8-bit operand pair through multiply, add and
      subtract, on every core shape, in every frm mode, with the raw result
      presented both normalised and one binade lower (doShiftSigDown1).
@@ -15,7 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "benchmarks", "common-data-gen"))
 sys.path.insert(0, HERE)
 
-from gfloat_ref import p3109_format                     # noqa: E402
+from gfloat_ref import FRM, p3109_format                # noqa: E402
 from fma_ref import OPS, exact                          # noqa: E402
 from fma_raw import CORES, raw_from_exact               # noqa: E402
 from flags_ref import flags, bf16_exact, bf16_is_snan, FRM_MODES, RODD  # noqa: E402
@@ -24,6 +26,7 @@ from p3109_rounder import p3109_round, raw_from_fn    # noqa: E402
 MODES = FRM_MODES + (RODD,)
 FMTS = (("p4", 4), ("p3", 3))
 NAMES = ("NV", "DZ", "OF", "UF", "NX")
+RND = {frm: rnd for frm, rnd in FRM.values()}
 
 
 def conv_job(args):
@@ -45,7 +48,7 @@ def fma_job(args):
     for a in range(256):
         xa = exact(fi, a)
         for b in range(256):
-            r = OPS[op](xa, exact(fi, b), mode)
+            r = OPS[op](xa, exact(fi, b), RND[mode])
             want = flags(r, fi, mode)
             for core, (ew, sw) in CORES.items():
                 for shifted in ((False, True) if r[0] == "num" and r[2] else (False,)):

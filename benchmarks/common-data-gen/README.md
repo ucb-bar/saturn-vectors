@@ -11,8 +11,8 @@ program on the simulated chip and comparing its results with expected values:
 | `vec-mx-binary` | Multiply, add and subtract on FP8, FP16 and BF16, every rounding mode |
 
 The expected values in each benchmark's `data.S` are computed by the Python
-reference models in this directory. Each array covers a few hundred inputs
-chosen at the edges (overflow threshold, top binade, subnormal boundary, exact
+reference models in this directory. Each array holds 256 (`vec-mx-unary`) or
+128 (`vec-mx-binary`) inputs, chosen at the edges (overflow threshold, top binade, subnormal boundary, exact
 ties), with the same inputs repeated for every rounding mode.
 
 The same benchmarks run on two kinds of build:
@@ -35,6 +35,7 @@ In this directory:
 | `gfloat_ref.py` | Conversions, via the [gfloat](https://github.com/graphcore-research/gfloat) library |
 | `fma_ref.py` | Arithmetic computed exactly, then rounded once (gfloat has no arithmetic) |
 | `requirements.txt` | Python packages for the models |
+| `mx_data_gen.c`, `mx_data_gen.h` | Spike-based generator, still used by `opu-fp8-gemm` and `vec-mx-matmul` |
 
 In each benchmark directory (`vec-mx-unary/`, `vec-mx-binary/`):
 
@@ -51,7 +52,7 @@ And `benchmarks/run_fp8_test.sh` runs one benchmark end to end.
 
 ## How to run
 
-All commands below are run from the Chipyard root.
+Run all commands from the Chipyard root directory.
 
 ### 1. Set up (once)
 
@@ -86,8 +87,8 @@ compiles the benchmark and runs it on the simulator: about 20 minutes for
 `vec-mx-unary`, 45 for `vec-mx-binary`. Add `--gen-only` to stop before the
 simulation.
 
-Pass: the run ends with `All tests passed`; a failure prints `Test failed`
-with the failing element and exits non-zero. Logs are in
+Pass: the run ends with `All tests passed`. A failure prints `Test failed`
+and the elements of the failing chunk, and exits non-zero. Logs are in
 `<benchmark>/results/`, with `latest.log` pointing at the most recent.
 
 A `p3109` or `p3109-finite` run leaves its vectors in the checked-in `data.S`.

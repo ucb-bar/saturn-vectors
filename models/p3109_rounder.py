@@ -85,14 +85,14 @@ MASK_TOP = MASK_BOTTOM - SIG_INT - 1
 # smallest normal; prec_shift is the precision the format lacks against SIG_INT.
 FMT = {
     "p4": dict(
-        frac_bits=3, exp_bits=4, bias=8,
+        frac_bits=3,
         min_norm=B_INT - 7,        # emin = -7
         min_nonzero=B_INT - 10,    # emin - (P-1) = -10, hardfloat's outMinNonzeroExp
         emax=B_INT + 7,
         delta=0, prec_shift=0,     # the datapath is built for this format
     ),
     "p3": dict(
-        frac_bits=2, exp_bits=5, bias=16,
+        frac_bits=2,
         min_norm=B_INT - 15,       # emin = -15
         min_nonzero=B_INT - 17,
         emax=B_INT + 15,
@@ -172,9 +172,12 @@ def p3109_round(raw, fmt, mode, sat=False, finite=False,
     ur_round_pos_bit = (adjusted_sig >> (lsb + 1)) & 1
     ur_any_round = (adjusted_sig & ((1 << (lsb + 2)) - 1)) != 0
     ur_round_incr = ((near_even or near_max) and ur_round_pos_bit) or (round_mag_up and ur_any_round)
+    # hardfloat also requires s_adjusted_exp <= min_norm; the clamped mask
+    # exponent makes the mask bit imply it
+    tiny_mask_bit = (round_mask >> (lsb + 2)) & 1
+    assert not tiny_mask_bit or s_adjusted_exp <= f["min_norm"]
     common_underflow = common_total_underflow or (
-        any_round and s_adjusted_exp <= f["min_norm"]
-        and ((round_mask >> (lsb + 2)) & 1)
+        any_round and tiny_mask_bit
         and (((round_mask >> (lsb + 3)) & 1)
              or not (round_carry and round_pos_bit and ur_round_incr)))
     common_inexact = common_total_underflow or any_round
@@ -189,8 +192,8 @@ def p3109_round(raw, fmt, mode, sat=False, finite=False,
 
     # Round-to-odd overflows to Inf/NaN too (P3109 4.7.5)
     overflow_round_mag_up = near_even or near_max or round_mag_up or odd
-    peg_min_nonzero = common_case and common_total_underflow and (round_mag_up or odd)
-    peg_max_finite = overflow and not overflow_round_mag_up
+    # Read only in the total-underflow branch below, as in the RTL
+    peg_min_nonzero = round_mag_up or odd
 
     # --- encode the 8-bit P3109 code ---------------------------------------
     sign = raw["sign"]
@@ -210,7 +213,7 @@ def p3109_round(raw, fmt, mode, sat=False, finite=False,
     elif overflow:
         # sat forces the clamp; otherwise inward rounding clamps and the
         # nearest/outward modes go to the overflow code point.
-        code = max_finite_code if (sat or peg_max_finite) else inf_code
+        code = max_finite_code if (sat or not overflow_round_mag_up) else inf_code
     elif common_total_underflow:
         code = (sb | 1) if peg_min_nonzero else 0x00  # -0 flushes to +0
     elif s_rounded_exp < f["min_norm"]:
@@ -220,9 +223,10 @@ def p3109_round(raw, fmt, mode, sat=False, finite=False,
         sig_with_hidden = (1 << f["frac_bits"]) | frac
         assert sig_with_hidden & ((1 << shift) - 1) == 0, "subnormal shift dropped a bit"
         field = sig_with_hidden >> shift
-        code = 0x00 if field == 0 else (sb | field)
+        assert field != 0, "not total underflow, so the field keeps the hidden bit"
+        code = sb | field
     else:
-        exp_field = s_rounded_exp - B_INT + f["bias"]
+        exp_field = s_rounded_exp - f["min_norm"] + 1
         code = sb | (exp_field << f["frac_bits"]) | frac
 
     return code, (invalid_exc, False, overflow, underflow, inexact)

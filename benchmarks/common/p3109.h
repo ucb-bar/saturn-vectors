@@ -366,7 +366,7 @@ static inline p3109_t p3109_maximum_finite(p3109_fmt_t f, p3109_t x, p3109_t y) 
 static inline p3109_t p3109_next_greater_than(p3109_fmt_t f, p3109_t x) {
   p3109_t nan = p3109_nan_of(f);
   if (p3109_is_nan(f, x)) return nan;
-  if (f.is_extended && p3109_is_infinite(f, x)) {
+  if (p3109_is_infinite(f, x)) {
     // -Inf steps up to the most negative finite value; +Inf has nowhere to go.
     if (p3109_is_sign_minus(f, x)) return p3109_min_finite_of(f);
     return nan;
@@ -386,11 +386,11 @@ static inline p3109_t p3109_next_less_than(p3109_fmt_t f, p3109_t x) {
   p3109_t nan = p3109_nan_of(f);
   if (p3109_is_nan(f, x)) return nan;
   if (!f.is_signed && x == 0) return nan;
-  if (f.is_extended && p3109_is_infinite(f, x)) {
+  if (p3109_is_infinite(f, x)) {
     if (p3109_is_sign_minus(f, x)) return nan;
     return p3109_max_finite_of(f);
   }
-  if (x == p3109_min_finite_of(f) && f.is_signed)
+  if (x == p3109_min_finite_of(f))  // signed: the unsigned zero returned above
     return f.is_extended ? p3109_neg_inf_of(f) : nan;
   if (x == 0) return (1u << (f.k - 1)) + 1u;  // zero steps to smallest negative
   if (p3109_is_sign_minus(f, x)) return x + 1;

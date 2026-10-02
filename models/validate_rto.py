@@ -45,11 +45,11 @@ if __name__ == "__main__":
                             print(f"   first {k:14} {fi.name} sat={sat}: bf16 0x{b:04X} "
                                   f"({x:g}) model 0x{got:02X} "
                                   f"({decode_float(fi, got).fval:g})  standard 0x{want:02X} ({y:g})")
-                total_bad += bad
+                total_bad += bad + prop_bad
                 print(f"{fi.name:14} sat={sat!s:5}: {65536 - bad:5}/65536 agree"
                       f"{'  ' + str(kinds) if kinds else ''}"
                       f"{'   REFERENCE PROPERTY FAILS: ' + str(prop_bad) if prop_bad else ''}",
                       flush=True)
 
-    print(f"\nTOTAL DISAGREEMENTS: {total_bad} of {total}")
+    print(f"\nTOTAL MISMATCHES: {total_bad} of {total}")
     sys.exit(1 if total_bad else 0)

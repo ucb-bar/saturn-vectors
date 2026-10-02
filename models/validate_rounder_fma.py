@@ -43,7 +43,7 @@ if __name__ == "__main__":
             for a in range(256):
                 xa = exact(fi, a)
                 for b in range(256):
-                    r = OPS[op](xa, exact(fi, b), 0)
+                    r = OPS[op](xa, exact(fi, b), FRM["rne"][1])
                     want = project(fi, r, FRM["rne"][1], False)
                     n += 1
                     for core in CORES:
@@ -67,7 +67,7 @@ if __name__ == "__main__":
                 bad = 0
                 for a, b in pairs:
                     for name, (frm, rnd) in FRM.items():
-                        r = OPS[op](exact(fi, a), exact(fi, b), frm)
+                        r = OPS[op](exact(fi, a), exact(fi, b), rnd)
                         for sat in (False, True):
                             want = project(fi, r, rnd, sat)
                             for core in CORES:

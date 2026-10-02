@@ -37,7 +37,7 @@ static double ipow2(int e) {
 // 4.7.2 ωDecode, transcribed pattern by pattern, in the order given.
 static real_t ref_decode(p3109_fmt_t f, p3109_t x) {
   uint32_t half = 1u << (f.k - 1), full = 1u << f.k;
-  int bias = p3109_exponent_bias_of(f);
+  int bias = 1 << (f.is_signed ? f.k - f.p - 1 : f.k - f.p);  // 3.1, not from p3109.h
 
   if (f.is_signed && x == half) return r_nan();
   if (!f.is_signed && x == full - 1) return r_nan();
