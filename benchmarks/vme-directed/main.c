@@ -20,6 +20,7 @@ static void mix(uint32_t v) { checksum = (checksum ^ v) * 0x01000193u; }
 static uint32_t lcg_state = 12345;
 static uint32_t lcg(void) { lcg_state = lcg_state * 1664525u + 1013904223u; return lcg_state >> 8; }
 
+static void diag_vsettnt_clamp(size_t te); // TEMP DIAG forward decl
 static size_t read_vtype(void) { size_t v; asm volatile("csrr %0, vtype" : "=r"(v)); return v; }
 static size_t read_vl(void) { size_t v; asm volatile("csrr %0, vl" : "=r"(v)); return v; }
 static uint64_t read_cycle(void) { uint64_t v; asm volatile("rdcycle %0" : "=r"(v)); return v; }
@@ -273,8 +274,11 @@ static void test_tile_mem(size_t te) {
   vme_vsettnt_e32w1(te);
   printf("tile_mem: column round-trip loop\n"); // TEMP DIAG
   for (size_t c = 0; c < te; c++) {
+    printf("  c=%lu vtse32 cycle=%llu\n", c, (unsigned long long)read_cycle()); // TEMP DIAG
     VME_VTSE32(mem_buf, vme_tss(0, VME_TSS_COL, c));
+    printf("  c=%lu vtse32 retired cycle=%llu\n", c, (unsigned long long)read_cycle()); // TEMP DIAG
     VME_VTLE32(mem_buf, vme_tss(3, VME_TSS_COL, c));
+    printf("  c=%lu done\n", c); // TEMP DIAG
   }
   printf("tile_mem: column round-trip store_tile_cols\n"); // TEMP DIAG
   store_tile_cols(3, te);
@@ -302,8 +306,14 @@ static void test_tile_mem(size_t te) {
   // not be touched in memory, mirroring test_moves' partial-length sf.vtmv.t.v case.
   printf("tile_mem: partial vtse32\n"); // TEMP DIAG
   size_t pl = te / 2 + 1;
-  vme_vsettnt_e32w1(pl);
+  // Fill the sentinel *before* configuring matrix mode: plain C loops under
+  // -march=...v... are fair game for the compiler's own auto-vectorizer, which
+  // emits its own vsetvli and silently clobbers vtwiden/tm/tk/vl -- confirmed via
+  // disassembly (a standard "vsetvli e8,mf4" strip-mining loop) to be exactly
+  // what turned the just-configured (e32,w1,tn=9) state into vl=4/vtwiden=0
+  // by the time VME_VTSE32 executed, when this fill ran after vme_vsettnt_e32w1.
   for (size_t j = 0; j < te; j++) mem_buf[j] = (int32_t)0xdeadbeef;
+  vme_vsettnt_e32w1(pl);
   VME_VTSE32(mem_buf, vme_tss(1, VME_TSS_ROW, 2));
   printf("tile_mem: partial vtse32 done\n"); // TEMP DIAG
   for (size_t j = 0; j < pl; j++)
@@ -429,17 +439,31 @@ static void diag_moves(size_t te) {
   printf("diag: done\n");
 }
 
+static void diag_vsettnt_clamp(size_t te) {
+  printf("diag_vsettnt_clamp: e32w1\n");
+  for (size_t req = te; req >= 1; req--) {
+    size_t tn = vme_vsettnt_e32w1(req);
+    printf("  e32w1 req=%lu -> tn=%lu vtype=0x%lx\n", req, tn, read_vtype());
+  }
+  printf("diag_vsettnt_clamp: e8w4\n");
+  for (size_t req = te; req >= 1; req--) {
+    size_t tn = vme_vsettnt_e8w4(req);
+    printf("  e8w4 req=%lu -> tn=%lu vtype=0x%lx\n", req, tn, read_vtype());
+  }
+}
+
 int main(void) {
   size_t te = test_config();
   if (te > MAX_TE) { printf("TE too large\n"); exit(1); }
-  #ifndef VME_NO_FP8
-  test_mm_fp8(te);
-  #endif
+  diag_vsettnt_clamp(te);
   test_moves(te);
   test_tile_mem(te);
   diag_moves(te);
-  test_mm_int8(te);
   test_vtzero(te);
+  test_mm_int8(te);
+  #ifndef VME_NO_FP8
+  test_mm_fp8(te);
+  #endif
   printf("checksum 0x%08x\n", checksum);
   if (failures) {
     printf("FAILED (%d)\n", failures);

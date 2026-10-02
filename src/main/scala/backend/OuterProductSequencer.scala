@@ -141,9 +141,16 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   // Take a new instruction
   when (io.dis.fire) {
     val dis_inst = io.dis.bits
-    val dis_ctrl = new VectorDecoder(dis_inst, opu_insns, Seq(OPUKind))
-    val kind = dis_ctrl.uint(OPUKind)
     val d_tile_st = dis_inst.tile_st
+    // sf.vtse32 bypasses the opu_insns match in accepts() (see its comment), so it's the
+    // first kind of instruction ever to reach this decoder "unmatched". The decoder's
+    // declared default (OPUKinds.NONE) is only a don't-care fill hint for logic
+    // minimization, not a guaranteed output for arbitrary unmatched inputs -- for this
+    // encoding it was observed to synthesize to OPUKinds.MM_INT instead, spuriously
+    // routing d_empty/d_mm/rvs1_mask/rvs2_mask through the sf.mm path. Force NONE here
+    // rather than trusting the table for an encoding it was never meant to decode.
+    val dis_ctrl = new VectorDecoder(dis_inst, opu_insns, Seq(OPUKind))
+    val kind = Mux(d_tile_st, OPUKinds.NONE.U, dis_ctrl.uint(OPUKind))
     // sf.vtse32's TSS lives in rs2 (rs1 is the memory address); every other OPU
     // instruction that reads a TSS (sf.vtmv.*) has it in rs1.
     val tss = Mux(d_tile_st, dis_inst.rs2_data, dis_inst.rs1_data)

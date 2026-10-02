@@ -38,7 +38,10 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
   // sf.vtle{eee}/sf.vtse{eee} (Load/Store Tile Subset to Memory): claims the mew=1
   // sub-space, which is otherwise always illegal below. rs2 holds a Tile Subset
   // Specifier rather than a lumop/sumop sub-opcode or stride register; only eee=32b
-  // (matching the (e32,w1) tile config sf.vtmv.* already requires) is implemented.
+  // is implemented. TEW=SEW*TWIDEN=32 is reachable via either config this subset
+  // supports: (e32,w1), the tile-move convention, or (e8,w4), the convention the
+  // currently-supported Zvti8i32mm/Zvtofp8fmm kernels leave vtype in -- both must be
+  // legal so a kernel can dump/load its accumulator tile without resetting vtype.
   val tile_mem = mew === 1.U && mop === 0.U && vm === 1.U && width === 7.U && io.inst(11,7) === 0.U
   val tile_eee = nf
   val opve = opcode === opcVectorE
@@ -65,7 +68,9 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
 
   when (v_load || v_store) {
     when (tile_mem) {
-      io.legal := tile_eee === 2.U && vtwiden === 1.U && io.vconfig.vtype.vsew === 2.U && !io.vconfig.vtype.vill
+      val tile_mem_vtype_ok = (vtwiden === 1.U && io.vconfig.vtype.vsew === 2.U) ||
+                               (vtwiden === 3.U && io.vconfig.vtype.vsew === 0.U)
+      io.legal := tile_eee === 2.U && tile_mem_vtype_ok && !io.vconfig.vtype.vill
       io.read_rs1 := true.B
       io.read_rs2 := true.B
     } .otherwise {
