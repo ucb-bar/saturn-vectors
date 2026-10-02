@@ -18,7 +18,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common-data-gen"))
 
-from gfloat import RoundMode  # noqa: E402
 from gfloat.formats import format_info_binary16, format_info_binary32  # noqa: E402
 from gfloat_ref import (  # noqa: E402
     BF16,
@@ -35,7 +34,7 @@ from gfloat_ref import (  # noqa: E402
 FP32 = format_info_binary32
 FP16 = format_info_binary16
 
-COUNT = 128
+COUNT = 256
 
 
 def emit(out, count):
@@ -89,7 +88,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-n", "--count", type=int, default=COUNT,
-                    help="elements per array (default: 128)")
+                    help=f"elements per array (default: {COUNT})")
     ap.add_argument("-o", "--output", help="write here instead of stdout")
     args = ap.parse_args()
 

@@ -1,7 +1,7 @@
 """Reference model for the FMA unit's arithmetic on 8- and 16-bit floats.
 
-Used to generate test vectors for vec-mx-binary.  It replaces mx_data_gen.c, which
-computed its answers on Spike, and which could only reach FP8 arithmetic by
+Used to generate test vectors for vec-mx-binary.  It replaces
+vec-mx-binary/gen_data/gen_data.c, which computed its answers on Spike, and which could only reach FP8 arithmetic by
 converting to BF16, computing there and converting back: for add and subtract with
 an 8-bit result that rounds twice.  This model rounds once, as the hardware does.
 
@@ -28,6 +28,7 @@ vec-mx-binary/gen_data/validate_fma_ref.py.
 """
 
 import math
+import random
 from fractions import Fraction
 
 from gfloat import RoundMode, decode_float, encode_float, round_float
@@ -79,7 +80,7 @@ def add(x, y, rnd):
     v = (-x[2] if x[1] else x[2]) + (-y[2] if y[1] else y[2])
     if v != 0:
         return ("num", int(v < 0), abs(v))
-    if _is_zero(x) and _is_zero(y) and x[1] == y[1]:
+    if x[1] == y[1]:                                      # both zero, as v == 0
         return ("num", x[1], Fraction(0))                 # (-0) + (-0) = -0
     return ("num", int(rnd == RoundMode.TowardNegative), Fraction(0))
 
@@ -150,8 +151,6 @@ def binary(op, src_fi, dst_fi, a_bits, b_bits, rnd=RoundMode.TiesToEven, sat=Fal
 # serve all five modes, and a failure then points at the mode, not the operands.
 # Picking evenly from each category gives rare but delicate cases (overflow,
 # ties, the top binade) the same share as ordinary ones.
-
-import random
 
 CATEGORIES = (            # (name, most taken per array; None = no limit)
     ("NaN operand", 3),

@@ -86,11 +86,6 @@ def convert(src_fi, dst_fi, bits, rnd=RoundMode.TiesToEven, sat=False):
 # Test vector construction
 # ---------------------------------------------------------------------------
 
-def _bf16(v):
-    """Nearest BF16 bit pattern to a real value."""
-    return _enc(BF16, v)
-
-
 def _enc(fi, v):
     """Nearest bit pattern in format `fi` to a real value."""
     return encode_float(fi, round_float(fi, v, rnd=RoundMode.TiesToEven))

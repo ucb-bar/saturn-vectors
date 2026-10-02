@@ -12,7 +12,6 @@ data.S -- so it works as a plain CI check.
   ./validate_gfloat.py [path/to/data.S]   # defaults to ../data.S.spike-golden
 """
 
-import math
 import os
 import re
 import sys
