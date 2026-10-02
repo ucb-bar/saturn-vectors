@@ -14,31 +14,27 @@ object P3109Scale {
   def isZero(scale: UInt) = scale === 0.U
   def exponent(scale: UInt): SInt = (0.U(1.W) ## scale).asSInt - Bias.S
 
-  // omegaBlockDecode (5.4.1): Multiply(scale, element), so Inf x 0 is NaN.
-  // in's exponent field must have room for the shift.
+  // omegaBlockDecode (5.4.1): Multiply(scale, element), so Inf x 0 is NaN
   def decode(in: RawFloat, scale: UInt): RawFloat = {
     val nanOut = in.isNaN || isNaN(scale) || (in.isInf && isZero(scale))
-    val zeroOut = !nanOut && (in.isZero || isZero(scale))
+    val zeroOut = in.isZero || isZero(scale)
     Mux(nanOut, makeNaN(in), Mux(zeroOut, makeZero(in), shiftExp(in, exponent(scale))))
   }
 
   // omegaBlockProject (5.4.2): Divide(element, scale), except that a zero
-  // scale gives zero for every element, infinities included
+  // scale gives zero for every element but NaN, infinities included
   def project(in: RawFloat, scale: UInt): RawFloat = {
     val nanOut = in.isNaN || isNaN(scale)
-    val zeroOut = !nanOut && isZero(scale)
+    val zeroOut = isZero(scale)
     Mux(nanOut, makeNaN(in), Mux(zeroOut, makeZero(in), shiftExp(in, -exponent(scale))))
   }
 
-  // Saturates instead of wrapping: past either end the following rounder
-  // overflows or underflows the same way
+  // The callers pass BF16 raw floats, whose sExp field holds any element's
+  // exponent moved by any scale (decode: 111..511, project: -4..511), so the
+  // sum always fits. Scale codes 0 and 255 never reach here, nor do NaNs.
   def shiftExp(in: RawFloat, delta: SInt): RawFloat = {
-    val w = in.sExp.getWidth
-    val wide = in.sExp +& delta
-    val hi = ((BigInt(1) << (w - 1)) - 1).S(w.W)
-    val lo = (-(BigInt(1) << (w - 1))).S(w.W)
     val out = WireInit(in)
-    out.sExp := Mux(wide > hi, hi, Mux(wide < lo, lo, wide(w - 1, 0).asSInt))
+    out.sExp := (in.sExp +& delta)(in.sExp.getWidth - 1, 0).asSInt
     out
   }
 

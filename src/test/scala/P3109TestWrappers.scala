@@ -25,7 +25,6 @@ class P3109ConvWrapper(formats: P3109Formats, name: String) extends RawModule {
   rounder.io.roundingMode := io.roundingMode
   rounder.io.sat := io.sat
   rounder.io.invalidExc := hardfloat.isSigNaNRawFloat(raw)
-  rounder.io.detectTininess := hardfloat.consts.tininess_afterRounding
   io.out := rounder.io.out
   io.exceptionFlags := rounder.io.exceptionFlags
 }

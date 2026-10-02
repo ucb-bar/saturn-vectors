@@ -82,7 +82,7 @@ object VectorParams {
 
   // p3109BlockFiniteParams:
   // Same as p3109BlockParams, both formats in the finite domain
-  def p3109BlockFiniteParams = p3109Params.copy(
+  def p3109BlockFiniteParams = p3109BlockParams.copy(
     p3109 = Some(P3109Formats(p4 = P3109Domain.Finite, p3 = P3109Domain.Finite, block = true))
   )
 

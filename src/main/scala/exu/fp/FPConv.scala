@@ -230,7 +230,6 @@ class FPConvBlock(mxConversion: Boolean, p3109: Option[P3109Formats])(implicit p
     f.io.altfmt := s1_altfmt
     f.io.roundingMode := s1_rm
     f.io.sat := s1_sat
-    f.io.detectTininess := hardfloat.consts.tininess_afterRounding
   }
 
   val out = WireInit(0.U(64.W))
