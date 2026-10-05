@@ -12,49 +12,23 @@ Run it before trusting fma_ref.py, and again after any change to it.
 """
 
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common-data-gen"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from gfloat import RoundMode  # noqa: E402
-from gfloat.formats import format_info_bfloat16, format_info_binary16, format_info_binary32  # noqa: E402
 from fma_ref import binary  # noqa: E402
-from gfloat_ref import FP8  # noqa: E402
-
-FORMATS = {   # name: (operand format, operand bytes, widened result format, its bytes)
-    "fp16": (format_info_binary16, 2, format_info_binary32, 4),
-    "bf16": (format_info_bfloat16, 2, format_info_binary32, 4),
-    "e4m3": (FP8["altfmt0"], 1, format_info_bfloat16, 2),
-    "e5m2": (FP8["altfmt1"], 1, format_info_bfloat16, 2),
-}
-OPS = ("mul", "add", "sub", "wmul", "wadd", "wsub")
+from gfloat_ref import read_data_s, unpack_words  # noqa: E402
+from gen_data import FORMATS, OPS  # noqa: E402  the arrays the generator writes
 
 
-def parse(path):
-    arrays, cur = {}, None
-    with open(path) as f:
-        for line in f:
-            m = re.match(r"^(\w+):\s*$", line)
-            if m:
-                cur = m.group(1)
-                arrays[cur] = []
-                continue
-            m = re.match(r"\s+\.word\s+(0x[0-9A-Fa-f]+)", line)
-            if m and cur:
-                arrays[cur].append(int(m.group(1), 16))
-    return arrays
-
-
-def unpack(words, esize):
-    per = 4 // esize
-    return [(w >> (8 * esize * j)) & ((1 << (8 * esize)) - 1) for w in words for j in range(per)]
 
 
 def main():
     path = sys.argv[1] if len(sys.argv) > 1 else \
         os.path.join(os.path.dirname(__file__), "..", "data.S.spike-golden")
-    arrays = parse(path)
+    arrays = read_data_s(path)
     n = arrays["N"][0]
     print(f"fma_ref vs Spike, {os.path.relpath(path)}, {n} elements per array\n")
     checked = failures = 0
@@ -66,9 +40,9 @@ def main():
                 continue
             wide = op.startswith("w")
             dst, desz = (wfi, wesz) if wide else (fi, esz)
-            a = unpack(arrays[name + "_a"], esz)[:n]
-            b = unpack(arrays[name + "_b"], esz)[:n]
-            want = unpack(arrays[name + "_out"], desz)[:n]
+            a = unpack_words(arrays[name + "_a"], esz)[:n]
+            b = unpack_words(arrays[name + "_b"], esz)[:n]
+            want = unpack_words(arrays[name + "_out"], desz)[:n]
             got = [binary(op[1:] if wide else op, fi, dst, x, y, RoundMode.TiesToEven, check=True) for x, y in zip(a, b)]
             bad = [i for i in range(n) if got[i] != want[i]]
             checked += 1

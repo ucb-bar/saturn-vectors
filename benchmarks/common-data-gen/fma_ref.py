@@ -92,7 +92,7 @@ def sub(x, y, rnd):
 OPS = {"mul": mul, "add": add, "sub": sub}
 
 
-def _floor_log2(a):
+def floor_log2(a):
     k = a.numerator.bit_length() - a.denominator.bit_length()
     while Fraction(2) ** k > a:
         k -= 1
@@ -101,16 +101,25 @@ def _floor_log2(a):
     return k
 
 
+def emin(fi):
+    """Exponent of fi's smallest normal number."""
+    return round(math.log2(fi.smallest_normal))
+
+
+def ulp(fi, a):
+    """Spacing of fi's numbers at magnitude a (> 0), subnormals included."""
+    return Fraction(2) ** (max(floor_log2(a), emin(fi)) - (fi.precision - 1))
+
+
 def _stand_in(fi, a):
     """A float in the same position as `a` (> 0) relative to fi's neighbouring grid points."""
-    emin = round(math.log2(fi.smallest_normal))
-    ulp = Fraction(2) ** (max(_floor_log2(a), emin) - (fi.precision - 1))
-    n = a / ulp
-    lo = (n.numerator // n.denominator) * ulp
+    u = ulp(fi, a)
+    n = a / u
+    lo = (n.numerator // n.denominator) * u
     if a == lo:
         return lo
-    mid = lo + ulp / 2
-    return lo + ulp / 4 if a < mid else (mid if a == mid else lo + 3 * ulp / 4)
+    mid = lo + u / 2
+    return lo + u / 4 if a < mid else (mid if a == mid else lo + 3 * u / 4)
 
 
 def project(fi, r, rnd, sat=False, check=False):
@@ -173,9 +182,7 @@ def _position(fi, a):
     Measured as the fractional part of a in units of fi's spacing there: 0 means
     a is one of fi's numbers, 1/2 means exactly halfway between two of them.
     """
-    emin = round(math.log2(fi.smallest_normal))
-    ulp = Fraction(2) ** (max(_floor_log2(a), emin) - (fi.precision - 1))
-    n = a / ulp
+    n = a / ulp(fi, a)
     frac = n - n.numerator // n.denominator
     return "exact" if frac == 0 else ("tie" if frac == Fraction(1, 2) else "inexact")
 
@@ -242,14 +249,14 @@ def _pool_16bit(op, src_fi, dst_fi, rng):
 
     # Constructed ties at the destination's precision.
     pd = dst_fi.precision
-    emin_d = round(math.log2(dst_fi.smallest_normal))
+    emin_d = emin(dst_fi)
     for _ in range(3000):
         if op in ("add", "sub"):
             xb = rand_code()
             x = exact(src_fi, xb)
             if x[2] == 0:
                 continue
-            half_ulp = Fraction(2) ** (max(_floor_log2(x[2]), emin_d) - (pd - 1)) / 2
+            half_ulp = ulp(dst_fi, x[2]) / 2
             yb = _representable(src_fi, half_ulp if rng.randrange(2) else -half_ulp)
             if yb is not None:
                 pool.add((xb, yb))
