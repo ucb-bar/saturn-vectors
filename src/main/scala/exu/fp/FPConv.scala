@@ -235,7 +235,7 @@ class FPConvBlock(mxConversion: Boolean)(implicit p: Parameters) extends CoreMod
   val s2d_exc = s2d.map(f => RegEnable(f.io.exceptionFlags, s1_valid))
 
   val bf162e5m2_exc = bf162e5m2.map(f => RegEnable(f.io.exceptionFlags, s1_valid))
-  val bf162e4m3_exc = bf162e5m3.zip(bf162e4m3).map(f => RegEnable(f._1.io.exceptionFlags | f._2.io.exceptionFlags, s1_valid))
+  val bf162e4m3_exc = bf162e5m3.zip(bf162e4m3).map(f => RegEnable(assembleOFPE4M3.flags(MXFType.E5M3.ieee(f._1.io.out), f._1.io.exceptionFlags, f._2.io.exceptionFlags), s1_valid))
   val s2bf16_exc = s2bf16.map(f => RegEnable(f.io.exceptionFlags, s1_valid))
   val s2h_exc = s2h.map(f => RegEnable(f.io.exceptionFlags, s1_valid))
   val d2s_exc = d2s.map(f => RegEnable(f.io.exceptionFlags, s1_valid))

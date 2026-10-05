@@ -43,7 +43,7 @@ object rawUnroundedToFp8 {
 			exceptionFlags := e5m2Narrower.io.exceptionFlags
 		} .otherwise { // E4M3
 			outBits := assembleOFPE4M3(e5m3Ieee, e4m3Ieee, saturate, roundingMode)
-			exceptionFlags := 0.U(5.W)
+			exceptionFlags := assembleOFPE4M3.flags(e5m3Ieee, e5m3Narrower.io.exceptionFlags, e4m3Narrower.io.exceptionFlags)
 		}
 
 		(outBits, exceptionFlags)
@@ -104,5 +104,21 @@ object assembleOFPE4M3 {
 			)
 		)
 		outValue
+	}
+
+	// Exception flags of the same conversion. Below the top binade the IEEE E4M3
+	// rounder's flags are right; from there up the E5M3 rounder's, except that
+	// overflow is judged against OFP8 E4M3's maxFinite (448), not E5M3's. A
+	// finite value beyond E5M3's own range comes out of that rounder as Inf,
+	// with its overflow flag set. Saturation changes the result, not the flags.
+	def flags(ieeeE5M3: UInt, e5m3Flags: UInt, e4m3Flags: UInt): UInt = {
+		val expE5M3 = ieeeE5M3(7, 3)
+		val sigE5M3 = ieeeE5M3(2, 0)
+		val topBinade = expE5M3 === "b10111".U(5.W)
+		val specialE5M3 = expE5M3 === "b11111".U(5.W) // Inf or NaN
+		val overflow = (expE5M3(4, 3) === "b11".U(2.W) && !specialE5M3) ||
+			(topBinade && sigE5M3 === "b111".U(3.W)) || e5m3Flags(2)
+		Mux(overflow, e5m3Flags(4) ## "b0101".U(4.W), // overflow is inexact too
+			Mux(topBinade || specialE5M3, e5m3Flags, e4m3Flags))
 	}
 }
