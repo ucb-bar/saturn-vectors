@@ -13,13 +13,12 @@ data.S -- so it works as a plain CI check.
 """
 
 import os
-import re
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common-data-gen"))
 
 from gfloat import decode_float  # noqa: E402
-from gfloat_ref import BF16, FP8, convert  # noqa: E402
+from gfloat_ref import BF16, FP8, convert, read_data_s, unpack_words  # noqa: E402
 
 E4M3 = FP8["altfmt0"]
 E5M2 = FP8["altfmt1"]
@@ -35,25 +34,6 @@ CASES = [
 ]
 
 
-def parse(path):
-    arrays, cur = {}, None
-    with open(path) as f:
-        for line in f:
-            m = re.match(r"^\.global\s+(\S+)", line)
-            if m:
-                cur = m.group(1)
-                arrays[cur] = []
-                continue
-            m = re.match(r"^\s+\.word\s+0x([0-9A-Fa-f]+)", line)
-            if m and cur:
-                arrays[cur].append(int(m.group(1), 16))
-    return arrays
-
-
-def unpack(words, esize):
-    per = 4 // esize
-    mask = (1 << (esize * 8)) - 1
-    return [(w >> (j * esize * 8)) & mask for w in words for j in range(per)]
 
 
 def main():
@@ -61,7 +41,7 @@ def main():
     # gen_data.py from gfloat, so comparing against it would be circular.
     path = sys.argv[1] if len(sys.argv) > 1 else \
         os.path.join(os.path.dirname(__file__), "..", "data.S.spike-golden")
-    arrays = parse(path)
+    arrays = read_data_s(path)
     if "N" not in arrays:
         sys.exit(f"no arrays parsed from {path}")
     n = arrays["N"][0]
@@ -74,8 +54,8 @@ def main():
             print(f"  {name:22} SKIPPED (not present)")
             continue
         checked += 1
-        inp = unpack(arrays[name], ssz)[:n]
-        exp = unpack(arrays[name + "_out"], dsz)[:n]
+        inp = unpack_words(arrays[name], ssz)[:n]
+        exp = unpack_words(arrays[name + "_out"], dsz)[:n]
         bad = [(i, b, e, convert(sfi, dfi, b, sat=sat))
                for i, (b, e) in enumerate(zip(inp, exp))
                if e != convert(sfi, dfi, b, sat=sat)]

@@ -29,6 +29,7 @@ sat=False.  This was established by cross-checking against Spike, not assumed.
 
 import math
 import random
+import re
 
 from gfloat import RoundMode, decode_float, encode_float, round_float
 from gfloat.formats import format_info_bfloat16, format_info_ocp_e4m3, format_info_ocp_e5m2
@@ -191,6 +192,28 @@ def print_header(out, note=""):
 def print_uint32(out, name, value):
     out.write(f".global {name}\n.balign 64\n{name}:\n")
     out.write(f"    .word 0x{value:08X}\n    .word 0x00000000\n")
+
+
+def read_data_s(path):
+    """The arrays of a data.S file: {label: [32-bit words]}."""
+    arrays, cur = {}, None
+    with open(path) as f:
+        for line in f:
+            m = re.match(r"^(\w+):\s*$", line)
+            if m:
+                cur = m.group(1)
+                arrays[cur] = []
+                continue
+            m = re.match(r"\s+\.word\s+0x([0-9A-Fa-f]+)", line)
+            if m and cur:
+                arrays[cur].append(int(m.group(1), 16))
+    return arrays
+
+
+def unpack_words(words, esize):
+    """Elements of esize bytes from little-endian 32-bit words (print_array's packing)."""
+    per = 4 // esize
+    return [(w >> (8 * esize * j)) & ((1 << (8 * esize)) - 1) for w in words for j in range(per)]
 
 
 def print_array(out, name, suffix, array, esize):
