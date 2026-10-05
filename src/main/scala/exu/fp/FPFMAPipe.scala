@@ -50,12 +50,13 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implicit p
   val hb = io.b.asTypeOf(Vec(4, UInt(16.W))).map(f => FType.H.recode(f))
   val hc = io.c.asTypeOf(Vec(4, UInt(16.W))).map(f => FType.H.recode(f))
 
-  def widen(in: UInt, inT: FType, outT: FType, active: Bool): UInt = {
+  // Also returns invalid: widening quiets a signalling NaN, so the FMA cannot see it
+  def widen(in: UInt, inT: FType, outT: FType, active: Bool): (UInt, Bool) = {
     val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
     widen.io.in := Mux(active, in, 0.U)
     widen.io.roundingMode := io.frm
     widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
-    widen.io.out
+    (widen.io.out, widen.io.exceptionFlags(4))
   }
 
   val dfma_valid = io.valid && io.out_eew === 3.U
@@ -75,13 +76,24 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implicit p
     widen(hc(0), FType.H, FType.S, io.out_eew === 2.U && io.c_eew === 1.U),
     widen(hc(2), FType.H, FType.S, io.out_eew === 2.U && io.c_eew === 1.U))
 
-  val da_in = da.zip(swa).map(t => Mux(io.out_eew =/= io.a_eew, t._2, t._1))
-  val db_in = db.zip(swb).map(t => Mux(io.out_eew =/= io.b_eew, t._2, t._1))
-  val dc_in = dc.zip(swc).map(t => Mux(io.out_eew =/= io.c_eew, t._2, t._1))
+  val da_in = da.zip(swa).map(t => Mux(io.out_eew =/= io.a_eew, t._2._1, t._1))
+  val db_in = db.zip(swb).map(t => Mux(io.out_eew =/= io.b_eew, t._2._1, t._1))
+  val dc_in = dc.zip(swc).map(t => Mux(io.out_eew =/= io.c_eew, t._2._1, t._1))
 
-  val sa_in = sa.zip(hwa).map(t => Mux(io.out_eew =/= io.a_eew, t._2, t._1))
-  val sb_in = sb.zip(hwb).map(t => Mux(io.out_eew =/= io.b_eew, t._2, t._1))
-  val sc_in = sc.zip(hwc).map(t => Mux(io.out_eew =/= io.c_eew, t._2, t._1))
+  val sa_in = sa.zip(hwa).map(t => Mux(io.out_eew =/= io.a_eew, t._2._1, t._1))
+  val sb_in = sb.zip(hwb).map(t => Mux(io.out_eew =/= io.b_eew, t._2._1, t._1))
+  val sc_in = sc.zip(hwc).map(t => Mux(io.out_eew =/= io.c_eew, t._2._1, t._1))
+
+  // Invalid from a widened operand, per FMA. b is unused by add/sub and c by mul.
+  def widenInvalid(wa: Seq[(UInt, Bool)], wb: Seq[(UInt, Bool)], wc: Seq[(UInt, Bool)]) =
+    wa.indices.map { i =>
+      (io.out_eew =/= io.a_eew && wa(i)._2) ||
+      (io.out_eew =/= io.b_eew && wb(i)._2 && !io.addsub) ||
+      (io.out_eew =/= io.c_eew && wc(i)._2 && !io.mul)
+    }
+  val d_widen_invalid = widenInvalid(swa, swb, swc)
+  val s_widen_invalid = widenInvalid(hwa, hwb, hwc)
+  val h_widen_invalid = Seq.fill(4)(false.B)
 
   val ha_in = ha
   val hb_in = hb
@@ -93,10 +105,10 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implicit p
   io.out := DontCare
   io.exc := DontCare
 
-  (buildFP64.option((dfma_valid, FType.D, da_in, db_in, dc_in)) ++ Seq(
-    (sfma_valid, FType.S, sa_in, sb_in, sc_in),
-    (hfma_valid, FType.H, ha_in, hb_in, hc_in)
-  )).foreach { case (fma_valid, ftype, a, b, c) => {
+  (buildFP64.option((dfma_valid, FType.D, da_in, db_in, dc_in, d_widen_invalid)) ++ Seq(
+    (sfma_valid, FType.S, sa_in, sb_in, sc_in, s_widen_invalid),
+    (hfma_valid, FType.H, ha_in, hb_in, hc_in, h_widen_invalid)
+  )).foreach { case (fma_valid, ftype, a, b, c, widen_invalid) => {
     val n = 64 / ftype.ieeeWidth
     val s1_valid = RegNext(fma_valid, false.B)
     val res = (0 until n).map { i =>
@@ -109,8 +121,10 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implicit p
       fma.io.b := RegEnable(Mux(io.addsub, 1.U << (ftype.ieeeWidth - 1), b(i)), fma_valid)
       fma.io.c := RegEnable(Mux(io.mul, (a(i) ^ b(i)) & (1.U << ftype.ieeeWidth), c(i)), fma_valid)
 
+      val s1_widen_invalid = RegEnable(widen_invalid(i), fma_valid)
+      val operand_invalid = Pipe(s1_valid, s1_widen_invalid, depth-2).bits
       val out = Pipe(fma.io.validout, ftype.ieee(fma.io.out), depth-4).bits
-      val exc = Pipe(fma.io.validout, fma.io.exceptionFlags, depth-4).bits
+      val exc = Pipe(fma.io.validout, fma.io.exceptionFlags | (operand_invalid << 4), depth-4).bits
       (out, Seq.fill(ftype.ieeeWidth / 8)(exc))
     }
     when (out_eew_pipe.bits === log2Ceil(ftype.ieeeWidth >> 3).U) {
@@ -189,12 +203,13 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implici
   val f8b = io.b.asTypeOf(Vec(8, UInt(8.W))).map(f => MXFType.E5M3.recode(fp8ToE5M3(f, io.altfmt)))
   val f8c = io.c.asTypeOf(Vec(8, UInt(8.W))).map(f => MXFType.E5M3.recode(fp8ToE5M3(f, io.altfmt)))
 
-  def widen(in: UInt, inT: FType, outT: FType, active: Bool): UInt = {
+  // Also returns invalid: widening quiets a signalling NaN, so the FMA cannot see it
+  def widen(in: UInt, inT: FType, outT: FType, active: Bool): (UInt, Bool) = {
     val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
     widen.io.in := Mux(active, in, 0.U)
     widen.io.roundingMode := io.frm
     widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
-    widen.io.out
+    (widen.io.out, widen.io.exceptionFlags(4))
   }
 
   val dfma_valid = io.valid && io.out_eew === 3.U
@@ -308,6 +323,12 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implici
     a := DontCare
     b := DontCare
     c := DontCare
+    // Invalid from a widened operand (b is unused by add/sub, c by mul)
+    val a_invalid = WireInit(false.B)
+    val b_invalid = WireInit(false.B)
+    val c_invalid = WireInit(false.B)
+    val s1_widen_invalid = RegEnable(a_invalid || (b_invalid && !io.addsub) || (c_invalid && !io.mul), fma_valid)
+    val invalidExc = fma.io.invalidExc || Pipe(s1_valid, s1_widen_invalid, depth-2).bits
 
     usedFor.foreach { data_type =>
       val cond = ftype_conditions(data_type)
@@ -315,44 +336,47 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implici
 
       val select_a = io.a_eew === cond._1 && (cond._2 || a_altfmt === cond._3)
       val in_a = recoded_in(data_type)._1(index)
-      val wide_a = if (data_type != fma_type) {
+      val (wide_a, wide_a_invalid) = if (data_type != fma_type) {
         widen(in_a, data_type, fma_type, select_a)
       } else {
-        in_a
+        (in_a, false.B)
       }
       when (select_a) {
         a := wide_a
+        a_invalid := wide_a_invalid
       }
 
       val select_b = io.b_eew === cond._1 && (cond._2 || b_altfmt === cond._3)
       val in_b = recoded_in(data_type)._2(index)
-      val wide_b = if (data_type != fma_type) {
+      val (wide_b, wide_b_invalid) = if (data_type != fma_type) {
         widen(in_b, data_type, fma_type, select_b)
       } else {
-        in_b
+        (in_b, false.B)
       }
       when (select_b) {
         b := wide_b
+        b_invalid := wide_b_invalid
       }
 
       val select_c = io.c_eew === cond._1 && (cond._2 || c_altfmt === cond._3)
       val in_c = recoded_in(data_type)._3(index)
-      val wide_c = if (data_type != fma_type) {
+      val (wide_c, wide_c_invalid) = if (data_type != fma_type) {
         widen(in_c, data_type, fma_type, select_c)
       } else {
-        in_c
+        (in_c, false.B)
       }
       when (select_c) {
         c := wide_c
+        c_invalid := wide_c_invalid
       }
 
       val select_out = out_select(data_type)
       if (data_type == MXFType.E5M3){
-        val (out_bits, exc_flags) = rawUnroundedToFp8(fma_type, fma.io.out, fma.io.invalidExc, out_altfmt_pipe.bits, frm_pipe.bits, false.B)
+        val (out_bits, exc_flags) = rawUnroundedToFp8(fma_type, fma.io.out, invalidExc, out_altfmt_pipe.bits, frm_pipe.bits, false.B)
 
         when (select_out) {
           out(data_type)(index) := Pipe(fma.io.validout, out_bits, depth-4).bits
-          exc(data_type).slice(index, index + ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, exc_flags, depth-4).bits }
+          exc(data_type).slice(index * ftype_exc_lanes(data_type), (index + 1) * ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, exc_flags, depth-4).bits }
         }
       }
       else {
@@ -360,12 +384,12 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean)(implici
         narrower.io.in := fma.io.out
         narrower.io.roundingMode := frm_pipe.bits
         narrower.io.detectTininess := hardfloat.consts.tininess_afterRounding
-        narrower.io.invalidExc := fma.io.invalidExc
+        narrower.io.invalidExc := invalidExc
         narrower.io.infiniteExc := false.B
 
         when (select_out) {
           out(data_type)(index) := Pipe(fma.io.validout, data_type.ieee(narrower.io.out), depth-4).bits
-          exc(data_type).slice(index, index + ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, narrower.io.invalidExc, depth-4).bits }
+          exc(data_type).slice(index * ftype_exc_lanes(data_type), (index + 1) * ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, narrower.io.exceptionFlags, depth-4).bits }
         }
       }
     }
