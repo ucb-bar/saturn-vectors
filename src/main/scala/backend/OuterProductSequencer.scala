@@ -181,11 +181,13 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     // sf.mm / sf.vtzero name the tile in rd[4:3]; moves (incl. sf.vtse32) take it from TSS[30:29]
     tile := Mux(d_move, tss(30, 29), dis_inst.rd(4, 3))
     tss_idx := tss(tssIdxBits-1, 0)
-    // sf.mm.<a>.<b>: a = funct6[0] describes vs2 (A), b = inst[7] = rd[0] describes vs1 (B)
-    signed_l := dis_inst.funct6(0)
-    signed_t := dis_inst.rd(0)
-    e5m2_l := !dis_inst.funct6(0)
-    e5m2_t := !dis_inst.rd(0)
+    // sf.mm.<a>.<b> (real Zvt): rd[0] describes vs2 (A) -- there is only one
+    // funct6 now, A's sign/format is the tile-dest bit, not funct6. B (vs1)
+    // isn't in the encoding at all: it's the vtype.altfmt CSR bit.
+    signed_l := dis_inst.rd(0)
+    signed_t := dis_inst.vconfig.vtype.altfmt
+    e5m2_l := dis_inst.rd(0)
+    e5m2_t := dis_inst.vconfig.vtype.altfmt
 
     k_idx := 0.U
     row_idx := 0.U

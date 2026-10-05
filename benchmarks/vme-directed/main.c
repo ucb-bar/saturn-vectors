@@ -22,6 +22,10 @@ static uint32_t lcg(void) { lcg_state = lcg_state * 1664525u + 1013904223u; retu
 
 static void diag_vsettnt_clamp(size_t te); // TEMP DIAG forward decl
 static size_t read_vtype(void) { size_t v; asm volatile("csrr %0, vtype" : "=r"(v)); return v; }
+// Zvt's mtype CSR (0xc23): bits[4:0]=widen (decoded value 0/1/2/4, not the
+// 2-bit code sf.msetmtype takes), bits[7:5]=tk, bits[21:10]=tm. Tile config
+// lives here, not in vtype -- unlike this RTL's current vtype-embedding hack.
+static size_t read_mtype(void) { size_t v; asm volatile("csrr %0, 0xc23" : "=r"(v)); return v; }
 static size_t read_vl(void) { size_t v; asm volatile("csrr %0, vl" : "=r"(v)); return v; }
 static uint64_t read_cycle(void) { uint64_t v; asm volatile("rdcycle %0" : "=r"(v)); return v; }
 
@@ -101,30 +105,39 @@ static size_t test_config(void) {
   printf("TE (tile edge) = %lu\n", te);
   CHECK(te >= 4 && te <= MAX_TE && (te & (te - 1)) == 0, "unexpected TE %lu", te);
 
+  size_t mt = read_mtype();
+  CHECK((mt & 0x1f) == 1, "e32w1: widen = %lu", mt & 0x1f);
   size_t vt = read_vtype();
-  CHECK(((vt >> 9) & 3) == 1, "e32w1: vtwiden = %lu", (vt >> 9) & 3);
   CHECK(((vt >> 3) & 7) == 2, "e32w1: vsew = %lu", (vt >> 3) & 7);
-  CHECK((vt & 7) == 2, "e32w1: LMUL field = %lu (expected m4)", vt & 7);
+  // LMUL is derived by sf.msetmtype from the TE/VLEN ratio (see
+  // vector_unit.cc's msetmtype()), not a fixed m4 -- at this harness's
+  // VLEN=128 real spike picks m2 (field 1) for e32w1.
+  CHECK((vt & 7) == 1, "e32w1: LMUL field = %lu (expected m2 at VLEN=128)", vt & 7);
   CHECK(((vt >> 6) & 3) == 3, "e32w1: vta/vma must be 1");
 
   CHECK(vme_vsettk(7) == 1, "e32w1: KMAX must be 1");
   CHECK(vme_vsettm(1000) == te, "e32w1: tm clamps to TE");
-  CHECK(((read_vtype() >> 16) & 0x3fff) == te, "tm field in vtype");
+  CHECK(((read_mtype() >> 10) & 0x3fff) == te, "tm field in mtype");
 
+  // e8w4 has its own KMAX (4, vs e32w1's 1), so sf.msetmtype's LMUL/TE
+  // derivation lands on a different natural tn -- not necessarily te.
   size_t tn = vme_vsettnt_e8w4((size_t)-1);
-  CHECK(tn == te, "e8w4: tn = %lu, expected TE", tn);
+  CHECK(tn == 32, "e8w4: tn = %lu, expected 32 at VLEN=128", tn);
+  mt = read_mtype();
+  CHECK((mt & 0x1f) == 4, "e8w4: widen = %lu", mt & 0x1f);
   vt = read_vtype();
-  CHECK(((vt >> 9) & 3) == 3 && ((vt >> 3) & 7) == 0 && (vt & 7) == 0, "e8w4 vtype = 0x%lx", vt);
+  CHECK(((vt >> 3) & 7) == 0 && (vt & 7) == 1, "e8w4 vtype = 0x%lx (expected vsew=0, LMUL field=1)", vt);
   CHECK(vme_vsettk(7) == 4, "e8w4: KMAX must be 4");
-  CHECK(((read_vtype() >> 11) & 7) == 4, "tk field in vtype");
+  CHECK(((read_mtype() >> 5) & 7) == 4, "tk field in mtype");
   CHECK(vme_vsettk(3) == 3, "e8w4: tk = 3");
-  CHECK(vme_vsettn(5) == 5 && read_vl() == 5, "sf.vsettn sets vl");
-  CHECK(vme_vsettm(te - 1) == te - 1, "sf.vsettm");
+  CHECK(vme_vsettn(5) == 5 && read_vl() == 5, "sf.msettn sets vl");
+  CHECK(vme_vsettm(te - 1) == te - 1, "sf.msettm");
 
-  // Unconfigured: sf.vsett* must set vill
-  asm volatile("vsetvli zero, %0, e32, m1, ta, ma" : : "r"(te));
-  vme_vsettm(4);
-  CHECK((read_vtype() >> (__riscv_xlen - 1)) & 1, "sf.vsettm without matrix config must set vill");
+  // Note: unlike this RTL's vtype-embedding scheme (which sets vtype.vill as
+  // a soft signal), real Zvt's sf.msettm/k/n hard-trap via require(P.VU.widen)
+  // when issued without a prior sf.msetmtype -- there's no vill-style flag to
+  // check here under the real extension, so that case isn't exercised as a
+  // CHECK; it's instead a genuine illegal-instruction trap (see handle_trap).
   return te;
 }
 
@@ -151,7 +164,9 @@ static void test_mm_int8(size_t te) {
       load_tile_rows(1, te);
       load_operands(te);
 
-      vme_vsettnt_e8w4(tn);
+      // B's (vs1's) sign is vtype.altfmt, not part of the sf.mm encoding --
+      // select it via which config instruction ran (see VME_MM_* in vme.h).
+      if (sb_tab[v]) vme_vsettnt_e8w4_alt(tn); else vme_vsettnt_e8w4(tn);
       vme_vsettm(tm);
       vme_vsettk(tk);
       switch (v) {
@@ -380,7 +395,9 @@ static void test_mm_fp8(size_t te) {
       }
     load_tile_rows(0, te);
     load_operands(te);
-    vme_vsettnt_e8w4(tn);
+    // B's (vs1's) format is vtype.altfmt, not part of the sf.mm encoding --
+    // select it via which config instruction ran (see VME_MM_E* in vme.h).
+    if (fmt_b[v]) vme_vsettnt_e8w4(tn); else vme_vsettnt_e8w4_alt(tn);
     vme_vsettm(tm);
     vme_vsettk(tk);
     switch (v) {
@@ -443,12 +460,12 @@ static void diag_vsettnt_clamp(size_t te) {
   printf("diag_vsettnt_clamp: e32w1\n");
   for (size_t req = te; req >= 1; req--) {
     size_t tn = vme_vsettnt_e32w1(req);
-    printf("  e32w1 req=%lu -> tn=%lu vtype=0x%lx\n", req, tn, read_vtype());
+    printf("  e32w1 req=%lu -> tn=%lu vtype=0x%lx mtype=0x%lx\n", req, tn, read_vtype(), read_mtype());
   }
   printf("diag_vsettnt_clamp: e8w4\n");
   for (size_t req = te; req >= 1; req--) {
     size_t tn = vme_vsettnt_e8w4(req);
-    printf("  e8w4 req=%lu -> tn=%lu vtype=0x%lx\n", req, tn, read_vtype());
+    printf("  e8w4 req=%lu -> tn=%lu vtype=0x%lx mtype=0x%lx\n", req, tn, read_vtype(), read_mtype());
   }
 }
 

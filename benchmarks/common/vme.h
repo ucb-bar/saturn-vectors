@@ -7,11 +7,22 @@
 //
 // Tiles (TEW = 32): mt0, mt4, mt8, mt12 -> tile index 0..3.
 //
-// Encodings (opcode OP-V = 0x57, OP-VE = 0x77):
-//   sf.vsettnt rd, rs1, eX, wY   vsetvli rd, rs1, (vsew << 3) | (alt << 8) | (vtwiden << 9)
-//   sf.vsettn/m/k rd, rs1        1 000010 {00000,00001,00010} rs1 111 rd 1010111
-//   sf.mm.<a>.<b> mtd, vs2, vs1  int8: 11110a 1 vs2 vs1 000 tt00b 1110111
-//                                fp8 : 11111a 1 vs2 vs1 001 tt00b 1110111
+// Encodings (opcode OP-V = 0x57, OP-VE = 0x77). The config instructions below
+// match spike's real Zvt extension (riscv-isa-sim commit 72958551, "Add Zvt
+// support") bit-for-bit, so this subset can be validated against spike as a
+// golden reference; the tile-move/zero/discard/load/store encodings were
+// already Zvt-compatible, the config ones were not (see commit that touched
+// this comment for the fix-up). sf.mm.* (matmul) is NOT yet Zvt-matched: real
+// Zvt distinguishes int8 sign combinations via rd-bit0 x the vtype.altfmt CSR
+// bit rather than two funct7 values, which this subset doesn't model.
+//   sf.msetmtype rd, rs1(mtype), rs2(vtype)   1000010 rs2 rs1 111 rd 1010111
+//   sf.msettn/m/k rd, rs1       1000100 {00000,00001,00010} rs1 111 rd 1010111
+//   sf.mm.u/s.<b> mtd, vs2, vs1 (int8, A=vs2 sign via rd bit0):
+//                                1111001 1 vs2 vs1 000 tt00b 1110111
+//     B's (vs1's) sign is NOT in the encoding -- it's the vtype.altfmt CSR bit
+//     (vtype bit 8), set via sf.msetmtype's vtype operand: altfmt=0 means B
+//     unsigned (vme_vsettnt_e8w4), altfmt=1 means B signed (vme_vsettnt_e8w4_alt).
+//   sf.mm.e4/e5.<b> mtd, vs2, vs1  fp8 : 11111a 1 vs2 vs1 001 tt00b 1110111
 //   sf.vtmv.v.t vd, rs1          010000 1 11111 rs1 110 vd    1010111
 //   sf.vtmv.t.v rs1, vs2         010111 1 vs2   rs1 110 00000 1010111
 //   sf.vtzero.t mtd              010000 1 11110 00000 110 tttt0 1010111
@@ -55,32 +66,66 @@ static inline size_t vme_tss(size_t tile, size_t pattern, size_t index) {
 // ---------------------------------------------------------------------------
 // Configuration
 
-// sf.vsettnt rd, rs1, e8, w4   (int8 / fp8 multiplicands, 32-bit accumulators)
+// sf.msetmtype rd, rs1(mtype_bits), rs2(vtype_bits): raw instruction emit,
+// no sf.msettn follow-up.
+static inline void vme_msetmtype_raw(size_t mtype_bits, size_t vtype_bits) {
+  size_t unused;
+  asm volatile(".insn r 0x57, 7, 0x42, %0, %1, %2" : "=r"(unused) : "r"(mtype_bits), "r"(vtype_bits));
+}
+
+// sf.msetmtype rd, rs1(mtype_bits), rs2(vtype_bits): mtype_bits[1:0] is the
+// widen code (same convention as RTL's vtwiden: 1 = e32w1 tile moves, 3 =
+// e8w4 matmul); vtype_bits is vsew<<3 (vlmul/vta/vma are derived by hardware
+// when widen != 0). Followed by sf.msettn to request tn and get it in vl.
+//
+// The vlmul derivation reads the CURRENT vsew before this instruction's own
+// vsew takes effect, so crossing a SEW change (e.g. e32w1 -> e8w4) derives
+// vlmul for the *previous* SEW rather than the new one. sf.msetmtype is
+// issued twice: the first (sacrificial) call only makes the new SEW
+// "current" so the second call's vlmul comes out right for it.
 static inline size_t vme_vsettnt_e8w4(size_t atn) {
+  size_t mtype_bits = 3;       // widen code 3 (TEW=4*SEW)
+  size_t vtype_bits = 0 << 3;  // vsew=0 (e8)
+  vme_msetmtype_raw(mtype_bits, vtype_bits);
+  vme_msetmtype_raw(mtype_bits, vtype_bits);
   size_t tn;
-  asm volatile(".insn i 0x57, 7, %0, %1, 0x600" : "=r"(tn) : "r"(atn));
+  asm volatile(".insn r 0x57, 7, 0x44, %0, %1, x0" : "=r"(tn) : "r"(atn));
   return tn;
 }
-// sf.vsettnt rd, rs1, e32, w1  (32-bit tile moves)
+// Same as vme_vsettnt_e8w4 but with vtype.altfmt=1 (vtype bit 8): selects the
+// B-operand-signed int8 matmul variants (sf.mm.*.s) -- see VME_MM_* below.
+static inline size_t vme_vsettnt_e8w4_alt(size_t atn) {
+  size_t mtype_bits = 3;
+  size_t vtype_bits = (0 << 3) | (1 << 8);  // vsew=0 (e8), altfmt=1
+  vme_msetmtype_raw(mtype_bits, vtype_bits);
+  vme_msetmtype_raw(mtype_bits, vtype_bits);
+  size_t tn;
+  asm volatile(".insn r 0x57, 7, 0x44, %0, %1, x0" : "=r"(tn) : "r"(atn));
+  return tn;
+}
 static inline size_t vme_vsettnt_e32w1(size_t atn) {
+  size_t mtype_bits = 1;        // widen code 1 (TEW=SEW)
+  size_t vtype_bits = 2 << 3;   // vsew=2 (e32)
+  vme_msetmtype_raw(mtype_bits, vtype_bits);
+  vme_msetmtype_raw(mtype_bits, vtype_bits);
   size_t tn;
-  asm volatile(".insn i 0x57, 7, %0, %1, 0x210" : "=r"(tn) : "r"(atn));
+  asm volatile(".insn r 0x57, 7, 0x44, %0, %1, x0" : "=r"(tn) : "r"(atn));
   return tn;
 }
-// sf.vsettn / sf.vsettm / sf.vsettk
+// sf.msettn / sf.msettm / sf.msettk
 static inline size_t vme_vsettn(size_t atn) {
   size_t r;
-  asm volatile(".insn r 0x57, 7, 0x42, %0, %1, x0" : "=r"(r) : "r"(atn));
+  asm volatile(".insn r 0x57, 7, 0x44, %0, %1, x0" : "=r"(r) : "r"(atn));
   return r;
 }
 static inline size_t vme_vsettm(size_t atm) {
   size_t r;
-  asm volatile(".insn r 0x57, 7, 0x42, %0, %1, x1" : "=r"(r) : "r"(atm));
+  asm volatile(".insn r 0x57, 7, 0x44, %0, %1, x1" : "=r"(r) : "r"(atm));
   return r;
 }
 static inline size_t vme_vsettk(size_t atk) {
   size_t r;
-  asm volatile(".insn r 0x57, 7, 0x42, %0, %1, x2" : "=r"(r) : "r"(atk));
+  asm volatile(".insn r 0x57, 7, 0x44, %0, %1, x2" : "=r"(r) : "r"(atk));
   return r;
 }
 
@@ -88,17 +133,26 @@ static inline size_t vme_vsettk(size_t atk) {
 // Matrix multiply: C[tm,tn] += A[tk,tm]^T * B[tk,tn], A rows in vs2, vs2+2, ...
 // B rows in vs1, vs1+2, ... (e8, w4: KMAX = 4, LMUL = 1). vs mod 8 must be 0 or 1.
 
-// sf.mm.u.u / s.u / u.s / s.s  (a = vs2 type, b = vs1 type)
+// sf.mm.u.u / s.u / u.s / s.s  (a = vs2 type, b = vs1 type). Real Zvt has ONE
+// funct7 (0x79) for int8 -- A's sign is rd bit0 (MT=unsigned, MTB=signed); B's
+// sign isn't in the encoding at all, so u.u/u.s share one instruction (and
+// s.u/s.s share the other), distinguished only by which vme_vsettnt_e8w4*
+// variant configured vtype.altfmt beforehand.
 #define VME_MM_U_U(t, vs2, vs1) asm volatile(".insn r 0x77, 0, 0x79, " VME_MT(t)  ", " VME_V(vs1) ", " VME_V(vs2))
-#define VME_MM_S_U(t, vs2, vs1) asm volatile(".insn r 0x77, 0, 0x7b, " VME_MT(t)  ", " VME_V(vs1) ", " VME_V(vs2))
-#define VME_MM_U_S(t, vs2, vs1) asm volatile(".insn r 0x77, 0, 0x79, " VME_MTB(t) ", " VME_V(vs1) ", " VME_V(vs2))
-#define VME_MM_S_S(t, vs2, vs1) asm volatile(".insn r 0x77, 0, 0x7b, " VME_MTB(t) ", " VME_V(vs1) ", " VME_V(vs2))
+#define VME_MM_S_U(t, vs2, vs1) asm volatile(".insn r 0x77, 0, 0x79, " VME_MTB(t) ", " VME_V(vs1) ", " VME_V(vs2))
+#define VME_MM_U_S(t, vs2, vs1) VME_MM_U_U(t, vs2, vs1)
+#define VME_MM_S_S(t, vs2, vs1) VME_MM_S_U(t, vs2, vs1)
 
-// sf.mm.e5m2.e5m2 / e5m2.e4m3 / e4m3.e5m2 / e4m3.e4m3
-#define VME_MM_E5_E5(t, vs2, vs1) asm volatile(".insn r 0x77, 1, 0x7d, " VME_MT(t)  ", " VME_V(vs1) ", " VME_V(vs2))
-#define VME_MM_E5_E4(t, vs2, vs1) asm volatile(".insn r 0x77, 1, 0x7d, " VME_MTB(t) ", " VME_V(vs1) ", " VME_V(vs2))
-#define VME_MM_E4_E5(t, vs2, vs1) asm volatile(".insn r 0x77, 1, 0x7f, " VME_MT(t)  ", " VME_V(vs1) ", " VME_V(vs2))
-#define VME_MM_E4_E4(t, vs2, vs1) asm volatile(".insn r 0x77, 1, 0x7f, " VME_MTB(t) ", " VME_V(vs1) ", " VME_V(vs2))
+// sf.mm.e4m3.e4m3 / e4m3.e5m2 / e5m2.e4m3 / e5m2.e5m2 (a = vs2 format, b = vs1
+// format). Same structure as the int8 case: ONE funct7 (0x79, same value as
+// int8 -- only funct3 differs, 1 vs 0), A's format is rd bit0 (MT=e4m3,
+// MTB=e5m2), B's format is vtype.altfmt (0=e4m3 via vme_vsettnt_e8w4, 1=e5m2
+// via vme_vsettnt_e8w4_alt) -- not part of the encoding, so e4m3.e4m3 shares
+// an instruction with e4m3.e5m2 (ditto e5m2.e4m3/e5m2.e5m2).
+#define VME_MM_E4_E4(t, vs2, vs1) asm volatile(".insn r 0x77, 1, 0x79, " VME_MT(t)  ", " VME_V(vs1) ", " VME_V(vs2))
+#define VME_MM_E5_E4(t, vs2, vs1) asm volatile(".insn r 0x77, 1, 0x79, " VME_MTB(t) ", " VME_V(vs1) ", " VME_V(vs2))
+#define VME_MM_E4_E5(t, vs2, vs1) VME_MM_E4_E4(t, vs2, vs1)
+#define VME_MM_E5_E5(t, vs2, vs1) VME_MM_E5_E4(t, vs2, vs1)
 
 // ---------------------------------------------------------------------------
 // Tile state

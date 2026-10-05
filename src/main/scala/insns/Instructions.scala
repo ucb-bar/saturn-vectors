@@ -232,13 +232,15 @@ object RORI       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.rol) 
 object ROR        extends OPIInstruction    { val props = Seq(F6(OPIFunct6.ror)      , UsesShift.Y, ShiftsLeft.N, ScalingShift.N) }
 object WSLL       extends OPIInstruction    { val props = Seq(F6(OPIFunct6.wsll)     , UsesShift.Y, ShiftsLeft.Y, ScalingShift.N, Wide2VD.Y, ZextImm5.Y) }
 
-// Outer-product unit: Xsfmm v0.6.6 encodings (RISC-V VME subset)
+// Outer-product unit: real Zvt encodings (riscv-isa-sim commit 72958551, "Add
+// Zvt support"), not the old Xsfmm-draft two-funct7 scheme.
 // sf.mm.<a>.<b> mtd, vs2, vs1 : C[tm,tn] += A[tk,tm]^T * B[tk,tn], A = vs2 (rows), B = vs1 (columns)
-//   The <b> operand type lives in instruction bit 7 (rd[0]) and the tile in rd[4:3];
-//   neither is part of the decode key.
-object SF_MM_INT   extends VectorInstruction { val props = Seq(OPVE.Y, F6(BitPat("b11110?")), F3(VectorConsts.OPIVV), SEW(0.U(2.W)),
+//   A's sign/format lives in instruction bit 7 (rd[0]) and the tile in rd[4:3];
+//   neither is part of the decode key. B's sign/format is NOT in the encoding
+//   at all -- it's the vtype.altfmt CSR bit (see OuterProductSequencer).
+object SF_MM_INT   extends VectorInstruction { val props = Seq(OPVE.Y, F6(BitPat("b111100")), F3(VectorConsts.OPIVV), SEW(0.U(2.W)),
   ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, VMBitReadsVM.N, OPUMatmul.Y, OPUKind(OPUKinds.MM_INT.U)) }
-object SF_MM_FP8   extends VectorInstruction { val props = Seq(OPVE.Y, F6(BitPat("b11111?")), F3(VectorConsts.OPFVV), SEW(0.U(2.W)),
+object SF_MM_FP8   extends VectorInstruction { val props = Seq(OPVE.Y, F6(BitPat("b111100")), F3(VectorConsts.OPFVV), SEW(0.U(2.W)),
   ReadsVS1.Y, ReadsVS2.Y, WritesVD.N, VMBitReadsVM.N, OPUMatmul.Y, OPUKind(OPUKinds.MM_FP8.U)) }
 // sf.vtmv.v.t vd, rs1(TSS): tile row/column -> vector register group
 object SF_VTMV_V_T extends VectorInstruction { val props = Seq(F6(OPMFunct6.wrxunary0), F3(VectorConsts.OPMVX), RS2(31.U(5.W)), SEW(2.U(2.W)),
