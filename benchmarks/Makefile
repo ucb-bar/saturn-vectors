@@ -51,6 +51,7 @@ bmarks = \
 	vec-transpose-store \
 	vec-fp8 \
 	vec-mx-binary \
+	vec-mx-fma \
 	vec-mx-unary \
 	vec-mx-matmul \
 	opu-fp8-gemm \

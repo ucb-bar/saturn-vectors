@@ -5,6 +5,7 @@
 #
 #   ./run_fp8_test.sh vec-mx-unary              # conversions
 #   ./run_fp8_test.sh vec-mx-binary             # FMA add / sub / mul
+#   ./run_fp8_test.sh vec-mx-fma                # FMA three-operand and .vf forms
 #   ./run_fp8_test.sh vec-mx-binary --gen-only  # stop before the (long) simulation
 #   ./run_fp8_test.sh vec-mx-unary p3109        # P3109 build (also p3109-finite)
 #
@@ -13,6 +14,7 @@
 #
 #   vec-mx-unary   conversions            reference: gfloat     (validate_gfloat.py)
 #   vec-mx-binary  FMA add / sub / mul    reference: fma_ref.py (validate_fma_ref.py)
+#   vec-mx-fma     FMA macc, .vf forms    reference: fma_ref.py (validate_spike.py)
 #
 # Every run is logged to <benchmark>/results/<config>-<timestamp>.log, and
 # <benchmark>/results/latest.log points at the most recent one.
@@ -29,7 +31,7 @@
 set -eo pipefail
 
 usage() {
-	echo "usage: $0 <vec-mx-unary|vec-mx-binary> [ocp|p3109|p3109-finite] [--gen-only]" >&2
+	echo "usage: $0 <vec-mx-unary|vec-mx-binary|vec-mx-fma> [ocp|p3109|p3109-finite] [--gen-only]" >&2
 	exit 2
 }
 
@@ -38,6 +40,7 @@ BENCH=${1:-}
 case "$BENCH" in
 	vec-mx-unary)  validator=validate_gfloat.py ;;
 	vec-mx-binary) validator=validate_fma_ref.py ;;
+	vec-mx-fma)    validator=validate_spike.py ;;
 	*) usage ;;
 esac
 
@@ -87,6 +90,8 @@ echo "# $BENCH / $STD / $CONFIG / N=${N:-default} / $(date -Is)"
 echo "# saturn $(git -C "$cydir/generators/saturn" describe --always --dirty 2>/dev/null)"
 echo
 
+source "$cydir/env.sh"
+
 echo "### 1/4  validate the reference model against the Spike golden file ($validator)"
 [ "$STD" = ocp ] || echo "(OCP formats; the P3109 references are checked in models/)"
 "$GFLOAT_PYTHON" "$here/gen_data/$validator"
@@ -99,7 +104,6 @@ head -1 "$here/data.S"
 
 echo
 echo "### 3/4  cross-build the benchmark"
-source "$cydir/env.sh"
 make -C "$bmarks" "$BENCH.riscv"
 
 if [ "$GEN_ONLY" = 1 ]; then

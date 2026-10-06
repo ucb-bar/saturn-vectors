@@ -2,17 +2,18 @@
 
 ## Scope
 
-Two benchmarks test Saturn's 8-bit floating point end to end, running a
+Three benchmarks test Saturn's 8-bit floating point end to end, running a
 program on the simulated chip and comparing its results with expected values:
 
 | Benchmark | Tests |
 |---|---|
 | `vec-mx-unary` | Conversions to and from 8-bit formats (BF16 ↔ FP8), every rounding mode, with and without saturation |
 | `vec-mx-binary` | Multiply, add and subtract on FP8, FP16 and BF16, every rounding mode |
+| `vec-mx-fma` | The other FMA forms: three operands (`vfmacc` family, `vfmadd`, `vfwmacc`) and a scalar operand (`.vf`), same formats and modes |
 
 The expected values in each benchmark's `data.S` are computed by the Python
 reference models in this directory. Each array holds 256 (`vec-mx-unary`) or
-128 (`vec-mx-binary`) inputs, chosen at the edges (overflow threshold, top binade, subnormal boundary, exact
+128 (`vec-mx-binary`, `vec-mx-fma`) inputs, chosen at the edges (overflow threshold, top binade, subnormal boundary, exact
 ties), with the same inputs repeated for every rounding mode.
 
 The same benchmarks run on two kinds of build:
@@ -37,15 +38,15 @@ In this directory:
 | `requirements.txt` | Python packages for the models |
 | `mx_data_gen.c`, `mx_data_gen.h` | Spike-based generator, still used by `vec-mx-matmul` and for the checked-in `opu-fp8-gemm/data.S` |
 
-In each benchmark directory (`vec-mx-unary/`, `vec-mx-binary/`):
+In each benchmark directory (`vec-mx-unary/`, `vec-mx-binary/`, `vec-mx-fma/`):
 
 | File | Contents |
 |---|---|
 | `main.c` | The benchmark |
 | `data.S` | Inputs and expected outputs, generated |
 | `gen_data/gen_data.py` | Writes `data.S` |
-| `gen_data/validate_*.py` | Checks the model against the original Spike output |
-| `data.S.spike-golden` | That Spike output, kept because it can no longer be regenerated |
+| `gen_data/validate_*.py` | Checks the model against Spike: its original output, or for `vec-mx-fma` Spike's FP16 results computed on the spot |
+| `data.S.spike-golden` | That original output, kept because it can no longer be regenerated (not in `vec-mx-fma`) |
 | `run_baseline.sh` | Shortcut for `../run_fp8_test.sh <this benchmark>` |
 
 And `benchmarks/run_fp8_test.sh` runs one benchmark end to end.
@@ -94,16 +95,19 @@ and the elements of the failing chunk, and exits non-zero. Logs are in
 A `p3109` or `p3109-finite` run leaves its vectors in the checked-in `data.S`.
 Restore it afterwards with
 `git checkout generators/saturn/benchmarks/vec-mx-unary/data.S` (or
-`vec-mx-binary`), or by running the benchmark again with `ocp`.
+`vec-mx-binary`, `vec-mx-fma`), or by running the benchmark again with `ocp`.
 
 ### 3. Check the models only (seconds, no simulator)
 
 ```bash
 ~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-unary/gen_data/validate_gfloat.py
 ~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-binary/gen_data/validate_fma_ref.py
+source env.sh   # validate_spike.py runs Spike (about a minute)
+~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-fma/gen_data/validate_spike.py
 ```
 
-Pass: each ends with a `PASS:` line. These compare against the OCP Spike data,
+Pass: the first two end with a `PASS:` line, the third with
+`TOTAL MISMATCHES: 0`. These compare against the OCP Spike data,
 the only golden data there is; the P3109 references are checked in
 `generators/saturn/models/`.
 
@@ -112,6 +116,7 @@ the only golden data there is; the P3109 references are checked in
 ```bash
 ~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-unary/gen_data/gen_data.py -n 256 -o generators/saturn/benchmarks/vec-mx-unary/data.S
 ~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-binary/gen_data/gen_data.py -n 128 -o generators/saturn/benchmarks/vec-mx-binary/data.S
+~/venvs/gfloat/bin/python generators/saturn/benchmarks/vec-mx-fma/gen_data/gen_data.py -n 128 -o generators/saturn/benchmarks/vec-mx-fma/data.S
 ```
 
 The generators are deterministic, so this reproduces the checked-in files
