@@ -77,8 +77,12 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
       widen.io.out
     }
     val f8macc = io.macc && io.fp8.get
-    val f8a = MXFType.E5M3.recode(fp8ToE5M3(io.in_l.asUInt, io.altfmt.get))
-    val f8b = MXFType.E5M3.recode(fp8ToE5M3(io.in_t.asUInt, io.altfmt.get))
+    def read8(u: UInt) = vParams.p3109 match {
+      case Some(f) => p3109ToE5M3(u, io.altfmt.get, f)
+      case None    => fp8ToE5M3(u, io.altfmt.get)
+    }
+    val f8a = MXFType.E5M3.recode(read8(io.in_l.asUInt))
+    val f8b = MXFType.E5M3.recode(read8(io.in_t.asUInt))
     val f8aw = widen(f8a, MXFType.E5M3, FType.S, f8macc)
     val f8bw = widen(f8b, MXFType.E5M3, FType.S, f8macc)
     val latency = 2

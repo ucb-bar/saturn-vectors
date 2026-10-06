@@ -99,6 +99,12 @@ object VectorParams {
     useOpu = true
   )
 
+  // opuP3109Params:
+  // Same as opuMxParams, with IEEE P3109 binary8p4/binary8p3 in place of OCP FP8
+  def opuP3109Params = opuMxParams.copy(
+    p3109 = Some(P3109Formats())
+  )
+
   // multiFMAParams:
   // Provides a second sequencer and set of functional units for FMA operations
   def multiFMAParams = genParams.copy(
@@ -416,7 +422,7 @@ case class VectorParams(
   // Minifloat support
   useMxFPFMA: Boolean = false,
   useMxConversion: Boolean = false,
-  p3109: Option[P3109Formats] = None, // IEEE P3109 in place of OCP FP8 (FPConv and FMA)
+  p3109: Option[P3109Formats] = None, // IEEE P3109 in place of OCP FP8 (FPConv, FMA and OPU)
   useMxOPU: Boolean = false,
 
   // for comparisons only
@@ -470,7 +476,6 @@ case class VectorParams(
   require(mLen >= 64 && mLen <= 512, "mLen must be >= 64 and <= 512")
   require((mLen & (mLen - 1)) == 0, "mLen must be power of 2")
   require(p3109.isEmpty || useMxConversion, "P3109 needs useMxConversion")
-  require(!(useMxOPU && p3109.isDefined), "the MX outer product unit reads OCP FP8 only")
 }
 
 case object VectorParamsKey extends Field[VectorParams]
