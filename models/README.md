@@ -8,6 +8,7 @@ simulation. It covers:
 
 - the rounder `P3109Rounder` (used by the conversion unit and the FMA), alone;
 - the conversion unit `FPConvBlock`, including block scale factors;
+- one cell of the outer-product unit, `OuterProductCell`;
 - the software helpers in `benchmarks/common/p3109.h`.
 
 Every check is exhaustive or close to it, and compares both result codes and
@@ -16,7 +17,7 @@ exception flags. The expected values come from independent references
 design.
 
 The end-to-end tests, which run programs on the whole chip, are the
-`vec-mx-unary` and `vec-mx-binary` benchmarks; see
+`vec-mx-unary`, `vec-mx-binary` and `opu-fp8-gemm` benchmarks; see
 `benchmarks/common-data-gen/README.md`.
 
 ## Files
@@ -46,6 +47,7 @@ Checks (each one exits non-zero on any mismatch):
 | `validate_rounder_fma.py` | Model on FMA results of every core type |
 | `run_rounder_check.sh` | `P3109Rounder` RTL against the references |
 | `run_conv_check.sh` | `FPConvBlock` RTL against the references |
+| `run_opu_check.sh` | `OuterProductCell` RTL against the references |
 | `p3109_test.c` | `p3109.h` against the standard's definitions |
 
 Used by the `run_*.sh` scripts, not run directly:
@@ -56,7 +58,9 @@ Used by the `run_*.sh` scripts, not run directly:
 | `tb_p3109_rounder.cpp`, `tb_p3109_fma_round.cpp` | `run_rounder_check.sh` | Verilator testbenches for the rounder |
 | `conv_vectors.py` | `run_conv_check.sh` | Expected results for `FPConvBlock` |
 | `tb_conv.cpp` | `run_conv_check.sh` | Verilator testbench for `FPConvBlock` |
-| `collect_hier.py` | both | Lists a module's files in the generated Verilog |
+| `opu_vectors.py` | `run_opu_check.sh` | Expected results for `OuterProductCell` |
+| `tb_opu_cell.cpp` | `run_opu_check.sh` | Verilator testbench for `OuterProductCell` |
+| `collect_hier.py` | all three | Lists a module's files in the generated Verilog |
 
 The rounder wrappers that `run_rounder_check.sh` tests are in
 `src/test/scala/P3109TestWrappers.scala`.
@@ -116,5 +120,19 @@ generators/saturn/models/run_conv_check.sh P3109BlockV256D128ShuttleConfig /tmp/
 Do the same steps for `P3109V256D128ShuttleConfig`, `P3109FiniteV256D128ShuttleConfig`
 and `P3109BlockFiniteV256D128ShuttleConfig`. A block config writes about
 600 MB of vectors to the work directory.
+
+Pass: `TOTAL MISMATCHES: 0` on the last line.
+
+### 5. Check the outer-product unit RTL (about 1 minute per config)
+
+Every (a, b) pair of both formats, against 11 accumulator values each:
+
+```bash
+source env.sh
+make -C sims/verilator verilog CONFIG=OPUV256D128P3109ShuttleConfig
+generators/saturn/models/run_opu_check.sh OPUV256D128P3109ShuttleConfig /tmp/p3109-opu
+```
+
+`OPUV256D128MxShuttleConfig` runs the same check on OCP FP8.
 
 Pass: `TOTAL MISMATCHES: 0` on the last line.

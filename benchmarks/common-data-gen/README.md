@@ -35,7 +35,7 @@ In this directory:
 | `gfloat_ref.py` | Conversions, via the [gfloat](https://github.com/graphcore-research/gfloat) library |
 | `fma_ref.py` | Arithmetic computed exactly, then rounded once (gfloat has no arithmetic) |
 | `requirements.txt` | Python packages for the models |
-| `mx_data_gen.c`, `mx_data_gen.h` | Spike-based generator, still used by `opu-fp8-gemm` and `vec-mx-matmul` |
+| `mx_data_gen.c`, `mx_data_gen.h` | Spike-based generator, still used by `vec-mx-matmul` and for the checked-in `opu-fp8-gemm/data.S` |
 
 In each benchmark directory (`vec-mx-unary/`, `vec-mx-binary/`):
 
@@ -117,6 +117,25 @@ the only golden data there is; the P3109 references are checked in
 The generators are deterministic, so this reproduces the checked-in files
 exactly. `--std p3109` generates for a P3109 build; `--summary` on
 `vec-mx-binary` lists the input categories of each array.
+
+### 5. The outer-product GEMM (`opu-fp8-gemm`)
+
+`opu-fp8-gemm` multiplies 68 × 12 by 12 × 68 matrices of 8-bit values on the
+OPU, accumulating in FP32. Its checked-in `data.S` is OCP FP8, from Spike.
+`gen_data/gen_data.py` writes the same arrays for P3109, and
+`gen_data/validate_gemm_ref.py` checks its reference against the Spike data.
+
+```bash
+B=generators/saturn/benchmarks
+~/venvs/gfloat/bin/python $B/opu-fp8-gemm/gen_data/validate_gemm_ref.py
+~/venvs/gfloat/bin/python $B/opu-fp8-gemm/gen_data/gen_data.py --std p3109 -o $B/opu-fp8-gemm/data.S
+make -C $B opu-fp8-gemm.riscv
+sims/verilator/simulator-chipyard.harness-OPUV256D128P3109ShuttleConfig $B/opu-fp8-gemm.riscv
+git checkout $B/opu-fp8-gemm/data.S
+```
+
+Pass: `PASS:` from the validator, then 14 lines of `passed` and exit code 0
+from the simulator.
 
 ## Background
 
