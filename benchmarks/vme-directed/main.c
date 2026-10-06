@@ -27,6 +27,43 @@ static size_t read_vtype(void) { size_t v; asm volatile("csrr %0, vtype" : "=r"(
 // lives here, not in vtype -- unlike this RTL's current vtype-embedding hack.
 static size_t read_mtype(void) { size_t v; asm volatile("csrr %0, 0xc23" : "=r"(v)); return v; }
 static size_t read_vl(void) { size_t v; asm volatile("csrr %0, vl" : "=r"(v)); return v; }
+static size_t read_vlenb(void) { size_t v; asm volatile("csrr %0, vlenb" : "=r"(v)); return v; }
+
+// Mirrors MatrixConfig in rocket-chip's Matrix.scala (and vector_unit.cc's
+// msetmtype() in spike) so test_config()'s checks hold at any VLEN this
+// binary is run under, not just the one they were first written against.
+// te is the raw hardware tile edge (opuTE() = vLen/8, same relationship the
+// benchmarks' Makefile uses to pick spike's zvt<N>t flag for a given VLEN).
+static size_t mx_kmax(size_t sew, size_t twiden) {
+  if (sew == 8)  return 4;
+  if (sew == 16) return 2;
+  if (sew == 32 && (twiden == 1 || twiden == 2)) return 1;
+  if (sew == 64 && twiden == 1) return 1;
+  return 0;
+}
+static size_t mx_ete(size_t sew, size_t twiden, size_t te) {
+  return (sew * twiden < 64) ? te : te / 2;
+}
+static size_t mx_lmul_log2(size_t sew, size_t twiden, size_t vlen, size_t te) {
+  size_t eve = vlen / sew;
+  size_t ete = mx_ete(sew, twiden, te);
+  size_t lmul = (size_t)8 / mx_kmax(sew, twiden);
+  size_t b = (size_t)8 / twiden;
+  if (b < lmul) lmul = b;
+  size_t c = (ete + eve - 1) / eve; // ceil(ete/eve)
+  if (c < lmul) lmul = c;
+  if (lmul < 1) lmul = 1;
+  size_t log2 = 0;
+  while (((size_t)1 << log2) < lmul) log2++;
+  return log2;
+}
+static size_t mx_max_tn(size_t sew, size_t twiden, size_t vlen, size_t te) {
+  size_t eve = vlen / sew;
+  size_t lmul = (size_t)1 << mx_lmul_log2(sew, twiden, vlen, te);
+  size_t ete = mx_ete(sew, twiden, te);
+  size_t tn = lmul * eve;
+  return tn < ete ? tn : ete;
+}
 
 // A rows (k = 0..3) go to v8, v10, v12, v14; B rows to v16, v18, v20, v22.
 static int8_t a_mem[4][MAX_TE] __attribute__((aligned(64)));
@@ -99,18 +136,26 @@ static void compare_tile(const char* what, size_t tm, size_t tn) {
 // ---------------------------------------------------------------------------
 
 static size_t test_config(void) {
+  size_t vlen = read_vlenb() * 8;
+  size_t te_raw = vlen / 8; // opuTE(vlen); see mx_kmax()/mx_lmul_log2() comment above
+
   size_t te = vme_vsettnt_e32w1((size_t)-1);
   printf("TE (tile edge) = %lu\n", te);
   CHECK(te >= 4 && te <= MAX_TE && (te & (te - 1)) == 0, "unexpected TE %lu", te);
+  CHECK(te == mx_max_tn(32, 1, vlen, te_raw), "e32w1: tn = %lu, expected %lu at VLEN=%lu",
+        te, mx_max_tn(32, 1, vlen, te_raw), vlen);
 
   size_t mt = read_mtype();
   CHECK((mt & 0x1f) == 1, "e32w1: widen = %lu", mt & 0x1f);
   size_t vt = read_vtype();
   CHECK(((vt >> 3) & 7) == 2, "e32w1: vsew = %lu", (vt >> 3) & 7);
   // LMUL is derived by sf.msetmtype from the TE/VLEN ratio (see
-  // vector_unit.cc's msetmtype()), not a fixed m4 -- at this harness's
-  // VLEN=128 real spike picks m2 (field 1) for e32w1.
-  CHECK((vt & 7) == 1, "e32w1: LMUL field = %lu (expected m2 at VLEN=128)", vt & 7);
+  // vector_unit.cc's msetmtype() / MatrixConfig.lmulLog2 in Matrix.scala):
+  // LMUL = min(8/KMAX, 8/TWIDEN, ETE/EVE). Computed here via mx_lmul_log2()
+  // so this holds at whatever VLEN the binary is actually run under.
+  size_t e32w1_lmul = mx_lmul_log2(32, 1, vlen, te_raw);
+  CHECK((vt & 7) == e32w1_lmul, "e32w1: LMUL field = %lu (expected %lu at VLEN=%lu)",
+        vt & 7, e32w1_lmul, vlen);
   CHECK(((vt >> 6) & 3) == 3, "e32w1: vta/vma must be 1");
 
   CHECK(vme_vsettk(7) == 1, "e32w1: KMAX must be 1");
@@ -119,12 +164,17 @@ static size_t test_config(void) {
 
   // e8w4 has its own KMAX (4, vs e32w1's 1), so sf.msetmtype's LMUL/TE
   // derivation lands on a different natural tn -- not necessarily te.
+  // Expected tn/LMUL computed via mx_max_tn()/mx_lmul_log2() for the actual
+  // VLEN this binary is run under.
   size_t tn = vme_vsettnt_e8w4((size_t)-1);
-  CHECK(tn == 32, "e8w4: tn = %lu, expected 32 at VLEN=128", tn);
+  size_t e8w4_tn = mx_max_tn(8, 4, vlen, te_raw);
+  CHECK(tn == e8w4_tn, "e8w4: tn = %lu, expected %lu at VLEN=%lu", tn, e8w4_tn, vlen);
   mt = read_mtype();
   CHECK((mt & 0x1f) == 4, "e8w4: widen = %lu", mt & 0x1f);
   vt = read_vtype();
-  CHECK(((vt >> 3) & 7) == 0 && (vt & 7) == 1, "e8w4 vtype = 0x%lx (expected vsew=0, LMUL field=1)", vt);
+  size_t e8w4_lmul = mx_lmul_log2(8, 4, vlen, te_raw);
+  CHECK(((vt >> 3) & 7) == 0 && (vt & 7) == e8w4_lmul,
+        "e8w4 vtype = 0x%lx (expected vsew=0, LMUL field=%lu)", vt, e8w4_lmul);
   CHECK(vme_vsettk(7) == 4, "e8w4: KMAX must be 4");
   CHECK(((read_mtype() >> 5) & 7) == 4, "tk field in mtype");
   CHECK(vme_vsettk(3) == 3, "e8w4: tk = 3");
@@ -146,6 +196,7 @@ static void test_mm_int8(size_t te) {
   size_t shapes[][3] = {{te, te, 4}, {te, te, 1}, {te - 1, te, 3}, {te, 1, 2}, {1, te - 3, 4}, {3, 5, 4}};
   for (int v = 0; v < 4; v++) {
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
+      printf("mm_int8: v=%d s=%lu\n", v, s); // TEMP DIAG
       size_t tm = shapes[s][0], tn = shapes[s][1], tk = shapes[s][2];
       for (int k = 0; k < 4; k++)
         for (size_t i = 0; i < te; i++) {
@@ -189,19 +240,26 @@ static void test_moves(size_t te) {
     for (size_t j = 0; j < te; j++)
       c_ref[i][j] = (int32_t)((i << 16) | j) ^ (int32_t)lcg();
   for (size_t t = 0; t < 4; t++) {
+    printf("test_moves: t=%lu load_tile_rows\n", t); // TEMP DIAG
     load_tile_rows(t, te);
+    printf("test_moves: t=%lu store_tile_cols\n", t); // TEMP DIAG
     store_tile_cols(t, te);
+    printf("test_moves: t=%lu compare_tile\n", t); // TEMP DIAG
     compare_tile("row-in / column-out", te, te);
   }
   // column-in / row-out
+  printf("test_moves: column-in/row-out loop\n"); // TEMP DIAG
   for (size_t c = 0; c < te; c++) {
     for (size_t r = 0; r < te; r++) row_buf[r] = c_ref[r][c];
     vme_vsettnt_e32w1(te);
     asm volatile("vle32.v v24, (%0)" : : "r"(row_buf) : "memory");
     VME_VTMV_T_V(vme_tss(2, VME_TSS_COL, c), 24);
   }
+  printf("test_moves: column-in/row-out store_tile_rows\n"); // TEMP DIAG
   store_tile_rows(2, te);
+  printf("test_moves: column-in/row-out compare_tile\n"); // TEMP DIAG
   compare_tile("column-in / row-out", te, te);
+  printf("test_moves: partial move section\n"); // TEMP DIAG
 
   // partial-length move (vl < TE): elements [vl, TE) of the row are tail-agnostic
   size_t pl = te / 2 + 1;
@@ -224,17 +282,26 @@ static void test_vtzero(size_t te) {
   for (size_t i = 0; i < te; i++)
     for (size_t j = 0; j < te; j++)
       c_ref[i][j] = (int32_t)lcg() | 1;
+  printf("vtzero: load_tile_rows\n"); // TEMP DIAG
   load_tile_rows(3, te);
+  printf("vtzero: after load_tile_rows c_ref[0][0]=0x%x\n", c_ref[0][0]); // TEMP DIAG
   size_t tm = te - 2, tn = 3;
   vme_vsettnt_e8w4(tn);
   vme_vsettm(tm);
+  printf("vtzero: VME_VTZERO\n"); // TEMP DIAG
   VME_VTZERO(3);
+  printf("vtzero: store_tile_rows\n"); // TEMP DIAG
   store_tile_rows(3, te);
+  printf("vtzero: after store_tile_rows c_mem[0][0]=0x%x c_ref[0][0]=0x%x\n", c_mem[0][0], c_ref[0][0]); // TEMP DIAG
   for (size_t i = 0; i < tm; i++)
     for (size_t j = 0; j < tn; j++)
       c_ref[i][j] = 0;
+  printf("vtzero: after zeroing c_ref c_ref[0][0]=0x%x c_mem[0][0]=0x%x\n", c_ref[0][0], c_mem[0][0]); // TEMP DIAG
+  printf("vtzero: compare_tile\n"); // TEMP DIAG
   compare_tile("vtzero body", tm, tn);
+  printf("vtzero: VTDISCARD\n"); // TEMP DIAG
   VME_VTDISCARD();
+  printf("vtzero: done\n"); // TEMP DIAG
 }
 
 // OCP FP8 -> float

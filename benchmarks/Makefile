@@ -5,6 +5,11 @@
 #
 
 XLEN ?= 64
+VLEN ?= 128
+# TE = VLEN/8, matching opuTE() in saturn's Parameters.scala -- keep spike's
+# matrix tile edge in sync with whichever VMEV<vlen>D<dlen>ShuttleConfig this
+# binary is being compared against.
+TE := $(shell echo $$(($(VLEN) / 8)))
 
 default: all
 
@@ -79,7 +84,7 @@ RISCV_LINK ?= $(RISCV_GCC) -T $(src_dir)/common/test.ld $(incs)
 RISCV_LINK_OPTS ?= -static -nostdlib -nostartfiles -lm -lgcc -T $(src_dir)/common/test.ld
 RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump -C -D -S --disassemble-all --disassemble-zeroes --section=.text --section=.text.startup --section=.text.init --section=.data
 MX_EXTENSIONS = zfbfmin_zvfbfmin_zvfbfwma_zvfbfa_zvfofp8min
-RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh_zvfh_$(MX_EXTENSIONS)_zicntr_zihpm_zvl128b_zvt64t_zvt8e_zvti8i32mm_zvtofp8fmm -p4 -m0x70020000:0x20000,0x80000000:0x10000000
+RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh_zvfh_$(MX_EXTENSIONS)_zicntr_zihpm_zvl$(VLEN)b_zvt$(TE)t_zvt8e_zvti8i32mm_zvtofp8fmm -p4 -m0x70020000:0x20000,0x80000000:0x10000000
 
 incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks)) -I$(src_dir)/../../../tests
 objs  :=
