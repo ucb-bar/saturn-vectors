@@ -105,6 +105,12 @@ object VectorParams {
     p3109 = Some(P3109Formats())
   )
 
+  // opuP3109FiniteParams:
+  // Same as opuP3109Params, both formats in the finite domain
+  def opuP3109FiniteParams = opuMxParams.copy(
+    p3109 = Some(P3109Formats(p4 = P3109Domain.Finite, p3 = P3109Domain.Finite))
+  )
+
   // multiFMAParams:
   // Provides a second sequencer and set of functional units for FMA operations
   def multiFMAParams = genParams.copy(

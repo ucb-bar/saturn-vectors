@@ -133,6 +133,7 @@ make -C sims/verilator verilog CONFIG=OPUV256D128P3109ShuttleConfig
 generators/saturn/models/run_opu_check.sh OPUV256D128P3109ShuttleConfig /tmp/p3109-opu
 ```
 
-`OPUV256D128MxShuttleConfig` runs the same check on OCP FP8.
+`OPUV256D128P3109FiniteShuttleConfig` runs it in the finite domain, and
+`OPUV256D128MxShuttleConfig` on OCP FP8.
 
 Pass: `TOTAL MISMATCHES: 0` on the last line.

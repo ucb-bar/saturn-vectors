@@ -5,8 +5,9 @@
 #
 #   ./run_opu_check.sh <CONFIG> <workdir>
 #
-# CONFIG is OPUV256D128P3109ShuttleConfig (P3109) or OPUV256D128MxShuttleConfig
-# (OCP FP8). Generate its Verilog first:
+# CONFIG is OPUV256D128P3109ShuttleConfig (P3109),
+# OPUV256D128P3109FiniteShuttleConfig (P3109, finite domain) or
+# OPUV256D128MxShuttleConfig (OCP FP8). Generate its Verilog first:
 #   make -C sims/verilator verilog CONFIG=<CONFIG>
 #
 # Environment overrides:
@@ -28,6 +29,7 @@ GFLOAT_PYTHON=${GFLOAT_PYTHON:-$HOME/venvs/gfloat/bin/python}
 
 case "$config" in
 	OPUV256D128P3109ShuttleConfig) std=p3109 ;;
+	OPUV256D128P3109FiniteShuttleConfig) std=p3109-finite ;;
 	OPUV256D128MxShuttleConfig)    std=ocp ;;
 	*) usage ;;
 esac
