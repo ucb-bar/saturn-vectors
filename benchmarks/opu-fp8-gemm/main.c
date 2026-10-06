@@ -18,11 +18,12 @@ size_t vl;
     extern otype name ## _c[] __attribute__((aligned(64))); \
     extern otype name ## _out[] __attribute__((aligned(64)));;
 
-void verify_result(uint32_t* out, uint32_t* ref, size_t M, size_t N) {
+// Bit for bit: the results are FP32 bit patterns
+int verify_result(uint32_t* out, uint32_t* ref, size_t M, size_t N) {
     for (size_t i = 0; i < M; i++) {
         for (size_t j = 0; j < N; j++) {
-            float res = out[i*N+j];
-            float gold = ref[i*N+j];
+            uint32_t res = out[i*N+j];
+            uint32_t gold = ref[i*N+j];
             if (res != gold) {
                 // Print gold and out as bit strings: sign_exp_sig format
                 printf("MISMATCH: m = %d, n = %d, gold = %x, out = %x\n", i, j, (uint32_t)gold, (uint32_t)res);
@@ -49,11 +50,12 @@ void verify_result(uint32_t* out, uint32_t* ref, size_t M, size_t N) {
                         printf("%u", (r >> b) & 0x1);
                     printf("\n");
                 }
-                return;
+                return 1;
             }
         }
     }
     printf("passed\n");
+    return 0;
 }
 
 void mm_opu(uint8_t* A, uint8_t* B, uint32_t* C, size_t M, size_t N, size_t K, size_t altfmt) {
@@ -137,16 +139,17 @@ test_data_t e5m2_tests[] = { ALL_ENTRIES(E5M2_ENTRY) };
 const char *mode_names[] = {"rand", "inf", "ninf", "nan", "nnan", "zero", "nzero"};
 
 int main() {
+    int failed = 0;
 
     for (int i = 0; i < NUM_MODES; i++) {
         printf("running e4m3_rand_%s\n", mode_names[i]);
         mm_opu(e4m3_tests[i].at, e4m3_tests[i].b, e4m3_tests[i].out, M, N, K, 0);
-        verify_result(e4m3_tests[i].out, e4m3_tests[i].c, M, N);
+        failed |= verify_result(e4m3_tests[i].out, e4m3_tests[i].c, M, N);
 
         printf("running e5m2_rand_%s\n", mode_names[i]);
         mm_opu(e5m2_tests[i].at, e5m2_tests[i].b, e5m2_tests[i].out, M, N, K, 1);
-        verify_result(e5m2_tests[i].out, e5m2_tests[i].c, M, N);
+        failed |= verify_result(e5m2_tests[i].out, e5m2_tests[i].c, M, N);
     }
 
-    return 0;
+    return failed;
 }
