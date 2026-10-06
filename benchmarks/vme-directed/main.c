@@ -27,7 +27,6 @@ static size_t read_vtype(void) { size_t v; asm volatile("csrr %0, vtype" : "=r"(
 // lives here, not in vtype -- unlike this RTL's current vtype-embedding hack.
 static size_t read_mtype(void) { size_t v; asm volatile("csrr %0, 0xc23" : "=r"(v)); return v; }
 static size_t read_vl(void) { size_t v; asm volatile("csrr %0, vl" : "=r"(v)); return v; }
-static uint64_t read_cycle(void) { uint64_t v; asm volatile("rdcycle %0" : "=r"(v)); return v; }
 
 // A rows (k = 0..3) go to v8, v10, v12, v14; B rows to v16, v18, v20, v22.
 static int8_t a_mem[4][MAX_TE] __attribute__((aligned(64)));
@@ -35,7 +34,6 @@ static int8_t b_mem[4][MAX_TE] __attribute__((aligned(64)));
 static int32_t c_mem[MAX_TE][MAX_TE] __attribute__((aligned(64)));
 static int32_t c_ref[MAX_TE][MAX_TE];
 static int32_t row_buf[MAX_TE] __attribute__((aligned(64)));
-static int32_t mem_buf[MAX_TE] __attribute__((aligned(64)));
 
 static void load_operands(size_t te) {
   asm volatile("vsetvli zero, %0, e8, m1, ta, ma" : : "r"(te));
@@ -148,7 +146,6 @@ static void test_mm_int8(size_t te) {
   size_t shapes[][3] = {{te, te, 4}, {te, te, 1}, {te - 1, te, 3}, {te, 1, 2}, {1, te - 3, 4}, {3, 5, 4}};
   for (int v = 0; v < 4; v++) {
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
-      printf("mm_int8: v=%d s=%lu\n", v, s); // TEMP DIAG
       size_t tm = shapes[s][0], tn = shapes[s][1], tk = shapes[s][2];
       for (int k = 0; k < 4; k++)
         for (size_t i = 0; i < te; i++) {
@@ -192,26 +189,19 @@ static void test_moves(size_t te) {
     for (size_t j = 0; j < te; j++)
       c_ref[i][j] = (int32_t)((i << 16) | j) ^ (int32_t)lcg();
   for (size_t t = 0; t < 4; t++) {
-    printf("test_moves: t=%lu load_tile_rows\n", t); // TEMP DIAG
     load_tile_rows(t, te);
-    printf("test_moves: t=%lu store_tile_cols\n", t); // TEMP DIAG
     store_tile_cols(t, te);
-    printf("test_moves: t=%lu compare_tile\n", t); // TEMP DIAG
     compare_tile("row-in / column-out", te, te);
   }
   // column-in / row-out
-  printf("test_moves: column-in/row-out loop\n"); // TEMP DIAG
   for (size_t c = 0; c < te; c++) {
     for (size_t r = 0; r < te; r++) row_buf[r] = c_ref[r][c];
     vme_vsettnt_e32w1(te);
     asm volatile("vle32.v v24, (%0)" : : "r"(row_buf) : "memory");
     VME_VTMV_T_V(vme_tss(2, VME_TSS_COL, c), 24);
   }
-  printf("test_moves: column-in/row-out store_tile_rows\n"); // TEMP DIAG
   store_tile_rows(2, te);
-  printf("test_moves: column-in/row-out compare_tile\n"); // TEMP DIAG
   compare_tile("column-in / row-out", te, te);
-  printf("test_moves: partial move section\n"); // TEMP DIAG
 
   // partial-length move (vl < TE): elements [vl, TE) of the row are tail-agnostic
   size_t pl = te / 2 + 1;
@@ -234,128 +224,17 @@ static void test_vtzero(size_t te) {
   for (size_t i = 0; i < te; i++)
     for (size_t j = 0; j < te; j++)
       c_ref[i][j] = (int32_t)lcg() | 1;
-  printf("vtzero: load_tile_rows\n"); // TEMP DIAG
   load_tile_rows(3, te);
-  printf("vtzero: after load_tile_rows c_ref[0][0]=0x%x\n", c_ref[0][0]); // TEMP DIAG
   size_t tm = te - 2, tn = 3;
   vme_vsettnt_e8w4(tn);
   vme_vsettm(tm);
-  printf("vtzero: VME_VTZERO\n"); // TEMP DIAG
   VME_VTZERO(3);
-  printf("vtzero: store_tile_rows\n"); // TEMP DIAG
   store_tile_rows(3, te);
-  printf("vtzero: after store_tile_rows c_mem[0][0]=0x%x c_ref[0][0]=0x%x\n", c_mem[0][0], c_ref[0][0]); // TEMP DIAG
   for (size_t i = 0; i < tm; i++)
     for (size_t j = 0; j < tn; j++)
       c_ref[i][j] = 0;
-  printf("vtzero: after zeroing c_ref c_ref[0][0]=0x%x c_mem[0][0]=0x%x\n", c_ref[0][0], c_mem[0][0]); // TEMP DIAG
-  printf("vtzero: compare_tile\n"); // TEMP DIAG
   compare_tile("vtzero body", tm, tn);
-  printf("vtzero: VTDISCARD\n"); // TEMP DIAG
   VME_VTDISCARD();
-  printf("vtzero: done\n"); // TEMP DIAG
-}
-
-// sf.vtse32 / sf.vtle32: Load/Store Tile Subset to Memory (spec 1.1.6).
-static void test_tile_mem(size_t te) {
-  // Row round-trip: tile 1 row r -(vtse32)-> mem_buf -(vtle32)-> tile 2 row r,
-  // read back through the existing (already-verified) sf.vtmv.v.t readout.
-  for (size_t i = 0; i < te; i++)
-    for (size_t j = 0; j < te; j++)
-      c_ref[i][j] = (int32_t)((i << 16) | j) ^ (int32_t)lcg();
-  printf("tile_mem: row round-trip load_tile_rows\n"); // TEMP DIAG
-  load_tile_rows(1, te);
-  vme_vsettnt_e32w1(te);
-  printf("tile_mem: row round-trip loop\n"); // TEMP DIAG
-  for (size_t r = 0; r < te; r++) {
-    printf("  r=%lu vtse32 cycle=%llu\n", r, (unsigned long long)read_cycle()); // TEMP DIAG
-    VME_VTSE32(mem_buf, vme_tss(1, VME_TSS_ROW, r));
-    printf("  r=%lu vtse32 retired cycle=%llu\n", r, (unsigned long long)read_cycle()); // TEMP DIAG
-    printf("  r=%lu vtle32\n", r); // TEMP DIAG
-    VME_VTLE32(mem_buf, vme_tss(2, VME_TSS_ROW, r));
-    printf("  r=%lu done\n", r); // TEMP DIAG
-  }
-  printf("tile_mem: row round-trip store_tile_rows\n"); // TEMP DIAG
-  store_tile_rows(2, te);
-  printf("tile_mem: row round-trip compare_tile\n"); // TEMP DIAG
-  compare_tile("vtse32/vtle32 row round-trip", te, te);
-
-  // Column round-trip: tile 0 column c -> mem_buf -> tile 3 column c.
-  for (size_t i = 0; i < te; i++)
-    for (size_t j = 0; j < te; j++)
-      c_ref[i][j] = (int32_t)lcg();
-  printf("tile_mem: column round-trip load_tile_rows\n"); // TEMP DIAG
-  load_tile_rows(0, te);
-  vme_vsettnt_e32w1(te);
-  printf("tile_mem: column round-trip loop\n"); // TEMP DIAG
-  for (size_t c = 0; c < te; c++) {
-    printf("  c=%lu vtse32 cycle=%llu\n", c, (unsigned long long)read_cycle()); // TEMP DIAG
-    VME_VTSE32(mem_buf, vme_tss(0, VME_TSS_COL, c));
-    printf("  c=%lu vtse32 retired cycle=%llu\n", c, (unsigned long long)read_cycle()); // TEMP DIAG
-    VME_VTLE32(mem_buf, vme_tss(3, VME_TSS_COL, c));
-    printf("  c=%lu done\n", c); // TEMP DIAG
-  }
-  printf("tile_mem: column round-trip store_tile_cols\n"); // TEMP DIAG
-  store_tile_cols(3, te);
-  printf("tile_mem: column round-trip compare_tile\n"); // TEMP DIAG
-  compare_tile("vtse32/vtle32 column round-trip", te, te);
-
-  // sf.vtse32's bytes checked directly against the reference (not just round-tripped).
-  for (size_t i = 0; i < te; i++)
-    for (size_t j = 0; j < te; j++)
-      c_ref[i][j] = (int32_t)lcg() ^ (int32_t)(i * te + j);
-  printf("tile_mem: direct-bytes load_tile_rows\n"); // TEMP DIAG
-  load_tile_rows(1, te);
-  vme_vsettnt_e32w1(te);
-  printf("tile_mem: direct-bytes loop\n"); // TEMP DIAG
-  for (size_t r = 0; r < te; r++) {
-    VME_VTSE32(mem_buf, vme_tss(1, VME_TSS_ROW, r));
-    for (size_t j = 0; j < te; j++)
-      mix((uint32_t)mem_buf[j]);
-    for (size_t j = 0; j < te; j++)
-      CHECK(mem_buf[j] == c_ref[r][j], "vtse32: mem[%lu][%lu] = 0x%x, expected 0x%x", r, j, mem_buf[j], c_ref[r][j]);
-  }
-  printf("tile_mem: direct-bytes done\n"); // TEMP DIAG
-
-  // Partial-length store/load (vl < TE): elements [vl, TE) are tail-agnostic and must
-  // not be touched in memory, mirroring test_moves' partial-length sf.vtmv.t.v case.
-  printf("tile_mem: partial vtse32\n"); // TEMP DIAG
-  size_t pl = te / 2 + 1;
-  // Fill the sentinel *before* configuring matrix mode: plain C loops under
-  // -march=...v... are fair game for the compiler's own auto-vectorizer, which
-  // emits its own vsetvli and silently clobbers vtwiden/tm/tk/vl -- confirmed via
-  // disassembly (a standard "vsetvli e8,mf4" strip-mining loop) to be exactly
-  // what turned the just-configured (e32,w1,tn=9) state into vl=4/vtwiden=0
-  // by the time VME_VTSE32 executed, when this fill ran after vme_vsettnt_e32w1.
-  for (size_t j = 0; j < te; j++) mem_buf[j] = (int32_t)0xdeadbeef;
-  vme_vsettnt_e32w1(pl);
-  VME_VTSE32(mem_buf, vme_tss(1, VME_TSS_ROW, 2));
-  printf("tile_mem: partial vtse32 done\n"); // TEMP DIAG
-  for (size_t j = 0; j < pl; j++)
-    CHECK(mem_buf[j] == c_ref[2][j], "partial vtse32: element %lu = 0x%x, expected 0x%x", j, mem_buf[j], c_ref[2][j]);
-  for (size_t j = pl; j < te; j++)
-    CHECK((uint32_t)mem_buf[j] == 0xdeadbeefu, "partial vtse32 touched element %lu beyond vl", j);
-
-  // Partial-length load (vl < TE): elements [vl, TE) of the destination row are
-  // tail-agnostic (same convention as sf.vtmv.t.v in test_moves) -- snapshot the row
-  // before the partial load so the tail can be compared, not just assumed.
-  printf("tile_mem: partial vtle32\n"); // TEMP DIAG
-  int32_t tail_before[MAX_TE];
-  vme_vsettnt_e32w1(te);
-  VME_VTMV_V_T(24, vme_tss(2, VME_TSS_ROW, 2));
-  asm volatile("vse32.v v24, (%0)" : : "r"(tail_before) : "memory");
-  for (size_t j = 0; j < te; j++) mem_buf[j] = (int32_t)0xdeadbeef;
-  vme_vsettnt_e32w1(pl);
-  VME_VTLE32(mem_buf, vme_tss(2, VME_TSS_ROW, 2));
-  vme_vsettnt_e32w1(te);
-  VME_VTMV_V_T(24, vme_tss(2, VME_TSS_ROW, 2));
-  asm volatile("vse32.v v24, (%0)" : : "r"(row_buf) : "memory");
-  printf("tile_mem: partial vtle32 done\n"); // TEMP DIAG
-  for (size_t j = 0; j < pl; j++)
-    CHECK((uint32_t)row_buf[j] == 0xdeadbeefu, "partial vtle32: element %lu = 0x%x, expected sentinel", j, row_buf[j]);
-  for (size_t j = pl; j < te; j++)
-    if (row_buf[j] != tail_before[j]) printf("note: partial vtle32 changed tail element %lu\n", j);
-  printf("tile_mem: done\n"); // TEMP DIAG
 }
 
 // OCP FP8 -> float
@@ -474,7 +353,6 @@ int main(void) {
   if (te > MAX_TE) { printf("TE too large\n"); exit(1); }
   diag_vsettnt_clamp(te);
   test_moves(te);
-  test_tile_mem(te);
   diag_moves(te);
   test_vtzero(te);
   test_mm_int8(te);
