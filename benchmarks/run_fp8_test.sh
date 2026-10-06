@@ -116,7 +116,9 @@ fi
 
 echo
 echo "### 4/4  run on Verilator  (config $CONFIG)"
-time "$sim" "$bmarks/$BENCH.riscv"
+# +loadmem preloads the program into memory; loading it through the host
+# interface instead takes hours for these data-heavy benchmarks.
+time "$sim" +permissive +loadmem="$bmarks/$BENCH.riscv" +permissive-off "$bmarks/$BENCH.riscv"
 
 echo
 echo "log: $log"

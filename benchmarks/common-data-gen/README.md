@@ -84,9 +84,9 @@ generators/saturn/benchmarks/run_fp8_test.sh vec-mx-unary p3109-finite    # P310
 ```
 
 Each run validates the model, generates `data.S` for the chosen standard,
-compiles the benchmark and runs it on the simulator: about 20 minutes for
-`vec-mx-unary`, 45 for `vec-mx-binary`. Add `--gen-only` to stop before the
-simulation.
+compiles the benchmark and runs it on the simulator: about 3 minutes for
+`vec-mx-unary`, 10 for `vec-mx-binary`, 20 for `vec-mx-fma`. Add
+`--gen-only` to stop before the simulation.
 
 Pass: the run ends with `All tests passed`. A failure prints `Test failed`
 and the elements of the failing chunk, and exits non-zero. Logs are in
