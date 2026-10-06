@@ -26,9 +26,13 @@ size_t vl;
 	ilmul- LMUL of input (1 if isew == esew, 2 if isew == 2 * esew)
 	olmul- LMUL of output (1 if osew == esew, 2 if osew == 2 * esew)
 	op   - operation, using v0 as the input and v24 as the output
+	rm   - RISC-V rounding mode written to frm: 0 RNE, 1 RTZ, 2 RDN, 3 RUP, 4 RMM.
+	       RVV floating-point instructions take their rounding mode from fcsr.frm,
+	       there is no per-instruction rm field, so it must be set here.
 */
-#define TEST(name, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+#define TEST(name, rm, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
 	printf("Testing " #name "\n"); \
+	asm volatile("csrwi frm, " #rm); \
 	avl = N; \
 	vl = 0; \
 	name ## _ = name; /* input pointer */ \
@@ -61,13 +65,30 @@ size_t vl;
 		avl -= vl; \
 	}
 
-TEST_DATA(uint32_t, fp16_narrow, uint16_t)
-TEST_DATA(uint32_t, bf16_narrow, uint16_t)
-TEST_DATA(uint16_t, e5m2_narrow, uint8_t)
-TEST_DATA(uint16_t, e4m3_narrow, uint8_t)
+/* Narrowing is what exercises rounding, so each narrowing conversion carries one
+   array pair per mode. The inputs are identical across modes, so a mismatch
+   isolates the rounding mode rather than the operand. */
+#define TEST_DATA_FRM(type, name, otype) \
+	TEST_DATA(type, name ## _rne, otype) \
+	TEST_DATA(type, name ## _rtz, otype) \
+	TEST_DATA(type, name ## _rdn, otype) \
+	TEST_DATA(type, name ## _rup, otype) \
+	TEST_DATA(type, name ## _rmm, otype)
 
-TEST_DATA(uint16_t, e5m2_narrow_sat, uint8_t)
-TEST_DATA(uint16_t, e4m3_narrow_sat, uint8_t)
+#define TEST_FRM(name, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rne, 0, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rtz, 1, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rdn, 2, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rup, 3, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op) \
+	TEST(name ## _rmm, 4, isew, osew, esew, ealt, ivle, ovle, ilmul, olmul, op)
+
+TEST_DATA_FRM(uint32_t, fp16_narrow, uint16_t)
+TEST_DATA_FRM(uint32_t, bf16_narrow, uint16_t)
+TEST_DATA_FRM(uint16_t, e5m2_narrow, uint8_t)
+TEST_DATA_FRM(uint16_t, e4m3_narrow, uint8_t)
+
+TEST_DATA_FRM(uint16_t, e5m2_narrow_sat, uint8_t)
+TEST_DATA_FRM(uint16_t, e4m3_narrow_sat, uint8_t)
 
 TEST_DATA(uint16_t, fp16_widen, uint32_t)
 TEST_DATA(uint16_t, bf16_widen, uint32_t)
@@ -76,18 +97,18 @@ TEST_DATA(uint8_t, e4m3_widen, uint16_t)
 
 int main() {
 
-    TEST(fp16_narrow, SEW_E32, SEW_E16, SEW_E16, 0, "vle32.v", "vle16.v", LMUL_M2, LMUL_M1, asm volatile("vfncvt.f.f.w v24, v0"))
-    TEST(bf16_narrow, SEW_E32, SEW_E16, SEW_E16, 1, "vle32.v", "vle16.v", LMUL_M2, LMUL_M1, asm volatile("vfncvt.f.f.w v24, v0"))
-    TEST(e5m2_narrow, SEW_E16, SEW_E8, SEW_E8, 1, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_F_F_W(V24, V0))
-    TEST(e4m3_narrow, SEW_E16, SEW_E8, SEW_E8, 0, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_F_F_W(V24, V0))
+    TEST_FRM(fp16_narrow, SEW_E32, SEW_E16, SEW_E16, 0, "vle32.v", "vle16.v", LMUL_M2, LMUL_M1, asm volatile("vfncvt.f.f.w v24, v0"))
+    TEST_FRM(bf16_narrow, SEW_E32, SEW_E16, SEW_E16, 1, "vle32.v", "vle16.v", LMUL_M2, LMUL_M1, asm volatile("vfncvt.f.f.w v24, v0"))
+    TEST_FRM(e5m2_narrow, SEW_E16, SEW_E8, SEW_E8, 1, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_F_F_W(V24, V0))
+    TEST_FRM(e4m3_narrow, SEW_E16, SEW_E8, SEW_E8, 0, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_F_F_W(V24, V0))
 
-    TEST(e5m2_narrow_sat, SEW_E16, SEW_E8, SEW_E8, 1, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_SAT_F_F_W(V24, V0))
-    TEST(e4m3_narrow_sat, SEW_E16, SEW_E8, SEW_E8, 0, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_SAT_F_F_W(V24, V0))
+    TEST_FRM(e5m2_narrow_sat, SEW_E16, SEW_E8, SEW_E8, 1, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_SAT_F_F_W(V24, V0))
+    TEST_FRM(e4m3_narrow_sat, SEW_E16, SEW_E8, SEW_E8, 0, "vle16.v", "vle8.v", LMUL_M2, LMUL_M1, VFNCVTBF16_SAT_F_F_W(V24, V0))
 
-	TEST(fp16_widen, SEW_E16, SEW_E32, SEW_E16, 0, "vle16.v", "vle32.v", LMUL_M1, LMUL_M2, asm volatile("vfwcvt.f.f.v v24, v0"))
-    TEST(bf16_widen, SEW_E16, SEW_E32, SEW_E16, 1, "vle16.v", "vle32.v", LMUL_M1, LMUL_M2, asm volatile("vfwcvt.f.f.v v24, v0"))
-    TEST(e5m2_widen, SEW_E8, SEW_E16, SEW_E8, 1, "vle8.v", "vle16.v", LMUL_M1, LMUL_M2, VFWCVTBF16_F_F_V(V24, V0))
-    TEST(e4m3_widen, SEW_E8, SEW_E16, SEW_E8, 0, "vle8.v", "vle16.v", LMUL_M1, LMUL_M2, VFWCVTBF16_F_F_V(V24, V0))
+	TEST(fp16_widen, 0, SEW_E16, SEW_E32, SEW_E16, 0, "vle16.v", "vle32.v", LMUL_M1, LMUL_M2, asm volatile("vfwcvt.f.f.v v24, v0"))
+    TEST(bf16_widen, 0, SEW_E16, SEW_E32, SEW_E16, 1, "vle16.v", "vle32.v", LMUL_M1, LMUL_M2, asm volatile("vfwcvt.f.f.v v24, v0"))
+    TEST(e5m2_widen, 0, SEW_E8, SEW_E16, SEW_E8, 1, "vle8.v", "vle16.v", LMUL_M1, LMUL_M2, VFWCVTBF16_F_F_V(V24, V0))
+    TEST(e4m3_widen, 0, SEW_E8, SEW_E16, SEW_E8, 0, "vle8.v", "vle16.v", LMUL_M1, LMUL_M2, VFWCVTBF16_F_F_V(V24, V0))
 
     printf("All tests passed\n");
 
