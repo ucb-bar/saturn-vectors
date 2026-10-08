@@ -49,6 +49,21 @@ bmarks = \
 	vec-square-root-approx \
 	vec-transpose-load \
 	vec-transpose-store \
+	vec-fp8 \
+	vec-mx-binary \
+	vec-mx-fma \
+	vec-mx-unary \
+	vec-mx-matmul \
+	opu-fp8-gemm \
+	opu-gemm \
+	opu-m4-gemm \
+	opu-m4-memcopy \
+	opu-m4-transpose \
+	opu-2x2-gemm \
+	opu-fused-gemm-transpose \
+	opu-fused-lm2-gemm-transpose \
+	opu-lm2-gemm \
+	opu-lm2-memcopy 
 
 cpp_bmarks = \
 	vec-tasks \
@@ -57,7 +72,6 @@ cpp_bmarks = \
 #--------------------------------------------------------------------
 # Build rules
 #--------------------------------------------------------------------
-
 RISCV_PREFIX ?= riscv$(XLEN)-unknown-elf-
 RISCV_GCC ?= $(RISCV_PREFIX)gcc
 RISCV_GXX ?= $(RISCV_PREFIX)g++
@@ -67,9 +81,10 @@ RISCV_GXX_OPTS ?= $(RISCV_COMMON_OPTS) -std=c++17 -specs=htif_nano.specs
 RISCV_LINK ?= $(RISCV_GCC) -T $(src_dir)/common/test.ld $(incs)
 RISCV_LINK_OPTS ?= -static -nostdlib -nostartfiles -lm -lgcc -T $(src_dir)/common/test.ld
 RISCV_OBJDUMP ?= $(RISCV_PREFIX)objdump -C -D -S --disassemble-all --disassemble-zeroes --section=.text --section=.text.startup --section=.text.init --section=.data
-RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh_zvfh -p4 -m0x70020000:0x20000,0x80000000:0x10000000
+MX_EXTENSIONS = zfbfmin_zvfbfmin_zvfbfwma_zvfbfa_zvfofp8min
+RISCV_SIM ?= spike --isa=rv$(XLEN)gcv_zfh_zvfh_$(MX_EXTENSIONS) -p4 -m0x70020000:0x20000,0x80000000:0x10000000
 
-incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks))
+incs  += -I$(src_dir)/env -I$(src_dir)/common $(addprefix -I$(src_dir)/, $(bmarks)) -I$(src_dir)/../../../tests
 objs  :=
 
 COMMON_SRCS = $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S) $(wildcard $(src_dir)/common/ara/*.c)
