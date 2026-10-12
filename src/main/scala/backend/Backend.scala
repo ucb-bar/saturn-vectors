@@ -360,6 +360,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     vrf.io.vxs(flat_vxs.size).rvs1.req <> vos.get.io.rvs1
     vrf.io.vxs(flat_vxs.size).rvs2.req <> vos.get.io.rvs2
+    vos.get.io.rvs1_resp := vrf.io.vxs(flat_vxs.size).rvs1.resp
+    vos.get.io.rvs2_resp := vrf.io.vxs(flat_vxs.size).rvs2.resp
+    vos.get.io.write_snoop := vrf.io.write_snoop
     vrf.io.vxs(flat_vxs.size).rvm.req.valid := false.B
     vrf.io.vxs(flat_vxs.size).rvm.req.bits := DontCare
     vrf.io.vxs(flat_vxs.size).rvd.req.valid := false.B

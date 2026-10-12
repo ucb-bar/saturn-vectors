@@ -54,6 +54,7 @@ class RegisterFileBank(reads: Int, maskReads: Int, rows: Int, maskRows: Int)(imp
     val mask_read = Vec(maskReads, Flipped(new VectorReadIO))
     val write = Input(Valid(new VectorWrite(dLen)))
     val ll_write = Flipped(Decoupled(new VectorWrite(dLen)))
+    val write_snoop = Output(Valid(UInt(log2Ceil(rows).W))) // every write this bank performs
   })
   val ll_write_valid = RegInit(false.B)
   val ll_write_bits = Reg(new VectorWrite(dLen))
@@ -102,6 +103,8 @@ class RegisterFileBank(reads: Int, maskReads: Int, rows: Int, maskRows: Int)(imp
     }
   }
 
+  io.write_snoop.valid := write.valid
+  io.write_snoop.bits := write.bits.eg
   when (write.valid) {
     vrf.write(
       write.bits.eg,
@@ -129,6 +132,8 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
 
     val pipe_writes = Vec(pipeWrites, Input(Valid(new VectorWrite(dLen))))
     val ll_writes = Vec(llWrites, Flipped(Decoupled(new VectorWrite(dLen))))
+    // Element groups written, one per bank per cycle, for the OPU scale cache
+    val write_snoop = Output(Vec(nBanks, Valid(UInt(log2Ceil(egsTotal).W))))
   })
 
   val vrf = Seq.fill(nBanks) { Module(new RegisterFileBank(reads.size, maskReads.size, egsTotal/nBanks, if (egsPerVReg < nBanks) 1 else egsPerVReg / nBanks)) }
@@ -181,6 +186,8 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
     val bank_write_eg   = Mux1H(bank_match, io.pipe_writes.map(_.bits.eg))
     val bank_write_valid = bank_match.orR
 
+    io.write_snoop(i).valid := rf.io.write_snoop.valid
+    io.write_snoop(i).bits := (if (nBanks == 1) rf.io.write_snoop.bits else Cat(rf.io.write_snoop.bits, i.U(vrfBankBits.W)))
     rf.io.write.valid := bank_write_valid
     rf.io.write.bits.data := bank_write_data
     rf.io.write.bits.mask := bank_write_mask

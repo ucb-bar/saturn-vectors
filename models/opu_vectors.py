@@ -2,17 +2,23 @@
 
     opu_vectors.py <outdir> <std: ocp | p3109 | p3109-finite>
 
-Writes opu.bin for tb_opu_cell.cpp, one 12-byte record per multiply-accumulate,
+Writes opu.bin for tb_opu_cell.cpp, one 16-byte record per multiply-accumulate,
 
-    u8 altfmt, u8 a, u8 b, u8 0, u32 c, u32 expect
+    u8 altfmt, u8 a, u8 b, u8 sa, u8 sb, 3 x u8 0, u32 c, u32 expect
 
-c is the FP32 accumulator before, expect after: c + a x b, rounded once to
-FP32 with round-to-nearest-even, which the cell always uses.
+c is the FP32 accumulator before, expect after: c + (sa x a) x (sb x b),
+rounded once to FP32 with round-to-nearest-even, which the cell always uses.
+sa and sb are P3109 Binary8p1uf block scales (0 is zero, 255 is NaN, otherwise
+2^(code - 128)), applied exactly as P3109's BlockDecode does.
 
-Every (a, b) pair of both formats, each with:
+Unscaled (sa = sb = 128, as OPFMACC): every (a, b) pair of both formats, each with
   * fixed accumulators: +-0, +-1, +-maxFinite, the smallest subnormal, +-Inf, NaN
   * one random accumulator within 2^+-26 of the product, which makes the
     addition round.
+Scaled (OPFMACC.S): every (a, b) pair of both formats, each with six scale
+pairs: two from a list of edge codes, two random, and two that put the scaled
+product at FP32's overflow and underflow boundaries; each with one of the
+accumulators above.
 """
 import math
 import os
@@ -27,6 +33,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "benchmarks", "common-data-gen"))
 from gfloat import RoundMode  # noqa: E402
 from gfloat.formats import format_info_binary32 as FP32  # noqa: E402
 from gfloat_ref import FP8_STANDARDS, binary32_result  # noqa: E402
+from fractions import Fraction  # noqa: E402
 from fma_ref import add, exact, mul, project  # noqa: E402
 
 RNE = RoundMode.TiesToEven
@@ -42,17 +49,54 @@ def near_c(rng, p):
     return rng.getrandbits(1) << 31 | (e + 127) << 23 | rng.getrandbits(23)
 
 
+EDGE_S = ((0, 128), (128, 0), (255, 128), (128, 255), (0, 255), (1, 1), (254, 254),
+          (1, 254), (254, 1), (127, 129), (129, 127), (64, 200), (200, 64), (2, 128))
+
+
+def scale(code):
+    """Decode a Binary8p1uf block scale exactly."""
+    if code == 255:
+        return ("nan",)
+    return ("num", 0, Fraction(0) if code == 0 else Fraction(2) ** (code - 128))
+
+
+def boundary_scales(rng, p, target):
+    """A scale pair putting |p| x 2^(sa + sb - 256) near 2^target, or random."""
+    if p[0] != "num" or p[2] == 0:
+        return rng.randint(0, 255), rng.randint(0, 255)
+    total = target - (math.frexp(float(p[2]))[1] - 1) + 256 + rng.randint(-1, 1)
+    lo = max(1, total - 254)
+    hi = min(254, total - 1)
+    if lo > hi:
+        return rng.randint(1, 254), rng.randint(1, 254)
+    sa = rng.randint(lo, hi)
+    return sa, total - sa
+
+
 def records(args):
-    std, altfmt, a_hi = args
+    std, altfmt, a_hi, scaled = args
     fi = FP8_STANDARDS[std][f"altfmt{altfmt}"]
-    rng = random.Random(altfmt << 8 | a_hi)
+    rng = random.Random(altfmt << 9 | scaled << 8 | a_hi)
     out = bytearray()
     for a in range(a_hi << 4, (a_hi + 1) << 4):
         for b in range(256):
-            p = mul(exact(fi, a), exact(fi, b), RNE)
-            for c in FIXED_C + (near_c(rng, p),):
+            if not scaled:
+                p = mul(exact(fi, a), exact(fi, b), RNE)
+                for c in FIXED_C + (near_c(rng, p),):
+                    want = binary32_result(std, project(FP32, add(p, exact(FP32, c), RNE), RNE))
+                    out += struct.pack("<BBBBBxxxII", altfmt, a, b, 128, 128, c, want)
+                continue
+            p0 = mul(exact(fi, a), exact(fi, b), RNE)
+            k = a << 8 | b
+            pairs = [EDGE_S[(2 * k) % len(EDGE_S)], EDGE_S[(2 * k + 1) % len(EDGE_S)],
+                     (rng.randint(0, 255), rng.randint(0, 255)),
+                     (rng.randint(0, 255), rng.randint(0, 255)),
+                     boundary_scales(rng, p0, 127), boundary_scales(rng, p0, -149)]
+            for i, (sa, sb) in enumerate(pairs):
+                p = mul(mul(scale(sa), exact(fi, a), RNE), mul(scale(sb), exact(fi, b), RNE), RNE)
+                c = (FIXED_C + (near_c(rng, p),))[(k * 6 + i) % (len(FIXED_C) + 1)]
                 want = binary32_result(std, project(FP32, add(p, exact(FP32, c), RNE), RNE))
-                out += struct.pack("<BBBxII", altfmt, a, b, c, want)
+                out += struct.pack("<BBBBBxxxII", altfmt, a, b, sa, sb, c, want)
     return bytes(out)
 
 
@@ -60,5 +104,6 @@ if __name__ == "__main__":
     if len(sys.argv) != 3 or sys.argv[2] not in FP8_STANDARDS:
         sys.exit(f"usage: opu_vectors.py <outdir> <{' | '.join(FP8_STANDARDS)}>")
     with Pool() as pool, open(os.path.join(sys.argv[1], "opu.bin"), "wb") as f:
-        for chunk in pool.map(records, [(sys.argv[2], f, a_hi) for f in (0, 1) for a_hi in range(16)]):
+        for chunk in pool.map(records, [(sys.argv[2], f, a_hi, scaled)
+                                        for scaled in (0, 1) for f in (0, 1) for a_hi in range(16)]):
             f.write(chunk)

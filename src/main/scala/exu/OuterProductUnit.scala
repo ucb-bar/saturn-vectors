@@ -45,6 +45,10 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
     // Data signals
     val in_l = Input(SInt(opuParams.aWidth.W)) // left input
     val in_t = Input(SInt(opuParams.bWidth.W)) // top input
+    // Block scales for OPFMACC.S, P3109 Binary8p1uf: 0 is zero, 255 is NaN,
+    // otherwise 2^(code - 128); 128 (2^0) for every other operation
+    val scale_l = Input(UInt(8.W))
+    val scale_t = Input(UInt(8.W))
 
     // Contol Signals
     val altfmt = if (useMxOPU) Some(Input(Bool())) else None // alternate format for outer product
@@ -81,19 +85,43 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
       case Some(f) => p3109ToE5M3(u, io.altfmt.get, f)
       case None    => fp8ToE5M3(u, io.altfmt.get)
     }
+    // A scaled operand can leave FP32's range even when the result does not,
+    // so a, b and c are widened to a recoded format with a 10-bit exponent,
+    // the scales are added to a's and b's exponents (exact there), and the
+    // exact a*b + c is rounded once, to FP32. With both scales 2^0 this is the
+    // unscaled OPFMACC: the same exact value, rounded once.
+    val wide = FType(FType.S.exp + 2, FType.S.sig)
+    def scaleRec(x: UInt, s: UInt, t: FType): UInt = {
+      val sign  = x(t.exp + t.sig)
+      val exp   = x(t.exp + t.sig - 1, t.sig - 1)
+      val fract = x(t.sig - 2, 0)
+      val isZero    = exp(t.exp, t.exp - 2) === 0.U
+      val isSpecial = exp(t.exp, t.exp - 1).andR // Inf or NaN
+      val qnan   = Cat(0.U(1.W), 7.U(3.W), 0.U((t.exp - 2).W), 1.U(1.W), 0.U((t.sig - 2).W))
+      val scaled = Cat(sign, (exp.zext + (s.zext - 128.S))(t.exp, 0), fract)
+      Mux(s === 255.U || (s === 0.U && isSpecial), qnan,  // NaN scale; 0 * Inf, 0 * NaN
+        Mux(s === 0.U, Cat(sign, 0.U((t.exp + t.sig).W)), // zero scale
+          Mux(isZero || isSpecial, x, scaled)))
+    }
     val f8a = MXFType.E5M3.recode(read8(io.in_l.asUInt))
     val f8b = MXFType.E5M3.recode(read8(io.in_t.asUInt))
-    val f8aw = widen(f8a, MXFType.E5M3, FType.S, f8macc)
-    val f8bw = widen(f8b, MXFType.E5M3, FType.S, f8macc)
+    val f8aw = scaleRec(widen(f8a, MXFType.E5M3, wide, f8macc), io.scale_l, wide)
+    val f8bw = scaleRec(widen(f8b, MXFType.E5M3, wide, f8macc), io.scale_t, wide)
     val latency = 2
-    val fma = Module(new MulAddRecFNPipe(latency, FType.S.exp, FType.S.sig))
+    val fma = Module(new MulAddRecFNPipeUnrounded(latency, wide.exp, wide.sig))
     fma.io.validin := f8macc
     fma.io.op := 0.U // FMA
     fma.io.roundingMode := hardfloat.consts.round_near_even
     fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
     fma.io.a := f8aw
     fma.io.b := f8bw
-    fma.io.c := FType.S.recode(regs(io.mrf_idx))
+    fma.io.c := widen(FType.S.recode(regs(io.mrf_idx)), FType.S, wide, f8macc)
+    val round = Module(new hardfloat.RoundAnyRawFNToRecFN(wide.exp, wide.sig + 2, FType.S.exp, FType.S.sig, 0))
+    round.io.invalidExc := fma.io.invalidExc
+    round.io.infiniteExc := false.B
+    round.io.in := fma.io.out
+    round.io.roundingMode := hardfloat.consts.round_near_even
+    round.io.detectTininess := hardfloat.consts.tininess_afterRounding
     // Pipeline control signals to match FMA latency
     mrf_idx_pipe := Pipe(f8macc, io.mrf_idx, latency).bits
     val _fp8_pipe = Pipe(f8macc, io.fp8.get, latency).bits
@@ -101,7 +129,7 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
 
     // P3109 has one zero, and encodes it in binary32 as +0 (Interim Report
     // v4.0.3, 4.8.2), where IEEE 754 can give -0; an OCP build keeps IEEE's.
-    val sum32 = FType.S.ieee(fma.io.out)
+    val sum32 = FType.S.ieee(round.io.out)
     val sum32_out = if (vParams.p3109.isDefined) Mux(sum32(30, 0) === 0.U, 0.U, sum32) else sum32
     sum_fp8 := Mux(fma.io.validout, sum32_out, 0.U)
     fp8_macc_complete := fma.io.validout
@@ -150,6 +178,8 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
   val io = IO(new Bundle{
     val in_l      = Input(Vec(clusterYdim, UInt(opuParams.aWidth.W)))
     val in_t      = Input(Vec(clusterXdim, UInt(opuParams.bWidth.W)))
+    val scale_l   = Input(Vec(clusterYdim, UInt(8.W)))
+    val scale_t   = Input(Vec(clusterXdim, UInt(8.W)))
 
     val in_pipe   = Input(UInt(opuParams.cWidth.W))
     val out_pipe  = Output(UInt(opuParams.cWidth.W))
@@ -178,6 +208,8 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
 
       cell.io.in_l  := io.in_l(i).asSInt
       cell.io.in_t  := io.in_t(j).asSInt
+      cell.io.scale_l := io.scale_l(i)
+      cell.io.scale_t := io.scale_t(j)
       cell.io.mrf_idx := io.mrf_idx
       if (useMxOPU) {
         cell.io.altfmt.get := io.altfmt.get
@@ -225,6 +257,9 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
 
   val in_l      = Vec(yDim, Vec(clusterYdim, UInt(opuParams.aWidth.W)))
   val in_t      = Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W)))
+  // block scales, laid out like in_l and in_t
+  val scale_l   = Vec(yDim, Vec(clusterYdim, UInt(8.W)))
+  val scale_t   = Vec(xDim, Vec(clusterXdim, UInt(8.W)))
 
   // same values broadcast horizontally
   val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W)) 
@@ -263,10 +298,12 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
       val cluster = clusters(i)(j)
       // column broadcast signals
       cluster.io.in_t      := io.op.in_t(j)
+      cluster.io.scale_t   := io.op.scale_t(j)
       cluster.io.mvin_bcast_col := io.op.mvin_bcast_col(j)
       cluster.io.mvin_col   := io.op.mvin_col(j)
       // row broadcast signals
       cluster.io.in_l      := io.op.in_l(i)
+      cluster.io.scale_l   := io.op.scale_l(i)
       cluster.io.mrf_idx    := io.op.mrf_idx(i)
       cluster.io.row_idx    := io.op.row_idx(i)
       cluster.io.col_idx    := io.op.col_idx(i)

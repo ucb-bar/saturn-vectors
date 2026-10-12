@@ -15,6 +15,11 @@ import saturn.exu._
 class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new OuterProductControl) with HasOPUParams {
   val rvs1 = Decoupled(new VectorReadReq)
   val rvs2 = Decoupled(new VectorReadReq)
+  // read data, for filling the scale cache
+  val rvs1_resp = Input(UInt(dLen.W))
+  val rvs2_resp = Input(UInt(dLen.W))
+  // every register-file write, to invalidate cached scales
+  val write_snoop = Input(Vec(vParams.vrfBanking, Valid(UInt(log2Ceil(egsTotal).W))))
 
   val pipe_write_req = new VectorPipeWriteReqIO(yDim+2)
 
@@ -55,6 +60,22 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val mvout = Reg(Bool())
   val macc = Reg(Bool())
   val macc_fp8 = Reg(Bool())
+  val scaled = Reg(Bool()) // OPFMACC.S
+
+  // Scale cache. OPFMACC.S reads its scales from vs1+1 and vs2+1, but the OPU
+  // has only two register-file read ports, both busy with data. Scales change
+  // once per block, so the last four scale registers read are kept here, one
+  // per entry (a 2x2 kernel uses four), and re-read only after a write to them.
+  // Fill cycles read missing pieces through the two data ports before the
+  // data reads start.
+  val nScaleEntries = 4
+  val c_alloc = RegInit(VecInit(Seq.fill(nScaleEntries)(false.B)))
+  val c_tag   = Reg(Vec(nScaleEntries, UInt(5.W)))
+  val c_pv    = RegInit(VecInit(Seq.fill(nScaleEntries)(0.U(egsPerVReg.W)))) // pieces valid
+  val c_data  = Reg(Vec(nScaleEntries, Vec(egsPerVReg, UInt(dLen.W))))
+  val c_ptr   = RegInit(0.U(log2Ceil(nScaleEntries).W))
+  val eA = Reg(UInt(log2Ceil(nScaleEntries).W)) // entry of vs1+1
+  val eB = Reg(UInt(log2Ceil(nScaleEntries).W)) // entry of vs2+1
 
   // val scalar_row_idx = Cat(
   //   inst.rs1_data(log2Ceil(yDim * vLen/dLen)-1, 0), 
@@ -98,12 +119,48 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     wvd_mask      := Mux(dis_inst.wvd               , FillInterleaved(egsPerVReg, dis_vd_arch_mask), 0.U)
     rvs1_mask     := Mux(dis_inst.renv1             , FillInterleaved(egsPerVReg, dis_vs1_arch_mask), 0.U)
     rvs2_mask     := Mux(dis_inst.renv2             , FillInterleaved(egsPerVReg, dis_vs2_arch_mask), 0.U)
-    emul        := dis_inst.emul
     eew        := dis_inst.vconfig.vtype.vsew
     val funct6 = OPMFunct6(dis_inst.funct6)
     val fp_funct6 = OPFFunct6(dis_inst.funct6)
-    macc_fp8 :=  fp_funct6 === OPFFunct6.opfmacc
-    macc :=  (funct6 === OPMFunct6.opmacc) || (fp_funct6 === OPFFunct6.opfmacc)
+    val dis_scaled = fp_funct6 === OPFFunct6.opfmaccs
+    // the frontend gives OPFMACC.S EMUL 2 so hazards cover the scale
+    // registers; the data are still one register each
+    emul        := Mux(dis_scaled, dis_inst.emul - 1.U, dis_inst.emul)
+    scaled := dis_scaled
+    macc_fp8 :=  fp_funct6 === OPFFunct6.opfmacc || dis_scaled
+    macc :=  (funct6 === OPMFunct6.opmacc) || (fp_funct6 === OPFFunct6.opfmacc) || dis_scaled
+
+    // look up both scale registers. A miss takes a free entry first, else a
+    // round-robin one, never the entry the other operand uses. A register
+    // keeps its entry after a write (only its pieces are dropped), so a
+    // kernel using at most four scale registers never evicts.
+    val tA = dis_inst.rs1 | 1.U
+    val tB = dis_inst.rs2 | 1.U
+    val hitA = VecInit((0 until nScaleEntries).map(e => c_alloc(e) && c_tag(e) === tA)).asUInt
+    val hitB = VecInit((0 until nScaleEntries).map(e => c_alloc(e) && c_tag(e) === tB)).asUInt
+    val bIdx = PriorityEncoder(hitB)
+    val free = ~c_alloc.asUInt
+    val f0 = PriorityEncoder(free)
+    val f1 = PriorityEncoder(free & ~UIntToOH(f0, nScaleEntries))
+    val cand0 = Mux(free.orR, f0, c_ptr)
+    val cand1 = Mux(PopCount(free) >= 2.U, f1, Mux(c_ptr === cand0, c_ptr + 1.U, c_ptr))
+    val newA = Mux(hitA.orR, PriorityEncoder(hitA), Mux(hitB.orR && bIdx === cand0, cand1, cand0))
+    val newB = Mux(hitB.orR, bIdx, Mux(tB === tA, newA, Mux(newA === cand0, cand1, cand0)))
+    when (dis_scaled) {
+      eA := newA
+      eB := newB
+      when (!hitA.orR) {
+        c_alloc(newA) := true.B
+        c_tag(newA) := tA
+        c_pv(newA) := 0.U
+      }
+      when (!hitB.orR && tB =/= tA) {
+        c_alloc(newB) := true.B
+        c_tag(newB) := tB
+        c_pv(newB) := 0.U
+      }
+      when ((!hitA.orR || !hitB.orR) && !free.orR) { c_ptr := c_ptr + 1.U }
+    }
     mvin := funct6 === OPMFunct6.opmvin
     mvout :=  funct6 === OPMFunct6.opmvout
     mvin_bcast :=  funct6 === OPMFunct6.opmvinbcast
@@ -118,12 +175,47 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   // element group we are writing
   val wvd_eg = ((inst.rd << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0)
-  // element group we are reading
-  io.rvs1.bits.eg := ((inst.rs1 << log2Ceil(egsPerVReg)) +& row_idx)(log2Ceil(egsTotal)-1,0)
-  io.rvs2.bits.eg := ((inst.rs2 << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0)
 
-  io.rvs1.valid := valid && renv1
-  io.rvs2.valid := valid && renv2
+  // scale-cache fill: the missing pieces of vs1+1 go through rvs1, those of
+  // vs2+1 through rvs2 (when both are the same register, its first two
+  // missing pieces)
+  val tA = inst.rs1 | 1.U
+  val tB = inst.rs2 | 1.U
+  val sameAB = eA === eB
+  val needA = ~c_pv(eA)
+  val needB = Mux(sameAB, needA & ~UIntToOH(PriorityEncoder(needA), egsPerVReg), ~c_pv(eB))
+  val pA = PriorityEncoder(needA)
+  val pB = PriorityEncoder(needB)
+  val fillA = valid && scaled && needA.orR
+  val fillB = valid && scaled && needB.orR
+  val filling = fillA || fillB
+  val fill_egA = ((tA << log2Ceil(egsPerVReg)) +& pA)(log2Ceil(egsTotal)-1,0)
+  val fill_egB = ((tB << log2Ceil(egsPerVReg)) +& pB)(log2Ceil(egsTotal)-1,0)
+  // all element groups of the two scale registers
+  val scale_oh = Mux(scaled, FillInterleaved(egsPerVReg, UIntToOH(tA, 32) | UIntToOH(tB, 32)), 0.U)
+  val scale_hazard = (scale_oh & io.older_writes) =/= 0.U
+
+  // element group we are reading
+  io.rvs1.bits.eg := Mux(filling, fill_egA, ((inst.rs1 << log2Ceil(egsPerVReg)) +& row_idx)(log2Ceil(egsTotal)-1,0))
+  io.rvs2.bits.eg := Mux(filling, fill_egB, ((inst.rs2 << log2Ceil(egsPerVReg)) +& col_idx)(log2Ceil(egsTotal)-1,0))
+
+  io.rvs1.valid := Mux(filling, fillA && !scale_hazard, valid && renv1)
+  io.rvs2.valid := Mux(filling, fillB && !scale_hazard, valid && renv2)
+
+  // cache updates: a write to a cached register drops it, and wins over a
+  // fill in the same cycle
+  for (e <- 0 until nScaleEntries) {
+    val snooped = io.write_snoop.map(w => w.valid && (w.bits >> log2Ceil(egsPerVReg)) === c_tag(e)).reduce(_||_)
+    val setA = filling && io.rvs1.fire && eA === e.U
+    val setB = filling && io.rvs2.fire && eB === e.U
+    when (setA) { c_data(e)(pA) := io.rvs1_resp }
+    when (setB) { c_data(e)(pB) := io.rvs2_resp }
+    when (snooped) {
+      c_pv(e) := 0.U
+    } .elsewhen (setA || setB) {
+      c_pv(e) := c_pv(e) | Mux(setA, UIntToOH(pA, egsPerVReg), 0.U) | Mux(setB, UIntToOH(pB, egsPerVReg), 0.U)
+    }
+  }
 
   val oldest = inst.vat === io.vat_head
   io.rvs1.bits.oldest := oldest
@@ -141,7 +233,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   val vs2_read_oh = Mux(renv2   , UIntToOH(io.rvs2.bits.eg), 0.U)
   val vd_write_oh = Mux(mvout   , UIntToOH(wvd_eg), 0.U)
 
-  val raw_hazard = ((vs1_read_oh | vs2_read_oh) & io.older_writes) =/= 0.U
+  val raw_hazard = ((vs1_read_oh | vs2_read_oh) & io.older_writes) =/= 0.U || scale_hazard
   val waw_hazard = (vd_write_oh & io.older_writes) =/= 0.U
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
@@ -160,6 +252,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.pipe_write_req.fire := io.iss.fire
 
   val iss_valid = (valid &&
+    !filling &&
     !data_hazard &&
     !(renv1 && !io.rvs1.ready) &&
     !(renv2 && !io.rvs2.ready) &&
@@ -170,6 +263,15 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.iss.valid := iss_valid
   io.iss.bits.in_l := DontCare // set in Backend
   io.iss.bits.in_t := DontCare
+  // scales, laid out as the Backend lays out in_l and in_t; 2^0 unless scaled
+  val sA_bytes = c_data(eA)(row_idx).asTypeOf(Vec(yDim * clusterYdim, UInt(8.W)))
+  val sB_bytes = c_data(eB)(col_idx).asTypeOf(Vec(xDim * clusterXdim, UInt(8.W)))
+  for (i <- 0 until yDim; j <- 0 until clusterYdim) {
+    io.iss.bits.scale_l(i)(j) := Mux(scaled, sA_bytes(i + j * yDim), 128.U)
+  }
+  for (i <- 0 until xDim; j <- 0 until clusterXdim) {
+    io.iss.bits.scale_t(i)(j) := Mux(scaled, sB_bytes(i + j * xDim), 128.U)
+  }
 
   // set the control signals
   val mrf_eg = Mux(mvout, inst.rs2 , inst.rd) +& Mux(macc,  
