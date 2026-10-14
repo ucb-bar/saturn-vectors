@@ -391,6 +391,11 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   // every in-flight readout, including the last one, is scoreboarded until written
   when (fire && do_mvout) {
     wsboard_write := UIntToOH(wvd_eg)
+    printf("OPS: mvout fire tile=%d tss_idx=%d col_idx=%d wvd_eg=%d move_cluster=%d move_latency=%d\n",
+      tile, tss_idx, col_idx, wvd_eg, move_cluster, move_latency)
+  }
+  when (wsboard_clear =/= 0.U) {
+    printf("OPS: wsboard_clear eg=%d\n", mvout_pipe(yDim+1))
   }
 
   io.busy := valid

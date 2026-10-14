@@ -273,6 +273,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
   vrf.io.vls.rvm.req <> vls.io.rvm
   vrf.io.vss.rvd.req <> vss.io.rvd
   vrf.io.vss.rvm.req <> vss.io.rvm
+  when (vrf.io.vss.rvd.req.fire && vrf.io.vss.rvd.req.bits.eg >= 32.U && vrf.io.vss.rvd.req.bits.eg <= 39.U) {
+    printf("STORE-READ: eg=%d rs=%d data=%x\n", vrf.io.vss.rvd.req.bits.eg, vrf.io.vss.rvd.req.bits.eg >> log2Ceil(egsPerVReg), vrf.io.vss.rvd.resp)
+  }
   vrf.io.vps.rvs2.req <> vps.io.rvs2
   vrf.io.vps.rvm.req <> vps.io.rvm
   vps.io.acc_init_resp := vrf.io.vps.rvs2.resp
@@ -299,6 +302,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
       vxs_iss.use_slide_rvs2 -> vxs_iss.slide_data,
       vxs_iss.use_normal_rvs2 -> vrf.io.vxs(i).rvs2.resp))
     val rvd_data = vrf.io.vxs(i).rvd.resp
+
+    when (vxs.io.iss.fire && vxs_iss.rs2 === 16.U) {
+      printf("EXU2: rvs2 read lane=%d eg=%d data=%x\n", i.U, vrf.io.vxs(i).rvs2.req.bits.eg, rvs2_data)
+    }
 
     vxu_iss.rvs1_data := rvs1_data
     vxu_iss.rvs2_data := rvs2_data
@@ -421,6 +428,13 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.vxs(i).pipe_write_req <> flat_vxs(i).io.pipe_write_req
     vrf.io.pipe_writes(i) <> flat_vxus(i).io.pipe_write
     vrf.io.iter_writes(i) <> flat_vxus(i).io.iter_write
+
+    when (flat_vxus(i).io.pipe_write.valid && flat_vxus(i).io.pipe_write.bits.eg >= 32.U && flat_vxus(i).io.pipe_write.bits.eg <= 39.U) {
+      printf("VXU-PIPE-WRITE: lane=%d eg=%d data=%x mask=%x\n", i.U, flat_vxus(i).io.pipe_write.bits.eg, flat_vxus(i).io.pipe_write.bits.data, flat_vxus(i).io.pipe_write.bits.mask)
+    }
+    when (flat_vxus(i).io.iter_write.valid && flat_vxus(i).io.iter_write.bits.eg >= 32.U && flat_vxus(i).io.iter_write.bits.eg <= 39.U) {
+      printf("VXU-ITER-WRITE: lane=%d eg=%d data=%x mask=%x\n", i.U, flat_vxus(i).io.iter_write.bits.eg, flat_vxus(i).io.iter_write.bits.data, flat_vxus(i).io.iter_write.bits.mask)
+    }
   }
 
 
@@ -432,6 +446,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.pipe_writes(flat_vxs.size).bits.data := RegEnable(
       Mux(vos.io.write_col, vopu.get.io.out_col.asUInt, vopu.get.io.out.asUInt), vos.io.write_reg_enable)
     vrf.io.pipe_writes(flat_vxs.size).bits.mask := vos.io.write_mask
+
+    when (vos.io.write.valid) {
+      printf("OPU-WRITE: eg=%d data=%x\n", vos.io.write.bits, vrf.io.pipe_writes(flat_vxs.size).bits.data)
+    }
 
     vrf.io.iter_writes(flat_vxs.size).valid := false.B
     vrf.io.iter_writes(flat_vxs.size).bits := DontCare
@@ -450,6 +468,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     get_vm_mask(vrf.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size, dLen),
     ~(0.U(dLenB.W)))
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.eidx_wmask & load_wmask)
+  when (load_write.fire && load_write.bits.eg >= 32.U && load_write.bits.eg <= 55.U) {
+    printf("LOAD-WRITE: eg=%d rd=%d data=%x mask=%x\n", load_write.bits.eg, load_write.bits.eg >> log2Ceil(egsPerVReg), load_write.bits.data, load_write.bits.mask)
+  }
   when (io.vmu.lresp.fire) {
     assert(io.vmu.lresp.bits.debug_id === vls.io.iss.bits.debug_id)
   }

@@ -209,6 +209,11 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   val war_hazard = (vd_write_oh & io.older_reads) =/= 0.U
   val data_hazard = raw_hazard || waw_hazard || war_hazard
 
+  when (valid && ((inst.rs2 === 16.U && renv2) || (inst.rs1 === 16.U && renv1) || (inst.rd === 16.U && inst.wvd))) {
+    printf("EXU: v16-touch eidx=%d rs1=%d rs2=%d rd=%d vs1_eg=%d vs2_eg=%d vs2_read_oh=%x older_writes=%x older_reads=%x raw=%d waw=%d war=%d iss_valid=%d iss_fire=%d\n",
+      eidx, inst.rs1, inst.rs2, inst.rd, io.rvs1.bits.eg, io.rvs2.bits.eg, vs2_read_oh, io.older_writes, io.older_reads, raw_hazard, waw_hazard, war_hazard, io.iss.valid, io.iss.fire)
+  }
+
   val rgatherv_e0_eidx = io.vgu.gather_eidx.bits
   val rgather_eidx = Mux(rgather_ix, uscalar, rgatherv_e0_eidx)
   val rgather_zero = rgather_eidx >= inst.vconfig.vtype.vlMax
@@ -238,6 +243,10 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   exu_scheduler.io.reqs(0).depth := pipe_stages
 
   val wvd_eg = getEgId(inst.rd, Mux(inst.reduction, 0.U, eidx), vd_eew, inst.writes_mask)
+  when (io.iss.fire && inst.wvd && inst.rd === 16.U) {
+    printf("EXU-SEQ-WRITE: rd=%d rs1=%d rs2=%d eidx=%d wvd_eg=%d pipe_stages=%d vat=%d\n",
+      inst.rd, inst.rs1, inst.rs2, eidx, wvd_eg, pipe_stages, inst.vat)
+  }
   io.pipe_write_req.request := valid && pipelined && exu_scheduler.io.reqs(0).available
   io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits-1,0)))
   io.pipe_write_req.pipe_depth := pipe_stages

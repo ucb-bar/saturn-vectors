@@ -11,6 +11,14 @@ VLEN ?= 128
 # binary is being compared against.
 TE := $(shell echo $$(($(VLEN) / 8)))
 
+# Set MX=0 when targeting a non-Mx OPU config (VectorParams.opuParams, e.g.
+# VMEV<vlen>D<dlen>ShuttleConfig): its OPU doesn't implement the FP8 matmul
+# datapath, so vme-directed's test_mm_fp8 is compiled out rather than failing.
+# Mx configs (VectorParams.opuMxParams, VMEV<vlen>D<dlen>MxShuttleConfig) do
+# implement it; MX=1 (the default) runs test_mm_fp8 as usual.
+MX ?= 1
+vme-directed.riscv: EXTRA_CFLAGS := $(if $(filter 0,$(MX)),-DVME_NO_FP8,)
+
 default: all
 
 src_dir = .
@@ -93,7 +101,7 @@ COMMON_SRCS = $(wildcard $(src_dir)/common/*.c) $(wildcard $(src_dir)/common/*.S
 
 define compile_template
 $(1).riscv: $(wildcard $(src_dir)/$(1)/*) $(wildcard $(src_dir)/common/*)
-	$$(RISCV_GCC) $$(incs) $$(RISCV_GCC_OPTS) -o $$@ $(wildcard $(src_dir)/$(1)/*.c) $(wildcard $(src_dir)/$(1)/*.S) $(COMMON_SRCS) $$(RISCV_LINK_OPTS)
+	$$(RISCV_GCC) $$(incs) $$(RISCV_GCC_OPTS) $$(EXTRA_CFLAGS) -o $$@ $(wildcard $(src_dir)/$(1)/*.c) $(wildcard $(src_dir)/$(1)/*.S) $(COMMON_SRCS) $$(RISCV_LINK_OPTS)
 endef
 
 define compile_cpp_template

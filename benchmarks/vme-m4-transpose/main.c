@@ -22,6 +22,13 @@
 //          -> row (n0+cq*te+c) of c_out, starting at column (m0+rq*te)
 // Quadrants 1 and 2 (off-diagonal) end up swapped in the output, which falls
 // out naturally from row axis -> output column, column axis -> output row.
+//
+// vme_transpose_2x2_colrow below is the dual: load each sub-tile COLUMN-wise
+// (sf.vtmv.t.v with the COLUMN pattern) and read it back ROW-wise, the mirror
+// image of vme-directed's "column-in / row-out" single-tile check. Same
+// transpose, opposite hardware datapath -- the input column and output row
+// aren't contiguous in memory, so that direction uses strided load/store
+// instead of the unit-stride ones above.
 
 #include "vme.h"
 #include <stdio.h>
@@ -65,11 +72,57 @@ static void vme_transpose_2x2(int32_t* c_out, const int32_t* c_in, size_t M, siz
   VME_VTDISCARD();
 }
 
+// Dual of vme_transpose_2x2: load column-wise (TSS_COL), store row-wise
+// (TSS_ROW). Tile content ends up identical to the row-in/column-out
+// version, so the transpose comes out the same; only the load/store
+// datapath differs. Input columns and output rows aren't contiguous in
+// c_in/c_out (both row-major), so this uses strided vle/vse instead of
+// the unit-stride ones in vme_transpose_2x2.
+static void vme_transpose_2x2_colrow(int32_t* c_out, const int32_t* c_in, size_t M, size_t N, size_t te) {
+  vme_vsettnt_e32w1(te);
+  size_t in_stride = N * sizeof(int32_t);
+  size_t out_stride = M * sizeof(int32_t);
+  for (size_t m0 = 0; m0 < M; m0 += 2 * te) {
+    for (size_t n0 = 0; n0 < N; n0 += 2 * te) {
+      for (size_t t = 0; t < 4; t++) {
+        size_t rq = t >> 1, cq = t & 1;
+        for (size_t c = 0; c < te; c++) {
+          const int32_t* src = c_in + (m0 + rq * te) * N + (n0 + cq * te + c);
+          asm volatile("vlse32.v v16, (%0), %1" : : "r"(src), "r"(in_stride) : "memory");
+          VME_VTMV_T_V(vme_tss(t, VME_TSS_COL, c), 16);
+        }
+      }
+      for (size_t t = 0; t < 4; t++) {
+        size_t rq = t >> 1, cq = t & 1;
+        for (size_t r = 0; r < te; r++) {
+          int32_t* dst = c_out + (n0 + cq * te) * M + (m0 + rq * te + r);
+          VME_VTMV_V_T(16, vme_tss(t, VME_TSS_ROW, r));
+          asm volatile("vsse32.v v16, (%0), %1" : : "r"(dst), "r"(out_stride) : "memory");
+        }
+      }
+    }
+  }
+  VME_VTDISCARD();
+}
+
 static int32_t c_in[MAX_M * MAX_N] __attribute__((aligned(64)));
 static int32_t c_out[MAX_N * MAX_M] __attribute__((aligned(64)));  // note: transposed shape N x M
 
 static uint32_t lcg_state = 1;
 static uint32_t lcg(void) { lcg_state = lcg_state * 1664525u + 1013904223u; return lcg_state >> 8; }
+
+static void check_transpose(const char* label, size_t M, size_t N) {
+  for (size_t i = 0; i < M; i++) {
+    for (size_t j = 0; j < N; j++) {
+      if (c_out[j * M + i] != c_in[i * N + j]) {
+        printf("DIVERGENCE (%s) at (%lu,%lu): c_out=0x%x, c_in=0x%x\n",
+               label, i, j, c_out[j * M + i], c_in[i * N + j]);
+        exit(1);
+      }
+    }
+  }
+  printf("PASSED (%s)\n", label);
+}
 
 int main(void) {
   size_t te = vme_vsettnt_e32w1((size_t)-1);
@@ -85,16 +138,14 @@ int main(void) {
   vme_transpose_2x2(c_out, c_in, M, N, te);
   size_t cycles2 = vme_rdcycle();
   printf("cycles: %lu\n", cycles2 - cycles1);
+  check_transpose("row-in/column-out", M, N);
 
-  for (size_t i = 0; i < M; i++) {
-    for (size_t j = 0; j < N; j++) {
-      if (c_out[j * M + i] != c_in[i * N + j]) {
-        printf("DIVERGENCE at (%lu,%lu): c_out=0x%x, c_in=0x%x\n",
-               i, j, c_out[j * M + i], c_in[i * N + j]);
-        exit(1);
-      }
-    }
-  }
-  printf("PASSED\n");
+  vme_transpose_2x2_colrow(c_out, c_in, M, N, te);
+  cycles1 = vme_rdcycle();
+  vme_transpose_2x2_colrow(c_out, c_in, M, N, te);
+  cycles2 = vme_rdcycle();
+  printf("cycles (column-in/row-out): %lu\n", cycles2 - cycles1);
+  check_transpose("column-in/row-out", M, N);
+
   return 0;
 }
