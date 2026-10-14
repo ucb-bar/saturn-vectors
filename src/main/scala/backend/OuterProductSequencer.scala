@@ -226,7 +226,7 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
 
   // this avoids write-structural-hazards on bank ports with other FUs (maybe)
   io.pipe_write_req.request := valid && do_mvout && exu_scheduler.io.reqs(0).available
-  io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits,1)))
+  io.pipe_write_req.bank_sel := (if (vrfBankBits == 0) 1.U else UIntToOH(wvd_eg(vrfBankBits-1,0)))
   io.pipe_write_req.pipe_depth := move_latency
   io.pipe_write_req.oldest := oldest
   io.pipe_write_req.fire := io.iss.fire
