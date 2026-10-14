@@ -54,10 +54,22 @@ static void vme_gemm_2x2_bias(uint32_t* c, const uint8_t* at, const uint8_t* b,
       vme_vsettnt_e8w4_alt(te);
       vme_vsettm(te);
       VME_VTZERO(0); VME_VTZERO(1); VME_VTZERO(2); VME_VTZERO(3);
-      for (size_t k0 = 0; k0 < K; k0 += 1) {
-        size_t kk = 1;
-        const uint8_t* a0 = at + k0 * M + m0;
-        const uint8_t* bb = b + k0 * N + n0;
+      size_t k0 = 0;
+      const uint8_t* a0 = at + m0;
+      const uint8_t* bb = b + n0;
+      vme_vsettk(4);
+      while (K - k0 > 4) {
+        vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 4);
+        VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
+        VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
+        a0 += 4 * M;
+        bb += 4 * N;
+        k0 += 4;
+      }
+      // final chunk: 1..4 rows (whatever's left), may differ from the loop's
+      // fixed kk=4 so it needs its own vme_vsettk.
+      {
+        size_t kk = K - k0;
         vme_load_k4(a0, a0 + te, bb, bb + te, M, N, kk);
         vme_vsettk(kk);
         VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
@@ -67,16 +79,120 @@ static void vme_gemm_2x2_bias(uint32_t* c, const uint8_t* at, const uint8_t* b,
       // v24 (not v20) for the bias load: at e32w1 vlmul is 8, so every plain
       // vector operand here must be 8-register-aligned (v16 and v24 both are).
       vme_vsettnt_e32w1(te);
-      {
-        size_t vl_dbg; asm volatile("csrr %0, vl" : "=r"(vl_dbg));
-        printf("e32w1 readout: vl=%lu te=%lu\n", vl_dbg, te);
-      }
+      // {
+      //   size_t vl_dbg; asm volatile("csrr %0, vl" : "=r"(vl_dbg));
+      //   printf("e32w1 readout: vl=%lu te=%lu\n", vl_dbg, te);
+      // }
       // Unrolled by 2, with the second copy on entirely separate registers
       // (v20/v28 instead of v16/v24) and both streams' instructions
       // interleaved: gives the hardware two independent chains to overlap
       // instead of one chain repeatedly reusing the same destination register,
       // so the OPU's next tile-read-out never has to wait right behind this
       // tile's own bias-add/store on the identical register.
+      for (size_t r = 0; r < te; r++) {
+        for (size_t t = 0; t < 4; t += 2) {
+          size_t col0a = n0 + (t & 1) * te;
+          uint32_t* dsta = c + (m0 + (t >> 1) * te + r) * N + col0a;
+          size_t t2 = t + 1;
+          size_t col0b = n0 + (t2 & 1) * te;
+          uint32_t* dstb = c + (m0 + (t2 >> 1) * te + r) * N + col0b;
+
+          VME_VTMV_V_T(16, vme_tss(t, VME_TSS_ROW, r));
+          VME_VTMV_V_T(20, vme_tss(t2, VME_TSS_ROW, r));
+          asm volatile("vle32.v v24, (%0)" : : "r"(bias + col0a) : "memory");
+          asm volatile("vle32.v v28, (%0)" : : "r"(bias + col0b) : "memory");
+          asm volatile("vadd.vv v16, v16, v24");
+          asm volatile("vadd.vv v20, v20, v28");
+          asm volatile("vse32.v v16, (%0)" : : "r"(dsta) : "memory");
+          asm volatile("vse32.v v20, (%0)" : : "r"(dstb) : "memory");
+        }
+      }
+    }
+  }
+  VME_VTDISCARD();
+}
+
+// Same as vme_gemm_2x2_bias, but the k-loop consumes 1 row per sf.mm.s.s
+// instead of 4 (vme_vsettk(1) hoisted out, same as the k4 version).
+static void vme_gemm_2x2_bias_k1(uint32_t* c, const uint8_t* at, const uint8_t* b,
+                                  const int32_t* bias, size_t M, size_t N, size_t K, size_t te) {
+  for (size_t m0 = 0; m0 < M; m0 += 2 * te) {
+    for (size_t n0 = 0; n0 < N; n0 += 2 * te) {
+      vme_vsettnt_e8w4_alt(te);
+      vme_vsettm(te);
+      VME_VTZERO(0); VME_VTZERO(1); VME_VTZERO(2); VME_VTZERO(3);
+      size_t k0 = 0;
+      const uint8_t* a0 = at + m0;
+      const uint8_t* bb = b + n0;
+      vme_vsettk(1);
+      while (K - k0 > 1) {
+        vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 1);
+        VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
+        VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
+        a0 += 1 * M;
+        bb += 1 * N;
+        k0 += 1;
+      }
+      {
+        size_t kk = K - k0;
+        vme_load_k4(a0, a0 + te, bb, bb + te, M, N, kk);
+        vme_vsettk(kk);
+        VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
+        VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
+      }
+      vme_vsettnt_e32w1(te);
+      for (size_t r = 0; r < te; r++) {
+        for (size_t t = 0; t < 4; t += 2) {
+          size_t col0a = n0 + (t & 1) * te;
+          uint32_t* dsta = c + (m0 + (t >> 1) * te + r) * N + col0a;
+          size_t t2 = t + 1;
+          size_t col0b = n0 + (t2 & 1) * te;
+          uint32_t* dstb = c + (m0 + (t2 >> 1) * te + r) * N + col0b;
+
+          VME_VTMV_V_T(16, vme_tss(t, VME_TSS_ROW, r));
+          VME_VTMV_V_T(20, vme_tss(t2, VME_TSS_ROW, r));
+          asm volatile("vle32.v v24, (%0)" : : "r"(bias + col0a) : "memory");
+          asm volatile("vle32.v v28, (%0)" : : "r"(bias + col0b) : "memory");
+          asm volatile("vadd.vv v16, v16, v24");
+          asm volatile("vadd.vv v20, v20, v28");
+          asm volatile("vse32.v v16, (%0)" : : "r"(dsta) : "memory");
+          asm volatile("vse32.v v20, (%0)" : : "r"(dstb) : "memory");
+        }
+      }
+    }
+  }
+  VME_VTDISCARD();
+}
+
+// Same as vme_gemm_2x2_bias, but the k-loop consumes 2 rows per sf.mm.s.s
+// instead of 4 (vme_vsettk(2) hoisted out, same as the k4 version).
+static void vme_gemm_2x2_bias_k2(uint32_t* c, const uint8_t* at, const uint8_t* b,
+                                  const int32_t* bias, size_t M, size_t N, size_t K, size_t te) {
+  for (size_t m0 = 0; m0 < M; m0 += 2 * te) {
+    for (size_t n0 = 0; n0 < N; n0 += 2 * te) {
+      vme_vsettnt_e8w4_alt(te);
+      vme_vsettm(te);
+      VME_VTZERO(0); VME_VTZERO(1); VME_VTZERO(2); VME_VTZERO(3);
+      size_t k0 = 0;
+      const uint8_t* a0 = at + m0;
+      const uint8_t* bb = b + n0;
+      vme_vsettk(2);
+      while (K - k0 > 2) {
+        vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 2);
+        VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
+        VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
+        a0 += 2 * M;
+        bb += 2 * N;
+        k0 += 2;
+      }
+      {
+        size_t kk = K - k0;
+        vme_load_k4(a0, a0 + te, bb, bb + te, M, N, kk);
+        vme_vsettk(kk);
+        VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
+        VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
+      }
+      vme_vsettnt_e32w1(te);
       for (size_t r = 0; r < te; r++) {
         for (size_t t = 0; t < 4; t += 2) {
           size_t col0a = n0 + (t & 1) * te;
@@ -113,43 +229,24 @@ static uint32_t lcg(void) { lcg_state = lcg_state * 1664525u + 1013904223u; retu
 
 static inline size_t vme_rdcycle(void) { size_t c; asm volatile("csrr %0, mcycle" : "=r"(c)); return c; }
 
-int main(void) {
-  size_t te = vme_vsettnt_e32w1((size_t)-1);
-  if (te > MAX_TE) { printf("TE %lu > MAX_TE\n", te); exit(1); }
-  size_t M = M_BLOCKS * 2 * te, N = N_BLOCKS * 2 * te;
-  printf("VME fused GEMM+bias (transpose-A): TE=%lu M=%lu N=%lu, sweeping K=%d..%d step %d\n",
-         te, M, N, K_SWEEP_MIN, K_DIM, K_SWEEP_STEP);
+typedef void (*gemm_fn_t)(uint32_t*, const uint8_t*, const uint8_t*, const int32_t*, size_t, size_t, size_t, size_t);
 
-#ifdef VME_DEBUG_SEQ_DATA
-  // Human-readable, deterministic data for waveform debugging: A[i]=i+1,
-  // B[i]=i+2 (both wrap mod 256, they're uint8_t), bias[j]=1.
-  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = (uint8_t)(i + 1);
-  for (size_t i = 0; i < (size_t)K_DIM * N; i++) bm[i] = (uint8_t)(i + 2);
-  for (size_t j = 0; j < N; j++) c_bias[j] = j + 1;
-#else
-#ifdef VME_DEBUG_ZERO_A
-  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = 0;
-#else
-  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = (uint8_t)lcg();
-#endif
-  for (size_t i = 0; i < (size_t)K_DIM * N; i++) bm[i] = (uint8_t)lcg();
-#ifdef VME_DEBUG_ZERO_BIAS
-  for (size_t j = 0; j < N; j++) c_bias[j] = 0;
-#else
-  for (size_t j = 0; j < N; j++) c_bias[j] = (int32_t)(lcg() & 0xffff) - 0x8000;
-#endif
-#endif
-
+// Runs one kernel variant through the full K sweep against the scalar
+// reference, printing a k,cycles,ndiverge table and a final PASSED/FAILED
+// for that variant. Returns 1 if any K diverged.
+static int run_sweep(const char* name, gemm_fn_t fn, const uint8_t* at, const uint8_t* bm,
+                      const int32_t* c_bias, size_t M, size_t N, size_t te) {
+  printf("-- %s --\n", name);
   printf("k,cycles,ndiverge\n");
   int any_diverged = 0;
   for (size_t K = K_SWEEP_MIN; K <= (size_t)K_DIM; K += K_SWEEP_STEP) {
     // Fused GEMM: zero-accumulate the matmul, add the per-column bias at readout.
     // Run once to warm up (icache/tile state), then time a second run.
 #ifndef NO_WARMUP
-    vme_gemm_2x2_bias(c_vme, at, bm, c_bias, M, N, K, te);
+    fn(c_vme, at, bm, c_bias, M, N, K, te);
 #endif
     size_t cycles1 = vme_rdcycle();
-    vme_gemm_2x2_bias(c_vme, at, bm, c_bias, M, N, K, te);
+    fn(c_vme, at, bm, c_bias, M, N, K, te);
     size_t cycles2 = vme_rdcycle();
 
     // Reference: scalar signed int8 GEMM with the same bias, C[m][n] = bias[n] + sum_k At[k][m]*B[k][n].
@@ -189,5 +286,49 @@ int main(void) {
     }
   }
   printf(any_diverged ? "FAILED\n" : "PASSED\n");
+  return any_diverged;
+}
+
+int main(void) {
+  size_t te = vme_vsettnt_e32w1((size_t)-1);
+  if (te > MAX_TE) { printf("TE %lu > MAX_TE\n", te); exit(1); }
+  size_t M = M_BLOCKS * 2 * te, N = N_BLOCKS * 2 * te;
+  printf("VME fused GEMM+bias (transpose-A): TE=%lu M=%lu N=%lu, sweeping K=%d..%d step %d\n",
+         te, M, N, K_SWEEP_MIN, K_DIM, K_SWEEP_STEP);
+
+#ifdef VME_DEBUG_SEQ_DATA
+  // Human-readable, deterministic data for waveform debugging: A[i]=i+1,
+  // B[i]=i+2 (both wrap mod 256, they're uint8_t), bias[j]=1.
+  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = (uint8_t)(i + 1);
+  for (size_t i = 0; i < (size_t)K_DIM * N; i++) bm[i] = (uint8_t)(i + 2);
+  for (size_t j = 0; j < N; j++) c_bias[j] = j + 1;
+#else
+#ifdef VME_DEBUG_ZERO_A
+  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = 0;
+#else
+  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = (uint8_t)lcg();
+#endif
+  for (size_t i = 0; i < (size_t)K_DIM * N; i++) bm[i] = (uint8_t)lcg();
+#ifdef VME_DEBUG_ZERO_BIAS
+  for (size_t j = 0; j < N; j++) c_bias[j] = 0;
+#else
+  for (size_t j = 0; j < N; j++) c_bias[j] = (int32_t)(lcg() & 0xffff) - 0x8000;
+#endif
+#endif
+
+  int any_diverged = 0;
+  struct { const char* name; gemm_fn_t fn; } variants[] = {
+    { "vme_gemm_2x2_bias (k4)", vme_gemm_2x2_bias },
+    { "vme_gemm_2x2_bias_k1",   vme_gemm_2x2_bias_k1 },
+    { "vme_gemm_2x2_bias_k2",   vme_gemm_2x2_bias_k2 },
+  };
+  for (size_t v = 0; v < sizeof(variants) / sizeof(variants[0]); v++) {
+    for (size_t r = 0; r < te; r++)
+      for (size_t c = 0; c < te; c++)
+        bad_rc[r][c] = 0;
+    bad_t[0] = bad_t[1] = bad_t[2] = bad_t[3] = 0;
+    if (run_sweep(variants[v].name, variants[v].fn, at, bm, c_bias, M, N, te))
+      any_diverged = 1;
+  }
   return any_diverged ? 1 : 0;
 }
