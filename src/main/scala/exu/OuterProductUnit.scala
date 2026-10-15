@@ -314,4 +314,10 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
     }
     io.out_col(i) := clusters(i)(xDim-1).io.out_pipe_h
   }
+
+  val dbg_cycle = RegInit(0.U(32.W))
+  dbg_cycle := dbg_cycle + 1.U
+  printf("OPU-ARRAY: cycle=%d mvin=%x mvin_col=%x row_idx0=%d col_idx0=%d out=%x out_col=%x\n",
+    dbg_cycle, io.op.mvin.asUInt, io.op.mvin_col.asUInt, io.op.row_idx(0), io.op.col_idx(0),
+    io.out.asUInt, io.out_col.asUInt)
 }

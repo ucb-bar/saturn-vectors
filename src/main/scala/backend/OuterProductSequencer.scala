@@ -394,6 +394,10 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
     printf("OPS: mvout fire tile=%d tss_idx=%d col_idx=%d wvd_eg=%d move_cluster=%d move_latency=%d\n",
       tile, tss_idx, col_idx, wvd_eg, move_cluster, move_latency)
   }
+  when (fire && mvin && !nop) {
+    printf("OPS: mvin fire tile=%d tss_idx=%d col=%d col_idx=%d move_cluster=%d src_eg=%d\n",
+      tile, tss_idx, col, col_idx, move_cluster, io.rvs2.bits.eg)
+  }
   when (wsboard_clear =/= 0.U) {
     printf("OPS: wsboard_clear eg=%d\n", mvout_pipe(yDim+1))
   }
