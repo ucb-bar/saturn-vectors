@@ -1,9 +1,14 @@
-// OPFMACC.S end to end: a 64x64x96 GEMM with P3109 block scales (block 32) on
-// the 2x2 kernel, rule A registers (data in v2 v4 v6 v8, their scales in
-// v3 v5 v7 v9), compared bit for bit with gen_data.py's reference. New scales
-// are loaded at every block boundary, so the OPU's scale cache must drop the
-// old ones; in block 1 one scale register is written by vmv1r.v instead of a
-// load, the register file's other write path.
+// OPFMACC.S end to end: 64x64x96 GEMMs with P3109 block scales on the 2x2
+// kernel, rule A registers (data in even registers, their scales in the next
+// one), compared bit for bit with gen_data.py's reference. Three tests:
+//   gemm  block 32, data v2 v4 v6 v8, scales v3 v5 v7 v9. New scales at every
+//         block boundary, so the OPU's scale cache must drop the old ones; in
+//         block 1 one scale register is written by vmv1r.v instead of a load,
+//         the register file's other write path.
+//   alt   two register sets on alternate k steps (v2..v9 and v10..v17), each
+//         with its own scales: every OPFMACC.S misses the four-entry cache
+//         and evicts the other set's entries.
+//   gram  C = (sA x A)(sA x A)^T: m0 and m3 read one register as vs1 and vs2.
 #include <stdio.h>
 #include <stdint.h>
 #include "rvv_mx.h"
@@ -14,17 +19,39 @@
 #define K 96
 #define BLK 32
 
-extern uint8_t a0[], b0[], sa0[], sb0[], a1[], b1[], sa1[], sb1[];
-extern uint32_t c0[], out0[], c1[], out1[];
+#define DATA(t) extern uint8_t t##_a[], t##_b[], t##_sa[], t##_sb[]; extern uint32_t t##_c[], t##_out[];
+DATA(gemm0) DATA(gemm1) DATA(alt0) DATA(alt1)
+extern uint8_t gram0_a[], gram0_sa[], gram1_a[], gram1_sa[];
+extern uint32_t gram0_c[], gram0_out[], gram1_c[], gram1_out[];
 
 #define LD(v, p) asm volatile("vle8.v " v ", (%0)" : : "r"(p))
+#define K22(A0, A1, B0, B1, k) LD(#A0, &a[M * (k)]); LD(#A1, &a[M * (k) + 32]); \
+    LD(#B0, &b[N * (k)]); LD(#B1, &b[N * (k) + 32]); \
+    OPFMACCS(m0, B0, A0); OPFMACCS(m1, B1, A0); OPFMACCS(m2, B0, A1); OPFMACCS(m3, B1, A1);
 
-static void gemm(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const uint8_t *sb,
-                 uint32_t *c, int altfmt) {
+// Tiles are cleared and read out through v12..v15. A tile move's vd must be
+// below v16: bit 4 of the field is the OPU's column flag, and for OPMVOUT it
+// swaps the quadrant indices, so a row moved out to v16..v31 mixes quadrants.
+static void start(int altfmt) {
     asm volatile("vsetvli x0, %0, e32, m4, ta, ma\n\tvmv.v.i v12, 0" : : "r"(32));
     OPMVINBCAST(m0, v12); OPMVINBCAST(m1, v12); OPMVINBCAST(m2, v12); OPMVINBCAST(m3, v12);
     if (altfmt) VSETVLI_ALTFMT_X0(32, SEW_E8, LMUL_M1, 1);
     else        VSETVLI_ALTFMT_X0(32, SEW_E8, LMUL_M1, 0);
+}
+
+static void finish(uint32_t *c) {
+    asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(32));
+    for (int r = 0; r < 32; r++) {
+        VMV_VR(v12, r, m0); asm volatile("vse32.v v12, (%0)" : : "r"(&c[r * N]) : "memory");
+        VMV_VR(v12, r, m1); asm volatile("vse32.v v12, (%0)" : : "r"(&c[r * N + 32]) : "memory");
+        VMV_VR(v12, r, m2); asm volatile("vse32.v v12, (%0)" : : "r"(&c[(r + 32) * N]) : "memory");
+        VMV_VR(v12, r, m3); asm volatile("vse32.v v12, (%0)" : : "r"(&c[(r + 32) * N + 32]) : "memory");
+    }
+}
+
+static void gemm(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const uint8_t *sb,
+                 uint32_t *c, int altfmt) {
+    start(altfmt);
     for (int blk = 0; blk < K / BLK; blk++) {
         LD("v3", &sa[M * blk]);
         LD("v5", &sa[M * blk + 32]);
@@ -36,40 +63,71 @@ static void gemm(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const ui
             LD("v9", &sb[N * blk + 32]);
         }
         for (int k = blk * BLK; k < (blk + 1) * BLK; k++) {
-            LD("v2", &a[M * k]);
-            LD("v4", &a[M * k + 32]);
-            LD("v6", &b[N * k]);
-            LD("v8", &b[N * k + 32]);
-            OPFMACCS(m0, v6, v2);
-            OPFMACCS(m1, v8, v2);
-            OPFMACCS(m2, v6, v4);
-            OPFMACCS(m3, v8, v4);
+            K22(v2, v4, v6, v8, k)
         }
     }
-    asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(32));
-    for (int r = 0; r < 32; r++) {
-        VMV_VR(v12, r, m0); asm volatile("vse32.v v12, (%0)" : : "r"(&c[r * N]) : "memory");
-        VMV_VR(v12, r, m1); asm volatile("vse32.v v12, (%0)" : : "r"(&c[r * N + 32]) : "memory");
-        VMV_VR(v12, r, m2); asm volatile("vse32.v v12, (%0)" : : "r"(&c[(r + 32) * N]) : "memory");
-        VMV_VR(v12, r, m3); asm volatile("vse32.v v12, (%0)" : : "r"(&c[(r + 32) * N + 32]) : "memory");
-    }
+    finish(c);
 }
 
-static int check(const uint32_t *out, const uint32_t *ref, int altfmt) {
+// sa and sb hold one scale set per block and parity: set 2*blk on even k,
+// 2*blk+1 on odd k
+static void alt(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const uint8_t *sb,
+                uint32_t *c, int altfmt) {
+    start(altfmt);
+    for (int blk = 0; blk < K / BLK; blk++) {
+        const uint8_t *se = &sa[M * 2 * blk], *so = &sa[M * (2 * blk + 1)];
+        const uint8_t *te = &sb[N * 2 * blk], *to = &sb[N * (2 * blk + 1)];
+        LD("v3", se); LD("v5", se + 32); LD("v7", te); LD("v9", te + 32);
+        LD("v11", so); LD("v13", so + 32); LD("v15", to); LD("v17", to + 32);
+        for (int k = blk * BLK; k < (blk + 1) * BLK; k += 2) {
+            K22(v2, v4, v6, v8, k)
+            K22(v10, v12, v14, v16, k + 1)
+        }
+    }
+    finish(c);
+}
+
+static void gram(const uint8_t *a, const uint8_t *sa, uint32_t *c, int altfmt) {
+    start(altfmt);
+    for (int blk = 0; blk < K / BLK; blk++) {
+        LD("v3", &sa[M * blk]);
+        LD("v5", &sa[M * blk + 32]);
+        for (int k = blk * BLK; k < (blk + 1) * BLK; k++) {
+            LD("v2", &a[M * k]);
+            LD("v4", &a[M * k + 32]);
+            OPFMACCS(m0, v2, v2);
+            OPFMACCS(m1, v4, v2);
+            OPFMACCS(m2, v2, v4);
+            OPFMACCS(m3, v4, v4);
+        }
+    }
+    finish(c);
+}
+
+static int check(const char *test, const uint32_t *out, const uint32_t *ref, int altfmt) {
     int bad = 0;
     for (int i = 0; i < M * N; i++)
         if (out[i] != ref[i] && bad++ < 4)
-            printf("MISMATCH altfmt %d: m=%d n=%d got %08x want %08x\n",
-                   altfmt, i / N, i % N, out[i], ref[i]);
-    printf("altfmt %d: %d of %d differ\n", altfmt, bad, M * N);
+            printf("MISMATCH %s altfmt %d: m=%d n=%d got %08x want %08x\n",
+                   test, altfmt, i / N, i % N, out[i], ref[i]);
+    printf("%s altfmt %d: %d of %d differ\n", test, altfmt, bad, M * N);
     return bad != 0;
 }
 
 int main(void) {
-    gemm(a0, b0, sa0, sb0, out0, 0);
-    int failed = check(out0, c0, 0);
-    gemm(a1, b1, sa1, sb1, out1, 1);
-    failed |= check(out1, c1, 1);
+    int failed = 0;
+    gemm(gemm0_a, gemm0_b, gemm0_sa, gemm0_sb, gemm0_out, 0);
+    failed |= check("gemm", gemm0_out, gemm0_c, 0);
+    gemm(gemm1_a, gemm1_b, gemm1_sa, gemm1_sb, gemm1_out, 1);
+    failed |= check("gemm", gemm1_out, gemm1_c, 1);
+    alt(alt0_a, alt0_b, alt0_sa, alt0_sb, alt0_out, 0);
+    failed |= check("alt", alt0_out, alt0_c, 0);
+    alt(alt1_a, alt1_b, alt1_sa, alt1_sb, alt1_out, 1);
+    failed |= check("alt", alt1_out, alt1_c, 1);
+    gram(gram0_a, gram0_sa, gram0_out, 0);
+    failed |= check("gram", gram0_out, gram0_c, 0);
+    gram(gram1_a, gram1_sa, gram1_out, 1);
+    failed |= check("gram", gram1_out, gram1_c, 1);
     printf(failed ? "FAILED\n" : "passed\n");
     return failed;
 }
