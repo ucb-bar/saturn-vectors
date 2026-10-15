@@ -1,14 +1,19 @@
 // OPFMACC.S end to end: 64x64x96 GEMMs with P3109 block scales on the 2x2
-// kernel, rule A registers (data in even registers, their scales in the next
-// one), compared bit for bit with gen_data.py's reference. Three tests:
-//   gemm  block 32, data v2 v4 v6 v8, scales v3 v5 v7 v9. New scales at every
-//         block boundary, so the OPU's scale cache must drop the old ones; in
-//         block 1 one scale register is written by vmv1r.v instead of a load,
-//         the register file's other write path.
-//   alt   two register sets on alternate k steps (v2..v9 and v10..v17), each
-//         with its own scales: every OPFMACC.S misses the four-entry cache
-//         and evicts the other set's entries.
-//   gram  C = (sA x A)(sA x A)^T: m0 and m3 read one register as vs1 and vs2.
+// kernel, rule A registers (data in an even register, its scales in the next
+// one). Each result is compared bit for bit with gen_data.py's reference.
+// Three tests:
+//   gemm   Normal use. Block 32, data in v2 v4 v6 v8, scales in v3 v5 v7 v9,
+//          new scales loaded at every block, so the OPU's scale cache must
+//          drop the old ones. Also a zero scale and a NaN scale.
+//   evict  A stress test of the scale cache, not a way to write a kernel.
+//          Two register sets (v2..v9 and v10..v17) take turns every k step,
+//          each with different scales: eight scale registers share the
+//          four-entry cache, so every OPFMACC.S evicts entries and refills
+//          them. A wrong eviction or a stale entry would apply the other
+//          set's scales and change the results.
+//   gram   Tests vs1 = vs2. C = (sA x A)(sA x A)^T, so tiles m0 and m3 use
+//          one register as both operands, and the cache fills that scale
+//          register through both read ports in the same cycle.
 #include <stdio.h>
 #include <stdint.h>
 #include "rvv_mx.h"
@@ -19,8 +24,12 @@
 #define K 96
 #define BLK 32
 
+// Arrays defined in data.S, which gen_data.py writes; the linker resolves
+// them by name. Per test (gemm, alt, gram) and format (0, 1: altfmt):
+// _a, _b inputs, _sa, _sb their scales, _c the expected result from
+// gen_data.py's exact reference, _out where the kernel stores its result.
 #define DATA(t) extern uint8_t t##_a[], t##_b[], t##_sa[], t##_sb[]; extern uint32_t t##_c[], t##_out[];
-DATA(gemm0) DATA(gemm1) DATA(alt0) DATA(alt1)
+DATA(gemm0) DATA(gemm1) DATA(evict0) DATA(evict1)
 extern uint8_t gram0_a[], gram0_sa[], gram1_a[], gram1_sa[];
 extern uint32_t gram0_c[], gram0_out[], gram1_c[], gram1_out[];
 
@@ -39,6 +48,8 @@ static void start(int altfmt) {
     else        VSETVLI_ALTFMT_X0(32, SEW_E8, LMUL_M1, 0);
 }
 
+// Saves the results from the OPU to memory: row r of each tile is moved into
+// v12..v15 (32 FP32 values) and stored in that tile's quadrant of c.
 static void finish(uint32_t *c) {
     asm volatile("vsetvli x0, %0, e32, m4, ta, ma" : : "r"(32));
     for (int r = 0; r < 32; r++) {
@@ -56,6 +67,9 @@ static void gemm(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const ui
         LD("v3", &sa[M * blk]);
         LD("v5", &sa[M * blk + 32]);
         LD("v7", &sb[N * blk]);
+        // Block 1 writes v9 with a register move instead of a load, to test
+        // that the OPU's scale cache also sees writes from other units and
+        // drops its old copy of v9.
         if (blk == 1) {
             LD("v20", &sb[N * blk + 32]);
             asm volatile("vmv1r.v v9, v20");
@@ -71,7 +85,7 @@ static void gemm(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const ui
 
 // sa and sb hold one scale set per block and parity: set 2*blk on even k,
 // 2*blk+1 on odd k
-static void alt(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const uint8_t *sb,
+static void evict(const uint8_t *a, const uint8_t *b, const uint8_t *sa, const uint8_t *sb,
                 uint32_t *c, int altfmt) {
     start(altfmt);
     for (int blk = 0; blk < K / BLK; blk++) {
@@ -120,10 +134,10 @@ int main(void) {
     failed |= check("gemm", gemm0_out, gemm0_c, 0);
     gemm(gemm1_a, gemm1_b, gemm1_sa, gemm1_sb, gemm1_out, 1);
     failed |= check("gemm", gemm1_out, gemm1_c, 1);
-    alt(alt0_a, alt0_b, alt0_sa, alt0_sb, alt0_out, 0);
-    failed |= check("alt", alt0_out, alt0_c, 0);
-    alt(alt1_a, alt1_b, alt1_sa, alt1_sb, alt1_out, 1);
-    failed |= check("alt", alt1_out, alt1_c, 1);
+    evict(evict0_a, evict0_b, evict0_sa, evict0_sb, evict0_out, 0);
+    failed |= check("evict", evict0_out, evict0_c, 0);
+    evict(evict1_a, evict1_b, evict1_sa, evict1_sb, evict1_out, 1);
+    failed |= check("evict", evict1_out, evict1_c, 1);
     gram(gram0_a, gram0_sa, gram0_out, 0);
     failed |= check("gram", gram0_out, gram0_c, 0);
     gram(gram1_a, gram1_sa, gram1_out, 1);

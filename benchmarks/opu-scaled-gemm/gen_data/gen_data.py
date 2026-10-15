@@ -9,9 +9,9 @@ Both 8-bit formats of the build. Three tests:
 
   gemm  block 32: 64 row and 64 column scales per block, reloaded at each
         block, one by vmv1r.v; a zero scale and a NaN scale
-  alt   two register sets, used on alternate k steps, each with its own
+  evict two register sets, used on alternate k steps, each with its own
         scales: eight scale registers through a four-entry scale cache, so
-        every OPFMACC.S evicts and refills
+        every OPFMACC.S evicts and refills (a stress test of the cache)
   gram  C = (sA x A)(sA x A)^T: A is both operands, so two of the four
         tiles read the same register as vs1 and vs2
 """
@@ -71,7 +71,7 @@ def arrays(args):
         sb[2][40] = 255   # a NaN scale: column 40 is NaN from block 2 on
         ka = [sa[k // BLK] for k in range(K)]
         kb = [sb[k // BLK] for k in range(K)]
-    elif test == "alt":
+    elif test == "evict":
         # sa[2 * blk + parity]: set 0 on even k, set 1 on odd k
         sa, sb = scales(rng, M, 2 * K // BLK), scales(rng, N, 2 * K // BLK)
         ka = [sa[2 * (k // BLK) + k % 2] for k in range(K)]
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     ap.add_argument("--std", choices=sorted(FP8_STANDARDS), default="p3109")
     ap.add_argument("output")
     args = ap.parse_args()
-    jobs = [(args.std, t, f) for t in ("gemm", "alt", "gram") for f in (0, 1)]
+    jobs = [(args.std, t, f) for t in ("gemm", "evict", "gram") for f in (0, 1)]
     with Pool() as pool:
         results = pool.map(arrays, jobs)
     with open(args.output, "w") as f:
