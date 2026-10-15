@@ -202,8 +202,10 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   io.rvs1.valid := Mux(filling, fillA && !scale_hazard, valid && renv1)
   io.rvs2.valid := Mux(filling, fillB && !scale_hazard, valid && renv2)
 
-  // cache updates: a write to a cached register drops it, and wins over a
-  // fill in the same cycle
+  // cache updates: a write to a cached register drops it. A write and a fill
+  // of the same register in one cycle cannot happen (fills wait for older
+  // writes, younger writes wait for this instruction); the write wins anyway,
+  // so a broken ordering costs a refill rather than stale scales.
   for (e <- 0 until nScaleEntries) {
     val snooped = io.write_snoop.map(w => w.valid && (w.bits >> log2Ceil(egsPerVReg)) === c_tag(e)).reduce(_||_)
     val setA = filling && io.rvs1.fire && eA === e.U
