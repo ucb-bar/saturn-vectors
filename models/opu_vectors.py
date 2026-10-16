@@ -7,7 +7,8 @@ Writes opu.bin for tb_opu_cell.cpp, one 16-byte record per multiply-accumulate,
     u8 altfmt, u8 a, u8 b, u8 sa, u8 sb, 3 x u8 0, u32 c, u32 expect
 
 c is the FP32 accumulator before, expect after: c + (sa x a) x (sb x b),
-rounded once to FP32 with round-to-nearest-even, which the cell always uses.
+rounded once to FP32 with round-to-nearest-even, which the cell always uses
+(a zero result is +0 in a P3109 build).
 sa and sb are P3109 Binary8p1uf block scales (0 is zero, 255 is NaN, otherwise
 2^(code - 128)), applied exactly as P3109's BlockDecode does.
 

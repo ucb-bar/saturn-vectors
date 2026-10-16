@@ -260,11 +260,14 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
   val in_t      = Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W)))
   // OPFMACC.S scales. The sequencer keeps the scale cache's tags and decides
   // fills; the cached scale registers themselves are in OuterProductUnit.
-  // Index 0 is vs1+1 (row scales), 1 is vs2+1 (column scales).
-  val scaled  = Bool() // apply the scales of s_entry/s_piece; else 2^0
-  val s_entry = Vec(2, UInt(log2Ceil(opuParams.nScaleEntries).W))
-  val s_piece = Vec(2, UInt(log2Ceil(egsPerVReg).W)) // element group in the entry
-  val s_fill  = Vec(2, Bool()) // store in_l (0) / in_t (1) at s_entry, s_piece
+  // sa_* are A's row scales (vs1+1), sb_* B's column scales (vs2+1).
+  val scaled   = Bool() // apply the scales at sa_*/sb_*; else 2^0
+  val sa_entry = UInt(log2Ceil(opuParams.nScaleEntries).W) // cache entry
+  val sb_entry = UInt(log2Ceil(opuParams.nScaleEntries).W)
+  val sa_piece = UInt(log2Ceil(egsPerVReg).W) // element group in the entry
+  val sb_piece = UInt(log2Ceil(egsPerVReg).W)
+  val sa_fill  = Bool() // store in_l at sa_entry, sa_piece
+  val sb_fill  = Bool() // store in_t at sb_entry, sb_piece
 
   // same values broadcast horizontally
   val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W)) 
@@ -303,11 +306,11 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
   // on in_l / in_t as raw register-file data; scales are read with the
   // multiply-accumulate that uses them, a cycle or more after their fill.
   val scale_buf = Reg(Vec(opuParams.nScaleEntries, Vec(egsPerVReg, UInt(dLen.W))))
-  when (io.op.s_fill(0)) { scale_buf(io.op.s_entry(0))(io.op.s_piece(0)) := io.op.in_l.asUInt }
-  when (io.op.s_fill(1)) { scale_buf(io.op.s_entry(1))(io.op.s_piece(1)) := io.op.in_t.asUInt }
+  when (io.op.sa_fill) { scale_buf(io.op.sa_entry)(io.op.sa_piece) := io.op.in_l.asUInt }
+  when (io.op.sb_fill) { scale_buf(io.op.sb_entry)(io.op.sb_piece) := io.op.in_t.asUInt }
   // laid out like the Backend lays out in_l and in_t for a macc
-  val sA_bytes = scale_buf(io.op.s_entry(0))(io.op.s_piece(0)).asTypeOf(Vec(yDim * clusterYdim, UInt(8.W)))
-  val sB_bytes = scale_buf(io.op.s_entry(1))(io.op.s_piece(1)).asTypeOf(Vec(xDim * clusterXdim, UInt(8.W)))
+  val sA_bytes = scale_buf(io.op.sa_entry)(io.op.sa_piece).asTypeOf(Vec(yDim * clusterYdim, UInt(8.W)))
+  val sB_bytes = scale_buf(io.op.sb_entry)(io.op.sb_piece).asTypeOf(Vec(xDim * clusterXdim, UInt(8.W)))
   val scale_l = Wire(Vec(yDim, Vec(clusterYdim, UInt(8.W))))
   val scale_t = Wire(Vec(xDim, Vec(clusterXdim, UInt(8.W))))
   for (i <- 0 until yDim; j <- 0 until clusterYdim) {

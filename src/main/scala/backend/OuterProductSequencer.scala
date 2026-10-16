@@ -278,12 +278,12 @@ class OuterProductSequencer(implicit p: Parameters) extends Sequencer[OuterProdu
   // scales: on a fill cycle, which entries and pieces the read data go to;
   // on an issue cycle, which ones the OPU applies (2^0 unless scaled)
   io.iss.bits.scaled := io.iss.fire && scaled
-  io.iss.bits.s_entry(0) := eA
-  io.iss.bits.s_entry(1) := eB
-  io.iss.bits.s_piece(0) := Mux(filling, pA, row_idx)
-  io.iss.bits.s_piece(1) := Mux(filling, pB, col_idx)
-  io.iss.bits.s_fill(0) := filling && io.rvs1.fire
-  io.iss.bits.s_fill(1) := filling && io.rvs2.fire
+  io.iss.bits.sa_entry := eA
+  io.iss.bits.sb_entry := eB
+  io.iss.bits.sa_piece := Mux(filling, pA, row_idx)
+  io.iss.bits.sb_piece := Mux(filling, pB, col_idx)
+  io.iss.bits.sa_fill  := filling && io.rvs1.fire
+  io.iss.bits.sb_fill  := filling && io.rvs2.fire
 
   // set the control signals
   val mrf_eg = Mux(mvout, inst.rs2 , inst.rd) +& Mux(macc,  

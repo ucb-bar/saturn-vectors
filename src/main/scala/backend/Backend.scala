@@ -402,10 +402,10 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     }
 
     // OPFMACC.S scale-cache fills: the read data go to the OPU's scale entries
-    when (vos.get.io.iss.bits.s_fill(0)) {
+    when (vos.get.io.iss.bits.sa_fill) {
       vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(vopu_ctrl_reg.in_l)
     }
-    when (vos.get.io.iss.bits.s_fill(1)) {
+    when (vos.get.io.iss.bits.sb_fill) {
       vopu_ctrl_reg.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(vopu_ctrl_reg.in_t)
     }
 

@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "common-data-gen"))
 
 from gfloat import RoundMode  # noqa: E402
 from gfloat.formats import format_info_binary32 as FP32  # noqa: E402
-from gfloat_ref import FP8_STANDARDS  # noqa: E402
+from gfloat_ref import FP8_STANDARDS, binary32_result  # noqa: E402
 from fma_ref import add, exact, mul, project  # noqa: E402
 
 M, N, K, BLK = 64, 64, 96, 32
@@ -40,7 +40,7 @@ def scale(code):
     return ("num", 0, Fraction(0) if code == 0 else Fraction(2) ** (code - 128))
 
 
-def reference(fi, a, b, sa, sb):
+def reference(std, fi, a, b, sa, sb):
     """C[i][j] = sum over k of (sa[k][i] a[k][i]) (sb[k][j] b[k][j]), rounded per k."""
     c = []
     for i in range(M):
@@ -49,7 +49,7 @@ def reference(fi, a, b, sa, sb):
             for k in range(K):
                 p = mul(mul(scale(sa[k][i]), exact(fi, a[k][i]), RNE),
                         mul(scale(sb[k][j]), exact(fi, b[k][j]), RNE), RNE)
-                acc = project(FP32, add(p, exact(FP32, acc), RNE), RNE)
+                acc = binary32_result(std, project(FP32, add(p, exact(FP32, acc), RNE), RNE))
             c.append(acc)
     return c
 
@@ -80,7 +80,7 @@ def arrays(args):
         b, sa = a, scales(rng, M, K // BLK)
         sb = sa
         ka = kb = [sa[k // BLK] for k in range(K)]
-    return test, altfmt, a, b, sa, sb, reference(fi, a, b, ka, kb)
+    return test, altfmt, a, b, sa, sb, reference(std, fi, a, b, ka, kb)
 
 
 def emit(f, name, data, kind):

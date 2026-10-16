@@ -68,7 +68,8 @@ Special values:
 
 - A NaN anywhere (scale code 255, NaN `a` or `b`, NaN accumulator) gives NaN.
 - A zero scale times an infinite `a` or `b` gives NaN; a zero scale times a finite value gives zero.
-- Other infinities and signed zeros follow IEEE 754 multiplication and addition.
+- Other infinities follow IEEE 754 multiplication and addition.
+- A zero result is +0 in a P3109 build: P3109 has a single zero and encodes it in binary32 as +0 (§4.8.2). In an OCP build, signed zeros follow IEEE 754.
 - Every NaN result is the canonical binary32 NaN, `0x7FC00000`.
 
 With both scales 2^0 (code 128), `OPFMACC.S` computes exactly what `OPFMACC` computes.
