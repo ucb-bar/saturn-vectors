@@ -360,8 +360,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
 
     vrf.io.vxs(flat_vxs.size).rvs1.req <> vos.get.io.rvs1
     vrf.io.vxs(flat_vxs.size).rvs2.req <> vos.get.io.rvs2
-    vos.get.io.rvs1_resp := vrf.io.vxs(flat_vxs.size).rvs1.resp
-    vos.get.io.rvs2_resp := vrf.io.vxs(flat_vxs.size).rvs2.resp
     vos.get.io.write_snoop := vrf.io.write_snoop
     vrf.io.vxs(flat_vxs.size).rvm.req.valid := false.B
     vrf.io.vxs(flat_vxs.size).rvm.req.bits := DontCare
@@ -401,6 +399,14 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
           }
         }
       }
+    }
+
+    // OPFMACC.S scale-cache fills: the read data go to the OPU's scale entries
+    when (vos.get.io.iss.bits.s_fill(0)) {
+      vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs1.resp.asTypeOf(vopu_ctrl_reg.in_l)
+    }
+    when (vos.get.io.iss.bits.s_fill(1)) {
+      vopu_ctrl_reg.in_t := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(vopu_ctrl_reg.in_t)
     }
 
     vopu.io.op := vopu_ctrl_reg

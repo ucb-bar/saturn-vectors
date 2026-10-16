@@ -21,7 +21,8 @@ case class OPUParameters (
   val bWidth : Int = 8,
   val cWidth : Int = 32, // Accumulator size
 
-  val nMrfRegs : Int = 4
+  val nMrfRegs : Int = 4,
+  val nScaleEntries : Int = 4 // OPFMACC.S scale cache: scale registers held
 )
 
 trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
@@ -257,9 +258,13 @@ class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with H
 
   val in_l      = Vec(yDim, Vec(clusterYdim, UInt(opuParams.aWidth.W)))
   val in_t      = Vec(xDim, Vec(clusterXdim, UInt(opuParams.bWidth.W)))
-  // block scales, laid out like in_l and in_t
-  val scale_l   = Vec(yDim, Vec(clusterYdim, UInt(8.W)))
-  val scale_t   = Vec(xDim, Vec(clusterXdim, UInt(8.W)))
+  // OPFMACC.S scales. The sequencer keeps the scale cache's tags and decides
+  // fills; the cached scale registers themselves are in OuterProductUnit.
+  // Index 0 is vs1+1 (row scales), 1 is vs2+1 (column scales).
+  val scaled  = Bool() // apply the scales of s_entry/s_piece; else 2^0
+  val s_entry = Vec(2, UInt(log2Ceil(opuParams.nScaleEntries).W))
+  val s_piece = Vec(2, UInt(log2Ceil(egsPerVReg).W)) // element group in the entry
+  val s_fill  = Vec(2, Bool()) // store in_l (0) / in_t (1) at s_entry, s_piece
 
   // same values broadcast horizontally
   val mrf_idx    = Vec(yDim, UInt(cellRegIdxBits.W)) 
@@ -293,17 +298,36 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
 
   val clusters = Seq.fill(yDim, xDim)(withClock(gated_clock) { Module(new OuterProductCluster) })
 
+  // OPFMACC.S scale cache data, one scale register per entry, on the ungated
+  // clock so that fills land whatever the array's clock does. Fills arrive
+  // on in_l / in_t as raw register-file data; scales are read with the
+  // multiply-accumulate that uses them, a cycle or more after their fill.
+  val scale_buf = Reg(Vec(opuParams.nScaleEntries, Vec(egsPerVReg, UInt(dLen.W))))
+  when (io.op.s_fill(0)) { scale_buf(io.op.s_entry(0))(io.op.s_piece(0)) := io.op.in_l.asUInt }
+  when (io.op.s_fill(1)) { scale_buf(io.op.s_entry(1))(io.op.s_piece(1)) := io.op.in_t.asUInt }
+  // laid out like the Backend lays out in_l and in_t for a macc
+  val sA_bytes = scale_buf(io.op.s_entry(0))(io.op.s_piece(0)).asTypeOf(Vec(yDim * clusterYdim, UInt(8.W)))
+  val sB_bytes = scale_buf(io.op.s_entry(1))(io.op.s_piece(1)).asTypeOf(Vec(xDim * clusterXdim, UInt(8.W)))
+  val scale_l = Wire(Vec(yDim, Vec(clusterYdim, UInt(8.W))))
+  val scale_t = Wire(Vec(xDim, Vec(clusterXdim, UInt(8.W))))
+  for (i <- 0 until yDim; j <- 0 until clusterYdim) {
+    scale_l(i)(j) := Mux(io.op.scaled, sA_bytes(i + j * yDim), 128.U)
+  }
+  for (i <- 0 until xDim; j <- 0 until clusterXdim) {
+    scale_t(i)(j) := Mux(io.op.scaled, sB_bytes(i + j * xDim), 128.U)
+  }
+
   for (j <- 0 until xDim) {
     for (i <- 0 until yDim) {
       val cluster = clusters(i)(j)
       // column broadcast signals
       cluster.io.in_t      := io.op.in_t(j)
-      cluster.io.scale_t   := io.op.scale_t(j)
+      cluster.io.scale_t   := scale_t(j)
       cluster.io.mvin_bcast_col := io.op.mvin_bcast_col(j)
       cluster.io.mvin_col   := io.op.mvin_col(j)
       // row broadcast signals
       cluster.io.in_l      := io.op.in_l(i)
-      cluster.io.scale_l   := io.op.scale_l(i)
+      cluster.io.scale_l   := scale_l(i)
       cluster.io.mrf_idx    := io.op.mrf_idx(i)
       cluster.io.row_idx    := io.op.row_idx(i)
       cluster.io.col_idx    := io.op.col_idx(i)

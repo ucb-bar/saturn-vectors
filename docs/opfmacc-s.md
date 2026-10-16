@@ -105,9 +105,10 @@ With both scales 2^0 (code 128), `OPFMACC.S` computes exactly what `OPFMACC` com
 None of this is architectural:
 
 - **Hazards.** The frontend gives `OPFMACC.S` EMUL 2 (`PipelinedFaultCheck.scala`). Every hazard check, in the issue queues and in the OPU sequencer, then covers `vs1+1` and `vs2+1`.
-- **Scale cache.** The OPU has two register-file read ports, both used by the data. The OPU sequencer therefore keeps the last four scale registers it read (`OuterProductSequencer.scala`):
+- **Scale cache.** The OPU has two register-file read ports, both used by the data. The OPU therefore keeps the last scale registers it read, four by default (`OPUParameters.nScaleEntries`):
+  - The OPU sequencer (`OuterProductSequencer.scala`) keeps the tags and valid pieces and makes every decision. The scale bytes themselves are stored in the OPU (`OuterProductUnit.scale_buf`).
   - A miss takes a free entry first, so a kernel with at most four scale registers never evicts.
-  - Missing pieces are read through the two data ports, in fill cycles before the data reads.
+  - Missing pieces are read through the two data ports, in fill cycles before the data reads. The sequencer sends the read data to an OPU entry, and later tells the OPU which entries to apply.
   - Every register-file write is reported (`RegisterFile.write_snoop`) and drops the written register's cached copy.
 - **Cell.** Each cell (`OuterProductUnit.scala`) works as follows:
   1. It widens `a`, `b` and the accumulator to a recoded format with a 10-bit exponent, where a scaled operand cannot overflow.
