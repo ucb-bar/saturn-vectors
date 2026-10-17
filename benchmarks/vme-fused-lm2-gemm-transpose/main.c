@@ -38,7 +38,9 @@
 #ifndef K_SWEEP_STEP
 #define K_SWEEP_STEP 4
 #endif
+#ifndef MAX_TE
 #define MAX_TE 64
+#endif
 #define MAX_M (M_BLOCKS * 2 * MAX_TE)
 #define MAX_N (N_BLOCKS * 2 * MAX_TE)
 
@@ -249,6 +251,11 @@ static int run_sweep(const char* name, gemm_fn_t fn, const uint8_t* at, const ui
     fn(c_vme, at, bm, c_bias, M, N, K, te);
     size_t cycles2 = vme_rdcycle();
 
+    size_t ndiverge = 0;
+#ifndef VERIFY
+#define VERIFY 1
+#endif
+#if VERIFY
     // Reference: scalar signed int8 GEMM with the same bias, C[m][n] = bias[n] + sum_k At[k][m]*B[k][n].
     for (size_t i = 0; i < M; i++) {
       for (size_t j = 0; j < N; j++) {
@@ -259,7 +266,6 @@ static int run_sweep(const char* name, gemm_fn_t fn, const uint8_t* at, const ui
       }
     }
 
-    size_t ndiverge = 0;
     for (size_t i = 0; i < M; i++) {
       for (size_t j = 0; j < N; j++) {
         if ((int32_t)c_vme[i * N + j] != c_ref[i * N + j]) {
@@ -273,6 +279,7 @@ static int run_sweep(const char* name, gemm_fn_t fn, const uint8_t* at, const ui
         }
       }
     }
+#endif
     if (ndiverge) any_diverged = 1;
 
     printf("%lu,%lu,%lu\n", K, cycles2 - cycles1, ndiverge);
