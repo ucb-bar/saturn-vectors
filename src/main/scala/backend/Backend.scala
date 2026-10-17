@@ -390,6 +390,20 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
         vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
           Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
         )
+        printf("BE: mvin_col read eg=%d resp=%x\n",
+          vrf.io.vxs(flat_vxs.size).rvs2.req.bits.eg, vrf.io.vxs(flat_vxs.size).rvs2.resp)
+        val dbg_direct = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+          Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
+        )
+        val dbg_flat = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
+          Vec(vopu.yDim * vopu.clusterYdim, UInt(opuParams.aWidth.W))
+        )
+        for (ii <- 0 until vopu.yDim) {
+          for (jj <- 0 until vopu.clusterYdim) {
+            printf("BE: mvin_col i=%d j=%d direct_cast=%x macc_style(i+j*yDim)=%x\n",
+              ii.U, jj.U, dbg_direct(ii)(jj), dbg_flat(ii.U +& (jj * vopu.yDim).U))
+          }
+        }
       }
 
       // sf.mm: A = vs2 feeds the rows, B = vs1 feeds the columns

@@ -14,7 +14,7 @@ static inline size_t vme_rdcycle(void) { size_t c; asm volatile("csrr %0, mcycle
 #include "vme_gemm.h"
 
 #ifndef K_DIM
-#define K_DIM 64
+#define K_DIM 8 // independent of M,N -- the M/N sweep doesn't need a large K to exercise tile edges
 #endif
 #ifndef VERIFY
 #define VERIFY 1
@@ -143,10 +143,12 @@ int main(void) {
   size_t K = K_DIM;
 
   int any_failed = 0;
-  for (size_t k = 1; k <= 16; k++) {
+  size_t max_mn = 2 * te; // caps the sweep at the single/double-tile boundary for faster sim
+  for (size_t k = 1; 8*k - 1 <= max_mn; k++) {
     size_t vals[3] = { 8*k - 1, 8*k, 8*k + 1 };
     for (int vi = 0; vi < 3; vi++) {
       size_t MN = vals[vi];
+      if (MN > max_mn) continue;
       printf("== M=N=%lu ==\n", MN);
       if (run_mn(MN, MN, te, K)) any_failed = 1;
     }

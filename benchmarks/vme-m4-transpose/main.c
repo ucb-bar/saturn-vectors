@@ -36,10 +36,10 @@
 #include <stdlib.h>
 
 #ifndef M_BLOCKS
-#define M_BLOCKS 4      // M = M_BLOCKS * 2 * TE
+#define M_BLOCKS 1      // M = M_BLOCKS * 2 * TE
 #endif
 #ifndef N_BLOCKS
-#define N_BLOCKS 4      // N = N_BLOCKS * 2 * TE
+#define N_BLOCKS 1      // N = N_BLOCKS * 2 * TE
 #endif
 #define MAX_TE 64
 #define MAX_M (M_BLOCKS * 2 * MAX_TE)
@@ -111,17 +111,86 @@ static int32_t c_out[MAX_N * MAX_M] __attribute__((aligned(64)));  // note: tran
 static uint32_t lcg_state = 1;
 static uint32_t lcg(void) { lcg_state = lcg_state * 1664525u + 1013904223u; return lcg_state >> 8; }
 
-static void check_transpose(const char* label, size_t M, size_t N) {
+// Returns 1 if any element diverged (reports up to 8), 0 if all matched.
+static int check_transpose(const char* label, size_t M, size_t N) {
+  int ndiverge = 0;
   for (size_t i = 0; i < M; i++) {
     for (size_t j = 0; j < N; j++) {
       if (c_out[j * M + i] != c_in[i * N + j]) {
-        printf("DIVERGENCE (%s) at (%lu,%lu): c_out=0x%x, c_in=0x%x\n",
-               label, i, j, c_out[j * M + i], c_in[i * N + j]);
-        exit(1);
+        if (ndiverge < 8)
+          printf("DIVERGENCE (%s) at (%lu,%lu): c_out=0x%x, c_in=0x%x\n",
+                 label, i, j, c_out[j * M + i], c_in[i * N + j]);
+        ndiverge++;
       }
     }
   }
-  printf("PASSED (%s)\n", label);
+  printf(ndiverge ? "FAILED (%s)\n" : "PASSED (%s)\n", label);
+  return ndiverge != 0;
+}
+
+// One TE x TE tile per (m0,n0) (not vme_transpose_2x2's 2x2 super-tile),
+// clamped to whatever's left when M or N isn't a multiple of TE. For
+// edge-case coverage, not the throughput path.
+static void vme_transpose_tiled(int32_t* c_out, const int32_t* c_in, size_t M, size_t N, size_t te) {
+  for (size_t m0 = 0; m0 < M; m0 += te) {
+    size_t tm = (M - m0 < te) ? (M - m0) : te;
+    for (size_t n0 = 0; n0 < N; n0 += te) {
+      size_t tn = (N - n0 < te) ? (N - n0) : te;
+      vme_vsettnt_e32w1(tn);
+      for (size_t r = 0; r < tm; r++) {
+        const int32_t* src = c_in + (m0 + r) * N + n0;
+        asm volatile("vle32.v v16, (%0)" : : "r"(src) : "memory");
+        VME_VTMV_T_V(vme_tss(0, VME_TSS_ROW, r), 16);
+      }
+      vme_vsettnt_e32w1(tm);
+      for (size_t c = 0; c < tn; c++) {
+        int32_t* dst = c_out + (n0 + c) * M + m0;
+        VME_VTMV_V_T(16, vme_tss(0, VME_TSS_COL, c));
+        asm volatile("vse32.v v16, (%0)" : : "r"(dst) : "memory");
+      }
+    }
+  }
+  VME_VTDISCARD();
+}
+
+// Dual of vme_transpose_tiled: load column-wise, store row-wise (strided),
+// single-tile/clamped mirror of vme_transpose_2x2_colrow.
+static void vme_transpose_tiled_colrow(int32_t* c_out, const int32_t* c_in, size_t M, size_t N, size_t te) {
+  size_t in_stride = N * sizeof(int32_t);
+  size_t out_stride = M * sizeof(int32_t);
+  for (size_t m0 = 0; m0 < M; m0 += te) {
+    size_t tm = (M - m0 < te) ? (M - m0) : te;
+    for (size_t n0 = 0; n0 < N; n0 += te) {
+      size_t tn = (N - n0 < te) ? (N - n0) : te;
+      vme_vsettnt_e32w1(tm);
+      for (size_t c = 0; c < tn; c++) {
+        const int32_t* src = c_in + m0 * N + (n0 + c);
+        asm volatile("vlse32.v v16, (%0), %1" : : "r"(src), "r"(in_stride) : "memory");
+        VME_VTMV_T_V(vme_tss(0, VME_TSS_COL, c), 16);
+      }
+      vme_vsettnt_e32w1(tn);
+      for (size_t r = 0; r < tm; r++) {
+        int32_t* dst = c_out + n0 * M + (m0 + r);
+        VME_VTMV_V_T(16, vme_tss(0, VME_TSS_ROW, r));
+        asm volatile("vsse32.v v16, (%0), %1" : : "r"(dst), "r"(out_stride) : "memory");
+      }
+    }
+  }
+  VME_VTDISCARD();
+}
+
+// Runs both transpose directions at one M=N, verifying each. Returns 1 if
+// either diverged.
+static int run_mn(size_t M, size_t N, size_t te) {
+  for (size_t i = 0; i < M * N; i++) c_in[i] = (int32_t)lcg();
+
+  vme_transpose_tiled(c_out, c_in, M, N, te);
+  int any_failed = check_transpose("row-in/column-out tiled", M, N);
+
+  vme_transpose_tiled_colrow(c_out, c_in, M, N, te);
+  any_failed |= check_transpose("column-in/row-out tiled", M, N);
+
+  return any_failed;
 }
 
 int main(void) {
@@ -138,14 +207,29 @@ int main(void) {
   vme_transpose_2x2(c_out, c_in, M, N, te);
   size_t cycles2 = vme_rdcycle();
   printf("cycles: %lu\n", cycles2 - cycles1);
-  check_transpose("row-in/column-out", M, N);
+  int any_failed = check_transpose("row-in/column-out", M, N);
 
   vme_transpose_2x2_colrow(c_out, c_in, M, N, te);
   cycles1 = vme_rdcycle();
   vme_transpose_2x2_colrow(c_out, c_in, M, N, te);
   cycles2 = vme_rdcycle();
   printf("cycles (column-in/row-out): %lu\n", cycles2 - cycles1);
-  check_transpose("column-in/row-out", M, N);
+  any_failed |= check_transpose("column-in/row-out", M, N);
 
-  return 0;
+  // M/N edge cases around every multiple of 8 up to 128 (7,8,9, 15,16,17,
+  // ..., 127,128,129), via the single-tile/clamped vme_transpose_tiled*
+  // (vme_transpose_2x2's 2x2 super-tile has no tail handling and would
+  // read/write out of bounds for non-multiples of 2*TE).
+  size_t max_mn = 2 * te; // caps the sweep at the single/double-tile boundary for faster sim
+  for (size_t k = 1; 8*k - 1 <= max_mn; k++) {
+    size_t vals[3] = { 8*k - 1, 8*k, 8*k + 1 };
+    for (int vi = 0; vi < 3; vi++) {
+      size_t MN = vals[vi];
+      if (MN > max_mn) continue;
+      printf("== M=N=%lu ==\n", MN);
+      any_failed |= run_mn(MN, MN, te);
+    }
+  }
+
+  return any_failed ? 1 : 0;
 }

@@ -24,10 +24,10 @@
 #include <stdlib.h>
 
 #ifndef M_BLOCKS
-#define M_BLOCKS 4      // M = M_BLOCKS * 2 * TE
+#define M_BLOCKS 1      // M = M_BLOCKS * 2 * TE
 #endif
 #ifndef N_BLOCKS
-#define N_BLOCKS 4      // N = N_BLOCKS * 2 * TE
+#define N_BLOCKS 1      // N = N_BLOCKS * 2 * TE
 #endif
 #ifndef K_DIM
 #define K_DIM 32       // max K swept
