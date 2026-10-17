@@ -86,6 +86,18 @@ def canonical_nan(fi):
     return fi.code_of_nan  # a format with a single NaN encoding
 
 
+def external_result(std, code, bits):
+    """The result of an operation on 8-bit formats, in a `bits`-wide external
+    format (binary32, BFloat16, ...), as a build of `std` writes it. P3109 has a
+    single zero, which it encodes in an external format as +0 (Interim Report
+    v4.0.3, 4.8.2); OCP builds keep IEEE 754's signed zero."""
+    return 0 if std.startswith("p3109") and code == 1 << (bits - 1) else code
+
+
+def binary32_result(std, code):
+    return external_result(std, code, 32)
+
+
 def convert(src_fi, dst_fi, bits, rnd=RoundMode.TiesToEven, sat=False):
     """One conversion, as the hardware should perform it. Returns dst bit pattern."""
     v = decode_float(src_fi, bits).fval

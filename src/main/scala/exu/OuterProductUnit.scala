@@ -99,7 +99,11 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
     val _fp8_pipe = Pipe(f8macc, io.fp8.get, latency).bits
     val _macc_pipe = Pipe(f8macc, io.macc, latency).bits
 
-    sum_fp8 := Mux(fma.io.validout, FType.S.ieee(fma.io.out), 0.U)
+    // P3109 has one zero, and encodes it in binary32 as +0 (Interim Report
+    // v4.0.3, 4.8.2), where IEEE 754 can give -0; an OCP build keeps IEEE's.
+    val sum32 = FType.S.ieee(fma.io.out)
+    val sum32_out = if (vParams.p3109.isDefined) Mux(sum32(30, 0) === 0.U, 0.U, sum32) else sum32
+    sum_fp8 := Mux(fma.io.validout, sum32_out, 0.U)
     fp8_macc_complete := fma.io.validout
   } else {
     mrf_idx_pipe := 0.U

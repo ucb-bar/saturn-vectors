@@ -413,6 +413,17 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean, mxFPFMA: Boolean, p3109: 
       io.exc := exc(ftype)
     }
   }
+
+  // P3109 has one zero, which it encodes in an external format as +0 (Interim
+  // Report v4.0.3, 4.8.2), where IEEE 754 can give -0. Here that is a BF16
+  // result of an operation with an 8-bit operand (8-bit operations widen only
+  // to BF16); operations on BF16 or wider operands keep IEEE's signed zero.
+  if (p3109.isDefined) {
+    val in8_pipe = Pipe(io.valid, io.a_eew === 0.U || io.b_eew === 0.U, depth-1).bits
+    when (out_select(MXFType.BF16) && in8_pipe) {
+      io.out := VecInit(out(MXFType.BF16).map(x => Mux(x(14, 0) === 0.U, 0.U(16.W), x))).asUInt
+    }
+  }
 }
 
 trait FMAFactory extends FunctionalUnitFactory {

@@ -482,6 +482,9 @@ case class VectorParams(
   require(mLen >= 64 && mLen <= 512, "mLen must be >= 64 and <= 512")
   require((mLen & (mLen - 1)) == 0, "mLen must be power of 2")
   require(p3109.isEmpty || useMxConversion, "P3109 needs useMxConversion")
+  // of the FMA pipes with 8-bit operands, only the segmented one reads P3109;
+  // the tandem one would read them as OCP FP8
+  require(p3109.isEmpty || !useMxFPFMA || useSegmentedFPFMA, "P3109 needs the segmented vector FMA")
 }
 
 case object VectorParamsKey extends Field[VectorParams]

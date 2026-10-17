@@ -26,7 +26,7 @@ sys.path.insert(0, os.path.join(HERE, "..", "benchmarks", "common-data-gen"))
 
 from gfloat import RoundMode  # noqa: E402
 from gfloat.formats import format_info_binary32 as FP32  # noqa: E402
-from gfloat_ref import FP8_STANDARDS  # noqa: E402
+from gfloat_ref import FP8_STANDARDS, binary32_result  # noqa: E402
 from fma_ref import add, exact, mul, project  # noqa: E402
 
 RNE = RoundMode.TiesToEven
@@ -51,7 +51,7 @@ def records(args):
         for b in range(256):
             p = mul(exact(fi, a), exact(fi, b), RNE)
             for c in FIXED_C + (near_c(rng, p),):
-                want = project(FP32, add(p, exact(FP32, c), RNE), RNE)
+                want = binary32_result(std, project(FP32, add(p, exact(FP32, c), RNE), RNE))
                 out += struct.pack("<BBBxII", altfmt, a, b, c, want)
     return bytes(out)
 

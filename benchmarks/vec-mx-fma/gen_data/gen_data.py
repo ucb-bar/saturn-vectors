@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common-d
 from gfloat import RoundMode, decode_float, encode_float, round_float  # noqa: E402
 from gfloat.formats import format_info_bfloat16, format_info_binary16, format_info_binary32  # noqa: E402
 from fma_ref import add, binary_inputs, exact, mul, project, sub  # noqa: E402
-from gfloat_ref import FP8_STANDARDS, FRM, canonical_nan, print_array, print_header, print_uint32  # noqa: E402
+from gfloat_ref import FP8_STANDARDS, FRM, canonical_nan, external_result, print_array, print_header, print_uint32  # noqa: E402
 
 COUNT = 128
 BLOCK = 16   # .vf: elements per scalar; main.c's BLOCK
@@ -141,7 +141,9 @@ def tests(std, count):
                 b = [addend(src, mul(exact(src, x), exact(src, y), RoundMode.TiesToEven), i, rng) for i, (x, y) in enumerate(zip(a, c))]
             elif has_c:
                 c = [addend(dst, mul(exact(src, x), exact(src, y), RoundMode.TiesToEven), i, rng) for i, (x, y) in enumerate(zip(a, b))]
-            res = {mode: [project(dst, fn(exact(src, x), exact(src, y), exact(dst, z) if has_c else None, rnd), rnd)
+            # an 8-bit operation with a wider result: P3109's zero is +0 there
+            fix = (lambda r: external_result(std, r, dst.k)) if wide and src.k == 8 else (lambda r: r)
+            res = {mode: [fix(project(dst, fn(exact(src, x), exact(src, y), exact(dst, z) if has_c else None, rnd), rnd))
                           for x, y, z in zip(a, b, c if has_c else a)]
                    for mode, (_frm, rnd) in FRM.items()}
             yield f"{fname}_{op}", src, dst, has_c, a, b, c, res

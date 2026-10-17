@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common-d
 
 from gfloat.formats import format_info_bfloat16, format_info_binary16, format_info_binary32  # noqa: E402
 from fma_ref import binary, binary_inputs  # noqa: E402
-from gfloat_ref import FP8_STANDARDS, FRM, print_array, print_header, print_uint32  # noqa: E402
+from gfloat_ref import FP8_STANDARDS, FRM, external_result, print_array, print_header, print_uint32  # noqa: E402
 
 COUNT = 128
 OPS = ("mul", "add", "sub", "wmul", "wadd", "wsub")   # w*: the result is twice as wide
@@ -56,6 +56,8 @@ def emit(out, std, count, summary):
             b = [p[1] for p in pairs]
             for mode, (_frm, rnd) in FRM.items():
                 res = [binary(base, src, dst, x, y, rnd) for x, y in pairs]
+                if wide and ssz == 1:  # an 8-bit operation: P3109's zero is +0 in BF16
+                    res = [external_result(std, r, 8 * dsz) for r in res]
                 name = f"{fname}_{op}_{mode}"
                 print_array(out, name, "_a", a, ssz)
                 print_array(out, name, "_b", b, ssz)

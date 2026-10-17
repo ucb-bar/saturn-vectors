@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "common-d
 from gfloat import RoundMode, decode_float, encode_float, round_float  # noqa: E402
 from gfloat.formats import format_info_binary32 as FP32  # noqa: E402
 from fma_ref import add, exact, mul, project  # noqa: E402
-from gfloat_ref import FP8_STANDARDS, canonical_nan, print_array, print_header, print_uint32  # noqa: E402
+from gfloat_ref import FP8_STANDARDS, binary32_result, canonical_nan, print_array, print_header, print_uint32  # noqa: E402
 
 M, N, K = 68, 68, 12
 RNE = RoundMode.TiesToEven
@@ -45,7 +45,7 @@ def finite_codes(fi):
     return [c for c in range(256) if math.isfinite(decode_float(fi, c).fval)]
 
 
-def gemm(fi, at, b):
+def gemm(fi, at, b, std="ocp"):
     """C[i][j], row-major, from A transposed (K x M) and B (K x N)."""
     c = []
     for i in range(M):
@@ -53,7 +53,7 @@ def gemm(fi, at, b):
             acc = 0
             for k in range(K):
                 p = mul(exact(fi, at[k * M + i]), exact(fi, b[k * N + j]), RNE)
-                acc = project(FP32, add(p, exact(FP32, acc), RNE), RNE)
+                acc = binary32_result(std, project(FP32, add(p, exact(FP32, acc), RNE), RNE))
             c.append(acc)
     return c
 
@@ -72,7 +72,7 @@ def emit(out, std):
             name = f"{fname}_rand_{mode}"
             print_array(out, name, "_at", at, 1)
             print_array(out, name, "_b", b, 1)
-            print_array(out, name, "_c", gemm(fi, at, b), 4)
+            print_array(out, name, "_c", gemm(fi, at, b, std), 4)
             out.write(f".global {name}_out\n.balign 64\n{name}_out:\n    .space {M * N * 4}\n")
 
 
