@@ -278,6 +278,7 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.rvd_eew   := vs3_eew
   io.iss.bits.vd_eew    := vd_eew
   io.iss.bits.sew       := inst.vconfig.vtype.vsew
+  io.iss.bits.altfmt    := inst.vconfig.vtype.altfmt
   io.iss.bits.eidx      := eidx
   io.iss.bits.vl        := inst.vconfig.vl
   io.iss.bits.wvd_eg    := wvd_eg
