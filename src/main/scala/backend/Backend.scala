@@ -390,20 +390,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
         vopu_ctrl_reg.in_l := vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
           Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
         )
-        printf("BE: mvin_col read eg=%d resp=%x\n",
-          vrf.io.vxs(flat_vxs.size).rvs2.req.bits.eg, vrf.io.vxs(flat_vxs.size).rvs2.resp)
-        val dbg_direct = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
-          Vec(vopu.yDim, Vec(vopu.clusterYdim, UInt(opuParams.aWidth.W)))
-        )
-        val dbg_flat = vrf.io.vxs(flat_vxs.size).rvs2.resp.asTypeOf(
-          Vec(vopu.yDim * vopu.clusterYdim, UInt(opuParams.aWidth.W))
-        )
-        for (ii <- 0 until vopu.yDim) {
-          for (jj <- 0 until vopu.clusterYdim) {
-            printf("BE: mvin_col i=%d j=%d direct_cast=%x macc_style(i+j*yDim)=%x\n",
-              ii.U, jj.U, dbg_direct(ii)(jj), dbg_flat(ii.U +& (jj * vopu.yDim).U))
-          }
-        }
       }
 
       // sf.mm: A = vs2 feeds the rows, B = vs1 feeds the columns
@@ -482,9 +468,6 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     get_vm_mask(vrf.io.vls.rvm.resp, vls.io.iss.bits.eidx, vls.io.iss.bits.elem_size, dLen),
     ~(0.U(dLenB.W)))
   load_write.bits.mask := FillInterleaved(8, vls.io.iss.bits.eidx_wmask & load_wmask)
-  when (load_write.fire && load_write.bits.eg >= 32.U && load_write.bits.eg <= 55.U) {
-    printf("LOAD-WRITE: eg=%d rd=%d data=%x mask=%x\n", load_write.bits.eg, load_write.bits.eg >> log2Ceil(egsPerVReg), load_write.bits.data, load_write.bits.mask)
-  }
   when (io.vmu.lresp.fire) {
     assert(io.vmu.lresp.bits.debug_id === vls.io.iss.bits.debug_id)
   }
