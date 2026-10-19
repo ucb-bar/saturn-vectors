@@ -110,6 +110,13 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
   when (!s0_inst.vmu && s0_inst.funct3 === OPIVI && s0_inst.funct6 === OPIFunct6.mvnrr.litValue.U) {
     s0_inst.emul := log2_up(s0_inst.imm5, 8)
   }
+  // OPFMACC.S reads each operand as a register pair (data, scales): EMUL 2
+  // makes every hazard check cover the scale register. Rule A: the scales of
+  // vN are in vN+1, which OuterProductSequencer also assumes (tA, tB: rs | 1);
+  // a change of rule must change both.
+  when (!s0_inst.vmu && s0_inst.funct3 === OPFVV && s0_inst.funct6 === OPFFunct6.opfmaccs.litValue.U) {
+    s0_inst.emul := 1.U
+  }
 
   val s0_unit = s0_inst.mop === mopUnit || (s0_inst.mop === mopStrided && io.s0.in.bits.rs2 === ((s0_inst.nf +& 1.U) << s0_inst.mem_elem_size))
   val s0_indexed = s0_inst.mop.isOneOf(mopOrdered, mopUnordered)

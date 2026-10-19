@@ -60,4 +60,6 @@
 // opfvv. f6=b100101, f7=b1001011
 #define OPFMACC(md, vs2, vs1) \
   asm volatile(".insn r 0x57, 0x1, 0x4b, " md ", " vs1 ", " vs2);
-  
+  // opfvv. f6=b100110, f7=b1001101: OPFMACC.S, scales in vs1+1 and vs2+1
+#define OPFMACCS(md, vs2, vs1) \
+  asm volatile(".insn r 0x57, 0x1, 0x4d, " md ", " vs1 ", " vs2);

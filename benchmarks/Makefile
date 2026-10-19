@@ -55,6 +55,8 @@ bmarks = \
 	vec-mx-unary \
 	vec-mx-matmul \
 	opu-fp8-gemm \
+	opu-timing \
+	opu-scaled-gemm \
 	opu-gemm \
 	opu-m4-gemm \
 	opu-m4-memcopy \

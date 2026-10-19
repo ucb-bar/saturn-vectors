@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Check the 8-bit multiply-accumulate of one OuterProductCell with Verilator:
-# every (a, b) pair of both formats, against 11 accumulator values each.
+# every (a, b) pair of both formats, against 11 accumulator values each, then
+# again with six P3109 block-scale pairs each (OPFMACC.S); see opu_vectors.py.
 #
 #   ./run_opu_check.sh <CONFIG> <workdir>
 #
