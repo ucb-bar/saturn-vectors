@@ -16,7 +16,7 @@ class OuterProductSequencerIO(implicit p: Parameters) extends SequencerIO(new Ou
   val rvs1 = Decoupled(new VectorReadReq)
   val rvs2 = Decoupled(new VectorReadReq)
   // every register-file write, to invalidate cached scales
-  val write_snoop = Input(Vec(vParams.vrfBanking, Valid(UInt(log2Ceil(egsTotal).W))))
+  val write_snoop = Input(Vec(2 * vParams.vrfBanking, Valid(UInt(log2Ceil(egsTotal).W))))
 
   val pipe_write_req = new VectorPipeWriteReqIO(yDim+2)
 

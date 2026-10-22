@@ -36,7 +36,7 @@ class RegisterAccess(exSeqs: Int, maxExuDepth: Int)(implicit p: Parameters) exte
     val pipe_writes = Vec(exSeqs, Input(Valid(new VectorWrite(dLen))))
     val iter_writes = Vec(exSeqs, Flipped(Decoupled(new VectorWrite(dLen))))
     val load_write = Flipped(Decoupled(new VectorWrite(dLen)))
-    val write_snoop = Output(Vec(vParams.vrfBanking, Valid(UInt(log2Ceil(egsTotal).W))))
+    val write_snoop = Output(Vec(2 * vParams.vrfBanking, Valid(UInt(log2Ceil(egsTotal).W))))
   })
 
   // 3R1W banks
