@@ -64,14 +64,16 @@ object VectorParams {
   def opuParams = genParams.copy(
     vliqEntries = 8, // beef this up since OPU tends to be used with LMUL=1
     vlissqEntries = 6,
-    useOpu = true
+    useOpu = true,
+    // useOpuColReadout = true
   )
 
   def opuMxParams = mxParams.copy(
     vliqEntries = 8,
     vlissqEntries = 6,
     useMxOPU = true,
-    useOpu = true
+    useOpu = true,
+    // useOpuColReadout = true
   )
 
   // multiFMAParams:
@@ -366,6 +368,10 @@ case class VectorParams(
   useMxConversion: Boolean = false,
   useMxOPU: Boolean = false,
 
+  // VME instructions that read out columns (sf.vtmv.v.t, TSS pattern = column):
+  // the OPU's horizontal pipe (in_pipe_h/out_pipe_h) that this needs
+  useOpuColReadout: Boolean = false,
+
   // for comparisons only
   hazardingMultiplier: Int = 0,
   hwachaLimiter: Option[Int] = None,
@@ -430,6 +436,7 @@ trait HasVectorParams extends HasVectorConsts { this: HasCoreParameters =>
 
   def useOpu = vParams.useOpu
   def useMxOPU = vParams.useMxOPU
+  def useOpuColReadout = vParams.useOpuColReadout
 
   def opuParams = OPUParameters()
   def opuTE = vParams.opuTE(vLen)

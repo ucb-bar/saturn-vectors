@@ -444,7 +444,9 @@ class VectorBackend(implicit p: Parameters) extends CoreModule()(p) with HasVect
     vrf.io.pipe_writes(flat_vxs.size).valid := vos.io.write.valid
     vrf.io.pipe_writes(flat_vxs.size).bits.eg := vos.io.write.bits
     vrf.io.pipe_writes(flat_vxs.size).bits.data := RegEnable(
-      Mux(vos.io.write_col, vopu.get.io.out_col.asUInt, vopu.get.io.out.asUInt), vos.io.write_reg_enable)
+      if (useOpuColReadout) Mux(vos.io.write_col, vopu.get.io.out_col.get.asUInt, vopu.get.io.out.asUInt)
+      else vopu.get.io.out.asUInt,
+      vos.io.write_reg_enable)
     vrf.io.pipe_writes(flat_vxs.size).bits.mask := vos.io.write_mask
 
     when (vos.io.write.valid) {

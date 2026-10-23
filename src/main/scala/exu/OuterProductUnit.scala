@@ -137,11 +137,12 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
     val in_l      = Input(Vec(clusterYdim, UInt(opuParams.aWidth.W)))
     val in_t      = Input(Vec(clusterXdim, UInt(opuParams.bWidth.W)))
 
-    // Vertical readout pipe (row moves) and horizontal readout pipe (column moves)
+    // Vertical readout pipe (row moves) and horizontal readout pipe (column
+    // moves, only wired up when useOpuColReadout is set)
     val in_pipe     = Input(UInt(opuParams.cWidth.W))
     val out_pipe    = Output(UInt(opuParams.cWidth.W))
-    val in_pipe_h   = Input(UInt(opuParams.cWidth.W))
-    val out_pipe_h  = Output(UInt(opuParams.cWidth.W))
+    val in_pipe_h   = if (useOpuColReadout) Some(Input(UInt(opuParams.cWidth.W))) else None
+    val out_pipe_h  = if (useOpuColReadout) Some(Output(UInt(opuParams.cWidth.W))) else None
 
     val mrf_idx = Input(UInt(cellRegIdxBits.W))
     val row_idx = Input(UInt(log2Ceil(clusterYdim).W))
@@ -170,7 +171,6 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
   val cells = Seq.fill(clusterYdim, clusterXdim)(Module(new OuterProductCell))
   val cell_outs = Wire(Vec(clusterYdim, Vec(clusterXdim, UInt(opuParams.cWidth.W))))
   val pipe = Reg(UInt(opuParams.cWidth.W))
-  val pipe_h = Reg(UInt(opuParams.cWidth.W))
 
   for (i <- 0 until clusterYdim) {
     for (j <- 0 until clusterXdim) {
@@ -204,13 +204,16 @@ class OuterProductCluster(implicit p : Parameters) extends CoreModule()(p) with 
     io.in_pipe,
     cell_outs(io.row_idx)(io.col_idx)
   )
-  pipe_h := Mux(io.shift_h,
-    io.in_pipe_h,
-    cell_outs(io.col_idx)(io.row_idx)
-  )
-
   io.out_pipe := pipe
-  io.out_pipe_h := pipe_h
+
+  if (useOpuColReadout) {
+    val pipe_h = Reg(UInt(opuParams.cWidth.W))
+    pipe_h := Mux(io.shift_h,
+      io.in_pipe_h.get,
+      cell_outs(io.col_idx)(io.row_idx)
+    )
+    io.out_pipe_h.get := pipe_h
+  }
 }
 
 class OuterProductControl(implicit p: Parameters) extends CoreBundle()(p) with HasOPUParams {
@@ -252,8 +255,9 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
 
   val io = IO(new Bundle {
     val op = Input(new OuterProductControl)
-    val out = Output(Vec(xDim, UInt(opuParams.cWidth.W)))     // row readout, one element per cluster column
-    val out_col = Output(Vec(yDim, UInt(opuParams.cWidth.W))) // column readout, one element per cluster row
+    val out = Output(Vec(xDim, UInt(opuParams.cWidth.W))) // row readout, one element per cluster column
+    // column readout, one element per cluster row
+    val out_col = if (useOpuColReadout) Some(Output(Vec(yDim, UInt(opuParams.cWidth.W)))) else None
     val YOU_SHALL_PASS = Output(Bool())
   })
 
@@ -307,12 +311,14 @@ class OuterProductUnit(implicit p: Parameters) extends CoreModule()(p) with HasO
     io.out(j) := clusters(yDim-1)(j).io.out_pipe
   }
   // horizontal readout chain (column moves)
-  for (i <- 0 until yDim) {
-    clusters(i)(0).io.in_pipe_h := 0.U
-    for (j <- 1 until xDim) {
-      clusters(i)(j).io.in_pipe_h := clusters(i)(j-1).io.out_pipe_h
+  if (useOpuColReadout) {
+    for (i <- 0 until yDim) {
+      clusters(i)(0).io.in_pipe_h.get := 0.U
+      for (j <- 1 until xDim) {
+        clusters(i)(j).io.in_pipe_h.get := clusters(i)(j-1).io.out_pipe_h.get
+      }
+      io.out_col.get(i) := clusters(i)(xDim-1).io.out_pipe_h.get
     }
-    io.out_col(i) := clusters(i)(xDim-1).io.out_pipe_h
   }
 
 }
