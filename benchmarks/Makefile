@@ -71,7 +71,8 @@ bmarks = \
 	vme-fp8-gemm \
 	vme-fused-lm2-gemm-transpose \
 	vme-m4-transpose \
-	
+	mmt4d \
+
 # The opu-* benchmarks use the retired BME encodings (bme.h) and no longer
 # decode now that the OPU implements the Xsfmm/VME subset (vme.h).
 
