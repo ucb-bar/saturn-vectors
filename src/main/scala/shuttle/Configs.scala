@@ -40,7 +40,7 @@ class WithShuttleVectorUnit(
               decoder
             }),
             issueVConfig = false,
-            vExts = Seq("zvbb")
+            vExts = Seq("zvbb") ++ params.vExts
           )),
         )
       )) else tp

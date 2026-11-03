@@ -1,0 +1,4 @@
+# Reference model for FP8 conversion tests. Needs Python >= 3.10
+# (gfloat declares 3.8.1 but uses match statements).
+gfloat==0.5.2
+numpy
