@@ -185,7 +185,7 @@ class RegisterFile(reads: Seq[Int], maskReads: Seq[Int], pipeWrites: Int, llWrit
     rf.io.write.bits.data := bank_write_data
     rf.io.write.bits.mask := bank_write_mask
     rf.io.write.bits.eg := bank_write_eg >> vrfBankBits
-    when (bank_write_valid) { PopCount(bank_match) === 1.U }
+    assert(PopCount(bank_match) <= 1.U, "two pipe writes to one VRF bank in one cycle")
 
     val ll_arb = Module(new Arbiter(new VectorWrite(dLen), llWrites))
     rf.io.ll_write <> ll_arb.io.out
