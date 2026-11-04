@@ -321,23 +321,9 @@ class ExecuteSequencer(supported_insns: Seq[VectorInstruction], maxPipeDepth: In
   io.iss.bits.slide_data := io.vgu.slide_data & slide_down_bit_mask
 
   io.iss.bits.use_scalar_rvs1 := inst.funct3.isOneOf(OPIVI, OPIVX, OPMVX, OPFVF) || rgather_v || rgatherei16
-  // NaN-box a narrow .vf scalar FP operand. When a scalar FP operand is read
-  // narrower than the FP register (vs1_eew < 64) and its upper bits are not all
-  // ones, RISC-V requires it to read as the canonical NaN of that width. Without
-  // this the FP units take the raw low bits, so a wider value held in the register
-  // but consumed by a narrower .vf op is used as a valid float instead of a NaN.
-  val fp_scalar = Wire(UInt(64.W))
-  fp_scalar := sscalar
-  when (inst.funct3 === OPFVF) {
-    when (vs1_eew === 2.U && !sscalar(63,32).andR) {
-      fp_scalar := Cat(sscalar(63,32), "h7FC00000".U(32.W))
-    } .elsewhen (vs1_eew === 1.U && !sscalar(63,16).andR) {
-      fp_scalar := Cat(sscalar(63,16), "h7E00".U(16.W))
-    }
-  }
   io.iss.bits.scalar := Mux(rgather_v || rgatherei16,
     rgather_eidx,
-    Mux(zext_imm5, uscalar, fp_scalar))
+    Mux(zext_imm5, uscalar, sscalar))
   io.iss.bits.use_zero_rvs2 := rgather_zero && (rgather || rgatherei16)
 
   io.iss.bits.acc       := inst.reduction && usesAcc.B
