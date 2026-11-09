@@ -112,6 +112,16 @@ static void load_tile_rows(size_t t, size_t te) {
   }
 }
 
+// Write c_ref into tile t with column moves (transposing from row-major).
+static void load_tile_cols(size_t t, size_t te) {
+  for (size_t c = 0; c < te; c++) {
+    for (size_t r = 0; r < te; r++) row_buf[r] = c_ref[r][c];
+    vme_vsettnt_e32w1(te);
+    asm volatile("vle32.v v24, (%0)" : : "r"(row_buf) : "memory");
+    VME_VTMV_T_V(vme_tss(t, VME_TSS_COL, c), 24);
+  }
+}
+
 static int32_t ext8(int8_t x, int is_signed) { return is_signed ? (int32_t)x : (int32_t)(uint8_t)x; }
 
 static void ref_mm_i8(size_t tm, size_t tn, size_t tk, int sa, int sb) {
@@ -386,16 +396,16 @@ static void diag_moves(size_t te) {
   for (size_t i = 0; i < te; i++)
     for (size_t j = 0; j < te; j++)
       c_ref[i][j] = (int32_t)((i << 16) | j);
-  printf("diag: load_tile_rows(0)\n");
-  load_tile_rows(0, te);
+  printf("diag: load_tile_cols(0)\n");
+  load_tile_cols(0, te);
   printf("diag: store_tile_rows(0) [mvout tile0 row]\n");
   store_tile_rows(0, te);
   compare_tile("diag row0", te, te);
   printf("diag: store_tile_cols(0) [mvout tile0 col]\n");
   store_tile_cols(0, te);
   compare_tile("diag col0", te, te);
-  printf("diag: load_tile_rows(1)\n");
-  load_tile_rows(1, te);
+  printf("diag: load_tile_cols(1)\n");
+  load_tile_cols(1, te);
   printf("diag: store_tile_cols(1) [mvout tile1 col]\n");
   store_tile_cols(1, te);
   compare_tile("diag col1", te, te);

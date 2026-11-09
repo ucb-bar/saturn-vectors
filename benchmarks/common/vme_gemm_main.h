@@ -144,7 +144,10 @@ int main(void) {
 
   int any_failed = 0;
   size_t max_mn = 2 * te; // caps the sweep at the single/double-tile boundary for faster sim
-  for (size_t k = 1; 8*k - 1 <= max_mn; k++) {
+#ifndef MN_SWEEP_START_K
+#define MN_SWEEP_START_K 1
+#endif
+  for (size_t k = MN_SWEEP_START_K; 8*k - 1 <= max_mn; k++) {
     size_t vals[3] = { 8*k - 1, 8*k, 8*k + 1 };
     for (int vi = 0; vi < 3; vi++) {
       size_t MN = vals[vi];
