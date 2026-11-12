@@ -58,6 +58,30 @@ static float e4m3_to_float(uint8_t x) {
   return sign ? -v : v;
 }
 
+// -DPOWER_WINDOW marks each timed call through mscratch for Iris's
+// PowerWindowMonitor (iris/test/src/IrisSpec.scala): 1 opens the FSDB dump
+// window, 2 marks where the call enters its k-loop, 3 where it leaves it for
+// the readout, 0 closes the window; the power analysis takes the k-loop as
+// 2..3 and the readout as 3..0. Each mark fences first, which stalls until the
+// decoupled vector unit is idle, so it lands where the vector unit is, not
+// where the scalar core ran ahead to. The in-kernel marks only advance from
+// the one before, so the warm-up call doesn't fence and only the first
+// super-tile is marked; their fences are inside the timed region, so a
+// POWER_WINDOW build's cycle counts include them.
+#ifdef POWER_WINDOW
+#define POWER_MARK(v) asm volatile("fence\n\tcsrw mscratch, %0" : : "r"((size_t)(v)) : "memory")
+#define POWER_ADVANCE(from, to) do {                          \
+    size_t s_;                                                \
+    asm volatile("csrr %0, mscratch" : "=r"(s_) : : "memory"); \
+    if (s_ == (from)) POWER_MARK(to);                         \
+  } while (0)
+#else
+#define POWER_MARK(v)
+#define POWER_ADVANCE(from, to)
+#endif
+#define POWER_KLOOP()   POWER_ADVANCE(1, 2)
+#define POWER_READOUT() POWER_ADVANCE(2, 3)
+
 // tk=4: vme_vsettk(4) hoisted out of the k-loop, 4 rows consumed per sf.mm.
 static void vme_fp8_gemm_2x2_bias(uint32_t* c, const uint8_t* at, const uint8_t* b,
                                    const float* bias, size_t M, size_t N, size_t K, size_t te) {
@@ -70,6 +94,7 @@ static void vme_fp8_gemm_2x2_bias(uint32_t* c, const uint8_t* at, const uint8_t*
       const uint8_t* a0 = at + m0;
       const uint8_t* bb = b + n0;
       vme_vsettk(4);
+      POWER_KLOOP();
       while (K - k0 > 4) {
         vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 4);
         VME_MM_E4_E4(0, 0, 16); VME_MM_E4_E4(1, 0, 24);
@@ -85,6 +110,7 @@ static void vme_fp8_gemm_2x2_bias(uint32_t* c, const uint8_t* at, const uint8_t*
         VME_MM_E4_E4(0, 0, 16); VME_MM_E4_E4(1, 0, 24);
         VME_MM_E4_E4(2, 8, 16); VME_MM_E4_E4(3, 8, 24);
       }
+      POWER_READOUT();
       vme_vsettnt_e32w1(te);
       for (size_t r = 0; r < te; r++) {
         for (size_t t = 0; t < 4; t += 2) {
@@ -121,6 +147,7 @@ static void vme_fp8_gemm_2x2_bias_k1(uint32_t* c, const uint8_t* at, const uint8
       const uint8_t* a0 = at + m0;
       const uint8_t* bb = b + n0;
       vme_vsettk(1);
+      POWER_KLOOP();
       while (K - k0 > 1) {
         vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 1);
         VME_MM_E4_E4(0, 0, 16); VME_MM_E4_E4(1, 0, 24);
@@ -136,6 +163,7 @@ static void vme_fp8_gemm_2x2_bias_k1(uint32_t* c, const uint8_t* at, const uint8
         VME_MM_E4_E4(0, 0, 16); VME_MM_E4_E4(1, 0, 24);
         VME_MM_E4_E4(2, 8, 16); VME_MM_E4_E4(3, 8, 24);
       }
+      POWER_READOUT();
       vme_vsettnt_e32w1(te);
       for (size_t r = 0; r < te; r++) {
         for (size_t t = 0; t < 4; t += 2) {
@@ -172,6 +200,7 @@ static void vme_fp8_gemm_2x2_bias_k2(uint32_t* c, const uint8_t* at, const uint8
       const uint8_t* a0 = at + m0;
       const uint8_t* bb = b + n0;
       vme_vsettk(2);
+      POWER_KLOOP();
       while (K - k0 > 2) {
         vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 2);
         VME_MM_E4_E4(0, 0, 16); VME_MM_E4_E4(1, 0, 24);
@@ -187,6 +216,7 @@ static void vme_fp8_gemm_2x2_bias_k2(uint32_t* c, const uint8_t* at, const uint8
         VME_MM_E4_E4(0, 0, 16); VME_MM_E4_E4(1, 0, 24);
         VME_MM_E4_E4(2, 8, 16); VME_MM_E4_E4(3, 8, 24);
       }
+      POWER_READOUT();
       vme_vsettnt_e32w1(te);
       for (size_t r = 0; r < te; r++) {
         for (size_t t = 0; t < 4; t += 2) {
@@ -220,6 +250,11 @@ static uint32_t bad_t[4];                 // divergence count by which of the 4 
 
 static uint32_t lcg_state = 1;
 static uint32_t lcg(void) { lcg_state = lcg_state * 1664525u + 1013904223u; return lcg_state >> 8; }
+static uint8_t lcg_e4m3(void) {
+  uint8_t x;
+  do x = (uint8_t)lcg(); while ((x & 0x7f) == 0x7f);
+  return x;
+}
 
 static inline size_t vme_rdcycle(void) { size_t c; asm volatile("csrr %0, mcycle" : "=r"(c)); return c; }
 
@@ -247,9 +282,11 @@ static int run_sweep(const char* name, gemm_fn_t fn, const uint8_t* at, const ui
 #ifndef NO_WARMUP
     fn(c_vme, at, bm, c_bias, M, N, K, te);
 #endif
+    POWER_MARK(1);
     size_t cycles1 = vme_rdcycle();
     fn(c_vme, at, bm, c_bias, M, N, K, te);
     size_t cycles2 = vme_rdcycle();
+    POWER_MARK(0);
 
     size_t ndiverge = 0;
 #ifndef VERIFY
@@ -302,10 +339,10 @@ int main(void) {
   printf("VME fused FP8 GEMM+bias (E4M3xE4M3, transpose-A): TE=%lu M=%lu N=%lu, sweeping K=%d..%d step %d\n",
          te, M, N, K_SWEEP_MIN, K_DIM, K_SWEEP_STEP);
 
-  // keep e4m3 values finite: clear the top exponent bit (0xbf mask), same as
-  // vme_gemm_main.h -- avoids ever generating the e=15,m=7 NaN encoding.
-  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = (uint8_t)lcg() & 0xbf;
-  for (size_t i = 0; i < (size_t)K_DIM * N; i++) bm[i] = (uint8_t)lcg() & 0xbf;
+  // uniformly random finite e4m3 values: redraw the two NaN encodings
+  // (e=15, m=7, either sign) and keep every other byte as is.
+  for (size_t i = 0; i < (size_t)K_DIM * M; i++) at[i] = lcg_e4m3();
+  for (size_t i = 0; i < (size_t)K_DIM * N; i++) bm[i] = lcg_e4m3();
   for (size_t j = 0; j < N; j++) c_bias[j] = (float)((int32_t)(lcg() & 0xffff) - 0x8000);
 
   int any_diverged = 0;

@@ -72,29 +72,41 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
 
   val is_fp8 = io.fp8.getOrElse(false.B)
   val int_macc = io.macc && !is_fp8
-  val a_ext = Cat(io.signed_l && io.in_l(opuParams.aWidth-1), io.in_l).asSInt
-  val b_ext = Cat(io.signed_t && io.in_t(opuParams.bWidth-1), io.in_t).asSInt
+  // Operand isolation: the int8 multiply-add only sees its operands, and the
+  // accumulator, while it's doing an int8 MAC (its result is used only then),
+  // so FP8 MACs and readouts through regs(mrf_idx) don't toggle it.
+  val in_l_int = Mux(int_macc, io.in_l, 0.U)
+  val in_t_int = Mux(int_macc, io.in_t, 0.U)
+  val a_ext = Cat(io.signed_l && in_l_int(opuParams.aWidth-1), in_l_int).asSInt
+  val b_ext = Cat(io.signed_t && in_t_int(opuParams.bWidth-1), in_t_int).asSInt
   val prod = a_ext * b_ext
-  val sum_int = (regs(io.mrf_idx).asSInt + prod).asUInt
+  val sum_int = (Mux(int_macc, regs(io.mrf_idx), 0.U).asSInt + prod).asUInt
 
   val mrf_idx_pipe = Wire(UInt(cellRegIdxBits.W))
   val fp8_macc_complete = Wire(Bool())
   val sum_fp8 = Wire(UInt(opuParams.cWidth.W))
 
   if (useMxOPU) {
-    def widen(in: UInt, inT: FType, outT: FType, active: Bool): UInt = {
+    def widen(in: UInt, inT: FType, outT: FType): UInt = {
       val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
-      widen.io.in := Mux(active, in, 0.U)
+      widen.io.in := in
       widen.io.roundingMode := hardfloat.consts.round_near_even
       widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
       widen.io.out
     }
     val f8macc = io.macc && is_fp8
+    // Operand isolation: the FP8 path, decode through FMA, only sees its
+    // operands and the accumulator while it's doing an FP8 MAC. The FMA takes
+    // a, b and c in the cycle validin (f8macc) is set and registers nothing
+    // otherwise, so int8 MACs and readouts through regs(mrf_idx) don't toggle
+    // it. Zero operands decode to +0, which widens to +0.
+    val in_l_f8 = Mux(f8macc, io.in_l, 0.U)
+    val in_t_f8 = Mux(f8macc, io.in_t, 0.U)
     // FP8 x FP8 products are exact in FP32, so widening before the FMA loses nothing
-    val f8a = MXFType.E5M3.recode(fp8ToE5M3(io.in_l, io.e5m2_l.get))
-    val f8b = MXFType.E5M3.recode(fp8ToE5M3(io.in_t, io.e5m2_t.get))
-    val f8aw = widen(f8a, MXFType.E5M3, FType.S, f8macc)
-    val f8bw = widen(f8b, MXFType.E5M3, FType.S, f8macc)
+    val f8a = MXFType.E5M3.recode(fp8ToE5M3(in_l_f8, io.e5m2_l.get))
+    val f8b = MXFType.E5M3.recode(fp8ToE5M3(in_t_f8, io.e5m2_t.get))
+    val f8aw = widen(f8a, MXFType.E5M3, FType.S)
+    val f8bw = widen(f8b, MXFType.E5M3, FType.S)
     val fma = Module(new MulAddRecFNPipe(fp8MaccLatency, FType.S.exp, FType.S.sig))
     fma.io.validin := f8macc
     fma.io.op := 0.U // FMA
@@ -102,7 +114,7 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
     fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
     fma.io.a := f8aw
     fma.io.b := f8bw
-    fma.io.c := FType.S.recode(regs(io.mrf_idx))
+    fma.io.c := FType.S.recode(Mux(f8macc, regs(io.mrf_idx), 0.U))
     // Pipeline the destination index to match FMA latency
     mrf_idx_pipe := Pipe(f8macc, io.mrf_idx, fp8MaccLatency).bits
 

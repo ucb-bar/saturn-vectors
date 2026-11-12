@@ -44,6 +44,30 @@
 #define MAX_M (M_BLOCKS * 2 * MAX_TE)
 #define MAX_N (N_BLOCKS * 2 * MAX_TE)
 
+// -DPOWER_WINDOW marks each timed call through mscratch for Iris's
+// PowerWindowMonitor (iris/test/src/IrisSpec.scala): 1 opens the FSDB dump
+// window, 2 marks where the call enters its k-loop, 3 where it leaves it for
+// the readout, 0 closes the window; the power analysis takes the k-loop as
+// 2..3 and the readout as 3..0. Each mark fences first, which stalls until the
+// decoupled vector unit is idle, so it lands where the vector unit is, not
+// where the scalar core ran ahead to. The in-kernel marks only advance from
+// the one before, so the warm-up call doesn't fence and only the first
+// super-tile is marked; their fences are inside the timed region, so a
+// POWER_WINDOW build's cycle counts include them. Same as the -fp8 version.
+#ifdef POWER_WINDOW
+#define POWER_MARK(v) asm volatile("fence\n\tcsrw mscratch, %0" : : "r"((size_t)(v)) : "memory")
+#define POWER_ADVANCE(from, to) do {                          \
+    size_t s_;                                                \
+    asm volatile("csrr %0, mscratch" : "=r"(s_) : : "memory"); \
+    if (s_ == (from)) POWER_MARK(to);                         \
+  } while (0)
+#else
+#define POWER_MARK(v)
+#define POWER_ADVANCE(from, to)
+#endif
+#define POWER_KLOOP()   POWER_ADVANCE(1, 2)
+#define POWER_READOUT() POWER_ADVANCE(2, 3)
+
 // Like vme_gemm_2x2 (int8 path only), but adds a per-output-column bias to
 // each tile row as it's read out of the accumulator, instead of zero-init
 // followed by a separate whole-array bias pass.
@@ -60,6 +84,7 @@ static void vme_gemm_2x2_bias(uint32_t* c, const uint8_t* at, const uint8_t* b,
       const uint8_t* a0 = at + m0;
       const uint8_t* bb = b + n0;
       vme_vsettk(4);
+      POWER_KLOOP();
       while (K - k0 > 4) {
         vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 4);
         VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
@@ -77,6 +102,7 @@ static void vme_gemm_2x2_bias(uint32_t* c, const uint8_t* at, const uint8_t* b,
         VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
         VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
       }
+      POWER_READOUT();
       // Read each tile row out, add the bias slice for its column block, store.
       // v24 (not v20) for the bias load: at e32w1 vlmul is 8, so every plain
       // vector operand here must be 8-register-aligned (v16 and v24 both are).
@@ -127,6 +153,7 @@ static void vme_gemm_2x2_bias_k1(uint32_t* c, const uint8_t* at, const uint8_t* 
       const uint8_t* a0 = at + m0;
       const uint8_t* bb = b + n0;
       vme_vsettk(1);
+      POWER_KLOOP();
       while (K - k0 > 1) {
         vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 1);
         VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
@@ -142,6 +169,7 @@ static void vme_gemm_2x2_bias_k1(uint32_t* c, const uint8_t* at, const uint8_t* 
         VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
         VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
       }
+      POWER_READOUT();
       vme_vsettnt_e32w1(te);
       for (size_t r = 0; r < te; r++) {
         for (size_t t = 0; t < 4; t += 2) {
@@ -179,6 +207,7 @@ static void vme_gemm_2x2_bias_k2(uint32_t* c, const uint8_t* at, const uint8_t* 
       const uint8_t* a0 = at + m0;
       const uint8_t* bb = b + n0;
       vme_vsettk(2);
+      POWER_KLOOP();
       while (K - k0 > 2) {
         vme_load_k4(a0, a0 + te, bb, bb + te, M, N, 2);
         VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
@@ -194,6 +223,7 @@ static void vme_gemm_2x2_bias_k2(uint32_t* c, const uint8_t* at, const uint8_t* 
         VME_MM_S_S(0, 0, 16); VME_MM_S_S(1, 0, 24);
         VME_MM_S_S(2, 8, 16); VME_MM_S_S(3, 8, 24);
       }
+      POWER_READOUT();
       vme_vsettnt_e32w1(te);
       for (size_t r = 0; r < te; r++) {
         for (size_t t = 0; t < 4; t += 2) {
@@ -247,9 +277,11 @@ static int run_sweep(const char* name, gemm_fn_t fn, const uint8_t* at, const ui
 #ifndef NO_WARMUP
     fn(c_vme, at, bm, c_bias, M, N, K, te);
 #endif
+    POWER_MARK(1);
     size_t cycles1 = vme_rdcycle();
     fn(c_vme, at, bm, c_bias, M, N, K, te);
     size_t cycles2 = vme_rdcycle();
+    POWER_MARK(0);
 
     size_t ndiverge = 0;
 #ifndef VERIFY
