@@ -44,6 +44,15 @@ class INTV256D128RocketConfig extends Config(
   new freechips.rocketchip.rocket.WithNHugeCores(1) ++
   new chipyard.config.AbstractConfig)
 
+// Integer-only vector unit and no scalar FPU: an integer-only core end to end (rv64imac with
+// Zve64x). Mirrors INTV256D128RocketConfig so the A/B is one variable.
+class INTV256D128NoFPURocketConfig extends Config(
+  new saturn.rocket.WithRocketVectorUnit(256, 128, VectorParams.refParams.copy(useVectorFP = false)) ++
+  new chipyard.config.WithSystemBusWidth(128) ++
+  new freechips.rocketchip.rocket.WithoutFPU ++
+  new freechips.rocketchip.rocket.WithNHugeCores(1) ++
+  new chipyard.config.AbstractConfig)
+
 class REFV256D128M64RocketConfig extends Config(
   new saturn.rocket.WithRocketVectorUnit(256, 128, VectorParams.refParams, mLen = Some(64)) ++
   new freechips.rocketchip.rocket.WithNHugeCores(1) ++
