@@ -46,6 +46,67 @@ trait HasOPUParams extends HasVectorParams { this: HasCoreParameters =>
   def fp8MaccLatency = 2
 }
 
+// FP8 multiply-accumulate into FP32, c + a*b rounded once with rm, in two
+// stages like MulAddRecFNPipe(2, 8, 24). A product of two FP8 values has at
+// most 8 significant bits and lies within FP32's normal range, so it is exact
+// in FP32: the product is formed directly, and one FP32 addition and one
+// rounding replace the 24x24 multiply-add.
+class FP8MacPipe extends Module {
+  val io = IO(new Bundle {
+    val validin = Input(Bool())
+    val a = Input(UInt(8.W))
+    val b = Input(UInt(8.W))
+    val e5m2_a = Input(Bool())
+    val e5m2_b = Input(Bool())
+    val c = Input(UInt(32.W))
+    val rm = Input(UInt(3.W))
+    val validout = Output(Bool())
+    val out = Output(UInt(32.W))
+  })
+  val S = FType.S
+  val E5M3 = MXFType.E5M3
+
+  val a = rawFloatFromFN(E5M3.exp, E5M3.sig, fp8ToE5M3(io.a, io.e5m2_a))
+  val b = rawFloatFromFN(E5M3.exp, E5M3.sig, fp8ToE5M3(io.b, io.e5m2_b))
+  val sig = a.sig(3, 0) * b.sig(3, 0) // 1.xxx * 1.yyy, in [1, 4)
+  val carry = sig(7)
+  val prod = Wire(new RawFloat(S.exp, S.sig))
+  prod.isNaN := a.isNaN || b.isNaN || (a.isInf && b.isZero) || (a.isZero && b.isInf)
+  prod.isInf := (a.isInf || b.isInf) && !prod.isNaN
+  prod.isZero := (a.isZero || b.isZero) && !prod.isNaN
+  prod.sign := a.sign ^ b.sign
+  // raw exponents are biased by 2^expWidth; AddRawFN also reads a zero's
+  // exponent and significand, so a zero product gets those of a recoded zero
+  prod.sExp := Mux(prod.isZero, 0.S,
+    (a.sExp +& b.sExp +& carry.zext +& ((1 << S.exp) - 2 * (1 << E5M3.exp)).S)(S.exp + 1, 0).asSInt)
+  prod.sig := Mux(prod.isZero, 0.U, Cat(0.U(1.W), Mux(carry, sig, sig(6, 0) ## 0.U(1.W)), 0.U((S.sig - 8).W)))
+
+  val valid1 = RegNext(io.validin, false.B)
+  val prod1 = RegEnable(prod, io.validin)
+  val c1 = RegEnable(S.recode(io.c), io.validin)
+  val rm1 = RegEnable(io.rm, io.validin)
+
+  val add = Module(new AddRawFN(S.exp, S.sig))
+  add.io.subOp := false.B
+  add.io.a := rawFloatFromRecFN(S.exp, S.sig, c1)
+  add.io.b := prod1
+  add.io.roundingMode := rm1
+
+  val valid2 = RegNext(valid1, false.B)
+  val sum2 = RegEnable(add.io.rawOut, valid1)
+  val invalid2 = RegEnable(add.io.invalidExc, valid1)
+  val rm2 = RegEnable(rm1, valid1)
+
+  val round = Module(new RoundRawFNToRecFN(S.exp, S.sig, 0))
+  round.io.invalidExc := invalid2
+  round.io.infiniteExc := false.B
+  round.io.in := sum2
+  round.io.roundingMode := rm2
+  round.io.detectTininess := consts.tininess_afterRounding
+  io.validout := valid2
+  io.out := S.ieee(round.io.out)
+}
+
 class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasOPUParams {
 
   val io = IO(new Bundle{
@@ -87,39 +148,25 @@ class OuterProductCell(implicit p: Parameters) extends CoreModule()(p) with HasO
   val sum_fp8 = Wire(UInt(opuParams.cWidth.W))
 
   if (useMxOPU) {
-    def widen(in: UInt, inT: FType, outT: FType): UInt = {
-      val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
-      widen.io.in := in
-      widen.io.roundingMode := hardfloat.consts.round_near_even
-      widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
-      widen.io.out
-    }
     val f8macc = io.macc && is_fp8
-    // Operand isolation: the FP8 path, decode through FMA, only sees its
-    // operands and the accumulator while it's doing an FP8 MAC. The FMA takes
-    // a, b and c in the cycle validin (f8macc) is set and registers nothing
-    // otherwise, so int8 MACs and readouts through regs(mrf_idx) don't toggle
-    // it. Zero operands decode to +0, which widens to +0.
-    val in_l_f8 = Mux(f8macc, io.in_l, 0.U)
-    val in_t_f8 = Mux(f8macc, io.in_t, 0.U)
-    // FP8 x FP8 products are exact in FP32, so widening before the FMA loses nothing
-    val f8a = MXFType.E5M3.recode(fp8ToE5M3(in_l_f8, io.e5m2_l.get))
-    val f8b = MXFType.E5M3.recode(fp8ToE5M3(in_t_f8, io.e5m2_t.get))
-    val f8aw = widen(f8a, MXFType.E5M3, FType.S)
-    val f8bw = widen(f8b, MXFType.E5M3, FType.S)
-    val fma = Module(new MulAddRecFNPipe(fp8MaccLatency, FType.S.exp, FType.S.sig))
-    fma.io.validin := f8macc
-    fma.io.op := 0.U // FMA
-    fma.io.roundingMode := io.rm.get
-    fma.io.detectTininess := hardfloat.consts.tininess_afterRounding
-    fma.io.a := f8aw
-    fma.io.b := f8bw
-    fma.io.c := FType.S.recode(Mux(f8macc, regs(io.mrf_idx), 0.U))
-    // Pipeline the destination index to match FMA latency
+    // Operand isolation: the FP8 path only sees its operands and the
+    // accumulator while it's doing an FP8 MAC. FP8MacPipe takes a, b and c in
+    // the cycle validin (f8macc) is set and registers nothing otherwise, so
+    // int8 MACs and readouts through regs(mrf_idx) don't toggle it.
+    require(fp8MaccLatency == 2, "FP8MacPipe has two stages")
+    val mac = Module(new FP8MacPipe)
+    mac.io.validin := f8macc
+    mac.io.a := Mux(f8macc, io.in_l, 0.U)
+    mac.io.b := Mux(f8macc, io.in_t, 0.U)
+    mac.io.e5m2_a := io.e5m2_l.get
+    mac.io.e5m2_b := io.e5m2_t.get
+    mac.io.c := Mux(f8macc, regs(io.mrf_idx), 0.U)
+    mac.io.rm := io.rm.get
+    // Pipeline the destination index to match the MAC's latency
     mrf_idx_pipe := Pipe(f8macc, io.mrf_idx, fp8MaccLatency).bits
 
-    sum_fp8 := FType.S.ieee(fma.io.out)
-    fp8_macc_complete := fma.io.validout
+    sum_fp8 := mac.io.out
+    fp8_macc_complete := mac.io.validout
   } else {
     mrf_idx_pipe := 0.U
     fp8_macc_complete := false.B
