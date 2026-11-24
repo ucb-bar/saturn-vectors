@@ -57,7 +57,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
       val rvs2_nan = fType.isNaN(rvs2_rec)
       val rvs1_nan = fType.isNaN(rvs1_rec)
 
-      comp.io.signaling := true.B
+      comp.io.signaling := ctrl.bool(WritesAsMask) && (ctrl.bool(FPMLT) || ctrl.bool(FPMGT))
       comp.io.a := rvs2_rec
       comp.io.b := rvs1_rec
       (comp.io, rvs2, rvs2_nan, rvs1, rvs1_nan)
