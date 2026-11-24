@@ -116,8 +116,16 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
   val s0_base  = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vstart    ) << s0_inst.mem_elem_size)
   val s0_bound = io.s0.in.bits.rs1 + (((s0_inst.seg_nf +& 1.U) * s0_inst.vconfig.vl) << s0_inst.mem_elem_size) - 1.U
   val s0_single_page = (s0_base >> pgIdxBits) === (s0_bound >> pgIdxBits)
-  val s0_replay_next_page = s0_inst.vmu && s0_unit && s0_inst.nf === 0.U && !s0_single_page
-  val s0_iterative = (!s0_single_page || !s0_unit || s0_inst.umop === lumopFF) && !s0_replay_next_page
+  // The fast path checks permission for the base element only and applies it to the
+  // whole access. That is sound across a page only when the PMP granularity is at
+  // least a page; with sub-page granularity a protection boundary can fall inside a
+  // page, so also require the access to lie within one PMP granule and otherwise fall
+  // back to the per-element IterativeFaultCheck.
+  val pageGranularityPMPs = pmpGranularity >= (1 << pgIdxBits)
+  val s0_single_pmp = if (pageGranularityPMPs) true.B else
+    (s0_base >> log2Ceil(pmpGranularity)) === (s0_bound >> log2Ceil(pmpGranularity))
+  val s0_replay_next_page = s0_inst.vmu && s0_unit && s0_inst.nf === 0.U && !s0_single_page && s0_single_pmp
+  val s0_iterative = (!s0_single_page || !s0_single_pmp || !s0_unit || s0_inst.umop === lumopFF) && !s0_replay_next_page
   val s0_fast_sg = s0_iterative && io.s0.in.bits.phys && s0_inst.mop === mopUnordered && s0_inst.seg_nf === 0.U && sgSize.map { size =>
     s0_base >= io.sg_base && s0_base < (io.sg_base + size.U)
   }.getOrElse(false.B)
