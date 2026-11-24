@@ -47,12 +47,12 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) exte
   val hb = io.b.asTypeOf(Vec(4, UInt(16.W))).map(f => FType.H.recode(f))
   val hc = io.c.asTypeOf(Vec(4, UInt(16.W))).map(f => FType.H.recode(f))
 
-  def widen(in: UInt, inT: FType, outT: FType, active: Bool): UInt = {
+  def widen(in: UInt, inT: FType, outT: FType, active: Bool): (UInt, Bool) = {
     val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
     widen.io.in := Mux(active, in, 0.U)
     widen.io.roundingMode := io.frm
     widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
-    widen.io.out
+    (widen.io.out, widen.io.exceptionFlags(4))
   }
 
   val dfma_valid = io.valid && io.out_eew === 3.U
@@ -72,17 +72,25 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) exte
     widen(hc(0), FType.H, FType.S, io.out_eew === 2.U && io.c_eew === 1.U),
     widen(hc(2), FType.H, FType.S, io.out_eew === 2.U && io.c_eew === 1.U))
 
-  val da_in = da.zip(swa).map(t => Mux(io.out_eew =/= io.a_eew, t._2, t._1))
-  val db_in = db.zip(swb).map(t => Mux(io.out_eew =/= io.b_eew, t._2, t._1))
-  val dc_in = dc.zip(swc).map(t => Mux(io.out_eew =/= io.c_eew, t._2, t._1))
+  val da_in = da.zip(swa).map(t => Mux(io.out_eew =/= io.a_eew, t._2._1, t._1))
+  val db_in = db.zip(swb).map(t => Mux(io.out_eew =/= io.b_eew, t._2._1, t._1))
+  val dc_in = dc.zip(swc).map(t => Mux(io.out_eew =/= io.c_eew, t._2._1, t._1))
 
-  val sa_in = sa.zip(hwa).map(t => Mux(io.out_eew =/= io.a_eew, t._2, t._1))
-  val sb_in = sb.zip(hwb).map(t => Mux(io.out_eew =/= io.b_eew, t._2, t._1))
-  val sc_in = sc.zip(hwc).map(t => Mux(io.out_eew =/= io.c_eew, t._2, t._1))
+  val sa_in = sa.zip(hwa).map(t => Mux(io.out_eew =/= io.a_eew, t._2._1, t._1))
+  val sb_in = sb.zip(hwb).map(t => Mux(io.out_eew =/= io.b_eew, t._2._1, t._1))
+  val sc_in = sc.zip(hwc).map(t => Mux(io.out_eew =/= io.c_eew, t._2._1, t._1))
 
   val ha_in = ha
   val hb_in = hb
   val hc_in = hc
+
+  val da_nv = swa.map(_._2)
+  val db_nv = swb.map(_._2)
+  val dc_nv = swc.map(_._2)
+  val sa_nv = hwa.map(_._2)
+  val sb_nv = hwb.map(_._2)
+  val sc_nv = hwc.map(_._2)
+  val h_nv = Seq.fill(4)(false.B)
 
   val s1_op = RegEnable(io.op, io.valid)
   val s1_frm = RegEnable(io.frm, io.valid)
@@ -90,10 +98,10 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) exte
   io.out := DontCare
   io.exc := DontCare
 
-  (buildFP64.option((dfma_valid, FType.D, da_in, db_in, dc_in)) ++ Seq(
-    (sfma_valid, FType.S, sa_in, sb_in, sc_in),
-    (hfma_valid, FType.H, ha_in, hb_in, hc_in)
-  )).foreach { case (fma_valid, ftype, a, b, c) => {
+  (buildFP64.option((dfma_valid, FType.D, da_in, db_in, dc_in, da_nv, db_nv, dc_nv)) ++ Seq(
+    (sfma_valid, FType.S, sa_in, sb_in, sc_in, sa_nv, sb_nv, sc_nv),
+    (hfma_valid, FType.H, ha_in, hb_in, hc_in, h_nv, h_nv, h_nv)
+  )).foreach { case (fma_valid, ftype, a, b, c, a_nv, b_nv, c_nv) => {
     val n = 64 / ftype.ieeeWidth
     val s1_valid = RegNext(fma_valid, false.B)
     val res = (0 until n).map { i =>
@@ -106,8 +114,10 @@ class TandemFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) exte
       fma.io.b := RegEnable(Mux(io.addsub, 1.U << (ftype.ieeeWidth - 1), b(i)), fma_valid)
       fma.io.c := RegEnable(Mux(io.mul, (a(i) ^ b(i)) & (1.U << ftype.ieeeWidth), c(i)), fma_valid)
 
+      val widen_nv = a_nv(i) || b_nv(i) || c_nv(i)
+      val fma_exc = fma.io.exceptionFlags | (Pipe(fma_valid, widen_nv, depth-1).bits ## 0.U(4.W))
       val out = Pipe(fma.io.validout, ftype.ieee(fma.io.out), depth-4).bits
-      val exc = Pipe(fma.io.validout, fma.io.exceptionFlags, depth-4).bits
+      val exc = Pipe(fma.io.validout, fma_exc, depth-4).bits
       (out, Seq.fill(ftype.ieeeWidth / 8)(exc))
     }
     when (out_eew_pipe.bits === log2Ceil(ftype.ieeeWidth >> 3).U) {
@@ -175,12 +185,12 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) e
   val hc = io.c.asTypeOf(Vec(4, UInt(16.W))).map(f => FType.H.recode(f))
 
 
-  def widen(in: UInt, inT: FType, outT: FType, active: Bool): UInt = {
+  def widen(in: UInt, inT: FType, outT: FType, active: Bool): (UInt, Bool) = {
     val widen = Module(new hardfloat.RecFNToRecFN(inT.exp, inT.sig, outT.exp, outT.sig))
     widen.io.in := Mux(active, in, 0.U)
     widen.io.roundingMode := io.frm
     widen.io.detectTininess := hardfloat.consts.tininess_afterRounding
-    widen.io.out
+    (widen.io.out, widen.io.exceptionFlags(4))
   }
 
   val dfma_valid = io.valid && io.out_eew === 3.U
@@ -264,6 +274,11 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) e
     val a = Wire(UInt(fma_type.recodedWidth.W))
     val b = Wire(UInt(fma_type.recodedWidth.W))
     val c = Wire(UInt(fma_type.recodedWidth.W))
+    val a_nv = WireDefault(false.B)
+    val b_nv = WireDefault(false.B)
+    val c_nv = WireDefault(false.B)
+    val widen_nv = a_nv || b_nv || c_nv
+    val invalid = fma.io.invalidExc || Pipe(fma_valid, widen_nv, depth-1).bits
 
     a := DontCare
     b := DontCare
@@ -278,10 +293,11 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) e
       val wide_a = if (data_type != fma_type) {
         widen(in_a, data_type, fma_type, select_a)
       } else {
-        in_a
+        (in_a, false.B)
       }
       when (select_a) {
-        a := wide_a
+        a := wide_a._1
+        a_nv := wide_a._2
       }
 
       val select_b = io.b_eew === cond._1
@@ -289,10 +305,11 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) e
       val wide_b = if (data_type != fma_type) {
         widen(in_b, data_type, fma_type, select_b)
       } else {
-        in_b
+        (in_b, false.B)
       }
       when (select_b) {
-        b := wide_b
+        b := wide_b._1
+        b_nv := wide_b._2
       }
 
       val select_c = io.c_eew === cond._1
@@ -300,10 +317,11 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) e
       val wide_c = if (data_type != fma_type) {
         widen(in_c, data_type, fma_type, select_c)
       } else {
-        in_c
+        (in_c, false.B)
       }
       when (select_c) {
-        c := wide_c
+        c := wide_c._1
+        c_nv := wide_c._2
       }
 
       val select_out = out_select(data_type)
@@ -311,7 +329,7 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) e
       narrower.io.in := fma.io.out
       narrower.io.roundingMode := frm_pipe.bits
       narrower.io.detectTininess := hardfloat.consts.tininess_afterRounding
-      narrower.io.invalidExc := fma.io.invalidExc
+      narrower.io.invalidExc := invalid
       narrower.io.infiniteExc := false.B
 
       when (select_out) {

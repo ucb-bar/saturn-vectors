@@ -110,6 +110,9 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   val rvs1_recoded = Mux(vd_eew64, d_rvs1, Mux(vd_eew32, s_rvs1, h_rvs1))
   val rvd_recoded = Mux(vd_eew64, d_rvd, Mux(vd_eew32, s_rvd, h_rvd))
 
+  val in1_nv = WireDefault(false.B)
+  val in2_nv = WireDefault(false.B)
+
   // Set req.in1
   when (ctrl.bool(FPSwapVdV2)) {
     req.in1 := rvd_recoded
@@ -117,8 +120,10 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
     req.in1 := d_rvs2
   } .elsewhen ((vd_eew === 3.U) && (vs2_eew === 2.U)) {
     req.in1 := s_widen_rvs2.io.out
+    in1_nv := s_widen_rvs2.io.exceptionFlags(4)
   } .elsewhen ((vd_eew === 2.U) && (vs2_eew === 1.U)) {
     req.in1 := h_widen_rvs2.io.out
+    in1_nv := h_widen_rvs2.io.exceptionFlags(4)
   } .elsewhen (vs2_eew === 2.U) {
     req.in1 := s_rvs2
   } .otherwise {
@@ -130,8 +135,10 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
     req.in2 := d_rvs1
   } .elsewhen ((vd_eew === 3.U) && (vs1_eew === 2.U) && !io.pipe(0).bits.acc) {
     req.in2 := s_widen_rvs1.io.out
+    in2_nv := s_widen_rvs1.io.exceptionFlags(4)
   } .elsewhen ((vd_eew === 2.U) && (vs1_eew === 1.U) && !io.pipe(0).bits.acc) {
     req.in2 := h_widen_rvs1.io.out
+    in2_nv := h_widen_rvs1.io.exceptionFlags(4)
   } .elsewhen (vs1_eew === 2.U) {
     req.in2 := s_rvs1
   } .otherwise {
@@ -156,7 +163,8 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   io.write.bits.data := Fill(dLenB >> 3, Mux(io.pipe(depth-1).bits.vd_eew === 3.U, FType.D.ieee(io_fp_resp.bits.data), Mux(io.pipe(depth-1).bits.vd_eew === 2.U,
                         Fill(2, FType.S.ieee(unbox(io_fp_resp.bits.data, S, Some(FType.S)))), Fill(4, FType.H.ieee(unbox(io_fp_resp.bits.data, H, Some(FType.H)))))))
 
-  io.set_fflags := DontCare
+  io.set_fflags.valid := io.pipe(depth-1).valid
+  io.set_fflags.bits := Pipe(io.pipe(0).valid, io.pipe(0).bits.wmask.orR && (in1_nv || in2_nv), depth-1).bits ## 0.U(4.W)
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
   io.set_vxsat := false.B
