@@ -316,7 +316,7 @@ class SegmentedFMAPipe(depth: Int, buildFP64: Boolean)(implicit p: Parameters) e
 
       when (select_out) {
         out(data_type)(index) := Pipe(fma.io.validout, data_type.ieee(narrower.io.out), depth-4).bits
-        exc(data_type).slice(index, index + ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, narrower.io.invalidExc, depth-4).bits }
+        exc(data_type).slice(index * ftype_exc_lanes(data_type), (index + 1) * ftype_exc_lanes(data_type)).foreach { _ := Pipe(fma.io.validout, narrower.io.exceptionFlags, depth-4).bits }
       }
     }
 
@@ -492,8 +492,10 @@ class FPFMAPipe(depth: Int, elementwiseFP64: Boolean, segmentedFPFMA: Boolean)(i
     io.write.bits.data := Fill(dLenB >> 3, pipe_out(0).out)
   }
 
+  val exc = Mux(elementwiseFP64.B && io.pipe(depth-1).bits.vd_eew === 3.U,
+    VecInit(Seq.fill(nTandemFMA)(pipe_out(0).exc).flatten), VecInit(pipe_out.map(_.exc).flatten))
   io.set_fflags.valid := io.write.valid
-  io.set_fflags.bits := pipe_out.map(_.exc).flatten.zipWithIndex.map {
+  io.set_fflags.bits := exc.zipWithIndex.map {
     case (e,i) => Mux(io.pipe(depth-1).bits.wmask(i), e, 0.U)
   }.reduce(_|_)
   io.scalar_write.valid := false.B

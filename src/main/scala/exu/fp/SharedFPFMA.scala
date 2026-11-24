@@ -67,9 +67,10 @@ class SharedScalarElementwiseFPFMA(depth: Int)(implicit p: Parameters) extends P
   req.typ := 0.U
   req.fmt := 0.U
 
-  val rvs2_elem = io.pipe(0).bits.rvs2_elem
-  val rvs1_elem = io.pipe(0).bits.rvs1_elem
-  val rvd_elem  = io.pipe(0).bits.rvd_elem
+  val active = io.pipe(0).bits.wmask.orR
+  val rvs2_elem = Mux(active, io.pipe(0).bits.rvs2_elem, 0.U)
+  val rvs1_elem = Mux(active, io.pipe(0).bits.rvs1_elem, 0.U)
+  val rvd_elem  = Mux(active, io.pipe(0).bits.rvd_elem, 0.U)
 
   val h_rvs2 = FType.H.recode(rvs2_elem(15,0))
   val h_rvs1 = FType.H.recode(rvs1_elem(15,0))

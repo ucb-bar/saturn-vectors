@@ -339,7 +339,7 @@ class FPDivSqrt(implicit p: Parameters) extends IterativeFunctionalUnit()(p) wit
   io.stall := valid
   last := io.write.fire
 
-  io.set_fflags.valid := divsqrt_valid || (vfrsqrt7_inst && io.write.fire) || (vfrec7_inst && io.write.fire)
+  io.set_fflags.valid := op.wmask.orR && (divsqrt_valid || (vfrsqrt7_inst && io.write.fire) || (vfrec7_inst && io.write.fire))
   io.set_fflags.bits := Mux(divsqrt_valid, divsqrt_exc,
     (recSqrt7.io.exc & Fill(5, vfrsqrt7_inst)) | (rec7.io.exc & Fill(5, vfrec7_inst)))
 
