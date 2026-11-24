@@ -183,7 +183,7 @@ class SpecialSequencer(exu_insns: Seq[VectorInstruction])(implicit p: Parameters
     acc_busy := true.B
   }
 
-  when (io.acc_done && acc) {
+  when (io.acc_done && acc && valid) {
     valid := false.B
   }
 
