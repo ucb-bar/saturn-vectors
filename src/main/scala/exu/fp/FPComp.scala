@@ -57,7 +57,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
       val rvs2_nan = fType.isNaN(rvs2_rec)
       val rvs1_nan = fType.isNaN(rvs1_rec)
 
-      comp.io.signaling := true.B
+      comp.io.signaling := ctrl.bool(WritesAsMask) && (ctrl.bool(FPMLT) || ctrl.bool(FPMGT))
       comp.io.a := rvs2_rec
       comp.io.b := rvs1_rec
       (comp.io, rvs2, rvs2_nan, rvs1, rvs1_nan)
@@ -95,7 +95,9 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
     }
     comp_results_eew(eew) := comparisons.asUInt
 
-    exceptions(eew - 1) := gen_compares.map {case(comp, rvs2, rvs2_nan, rvs1, rvs1_nan) => comp.exceptionFlags}.reduce(_ | _)
+    exceptions(eew - 1) := gen_compares.zipWithIndex.map { case ((comp, rvs2, rvs2_nan, rvs1, rvs1_nan), j) =>
+      Mux(io.pipe(0).bits.wmask(j * fType.ieeeWidth / 8) && !ctrl.bool(FPSgnj), comp.exceptionFlags, 0.U)
+    }.reduce(_ | _)
   }
 
 
@@ -153,7 +155,7 @@ class FPCompPipe(implicit p: Parameters) extends PipelinedFunctionalUnit(2)(p) w
   io.write.bits.data := RegEnable(out, io.pipe(0).valid)
 
   io.set_fflags.valid := io.write.valid
-  io.set_fflags.bits := Mux(io.pipe(1).bits.rvd_eew === 3.U, s1_exceptions(1), s1_exceptions(0))
+  io.set_fflags.bits := Mux1H((1 to 3).map(eew => (io.pipe(1).bits.rvs2_eew === eew.U) -> s1_exceptions(eew - 1)))
   io.scalar_write.valid := false.B
   io.scalar_write.bits := DontCare
 }
