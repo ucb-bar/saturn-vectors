@@ -52,7 +52,8 @@ bmarks = \
 
 cpp_bmarks = \
 	vec-tasks \
-	vec-daxpy
+	vec-daxpy \
+	vec-memcpy
 
 #--------------------------------------------------------------------
 # Build rules
