@@ -56,6 +56,6 @@ class EarlyVectorDecode(supported_ex_insns: Seq[VectorInstruction])(implicit p: 
     io.read_frs1 := funct3 === OPFVF
     io.write_rd := funct3 === OPMVV && OPMFunct6(funct6) === OPMFunct6.wrxunary0
     io.write_frd := funct3 === OPFVV && OPFFunct6(funct6) === OPFFunct6.wrfunary0
-    io.fp := funct3 === OPFVF
+    io.fp := funct3.isOneOf(OPFVV, OPFVF)
   }
 }
