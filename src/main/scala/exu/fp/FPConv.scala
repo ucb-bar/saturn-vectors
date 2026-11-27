@@ -30,7 +30,7 @@ class FPConvBlock(implicit p: Parameters) extends CoreModule()(p) with HasFPUPar
     val widen = Input(Bool())
     val narrow = Input(Bool())
     val signed = Input(Bool())
-    val frm = Input(UInt(2.W))
+    val frm = Input(UInt(3.W))
     val i2f = Input(Bool())
     val f2i = Input(Bool())
     val truncating = Input(Bool())
