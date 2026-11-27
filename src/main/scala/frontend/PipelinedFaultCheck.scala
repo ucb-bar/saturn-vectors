@@ -218,7 +218,7 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
     } .elsewhen (s2_inst.vstart =/= 0.U && !s2_inst.vmu) {
       io.s2.xcpt.valid := true.B
       io.s2.xcpt.bits.cause := Causes.illegal_instruction.U
-      io.s2.xcpt.bits.tval := s2_inst.pc
+      io.s2.xcpt.bits.tval := s2_inst.bits
     } .elsewhen (s2_inst.vstart >= s2_inst.vconfig.vl) {
       io.s2.retire := true.B
       io.s2.issue.valid := true.B
