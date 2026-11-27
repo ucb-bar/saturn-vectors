@@ -129,8 +129,8 @@ class PipelinedFaultCheck(edge: TLEdge, sgSize: Option[BigInt])(implicit p: Para
   io.s0.tlb_req.bits.passthrough := false.B
   io.s0.tlb_req.bits.size        := s0_inst.mem_elem_size
   io.s0.tlb_req.bits.cmd         := Mux(s0_inst.opcode(5), M_XWR, M_XRD)
-  io.s0.tlb_req.bits.prv         := io.s0.in.bits.status.prv
-  io.s0.tlb_req.bits.v           := io.s0.in.bits.status.v
+  io.s0.tlb_req.bits.prv         := io.s0.in.bits.status.dprv
+  io.s0.tlb_req.bits.v           := io.s0.in.bits.status.dv
 
   // s1_stage
   s1_valid := io.s0.in.fire
