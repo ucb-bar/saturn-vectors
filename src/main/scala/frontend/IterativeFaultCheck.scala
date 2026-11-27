@@ -159,8 +159,8 @@ class IterativeFaultCheck(implicit p: Parameters) extends CoreModule()(p) with H
   io.s0_tlb_req.bits.passthrough := false.B
   io.s0_tlb_req.bits.size        := inst.mem_elem_size
   io.s0_tlb_req.bits.cmd         := Mux(inst.opcode(5), M_XWR, M_XRD)
-  io.s0_tlb_req.bits.prv         := io.status.prv
-  io.s0_tlb_req.bits.v           := io.status.v
+  io.s0_tlb_req.bits.prv         := io.status.dprv
+  io.s0_tlb_req.bits.v           := io.status.dv
 
   io.s1_tlb_req.valid := RegEnable(io.s0_tlb_req.valid, false.B, valid)
   io.s1_tlb_req.bits  := RegEnable(io.s0_tlb_req.bits, valid)

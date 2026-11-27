@@ -49,7 +49,7 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
   hella_load_q.io.enq.bits.tag    := Cat(0.U, io.vec.load_req.bits.tag)
   hella_load_q.io.enq.bits.cmd    := M_XRD
   hella_load_q.io.enq.bits.signed := false.B
-  hella_load_q.io.enq.bits.dprv   := io.status.prv
+  hella_load_q.io.enq.bits.dprv   := io.status.dprv
   hella_load_q.io.enq.bits.dv     := io.status.dv
   hella_load_q.io.enq.bits.data   := DontCare
   hella_load_q.io.enq.bits.mask   := DontCare
@@ -69,7 +69,7 @@ class HellaCacheInterface(implicit p: Parameters) extends CoreModule()(p) with H
   hella_store_q.io.enq.bits.cmd    := M_PWR
   hella_store_q.io.enq.bits.size   := log2Ceil(mLenB).U
   hella_store_q.io.enq.bits.signed := false.B
-  hella_store_q.io.enq.bits.dprv   := io.status.prv
+  hella_store_q.io.enq.bits.dprv   := io.status.dprv
   hella_store_q.io.enq.bits.dv     := io.status.dv
   hella_store_q.io.enq.bits.data   := io.vec.store_req.bits.data
   hella_store_q.io.enq.bits.mask   := io.vec.store_req.bits.mask
